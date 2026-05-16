@@ -1,0 +1,61 @@
+<div class="datasources fade-in">
+  <div class="page-header">
+    <div>
+      <h1>数据源</h1>
+      <p class="subtitle">管理数据源</p>
+    </div>
+    <button mat-raised-button color="primary">
+      <mat-icon>add</mat-icon>
+      新建数据源
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="card-content">
+      <div *ngIf="loading" class="loading-container">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
+      
+      <table mat-table [dataSource]="datasources" *ngIf="!loading">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>名称</th>
+          <td mat-cell *matCellDef="let ds">{{ ds.name }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="type">
+          <th mat-header-cell *matHeaderCellDef>类型</th>
+          <td mat-cell *matCellDef="let ds">{{ ds.type }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="workspace">
+          <th mat-header-cell *matHeaderCellDef>工作空间</th>
+          <td mat-cell *matCellDef="let ds">{{ ds.workspace }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>状态</th>
+          <td mat-cell *matCellDef="let ds">
+            <mat-chip [class.enabled]="ds.enabled">
+              {{ ds.enabled ? '启用' : '禁用' }}
+            </mat-chip>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>操作</th>
+          <td mat-cell *matCellDef="let ds">
+            <button mat-icon-button color="primary" matTooltip="编辑">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button mat-icon-button color="warn" matTooltip="删除">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="['name', 'type', 'workspace', 'status', 'actions']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['name', 'type', 'workspace', 'status', 'actions'];"></tr>
+      </table>
+    </div>
+  </div>
+</div>

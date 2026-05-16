@@ -1,0 +1,126 @@
+<div class="dashboard fade-in">
+  <div class="page-header">
+    <div>
+      <h1>仪表盘</h1>
+      <p class="subtitle">GeoServer 概览</p>
+    </div>
+    <button mat-raised-button color="primary" (click)="refresh()">
+      <mat-icon>refresh</mat-icon>
+      刷新
+    </button>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card stagger-item" routerLink="/layers">
+      <div class="stat-icon layers">
+        <mat-icon>layers</mat-icon>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ stats.layerCount }}</div>
+        <div class="stat-label">图层总数</div>
+      </div>
+    </div>
+
+    <div class="stat-card stagger-item">
+      <div class="stat-icon features">
+        <mat-icon>pin_drop</mat-icon>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ stats.featureCount }}</div>
+        <div class="stat-label">要素数量</div>
+      </div>
+    </div>
+
+    <div class="stat-card stagger-item">
+      <div class="stat-icon active">
+        <mat-icon>check_circle</mat-icon>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ stats.activeLayerCount }}</div>
+        <div class="stat-label">活跃图层</div>
+      </div>
+    </div>
+
+    <div class="stat-card stagger-item">
+      <div class="stat-icon workspaces">
+        <mat-icon>folder</mat-icon>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ stats.workspaceCount }}</div>
+        <div class="stat-label">工作空间</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="content-grid">
+    <div class="card recent-layers">
+      <div class="card-header">
+        <h2>最近图层</h2>
+        <a mat-button color="primary" routerLink="/layers">查看全部</a>
+      </div>
+      <div class="card-content">
+        <div *ngIf="loading" class="loading-container">
+          <mat-spinner diameter="40"></mat-spinner>
+        </div>
+        
+        <div *ngIf="!loading && recentLayers.length === 0" class="empty-state">
+          <mat-icon class="empty-icon">layers_clear</mat-icon>
+          <p>暂无图层</p>
+          <a mat-raised-button color="primary" routerLink="/layers/create">
+            创建第一个图层
+          </a>
+        </div>
+
+        <div *ngIf="!loading && recentLayers.length > 0" class="layers-list">
+          <div 
+            *ngFor="let layer of recentLayers" 
+            class="layer-item"
+            [routerLink]="['/layers', layer.name]"
+            matRipple>
+            <div class="layer-info">
+              <div class="layer-name">{{ layer.name }}</div>
+              <div class="layer-meta">
+                <span class="srs">{{ layer.srs }}</span>
+                <span class="workspace">{{ layer.workspace }}</span>
+              </div>
+            </div>
+            <div class="layer-status">
+              <mat-chip [class.enabled]="layer.enabled">
+                {{ layer.enabled ? '启用' : '禁用' }}
+              </mat-chip>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card quick-actions">
+      <div class="card-header">
+        <h2>快捷操作</h2>
+      </div>
+      <div class="card-content">
+        <div class="action-grid">
+          <button mat-stroked-button class="action-btn" routerLink="/layers/create">
+            <mat-icon>add_circle</mat-icon>
+            <span>创建图层</span>
+          </button>
+          
+          <button mat-stroked-button class="action-btn" routerLink="/layers">
+            <mat-icon>layers</mat-icon>
+            <span>管理图层</span>
+          </button>
+          
+          <button mat-stroked-button class="action-btn" routerLink="/layers">
+            <mat-icon>upload_file</mat-icon>
+            <span>导入数据</span>
+          </button>
+          
+          <button mat-stroked-button class="action-btn">
+            <mat-icon>download</mat-icon>
+            <span>导出数据</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

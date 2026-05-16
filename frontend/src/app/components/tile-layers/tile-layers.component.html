@@ -1,0 +1,64 @@
+<div class="tile-layers fade-in">
+  <div class="page-header">
+    <div>
+      <h1>切片图层</h1>
+      <p class="subtitle">管理切片图层</p>
+    </div>
+    <button mat-raised-button color="primary">
+      <mat-icon>add</mat-icon>
+      新建切片图层
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="card-content">
+      <div *ngIf="loading" class="loading-container">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
+      
+      <table mat-table [dataSource]="tileLayers" *ngIf="!loading">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>名称</th>
+          <td mat-cell *matCellDef="let tile">{{ tile.name }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="format">
+          <th mat-header-cell *matHeaderCellDef>格式</th>
+          <td mat-cell *matCellDef="let tile">{{ tile.format }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="zoomRange">
+          <th mat-header-cell *matHeaderCellDef>缩放级别</th>
+          <td mat-cell *matCellDef="let tile">{{ tile.minZoom }} - {{ tile.maxZoom }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>状态</th>
+          <td mat-cell *matCellDef="let tile">
+            <mat-chip [class.enabled]="tile.enabled">
+              {{ tile.enabled ? '启用' : '禁用' }}
+            </mat-chip>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>操作</th>
+          <td mat-cell *matCellDef="let tile">
+            <button mat-icon-button color="primary" matTooltip="预览">
+              <mat-icon>visibility</mat-icon>
+            </button>
+            <button mat-icon-button color="accent" matTooltip="编辑">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button mat-icon-button color="warn" matTooltip="删除">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="['name', 'format', 'zoomRange', 'status', 'actions']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['name', 'format', 'zoomRange', 'status', 'actions'];"></tr>
+      </table>
+    </div>
+  </div>
+</div>

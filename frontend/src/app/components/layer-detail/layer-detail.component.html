@@ -1,0 +1,148 @@
+<div class="layer-detail fade-in" *ngIf="layer">
+  <div class="detail-header">
+    <button mat-icon-button (click)="goBack()" class="back-btn">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+    <div class="header-info">
+      <h1>{{ layer.title }}</h1>
+      <p class="subtitle">{{ layer.name }}</p>
+    </div>
+    <div class="header-actions">
+      <mat-chip [class.enabled]="layer.enabled">
+        {{ layer.enabled ? '启用' : '禁用' }}
+      </mat-chip>
+    </div>
+  </div>
+
+  <div class="detail-content">
+    <div class="info-section">
+      <mat-card class="info-card">
+        <mat-card-header>
+          <mat-icon matCardAvatar>info</mat-icon>
+          <mat-card-title>图层信息</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="label">工作空间</span>
+              <span class="value">{{ layer.workspace }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">存储</span>
+              <span class="value">{{ layer.store }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">坐标系统</span>
+              <span class="value">{{ layer.srs }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">边界范围</span>
+              <span class="value bounds">
+                X: {{ layer.bounds.minx | number:'1.4-4' }} - {{ layer.bounds.maxx | number:'1.4-4' }}<br>
+                Y: {{ layer.bounds.miny | number:'1.4-4' }} - {{ layer.bounds.maxy | number:'1.4-4' }}
+              </span>
+            </div>
+          </div>
+          <div *ngIf="layer.abstract" class="abstract">
+            <span class="label">描述</span>
+            <p>{{ layer.abstract }}</p>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="preview-card">
+        <mat-card-header>
+          <mat-icon matCardAvatar>visibility</mat-icon>
+          <mat-card-title>图层预览</mat-card-title>
+          <div class="preview-actions">
+            <button mat-icon-button (click)="refreshPreview()" matTooltip="刷新">
+              <mat-icon>refresh</mat-icon>
+            </button>
+          </div>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="preview-container">
+            <img *ngIf="showPreview" [src]="previewUrl" alt="图层预览">
+            <div *ngIf="!showPreview" class="preview-placeholder" (click)="togglePreview()">
+              <mat-icon>image</mat-icon>
+              <p>点击加载预览</p>
+            </div>
+          </div>
+          <div class="preview-controls">
+            <mat-form-field appearance="outline">
+              <mat-label>宽度</mat-label>
+              <input matInput type="number" [(ngModel)]="previewSize.width" (change)="updatePreviewUrl()">
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>高度</mat-label>
+              <input matInput type="number" [(ngModel)]="previewSize.height" (change)="updatePreviewUrl()">
+            </mat-form-field>
+            <button mat-raised-button color="primary" (click)="togglePreview()">
+              {{ showPreview ? '隐藏预览' : '加载预览' }}
+            </button>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <mat-card class="features-card">
+      <mat-card-header>
+        <mat-icon matCardAvatar>pin_drop</mat-icon>
+        <mat-card-title>要素列表</mat-card-title>
+        <span class="feature-count">{{ features.length }} 个要素</span>
+      </mat-card-header>
+      <mat-card-content>
+        <div *ngIf="features.length === 0" class="empty-features">
+          <mat-icon>layers_clear</mat-icon>
+          <p>暂无要素</p>
+        </div>
+
+        <table *ngIf="features.length > 0" mat-table [dataSource]="features" class="features-table">
+          <ng-container matColumnDef="id">
+            <th mat-header-cell *matHeaderCellDef>ID</th>
+            <td mat-cell *matCellDef="let feature">{{ feature.id.substring(0, 8) }}...</td>
+          </ng-container>
+
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef>类型</th>
+            <td mat-cell *matCellDef="let feature">
+              <mat-chip>{{ feature.geometry.type }}</mat-chip>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="coordinates">
+            <th mat-header-cell *matHeaderCellDef>坐标</th>
+            <td mat-cell *matCellDef="let feature" class="coordinates">
+              {{ getCoordinatesDisplay(feature) }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="properties">
+            <th mat-header-cell *matHeaderCellDef>属性</th>
+            <td mat-cell *matCellDef="let feature">
+              <span *ngFor="let key of getPropertyKeys(feature)">
+                {{ key }}: {{ feature.properties[key] }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>操作</th>
+            <td mat-cell *matCellDef="let feature">
+              <button mat-icon-button color="warn" (click)="deleteFeature(feature)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
+
+<div *ngIf="loading" class="loading-container">
+  <mat-spinner diameter="48"></mat-spinner>
+</div>

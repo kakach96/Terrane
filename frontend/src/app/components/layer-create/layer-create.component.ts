@@ -1,0 +1,97 @@
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { GeoserverService } from '../../services/geoserver.service';
+import { NotificationService } from '../../services/notification.service';
+
+@Component({
+  selector: 'app-layer-create',
+  templateUrl: './layer-create.component.html',
+  styleUrls: ['./layer-create.component.scss']
+})
+export class LayerCreateComponent implements OnInit {
+  layerForm!: FormGroup;
+  loading = false;
+  workspaces: string[] = ['default'];
+  stores: string[] = ['shapes', 'postgis', 'geopackage'];
+  srsOptions = [
+    { value: 'EPSG:4326', label: 'EPSG:4326 (WGS84)' },
+    { value: 'EPSG:3857', label: 'EPSG:3857 (Web Mercator)' }
+  ];
+
+  constructor(
+    private fb: FormBuilder,
+    private geoserverService: GeoserverService,
+    private notificationService: NotificationService,
+    private router: Router
+  ) {}
+
+  ngOnInit(): void {
+    this.initForm();
+    this.loadWorkspaces();
+  }
+
+  initForm(): void {
+    this.layerForm = this.fb.group({
+      name: ['', [Validators.required, Validators.pattern(/^[a-z][a-z0-9_]*$/)]],
+      title: ['', Validators.required],
+      workspace: ['default', Validators.required],
+      store: ['shapes', Validators.required],
+      srs: ['EPSG:4326', Validators.required],
+      abstract: [''],
+      minx: [-180],
+      miny: [-90],
+      maxx: [180],
+      maxy: [90]
+    });
+  }
+
+  loadWorkspaces(): void {
+    this.geoserverService.getWorkspaces().subscribe({
+      next: (workspaces) => {
+        this.workspaces = [...new Set([...this.workspaces, ...workspaces])];
+      }
+    });
+  }
+
+  onSubmit(): void {
+    if (this.layerForm.invalid) {
+      this.notificationService.error('请检查表单填写');
+      return;
+    }
+
+    this.loading = true;
+    const formValue = this.layerForm.value;
+
+    this.geoserverService.createLayer(formValue).subscribe({
+      next: (layer) => {
+        this.notificationService.success(`图层 "${layer.name}" 创建成功`);
+        this.loading = false;
+        this.router.navigate(['/layers', layer.name]);
+      },
+      error: (error) => {
+        this.notificationService.error('创建失败: ' + (error.message || '未知错误'));
+        this.loading = false;
+      }
+    });
+  }
+
+  resetForm(): void {
+    this.layerForm.reset({
+      name: '',
+      title: '',
+      workspace: 'default',
+      store: 'shapes',
+      srs: 'EPSG:4326',
+      abstract: '',
+      minx: -180,
+      miny: -90,
+      maxx: 180,
+      maxy: 90
+    });
+  }
+
+  goBack(): void {
+    this.router.navigate(['/layers']);
+  }
+}

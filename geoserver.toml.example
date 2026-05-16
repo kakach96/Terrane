@@ -1,0 +1,38 @@
+[server]
+host = "127.0.0.1"
+port = 8080
+
+data_dir = "./data"
+
+[[workspaces]]
+name = "default"
+uri = "http://geoserver.org/default"
+
+[[workspaces.stores]]
+name = "shapes"
+store_type = "DataStore"
+path = "./data/shapefiles"
+
+[[workspaces.stores.layers]]
+name = "countries"
+title = "World Countries"
+abstract = "World countries boundaries"
+srs = "EPSG:4326"
+
+[workspaces.stores.layers.bounds]
+minx = -180.0
+miny = -90.0
+maxx = 180.0
+maxy = 90.0
+
+[[workspaces.stores.layers]]
+name = "cities"
+title = "Major Cities"
+abstract = "World major cities"
+srs = "EPSG:4326"
+
+[workspaces.stores.layers.bounds]
+minx = -180.0
+miny = -90.0
+maxx = 180.0
+maxy = 90.0

@@ -1,0 +1,13 @@
+.full-width {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+mat-dialog-content {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+textarea {
+  resize: vertical;
+}

@@ -1,0 +1,124 @@
+.server-status {
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .subtitle {
+    margin: 4px 0 0 0;
+    color: #64748b;
+    font-size: 14px;
+  }
+
+  .loading-container {
+    display: flex;
+    justify-content: center;
+    padding: 40px;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .stat-card {
+    display: flex;
+    gap: 16px;
+    padding: 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    &.uptime {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    &.memory {
+      background: #fef3c7;
+      color: #d97706;
+    }
+
+    &.cpu {
+      background: #e0e7ff;
+      color: #4338ca;
+    }
+
+    &.requests {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    &.errors {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    &.layers {
+      background: #ede9fe;
+      color: #7c3aed;
+    }
+
+    &.workspaces {
+      background: #fef9c3;
+      color: #ca8a04;
+    }
+
+    mat-icon {
+      font-size: 24px;
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  .stat-content {
+    flex: 1;
+  }
+
+  .stat-label {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 4px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .progress-bar {
+    margin-top: 8px;
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+
+    .progress {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+  }
+}

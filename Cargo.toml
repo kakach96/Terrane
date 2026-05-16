@@ -1,0 +1,30 @@
+[package]
+name = "rust-geoserver"
+version = "0.1.0"
+edition = "2021"
+authors = ["Rust GeoServer Team"]
+description = "A Rust implementation of GeoServer - Open Source GeoSpatial Data Server"
+
+[dependencies]
+actix-web = "4"
+actix-rt = "2"
+actix-files = "0.6"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+image = "0.24"
+geo = "0.27"
+geo-types = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+config = "0.13"
+thiserror = "1"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+quick-xml = { version = "0.31", features = ["serialize"] }
+sysinfo = "0.30"
+
+[dev-dependencies]
+actix-rt = "2"

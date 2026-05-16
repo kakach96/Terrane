@@ -1,0 +1,82 @@
+<div class="workspaces fade-in">
+  <div class="page-header">
+    <div>
+      <h1>工作空间</h1>
+      <p class="subtitle">管理工作空间</p>
+    </div>
+    <button mat-raised-button color="primary" (click)="openCreateDialog()">
+      <mat-icon>add</mat-icon>
+      新建工作空间
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="card-content">
+      <div *ngIf="loading" class="loading-container">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
+      
+      <table mat-table [dataSource]="workspaces" *ngIf="!loading" class="full-width">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>名称</th>
+          <td mat-cell *matCellDef="let workspace">{{ workspace.name }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="title">
+          <th mat-header-cell *matHeaderCellDef>标题</th>
+          <td mat-cell *matCellDef="let workspace">{{ workspace.title || '-' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="layerCount">
+          <th mat-header-cell *matHeaderCellDef>图层数</th>
+          <td mat-cell *matCellDef="let workspace">{{ workspace.layerCount }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>状态</th>
+          <td mat-cell *matCellDef="let workspace">
+            <button 
+              mat-chip 
+              [class.enabled]="workspace.enabled"
+              [class.disabled]="!workspace.enabled"
+              (click)="toggleStatus(workspace)"
+              class="clickable-chip"
+            >
+              {{ workspace.enabled ? '启用' : '禁用' }}
+            </button>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>操作</th>
+          <td mat-cell *matCellDef="let workspace">
+            <button mat-icon-button color="primary" matTooltip="编辑" (click)="openEditDialog(workspace)">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button 
+              mat-icon-button 
+              color="warn" 
+              matTooltip="删除" 
+              (click)="deleteWorkspace(workspace)"
+              [disabled]="workspace.layerCount > 0"
+              [matTooltipDisabled]="workspace.layerCount > 0"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+      </table>
+
+      <div *ngIf="!loading && workspaces.length === 0" class="empty-state">
+        <mat-icon class="empty-icon">folder_open</mat-icon>
+        <p>暂无工作空间</p>
+        <button mat-raised-button color="primary" (click)="openCreateDialog()">
+          创建第一个工作空间
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

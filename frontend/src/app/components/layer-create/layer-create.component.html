@@ -1,0 +1,118 @@
+<div class="create-layer fade-in">
+  <div class="page-header">
+    <div>
+      <h1>创建图层</h1>
+      <p class="subtitle">添加新的地理空间图层</p>
+    </div>
+  </div>
+
+  <mat-card class="form-card">
+    <mat-card-content>
+      <form [formGroup]="layerForm" (ngSubmit)="onSubmit()">
+        <div class="form-section">
+          <h3>基本信息</h3>
+          
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>图层名称</mat-label>
+            <input matInput formControlName="name" placeholder="例如: world_cities">
+            <mat-hint>只能使用小写字母、数字和下划线</mat-hint>
+            <mat-error *ngIf="layerForm.get('name')?.hasError('required')">
+              图层名称是必填项
+            </mat-error>
+            <mat-error *ngIf="layerForm.get('name')?.hasError('pattern')">
+              只能使用小写字母、数字和下划线
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>显示标题</mat-label>
+            <input matInput formControlName="title" placeholder="例如: World Cities">
+            <mat-error>显示标题是必填项</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>描述</mat-label>
+            <textarea matInput formControlName="abstract" rows="3"></textarea>
+          </mat-form-field>
+        </div>
+
+        <div class="form-section">
+          <h3>存储配置</h3>
+          
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>工作空间</mat-label>
+              <mat-select formControlName="workspace">
+                <mat-option *ngFor="let ws of workspaces" [value]="ws">
+                  {{ ws }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>存储</mat-label>
+              <mat-select formControlName="store">
+                <mat-option *ngFor="let store of stores" [value]="store">
+                  {{ store }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3>空间参考</h3>
+          
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>坐标系统 (SRS)</mat-label>
+            <mat-select formControlName="srs">
+              <mat-option *ngFor="let srs of srsOptions" [value]="srs.value">
+                {{ srs.label }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="form-section">
+          <h3>边界范围</h3>
+          
+          <div class="bounds-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>最小 X</mat-label>
+              <input matInput type="number" formControlName="minx">
+            </mat-form-field>
+            
+            <mat-form-field appearance="outline">
+              <mat-label>最小 Y</mat-label>
+              <input matInput type="number" formControlName="miny">
+            </mat-form-field>
+            
+            <mat-form-field appearance="outline">
+              <mat-label>最大 X</mat-label>
+              <input matInput type="number" formControlName="maxx">
+            </mat-form-field>
+            
+            <mat-form-field appearance="outline">
+              <mat-label>最大 Y</mat-label>
+              <input matInput type="number" formControlName="maxy">
+            </mat-form-field>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button mat-button type="button" (click)="goBack()">
+            取消
+          </button>
+          <button mat-stroked-button type="button" (click)="resetForm()">
+            重置
+          </button>
+          <button mat-raised-button color="primary" type="submit" [disabled]="loading">
+            <mat-icon *ngIf="!loading">add_circle</mat-icon>
+            <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+            {{ loading ? '创建中...' : '创建图层' }}
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+</div>

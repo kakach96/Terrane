@@ -1,0 +1,75 @@
+<div class="app-container">
+  <mat-sidenav-container class="sidenav-container">
+    <mat-sidenav #sidenav mode="side" [opened]="sidenavOpened" class="sidenav">
+      <div class="sidenav-header">
+        <div class="logo">
+          <span class="material-icons">public</span>
+          <span class="logo-text">RRGeoServer</span>
+        </div>
+      </div>
+      
+      <mat-nav-list class="nav-menu">
+        <a mat-list-item routerLink="/dashboard" routerLinkActive="active">
+          <mat-icon matListItemIcon>dashboard</mat-icon>
+          <span matListItemTitle>仪表盘</span>
+        </a>
+        
+        <a mat-list-item routerLink="/workspaces" routerLinkActive="active">
+          <mat-icon matListItemIcon>folder</mat-icon>
+          <span matListItemTitle>工作空间</span>
+        </a>
+        
+        <a mat-list-item routerLink="/layers" routerLinkActive="active">
+          <mat-icon matListItemIcon>layers</mat-icon>
+          <span matListItemTitle>图层</span>
+        </a>
+        
+        <a mat-list-item routerLink="/layer-preview" routerLinkActive="active">
+          <mat-icon matListItemIcon>visibility</mat-icon>
+          <span matListItemTitle>图层预览</span>
+        </a>
+        
+        <a mat-list-item routerLink="/tile-layers" routerLinkActive="active">
+          <mat-icon matListItemIcon>grid_view</mat-icon>
+          <span matListItemTitle>切片图层</span>
+        </a>
+        
+        <a mat-list-item routerLink="/server-status" routerLinkActive="active">
+          <mat-icon matListItemIcon>monitoring</mat-icon>
+          <span matListItemTitle>服务器状态</span>
+        </a>
+      </mat-nav-list>
+      
+      <div class="sidenav-footer">
+        <div class="version">v0.1.0</div>
+      </div>
+    </mat-sidenav>
+    
+    <mat-sidenav-content class="main-content">
+      <mat-toolbar class="top-toolbar">
+        <button mat-icon-button (click)="sidenav.toggle()">
+          <mat-icon>menu</mat-icon>
+        </button>
+        <span class="toolbar-title">{{ pageTitle }}</span>
+        <span class="spacer"></span>
+        <button mat-icon-button [matMenuTriggerFor]="menu">
+          <mat-icon>account_circle</mat-icon>
+        </button>
+        <mat-menu #menu="matMenu">
+          <button mat-menu-item>
+            <mat-icon>settings</mat-icon>
+            <span>设置</span>
+          </button>
+          <button mat-menu-item>
+            <mat-icon>info</mat-icon>
+            <span>关于</span>
+          </button>
+        </mat-menu>
+      </mat-toolbar>
+      
+      <div class="page-container">
+        <router-outlet></router-outlet>
+      </div>
+    </mat-sidenav-content>
+  </mat-sidenav-container>
+</div>
