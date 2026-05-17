@@ -5,12 +5,13 @@
 *.dll
 
 # Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/.angular/
+frontend/node_modules/*
+frontend/dist/*
+frontend/.angular/*
 frontend/package-lock.json
 frontend/yarn.lock
-frontend/.cache/
+frontend/.cache/*
+frontend/cache/*
 
 # IDE
 .vscode/
@@ -27,3 +28,6 @@ desktop.ini
 # Build artifacts
 static/*
 !static/.gitkeep
+
+.tmp_check/*
+geoserver.sqlite

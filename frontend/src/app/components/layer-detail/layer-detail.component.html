@@ -49,40 +49,6 @@
           </div>
         </mat-card-content>
       </mat-card>
-
-      <mat-card class="preview-card">
-        <mat-card-header>
-          <mat-icon matCardAvatar>visibility</mat-icon>
-          <mat-card-title>图层预览</mat-card-title>
-          <div class="preview-actions">
-            <button mat-icon-button (click)="refreshPreview()" matTooltip="刷新">
-              <mat-icon>refresh</mat-icon>
-            </button>
-          </div>
-        </mat-card-header>
-        <mat-card-content>
-          <div class="preview-container">
-            <img *ngIf="showPreview" [src]="previewUrl" alt="图层预览">
-            <div *ngIf="!showPreview" class="preview-placeholder" (click)="togglePreview()">
-              <mat-icon>image</mat-icon>
-              <p>点击加载预览</p>
-            </div>
-          </div>
-          <div class="preview-controls">
-            <mat-form-field appearance="outline">
-              <mat-label>宽度</mat-label>
-              <input matInput type="number" [(ngModel)]="previewSize.width" (change)="updatePreviewUrl()">
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>高度</mat-label>
-              <input matInput type="number" [(ngModel)]="previewSize.height" (change)="updatePreviewUrl()">
-            </mat-form-field>
-            <button mat-raised-button color="primary" (click)="togglePreview()">
-              {{ showPreview ? '隐藏预览' : '加载预览' }}
-            </button>
-          </div>
-        </mat-card-content>
-      </mat-card>
     </div>
 
     <mat-card class="features-card">
@@ -129,7 +95,10 @@
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef>操作</th>
             <td mat-cell *matCellDef="let feature">
-              <button mat-icon-button color="warn" (click)="deleteFeature(feature)">
+              <button mat-icon-button color="primary" (click)="viewFeature(feature)" matTooltip="查看详情">
+                <mat-icon>visibility</mat-icon>
+              </button>
+              <button mat-icon-button color="warn" (click)="deleteFeature(feature)" matTooltip="删除">
                 <mat-icon>delete</mat-icon>
               </button>
             </td>

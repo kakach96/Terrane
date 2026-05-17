@@ -15,7 +15,11 @@ import {
   Workspace,
   CreateWorkspaceRequest,
   UpdateWorkspaceRequest,
-  ServerStatus
+  ServerStatus,
+  DataSource,
+  CreateDataSourceRequest,
+  UpdateDataSourceRequest,
+  ConnectionTestResult
 } from '../models/geoserver.models';
 
 @Injectable({
@@ -65,6 +69,10 @@ export class GeoserverService {
 
   deleteFeature(layerName: string, featureId: string): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}/layers/${layerName}/features/${featureId}`);
+  }
+
+  updateFeature(layerName: string, featureId: string, feature: CreateFeatureRequest): Observable<Feature> {
+    return this.http.put<Feature>(`${this.apiUrl}/layers/${layerName}/features/${featureId}`, feature);
   }
 
   getPreviewUrl(layerName: string, options?: PreviewOptions): string {
@@ -127,5 +135,43 @@ export class GeoserverService {
   getServerStatus(): Observable<ServerStatus> {
     return this.http.get<ApiResponse<ServerStatus>>(`${this.apiUrl}/server/status`)
       .pipe(map(response => response.data as ServerStatus));
+  }
+
+  getDataSources(): Observable<DataSource[]> {
+    return this.http.get<ApiResponse<DataSource[]>>(`${this.apiUrl}/data-sources`)
+      .pipe(map(response => response.data || []));
+  }
+
+  getDataSource(name: string): Observable<DataSource> {
+    return this.http.get<ApiResponse<DataSource>>(`${this.apiUrl}/data-sources/${name}`)
+      .pipe(map(response => response.data as DataSource));
+  }
+
+  createDataSource(request: CreateDataSourceRequest): Observable<DataSource> {
+    return this.http.post<ApiResponse<DataSource>>(`${this.apiUrl}/data-sources`, request)
+      .pipe(map(response => response.data as DataSource));
+  }
+
+  updateDataSource(name: string, request: UpdateDataSourceRequest): Observable<void> {
+    return this.http.put<ApiResponse<void>>(`${this.apiUrl}/data-sources/${name}`, request)
+      .pipe(map(() => void 0));
+  }
+
+  deleteDataSource(name: string): Observable<void> {
+    return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/data-sources/${name}`)
+      .pipe(map(() => void 0));
+  }
+
+  testConnection(request: CreateDataSourceRequest): Observable<ConnectionTestResult> {
+    return this.http.post<ConnectionTestResult>(`${this.apiUrl}/data-sources/test`, request);
+  }
+
+  testDataSourceConnection(name: string): Observable<ConnectionTestResult> {
+    return this.http.post<ConnectionTestResult>(`${this.apiUrl}/data-sources/${name}/test`, {});
+  }
+
+  getDataSourceTables(dataSourceName: string): Observable<string[]> {
+    return this.http.get<ApiResponse<string[]>>(`${this.apiUrl}/data-sources/${dataSourceName}/tables`)
+      .pipe(map(response => response.data || []));
   }
 }

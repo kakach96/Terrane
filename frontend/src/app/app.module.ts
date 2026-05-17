@@ -24,17 +24,20 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatRippleModule } from '@angular/material/core';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 import { AppComponent } from './app.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { LayersComponent } from './components/layers/layers.component';
 import { LayerDetailComponent } from './components/layer-detail/layer-detail.component';
+import { FeatureDetailDialogComponent } from './components/layer-detail/feature-detail-dialog.component';
 import { LayerCreateComponent } from './components/layer-create/layer-create.component';
 import { PreviewComponent } from './components/preview/preview.component';
 import { ConfirmDialogComponent } from './shared/components/confirm-dialog.component';
 import { WorkspacesComponent } from './components/workspaces/workspaces.component';
 import { WorkspaceDialogComponent } from './components/workspaces/workspace-dialog.component';
-import { DatasourcesComponent } from './components/datasources/datasources.component';
+import { DataSourcesComponent } from './components/data-sources/data-sources.component';
+import { DataSourceDialogComponent } from './components/data-sources/data-source-dialog/data-source-dialog.component';
 import { TileLayersComponent } from './components/tile-layers/tile-layers.component';
 import { ServerStatusComponent } from './components/server-status/server-status.component';
 
@@ -42,6 +45,7 @@ const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
   { path: 'dashboard', component: DashboardComponent },
   { path: 'workspaces', component: WorkspacesComponent },
+  { path: 'data-sources', component: DataSourcesComponent },
   { path: 'layers', component: LayersComponent },
   { path: 'layers/create', component: LayerCreateComponent },
   { path: 'layers/:name', component: LayerDetailComponent },
@@ -61,7 +65,8 @@ const routes: Routes = [
     ConfirmDialogComponent,
     WorkspacesComponent,
     WorkspaceDialogComponent,
-    DatasourcesComponent,
+    DataSourcesComponent,
+    DataSourceDialogComponent,
     TileLayersComponent,
     ServerStatusComponent
   ],
@@ -90,7 +95,9 @@ const routes: Routes = [
     MatDividerModule,
     MatMenuModule,
     MatBadgeModule,
-    MatRippleModule
+    MatRippleModule,
+    MatSlideToggleModule,
+    FeatureDetailDialogComponent
   ],
   providers: [],
   bootstrap: [AppComponent]

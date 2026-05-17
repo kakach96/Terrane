@@ -16,6 +16,7 @@ mod handlers;
 mod utils;
 mod state;
 mod routes;
+mod store;
 
 use config::GeoServerConfig;
 use state::AppState;
@@ -112,7 +113,7 @@ async fn main() -> std::io::Result<()> {
     
     print_startup_info(&host, port, &api_context);
     
-    let app_state = web::Data::new(AppState::new(config));
+    let app_state = web::Data::new(AppState::new(config).await);
     
     HttpServer::new(move || {
         App::new()

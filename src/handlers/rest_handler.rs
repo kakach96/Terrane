@@ -32,25 +32,54 @@ impl<T> ApiResponse<T> {
 }
 
 pub async fn list_layers(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
-    let layers = state.list_layers().await;
-    let result: Vec<_> = layers.iter()
-        .map(|l| serde_json::json!({
-            "name": l.name,
-            "title": l.title,
-            "workspace": l.workspace,
-            "store": l.store,
-            "srs": l.srs.to_epsg(),
-            "bounds": {
-                "minx": l.native_bounds.bounds.minx,
-                "miny": l.native_bounds.bounds.miny,
-                "maxx": l.native_bounds.bounds.maxx,
-                "maxy": l.native_bounds.bounds.maxy,
-            },
-            "enabled": l.enabled,
-        }))
-        .collect();
-    
-    Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
+    if let Some(store) = &state.store {
+        match store.get_all_layers().await {
+            Ok(layers) => {
+                let result: Vec<_> = layers.iter()
+                    .map(|l| serde_json::json!({
+                        "name": l.name,
+                        "title": l.title,
+                        "workspace": l.workspace,
+                        "store": l.store,
+                        "srs": l.srs,
+                        "bounds": {
+                            "minx": l.minx,
+                            "miny": l.miny,
+                            "maxx": l.maxx,
+                            "maxy": l.maxy,
+                        },
+                        "enabled": l.enabled,
+                    }))
+                    .collect();
+
+                Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
+            }
+            Err(e) => {
+                eprintln!("Failed to list layers: {}", e);
+                Err(GeoServerError::InternalError("Failed to list layers".to_string()))
+            }
+        }
+    } else {
+        let layers = state.list_layers().await;
+        let result: Vec<_> = layers.iter()
+            .map(|l| serde_json::json!({
+                "name": l.name,
+                "title": l.title,
+                "workspace": l.workspace,
+                "store": l.store,
+                "srs": l.srs.to_epsg(),
+                "bounds": {
+                    "minx": l.native_bounds.bounds.minx,
+                    "miny": l.native_bounds.bounds.miny,
+                    "maxx": l.native_bounds.bounds.maxx,
+                    "maxy": l.native_bounds.bounds.maxy,
+                },
+                "enabled": l.enabled,
+            }))
+            .collect();
+
+        Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
+    }
 }
 
 pub async fn get_layer(
@@ -58,40 +87,84 @@ pub async fn get_layer(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
-    
-    if let Some(layer) = state.get_layer(layer_name).await {
-        let response = serde_json::json!({
-            "name": layer.name,
-            "title": layer.title,
-            "abstract": layer.abstract_text,
-            "workspace": layer.workspace,
-            "store": layer.store,
-            "srs": layer.srs.to_epsg(),
-            "native_bounds": {
-                "crs": layer.native_bounds.crs.to_epsg(),
-                "bounds": {
-                    "minx": layer.native_bounds.bounds.minx,
-                    "miny": layer.native_bounds.bounds.miny,
-                    "maxx": layer.native_bounds.bounds.maxx,
-                    "maxy": layer.native_bounds.bounds.maxy,
-                },
-            },
-            "lat_lon_bounds": {
-                "crs": layer.lat_lon_bounds.crs.to_epsg(),
-                "bounds": {
-                    "minx": layer.lat_lon_bounds.bounds.minx,
-                    "miny": layer.lat_lon_bounds.bounds.miny,
-                    "maxx": layer.lat_lon_bounds.bounds.maxx,
-                    "maxy": layer.lat_lon_bounds.bounds.maxy,
-                },
-            },
-            "styles": layer.styles,
-            "enabled": layer.enabled,
-        });
-        
-        Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
+
+    if let Some(store) = &state.store {
+        match store.get_layer(layer_name).await {
+            Ok(Some(layer)) => {
+                let response = serde_json::json!({
+                    "name": layer.name,
+                    "title": layer.title,
+                    "abstract": layer.abstract_text,
+                    "workspace": layer.workspace,
+                    "store": layer.store,
+                    "srs": layer.srs,
+                    "native_bounds": {
+                        "crs": layer.srs,
+                        "bounds": {
+                            "minx": layer.minx,
+                            "miny": layer.miny,
+                            "maxx": layer.maxx,
+                            "maxy": layer.maxy,
+                        },
+                    },
+                    "lat_lon_bounds": {
+                        "crs": "EPSG:4326",
+                        "bounds": {
+                            "minx": layer.minx,
+                            "miny": layer.miny,
+                            "maxx": layer.maxx,
+                            "maxy": layer.maxy,
+                        },
+                    },
+                    "styles": [],
+                    "enabled": layer.enabled,
+                });
+
+                Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
+            }
+            Ok(None) => {
+                Err(GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))
+            }
+            Err(e) => {
+                eprintln!("Failed to get layer: {}", e);
+                Err(GeoServerError::InternalError("Failed to get layer".to_string()))
+            }
+        }
     } else {
-        Err(GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))
+        if let Some(layer) = state.get_layer(layer_name).await {
+            let response = serde_json::json!({
+                "name": layer.name,
+                "title": layer.title,
+                "abstract": layer.abstract_text,
+                "workspace": layer.workspace,
+                "store": layer.store,
+                "srs": layer.srs.to_epsg(),
+                "native_bounds": {
+                    "crs": layer.native_bounds.crs.to_epsg(),
+                    "bounds": {
+                        "minx": layer.native_bounds.bounds.minx,
+                        "miny": layer.native_bounds.bounds.miny,
+                        "maxx": layer.native_bounds.bounds.maxx,
+                        "maxy": layer.native_bounds.bounds.maxy,
+                    },
+                },
+                "lat_lon_bounds": {
+                    "crs": layer.lat_lon_bounds.crs.to_epsg(),
+                    "bounds": {
+                        "minx": layer.lat_lon_bounds.bounds.minx,
+                        "miny": layer.lat_lon_bounds.bounds.miny,
+                        "maxx": layer.lat_lon_bounds.bounds.maxx,
+                        "maxy": layer.lat_lon_bounds.bounds.maxy,
+                    },
+                },
+                "styles": layer.styles,
+                "enabled": layer.enabled,
+            });
+
+            Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
+        } else {
+            Err(GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))
+        }
     }
 }
 
@@ -235,6 +308,60 @@ pub async fn delete_feature(
                 "deleted": true,
                 "feature_id": feature_id,
             }))));
+        }
+    }
+    
+    Err(GeoServerError::NotFound(format!("Feature '{}' not found", feature_id)))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateFeatureRequest {
+    pub geometry: Option<GeoJsonGeometry>,
+    pub properties: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+pub async fn update_feature(
+    req: HttpRequest,
+    body: web::Json<UpdateFeatureRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let layer_name = req.match_info().get("layer").unwrap_or("");
+    let feature_id = req.match_info().get("feature").unwrap_or("");
+    
+    let mut features_map = state.features.write().await;
+    if let Some(features) = features_map.get_mut(layer_name) {
+        if let Some(feature) = features.iter_mut().find(|f| f.id == feature_id) {
+            if let Some(new_geometry) = &body.geometry {
+                feature.geometry = new_geometry.clone();
+            }
+            
+            if let Some(new_properties) = &body.properties {
+                for (key, value) in new_properties {
+                    let prop_value = match value {
+                        serde_json::Value::String(s) => crate::models::PropertyValue::String(s.clone()),
+                        serde_json::Value::Number(n) => {
+                            if let Some(i) = n.as_i64() {
+                                crate::models::PropertyValue::Integer(i)
+                            } else if let Some(f) = n.as_f64() {
+                                crate::models::PropertyValue::Number(f)
+                            } else {
+                                crate::models::PropertyValue::String(n.to_string())
+                            }
+                        }
+                        serde_json::Value::Bool(b) => crate::models::PropertyValue::Boolean(*b),
+                        serde_json::Value::Null => crate::models::PropertyValue::Null,
+                        _ => crate::models::PropertyValue::String(value.to_string()),
+                    };
+                    feature.properties.insert(key.clone(), prop_value);
+                }
+            }
+            
+            return Ok(HttpResponse::Ok().json(serde_json::json!({
+                "type": "Feature",
+                "id": feature.id,
+                "geometry": feature.geometry,
+                "properties": feature.properties,
+            })));
         }
     }
     
@@ -537,45 +664,68 @@ pub async fn create_layer(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let srs = body.srs.clone()
-        .map(|s| CoordinateReferenceSystem::from_epsg(&s))
-        .unwrap_or(CoordinateReferenceSystem::EPSG4326);
-    
-    let bounds = if let (Some(minx), Some(miny), Some(maxx), Some(maxy)) = 
+        .unwrap_or_else(|| "EPSG:4326".to_string());
+
+    let (minx, miny, maxx, maxy) = if let (Some(x1), Some(y1), Some(x2), Some(y2)) =
         (body.minx, body.miny, body.maxx, body.maxy) {
-        BoundingBox::new(srs.clone(), Bounds::new(minx, miny, maxx, maxy))
+        (x1, y1, x2, y2)
     } else {
-        BoundingBox::world(srs.clone())
+        (-180.0, -90.0, 180.0, 90.0)
     };
-    
-    let mut layer = Layer::new(
-        body.name.clone(),
-        body.title.clone(),
-        body.workspace.clone(),
-        body.store.clone(),
-        srs,
-    ).with_bounds(bounds);
-    
-    layer.abstract_text = body.abstract_text.clone();
-    
-    state.add_layer(layer.clone()).await;
-    
-    let response = serde_json::json!({
-        "name": layer.name,
-        "title": layer.title,
-        "workspace": layer.workspace,
-        "store": layer.store,
-        "srs": layer.srs.to_epsg(),
-        "bounds": {
-            "minx": layer.native_bounds.bounds.minx,
-            "miny": layer.native_bounds.bounds.miny,
-            "maxx": layer.native_bounds.bounds.maxx,
-            "maxy": layer.native_bounds.bounds.maxy,
-        },
-        "enabled": layer.enabled,
-        "message": "Layer created successfully",
-    });
-    
-    Ok(HttpResponse::Created().json(ApiResponse::success(response)))
+
+    if let Some(store) = &state.store {
+        let layer = crate::store::sqlite_store::Layer {
+            name: body.name.clone(),
+            title: body.title.clone(),
+            workspace: body.workspace.clone(),
+            store: body.store.clone(),
+            srs: srs.clone(),
+            abstract_text: body.abstract_text.clone(),
+            enabled: true,
+            minx,
+            miny,
+            maxx,
+            maxy,
+            created: String::new(),
+            modified: String::new(),
+        };
+
+        match store.create_layer(&layer).await {
+            Ok(created_layer) => {
+                state.add_layer(Layer::new(
+                    created_layer.name.clone(),
+                    created_layer.title.clone(),
+                    created_layer.workspace.clone(),
+                    created_layer.store.clone(),
+                    CoordinateReferenceSystem::from_epsg(&created_layer.srs),
+                )).await;
+
+                let response = serde_json::json!({
+                    "name": created_layer.name,
+                    "title": created_layer.title,
+                    "workspace": created_layer.workspace,
+                    "store": created_layer.store,
+                    "srs": created_layer.srs,
+                    "bounds": {
+                        "minx": created_layer.minx,
+                        "miny": created_layer.miny,
+                        "maxx": created_layer.maxx,
+                        "maxy": created_layer.maxy,
+                    },
+                    "enabled": created_layer.enabled,
+                    "message": "Layer created successfully",
+                });
+
+                Ok(HttpResponse::Created().json(ApiResponse::success(response)))
+            }
+            Err(e) => {
+                eprintln!("Failed to create layer: {}", e);
+                Err(GeoServerError::InternalError("Failed to create layer".to_string()))
+            }
+        }
+    } else {
+        Err(GeoServerError::InternalError("Database not available".to_string()))
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -592,19 +742,38 @@ pub async fn update_layer(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
-    
-    let updates = crate::state::LayerUpdates {
-        title: body.title.clone(),
-        abstract_text: body.abstract_text.clone(),
-        enabled: body.enabled,
-    };
-    
-    if state.update_layer(layer_name, updates).await {
-        Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-            "message": format!("Layer '{}' updated successfully", layer_name),
-        }))))
+
+    if let Some(store) = &state.store {
+        match store.update_layer(
+            layer_name,
+            body.title.clone(),
+            body.abstract_text.clone(),
+            body.enabled,
+        ).await {
+            Ok(_) => {
+                Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                    "message": format!("Layer '{}' updated successfully", layer_name),
+                }))))
+            }
+            Err(e) => {
+                eprintln!("Failed to update layer: {}", e);
+                Err(GeoServerError::InternalError("Failed to update layer".to_string()))
+            }
+        }
     } else {
-        Err(GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))
+        let updates = crate::state::LayerUpdates {
+            title: body.title.clone(),
+            abstract_text: body.abstract_text.clone(),
+            enabled: body.enabled,
+        };
+
+        if state.update_layer(layer_name, updates).await {
+            Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "message": format!("Layer '{}' updated successfully", layer_name),
+            }))))
+        } else {
+            Err(GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))
+        }
     }
 }
 
@@ -613,13 +782,27 @@ pub async fn delete_layer(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
-    
-    if state.delete_layer(layer_name).await {
-        Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-            "message": format!("Layer '{}' deleted successfully", layer_name),
-        }))))
+
+    if let Some(store) = &state.store {
+        match store.delete_layer(layer_name).await {
+            Ok(_) => {
+                Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                    "message": format!("Layer '{}' deleted successfully", layer_name),
+                }))))
+            }
+            Err(e) => {
+                eprintln!("Failed to delete layer: {}", e);
+                Err(GeoServerError::InternalError("Failed to delete layer".to_string()))
+            }
+        }
     } else {
-        Err(GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))
+        if state.delete_layer(layer_name).await {
+            Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "message": format!("Layer '{}' deleted successfully", layer_name),
+            }))))
+        } else {
+            Err(GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))
+        }
     }
 }
 
@@ -658,4 +841,442 @@ pub async fn preview_layer(
     Ok(HttpResponse::Ok()
         .content_type(content_type)
         .body(image_data))
+}
+
+pub async fn list_data_sources(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+    if let Some(store) = &state.store {
+        match store.get_all_data_sources().await {
+            Ok(data_sources) => {
+                let result: Vec<_> = data_sources.iter()
+                    .map(|ds| serde_json::json!({
+                        "name": ds.name,
+                        "type": format!("{}", ds.data_source_type).to_lowercase(),
+                        "workspace": ds.workspace,
+                        "enabled": ds.enabled,
+                        "connection": ds.connection.as_ref().map(|c| serde_json::json!({
+                            "host": c.host,
+                            "port": c.port,
+                            "database": c.database,
+                            "username": c.username,
+                        })),
+                        "created": ds.created,
+                        "modified": ds.modified,
+                    }))
+                    .collect();
+                Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
+            }
+            Err(e) => {
+                eprintln!("Failed to get data sources: {}", e);
+                Ok(HttpResponse::Ok().json(ApiResponse::<Vec<serde_json::Value>>::success(vec![])))
+            }
+        }
+    } else {
+        Ok(HttpResponse::Ok().json(ApiResponse::<Vec<serde_json::Value>>::success(vec![])))
+    }
+}
+
+pub async fn get_data_source(
+    req: HttpRequest,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let name = req.match_info().get("name").unwrap_or("");
+    
+    if let Some(store) = &state.store {
+        match store.get_data_source(name).await {
+            Ok(Some(ds)) => {
+                let response = serde_json::json!({
+                    "name": ds.name,
+                    "type": format!("{}", ds.data_source_type).to_lowercase(),
+                    "workspace": ds.workspace,
+                    "enabled": ds.enabled,
+                    "connection": ds.connection.as_ref().map(|c| serde_json::json!({
+                        "host": c.host,
+                        "port": c.port,
+                        "database": c.database,
+                        "username": c.username,
+                    })),
+                    "created": ds.created,
+                    "modified": ds.modified,
+                });
+                Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
+            }
+            Ok(None) => {
+                return Err(GeoServerError::NotFound(format!("Data source '{}' not found", name)));
+            }
+            Err(e) => {
+                eprintln!("Failed to get data source: {}", e);
+                Err(GeoServerError::InternalError("Failed to get data source".to_string()))
+            }
+        }
+    } else {
+        Err(GeoServerError::InternalError("Database not available".to_string()))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateDataSourceRequest {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub data_source_type: String,
+    pub workspace: Option<String>,
+    pub enabled: Option<bool>,
+    pub connection: DataSourceConnectionRequest,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DataSourceConnectionRequest {
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    #[serde(default)]
+    pub schema: Option<String>,
+    pub username: String,
+    pub password: Option<String>,
+}
+
+pub async fn create_data_source(
+    body: web::Json<CreateDataSourceRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let data_source_type = match body.data_source_type.as_str() {
+        "postgis" => crate::models::DataSourceType::Postgis,
+        "shapefile" => crate::models::DataSourceType::Shapefile,
+        "geotiff" => crate::models::DataSourceType::Geotiff,
+        _ => return Err(GeoServerError::BadRequest("Invalid data source type".to_string())),
+    };
+
+    if let Some(store) = &state.store {
+        match store.get_data_source(&body.name).await {
+            Ok(Some(_)) => {
+                return Err(GeoServerError::Conflict(format!(
+                    "Data source '{}' already exists",
+                    body.name
+                )));
+            }
+            Err(e) => {
+                eprintln!("Failed to check data source: {}", e);
+                return Err(GeoServerError::InternalError("Failed to create data source".to_string()));
+            }
+            _ => {}
+        }
+
+        let connection = crate::models::DataSourceConnection {
+            host: body.connection.host.clone(),
+            port: body.connection.port,
+            database: body.connection.database.clone(),
+            schema: body.connection.schema.clone().unwrap_or("public".to_string()),
+            username: body.connection.username.clone(),
+            password: body.connection.password.clone(),
+        };
+
+        match store.create_data_source(
+            &body.name,
+            &data_source_type,
+            body.workspace.clone(),
+            body.enabled.unwrap_or(true),
+            &connection,
+        ).await {
+            Ok(ds) => {
+                let response = serde_json::json!({
+                    "name": ds.name,
+                    "type": format!("{}", ds.data_source_type).to_lowercase(),
+                    "workspace": ds.workspace,
+                    "enabled": ds.enabled,
+                    "created": ds.created,
+                });
+                Ok(HttpResponse::Created().json(ApiResponse::success(response)))
+            }
+            Err(e) => {
+                eprintln!("Failed to create data source: {}", e);
+                Err(GeoServerError::InternalError("Failed to create data source".to_string()))
+            }
+        }
+    } else {
+        Err(GeoServerError::InternalError("Database not available".to_string()))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateDataSourceRequest {
+    #[serde(rename = "type")]
+    pub data_source_type: Option<String>,
+    pub workspace: Option<String>,
+    pub enabled: Option<bool>,
+    pub connection: Option<DataSourceConnectionRequest>,
+}
+
+pub async fn update_data_source(
+    req: HttpRequest,
+    body: web::Json<UpdateDataSourceRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let name = req.match_info().get("name").unwrap_or("");
+
+    let data_source_type = if let Some(ref t) = body.data_source_type {
+        match t.as_str() {
+            "postgis" => Some(crate::models::DataSourceType::Postgis),
+            "shapefile" => Some(crate::models::DataSourceType::Shapefile),
+            "geotiff" => Some(crate::models::DataSourceType::Geotiff),
+            _ => return Err(GeoServerError::BadRequest("Invalid data source type".to_string())),
+        }
+    } else {
+        None
+    };
+
+    let connection = body.connection.as_ref().map(|c| crate::models::DataSourceConnection {
+        host: c.host.clone(),
+        port: c.port,
+        database: c.database.clone(),
+        schema: c.schema.clone().unwrap_or("public".to_string()),
+        username: c.username.clone(),
+        password: c.password.clone(),
+    });
+
+    if let Some(store) = &state.store {
+        match store.update_data_source(
+            name,
+            data_source_type,
+            body.workspace.clone(),
+            body.enabled,
+            connection,
+        ).await {
+            Ok(_) => {
+                Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                    "message": format!("Data source '{}' updated successfully", name),
+                }))))
+            }
+            Err(e) => {
+                eprintln!("Failed to update data source: {}", e);
+                Err(GeoServerError::InternalError("Failed to update data source".to_string()))
+            }
+        }
+    } else {
+        Err(GeoServerError::InternalError("Database not available".to_string()))
+    }
+}
+
+pub async fn delete_data_source(
+    req: HttpRequest,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let name = req.match_info().get("name").unwrap_or("");
+
+    if let Some(store) = &state.store {
+        match store.get_data_source(name).await {
+            Ok(None) => {
+                return Err(GeoServerError::NotFound(format!("Data source '{}' not found", name)));
+            }
+            Err(e) => {
+                eprintln!("Failed to check data source: {}", e);
+                return Err(GeoServerError::InternalError("Failed to delete data source".to_string()));
+            }
+            _ => {}
+        }
+
+        match store.delete_data_source(name).await {
+            Ok(_) => {
+                Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                    "message": format!("Data source '{}' deleted successfully", name),
+                }))))
+            }
+            Err(e) => {
+                eprintln!("Failed to delete data source: {}", e);
+                Err(GeoServerError::InternalError("Failed to delete data source".to_string()))
+            }
+        }
+    } else {
+        Err(GeoServerError::InternalError("Database not available".to_string()))
+    }
+}
+
+pub async fn test_data_source_connection(
+    req: HttpRequest,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let name = req.match_info().get("name").unwrap_or("");
+
+    if let Some(store) = &state.store {
+        match store.get_data_source(name).await {
+            Ok(Some(ds)) => {
+                if let Some(conn) = &ds.connection {
+                    let result = test_postgis_connection(conn).await;
+                    Ok(HttpResponse::Ok().json(result))
+                } else {
+                    Ok(HttpResponse::Ok().json(serde_json::json!({
+                        "success": false,
+                        "message": "No connection configuration found",
+                    })))
+                }
+            }
+            Ok(None) => {
+                Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "success": false,
+                    "message": format!("Data source '{}' not found", name),
+                })))
+            }
+            Err(e) => {
+                eprintln!("Failed to get data source: {}", e);
+                Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "success": false,
+                    "message": "Failed to get data source",
+                })))
+            }
+        }
+    } else {
+        Ok(HttpResponse::Ok().json(serde_json::json!({
+            "success": false,
+            "message": "Database not available",
+        })))
+    }
+}
+
+pub async fn test_connection(
+    body: web::Json<CreateDataSourceRequest>,
+    _state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let connection = crate::models::DataSourceConnection {
+        host: body.connection.host.clone(),
+        port: body.connection.port,
+        database: body.connection.database.clone(),
+        schema: body.connection.schema.clone().unwrap_or("public".to_string()),
+        username: body.connection.username.clone(),
+        password: body.connection.password.clone(),
+    };
+
+    let result = test_postgis_connection(&connection).await;
+    Ok(HttpResponse::Ok().json(result))
+}
+
+async fn test_postgis_connection(conn: &crate::models::DataSourceConnection) -> serde_json::Value {
+    let conn_str = format!(
+        "host={} port={} dbname={} user={} {}",
+        conn.host,
+        conn.port,
+        conn.database,
+        conn.username,
+        if let Some(pwd) = &conn.password {
+            format!("password={}", pwd)
+        } else {
+            "".to_string()
+        }
+    );
+
+    match tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await {
+        Ok((client, connection)) => {
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    eprintln!("Postgres connection error: {}", e);
+                }
+            });
+
+            if let Ok(_) = client.query_one("SELECT version();", &[]).await {
+                serde_json::json!({
+                    "success": true,
+                    "message": "Connection successful",
+                })
+            } else {
+                serde_json::json!({
+                    "success": false,
+                    "message": "Failed to execute query",
+                })
+            }
+        }
+        Err(e) => {
+            serde_json::json!({
+                "success": false,
+                "message": format!("Connection failed: {}", e),
+            })
+        }
+    }
+}
+
+pub async fn get_data_source_tables(
+    req: HttpRequest,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let name = req.match_info().get("name").unwrap_or("");
+
+    if let Some(store) = &state.store {
+        match store.get_data_source(name).await {
+            Ok(Some(data_source)) => {
+                if data_source.data_source_type != crate::models::DataSourceType::Postgis {
+                    return Err(GeoServerError::BadRequest("Only PostGIS data sources support table listing".to_string()));
+                }
+
+                if let Some(conn_info) = &data_source.connection {
+                    let tables = list_postgis_tables(conn_info).await;
+                    Ok(HttpResponse::Ok().json(ApiResponse::success(tables)))
+                } else {
+                    Err(GeoServerError::BadRequest("Data source has no connection configuration".to_string()))
+                }
+            }
+            Ok(None) => {
+                Err(GeoServerError::NotFound(format!("Data source '{}' not found", name)))
+            }
+            Err(e) => {
+                eprintln!("Failed to get data source: {}", e);
+                Err(GeoServerError::InternalError("Failed to get data source".to_string()))
+            }
+        }
+    } else {
+        Err(GeoServerError::InternalError("Database not available".to_string()))
+    }
+}
+
+async fn list_postgis_tables(conn: &crate::models::DataSourceConnection) -> Vec<String> {
+    let conn_str = format!(
+        "host={} port={} dbname={} user={} {}",
+        conn.host,
+        conn.port,
+        conn.database,
+        conn.username,
+        if let Some(pwd) = &conn.password {
+            format!("password={}", pwd)
+        } else {
+            "".to_string()
+        }
+    );
+
+    match tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await {
+        Ok((client, connection)) => {
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    eprintln!("Postgres connection error: {}", e);
+                }
+            });
+
+            let schema_filter = if conn.schema.is_empty() || conn.schema == "public" {
+                "AND n.nspname = 'public'".to_string()
+            } else {
+                format!("AND n.nspname = '{}'", conn.schema)
+            };
+
+            let query = format!(
+                "SELECT c.relname 
+                 FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE c.relkind IN ('r', 'v')
+                 AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                 {}
+                 ORDER BY c.relname",
+                schema_filter
+            );
+
+            match client.query(&query, &[]).await {
+                Ok(rows) => {
+                    rows.iter()
+                        .map(|row| row.get::<_, String>(0))
+                        .collect()
+                }
+                Err(e) => {
+                    eprintln!("Failed to query tables: {}", e);
+                    vec![]
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to connect to PostgreSQL: {}", e);
+            vec![]
+        }
+    }
 }

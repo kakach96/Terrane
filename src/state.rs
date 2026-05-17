@@ -5,20 +5,30 @@ use tokio::sync::RwLock;
 use std::time::Instant;
 use crate::config::GeoServerConfig;
 use crate::models::{Layer, Feature};
+use crate::store::SqliteStore;
 
 pub struct AppState {
     pub config: GeoServerConfig,
     pub layers: Arc<RwLock<Vec<Layer>>>,
     pub features: Arc<RwLock<HashMap<String, Vec<Feature>>>>,
     pub styles: Arc<RwLock<HashMap<String, String>>>,
+    pub store: Option<Arc<SqliteStore>>,
     pub start_time: Instant,
     pub request_count: AtomicU64,
     pub error_count: AtomicU64,
 }
 
 impl AppState {
-    pub fn new(config: GeoServerConfig) -> Self {
-        let layers: Vec<Layer> = config.workspaces.iter()
+    pub async fn new(config: GeoServerConfig) -> Self {
+        let store = match SqliteStore::new("geoserver.sqlite").await {
+            Ok(s) => Some(Arc::new(s)),
+            Err(e) => {
+                eprintln!("Failed to initialize SQLite store: {}", e);
+                None
+            }
+        };
+
+        let config_layers: Vec<Layer> = config.workspaces.iter()
             .flat_map(|workspace| {
                 workspace.stores.iter().flat_map(|store| {
                     store.layers.iter().map(|layer_config| {
@@ -40,8 +50,36 @@ impl AppState {
                     }).collect::<Vec<_>>()
                 }).collect::<Vec<_>>()
             }).collect();
-        
-        let features_layers = if layers.is_empty() {
+
+        let mut all_layers = config_layers.clone();
+
+        if let Some(ref store) = store {
+            if let Ok(db_layers) = store.get_all_layers().await {
+                for db_layer in db_layers {
+                    let layer = Layer::new(
+                        db_layer.name.clone(),
+                        db_layer.title.clone(),
+                        db_layer.workspace.clone(),
+                        db_layer.store.clone(),
+                        crate::models::CoordinateReferenceSystem::from_epsg(&db_layer.srs),
+                    ).with_bounds(crate::models::BoundingBox::new(
+                        crate::models::CoordinateReferenceSystem::from_epsg(&db_layer.srs),
+                        crate::models::Bounds::new(
+                            db_layer.minx,
+                            db_layer.miny,
+                            db_layer.maxx,
+                            db_layer.maxy,
+                        ),
+                    ));
+
+                    if !all_layers.iter().any(|l| l.name == layer.name) {
+                        all_layers.push(layer);
+                    }
+                }
+            }
+        }
+
+        let features_layers = if all_layers.is_empty() {
             vec![Layer::new(
                 "world".to_string(),
                 "World".to_string(),
@@ -50,14 +88,15 @@ impl AppState {
                 crate::models::CoordinateReferenceSystem::EPSG4326,
             )]
         } else {
-            layers.clone()
+            all_layers.clone()
         };
-        
+
         AppState {
             config,
             layers: Arc::new(RwLock::new(features_layers)),
             features: Arc::new(RwLock::new(HashMap::new())),
             styles: Arc::new(RwLock::new(HashMap::new())),
+            store,
             start_time: Instant::now(),
             request_count: AtomicU64::new(0),
             error_count: AtomicU64::new(0),

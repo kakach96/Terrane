@@ -25,6 +25,9 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 quick-xml = { version = "0.31", features = ["serialize"] }
 sysinfo = "0.30"
+rusqlite = { version = "0.29", features = ["chrono", "bundled"] }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
+postgres-native-tls = "0.5"
 
 [dev-dependencies]
 actix-rt = "2"

@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
+import { Workspace, DataSource } from '../../models/geoserver.models';
 
 @Component({
   selector: 'app-layer-create',
@@ -12,12 +13,11 @@ import { NotificationService } from '../../services/notification.service';
 export class LayerCreateComponent implements OnInit {
   layerForm!: FormGroup;
   loading = false;
-  workspaces: string[] = ['default'];
-  stores: string[] = ['shapes', 'postgis', 'geopackage'];
-  srsOptions = [
-    { value: 'EPSG:4326', label: 'EPSG:4326 (WGS84)' },
-    { value: 'EPSG:3857', label: 'EPSG:3857 (Web Mercator)' }
-  ];
+  workspaces: Workspace[] = [];
+  dataSources: DataSource[] = [];
+  tables: string[] = [];
+  loadingDataSources = false;
+  loadingTables = false;
 
   constructor(
     private fb: FormBuilder,
@@ -35,8 +35,9 @@ export class LayerCreateComponent implements OnInit {
     this.layerForm = this.fb.group({
       name: ['', [Validators.required, Validators.pattern(/^[a-z][a-z0-9_]*$/)]],
       title: ['', Validators.required],
-      workspace: ['default', Validators.required],
-      store: ['shapes', Validators.required],
+      workspace: ['', Validators.required],
+      dataSource: ['', Validators.required],
+      table: ['', Validators.required],
       srs: ['EPSG:4326', Validators.required],
       abstract: [''],
       minx: [-180],
@@ -44,12 +45,73 @@ export class LayerCreateComponent implements OnInit {
       maxx: [180],
       maxy: [90]
     });
+
+    this.layerForm.get('workspace')?.valueChanges.subscribe(workspaceName => {
+      if (workspaceName) {
+        this.loadDataSourcesForWorkspace(workspaceName);
+      } else {
+        this.dataSources = [];
+        this.tables = [];
+        this.layerForm.get('dataSource')?.setValue('');
+        this.layerForm.get('table')?.setValue('');
+      }
+    });
+
+    this.layerForm.get('dataSource')?.valueChanges.subscribe(dataSourceName => {
+      if (dataSourceName) {
+        this.loadTablesForDataSource(dataSourceName);
+      } else {
+        this.tables = [];
+        this.layerForm.get('table')?.setValue('');
+      }
+    });
   }
 
   loadWorkspaces(): void {
-    this.geoserverService.getWorkspaces().subscribe({
+    this.geoserverService.getAllWorkspaces().subscribe({
       next: (workspaces) => {
-        this.workspaces = [...new Set([...this.workspaces, ...workspaces])];
+        this.workspaces = workspaces;
+      }
+    });
+  }
+
+  loadDataSourcesForWorkspace(workspaceName: string): void {
+    this.loadingDataSources = true;
+    this.geoserverService.getDataSources().subscribe({
+      next: (dataSources) => {
+        this.dataSources = dataSources.filter(ds => ds.workspace === workspaceName);
+        this.loadingDataSources = false;
+        this.layerForm.get('dataSource')?.setValue('');
+        this.tables = [];
+        this.layerForm.get('table')?.setValue('');
+      },
+      error: (err) => {
+        console.error('Failed to load data sources:', err);
+        this.loadingDataSources = false;
+        this.dataSources = [];
+      }
+    });
+  }
+
+  loadTablesForDataSource(dataSourceName: string): void {
+     const dataSource = this.dataSources.find(ds => ds.name === dataSourceName);
+     if (!dataSource || dataSource.type !== 'postgis') {
+       this.tables = [];
+       this.layerForm.get('table')?.setValue('');
+       return;
+     }
+
+    this.loadingTables = true;
+    this.geoserverService.getDataSourceTables(dataSourceName).subscribe({
+      next: (tables) => {
+        this.tables = tables;
+        this.loadingTables = false;
+        this.layerForm.get('table')?.setValue('');
+      },
+      error: (err) => {
+        console.error('Failed to load tables:', err);
+        this.loadingTables = false;
+        this.tables = [];
       }
     });
   }
@@ -62,8 +124,22 @@ export class LayerCreateComponent implements OnInit {
 
     this.loading = true;
     const formValue = this.layerForm.value;
+    const layerData = {
+      name: formValue.name,
+      title: formValue.title,
+      workspace: formValue.workspace,
+      store: formValue.dataSource,
+      srs: formValue.srs,
+      abstract: formValue.abstract,
+      bounds: {
+        minx: formValue.minx,
+        miny: formValue.miny,
+        maxx: formValue.maxx,
+        maxy: formValue.maxy
+      }
+    };
 
-    this.geoserverService.createLayer(formValue).subscribe({
+    this.geoserverService.createLayer(layerData).subscribe({
       next: (layer) => {
         this.notificationService.success(`图层 "${layer.name}" 创建成功`);
         this.loading = false;
@@ -80,8 +156,9 @@ export class LayerCreateComponent implements OnInit {
     this.layerForm.reset({
       name: '',
       title: '',
-      workspace: 'default',
-      store: 'shapes',
+      workspace: '',
+      dataSource: '',
+      table: '',
       srs: 'EPSG:4326',
       abstract: '',
       minx: -180,
@@ -89,6 +166,8 @@ export class LayerCreateComponent implements OnInit {
       maxx: 180,
       maxy: 90
     });
+    this.dataSources = [];
+    this.tables = [];
   }
 
   goBack(): void {

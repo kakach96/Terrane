@@ -39,6 +39,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
             .service(
                 web::resource("/layers/{layer}/features/{feature}")
                     .route(web::get().to(crate::handlers::get_feature))
+                    .route(web::put().to(crate::handlers::update_feature))
                     .route(web::delete().to(crate::handlers::delete_feature))
             )
             .service(
@@ -54,5 +55,19 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
             )
             .route("/server/status", web::get().to(crate::handlers::get_server_status))
             .route("/data/upload", web::post().to(crate::handlers::upload_geojson))
+            .service(
+                web::resource("/data-sources")
+                    .route(web::get().to(crate::handlers::list_data_sources))
+                    .route(web::post().to(crate::handlers::create_data_source))
+            )
+            .route("/data-sources/test", web::post().to(crate::handlers::test_connection))
+            .route("/data-sources/{name}/tables", web::get().to(crate::handlers::get_data_source_tables))
+            .service(
+                web::resource("/data-sources/{name}")
+                    .route(web::get().to(crate::handlers::get_data_source))
+                    .route(web::put().to(crate::handlers::update_data_source))
+                    .route(web::delete().to(crate::handlers::delete_data_source))
+            )
+            .route("/data-sources/{name}/test", web::post().to(crate::handlers::test_data_source_connection))
     );
 }

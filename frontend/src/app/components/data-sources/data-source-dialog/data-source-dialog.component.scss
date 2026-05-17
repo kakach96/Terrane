@@ -1,0 +1,22 @@
+.data-source-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .form-row {
+    display: flex;
+    gap: 16px;
+
+    .form-field {
+      flex: 1;
+    }
+  }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 8px 0;
+    padding-top: 8px;
+  }
+}

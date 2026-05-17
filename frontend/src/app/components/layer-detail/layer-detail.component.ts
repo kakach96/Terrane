@@ -1,8 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Layer, Feature } from '../../models/geoserver.models';
+import { FeatureDetailDialogComponent } from './feature-detail-dialog.component';
 
 @Component({
   selector: 'app-layer-detail',
@@ -13,14 +15,12 @@ export class LayerDetailComponent implements OnInit {
   layer: Layer | null = null;
   features: Feature[] = [];
   loading = true;
-  previewUrl = '';
-  showPreview = false;
-  previewSize = { width: 800, height: 400 };
   displayedColumns = ['id', 'type', 'coordinates', 'properties', 'actions'];
 
   constructor(
     private route: ActivatedRoute,
     private router: Router,
+    private dialog: MatDialog,
     private geoserverService: GeoserverService,
     private notificationService: NotificationService
   ) {}
@@ -30,7 +30,6 @@ export class LayerDetailComponent implements OnInit {
     if (layerName) {
       this.loadLayer(layerName);
       this.loadFeatures(layerName);
-      this.updatePreviewUrl();
     }
   }
 
@@ -55,25 +54,12 @@ export class LayerDetailComponent implements OnInit {
     });
   }
 
-  updatePreviewUrl(): void {
-    const layerName = this.route.snapshot.paramMap.get('name');
-    if (layerName) {
-      this.previewUrl = this.geoserverService.getPreviewUrl(layerName, {
-        width: this.previewSize.width,
-        height: this.previewSize.height
-      });
-    }
-  }
-
-  togglePreview(): void {
-    this.showPreview = !this.showPreview;
-    if (this.showPreview) {
-      this.updatePreviewUrl();
-    }
-  }
-
-  refreshPreview(): void {
-    this.updatePreviewUrl();
+  viewFeature(feature: Feature): void {
+    this.dialog.open(FeatureDetailDialogComponent, {
+      data: feature,
+      width: '600px',
+      maxWidth: '90vw'
+    });
   }
 
   deleteFeature(feature: Feature): void {

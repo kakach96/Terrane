@@ -10,6 +10,57 @@
     <mat-card-content>
       <form [formGroup]="layerForm" (ngSubmit)="onSubmit()">
         <div class="form-section">
+          <h3>数据源配置</h3>
+          <p class="section-hint">选择工作空间和数据源来配置图层数据源</p>
+          
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>工作空间</mat-label>
+              <mat-select formControlName="workspace">
+                <mat-option value="" disabled>-- 请选择工作空间 --</mat-option>
+                <mat-option *ngFor="let ws of workspaces" [value]="ws.name">
+                  {{ ws.title || ws.name }}
+                </mat-option>
+              </mat-select>
+              <mat-error *ngIf="layerForm.get('workspace')?.hasError('required')">
+                请选择工作空间
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>数据源</mat-label>
+              <mat-select formControlName="dataSource">
+                <mat-option value="" disabled>-- 请先选择工作空间 --</mat-option>
+                <mat-option *ngFor="let ds of dataSources" [value]="ds.name" [disabled]="!ds.enabled">
+                  <span [class.disabled-option]="!ds.enabled">
+                    {{ ds.name }}
+                    <span *ngIf="!ds.enabled"> (已禁用)</span>
+                  </span>
+                </mat-option>
+              </mat-select>
+              <mat-error *ngIf="layerForm.get('dataSource')?.hasError('required')">
+                请选择数据源
+              </mat-error>
+              <mat-hint *ngIf="loadingDataSources">加载中...</mat-hint>
+            </mat-form-field>
+          </div>
+
+          <mat-form-field appearance="outline" class="full-width" *ngIf="tables.length > 0 || loadingTables">
+            <mat-label>数据表</mat-label>
+            <mat-select formControlName="table">
+              <mat-option value="" disabled>-- 请选择数据表 --</mat-option>
+              <mat-option *ngFor="let table of tables" [value]="table">
+                {{ table }}
+              </mat-option>
+            </mat-select>
+            <mat-error *ngIf="layerForm.get('table')?.hasError('required')">
+              请选择数据表
+            </mat-error>
+            <mat-hint *ngIf="loadingTables">加载表列表中...</mat-hint>
+          </mat-form-field>
+        </div>
+
+        <div class="form-section">
           <h3>基本信息</h3>
           
           <mat-form-field appearance="outline" class="full-width">
@@ -37,38 +88,13 @@
         </div>
 
         <div class="form-section">
-          <h3>存储配置</h3>
-          
-          <div class="form-row">
-            <mat-form-field appearance="outline">
-              <mat-label>工作空间</mat-label>
-              <mat-select formControlName="workspace">
-                <mat-option *ngFor="let ws of workspaces" [value]="ws">
-                  {{ ws }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>存储</mat-label>
-              <mat-select formControlName="store">
-                <mat-option *ngFor="let store of stores" [value]="store">
-                  {{ store }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-        </div>
-
-        <div class="form-section">
           <h3>空间参考</h3>
           
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>坐标系统 (SRS)</mat-label>
             <mat-select formControlName="srs">
-              <mat-option *ngFor="let srs of srsOptions" [value]="srs.value">
-                {{ srs.label }}
-              </mat-option>
+              <mat-option value="EPSG:4326">EPSG:4326 (WGS84)</mat-option>
+              <mat-option value="EPSG:3857">EPSG:3857 (Web Mercator)</mat-option>
             </mat-select>
           </mat-form-field>
         </div>

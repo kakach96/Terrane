@@ -15,6 +15,7 @@ export class AppComponent implements OnInit {
   private menuTitles: { [key: string]: string } = {
     '/dashboard': '仪表盘',
     '/workspaces': '工作空间',
+    '/data-sources': '数据源',
     '/layers': '图层',
     '/layer-preview': '图层预览',
     '/tile-layers': '切片图层',

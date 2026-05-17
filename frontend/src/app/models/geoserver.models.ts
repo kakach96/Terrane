@@ -58,6 +58,11 @@ export interface CreateFeatureRequest {
   properties: Record<string, any>;
 }
 
+export interface UpdateFeatureRequest {
+  geometry?: GeoJsonGeometry;
+  properties?: Record<string, any>;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -112,4 +117,43 @@ export interface ServerStatus {
   layerCount: number;
   enabledLayers: number;
   workspaceCount: number;
+}
+
+export interface DataSource {
+  name: string;
+  type: 'postgis' | 'shapefile' | 'geotiff';
+  workspace?: string;
+  enabled: boolean;
+  connection?: DataSourceConnection;
+  created?: string;
+  modified?: string;
+}
+
+export interface DataSourceConnection {
+  host: string;
+  port: number;
+  database: string;
+  schema?: string;
+  username: string;
+  password?: string;
+}
+
+export interface CreateDataSourceRequest {
+  name: string;
+  type: 'postgis' | 'shapefile' | 'geotiff';
+  workspace?: string;
+  enabled?: boolean;
+  connection: DataSourceConnection;
+}
+
+export interface UpdateDataSourceRequest {
+  type?: 'postgis' | 'shapefile' | 'geotiff';
+  workspace?: string;
+  enabled?: boolean;
+  connection?: DataSourceConnection;
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  message?: string;
 }

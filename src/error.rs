@@ -12,6 +12,9 @@ pub enum GeoServerError {
     #[error("Conflict: {0}")]
     Conflict(String),
     
+    #[error("Internal error: {0}")]
+    InternalError(String),
+    
     #[error("Service error: {0}")]
     ServiceError(String),
     

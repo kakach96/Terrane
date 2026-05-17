@@ -1,0 +1,94 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+<mat-dialog-content>
+  <form [formGroup]="form" class="data-source-form">
+    <div class="form-row">
+      <mat-form-field class="form-field">
+        <mat-label>名称</mat-label>
+        <input matInput formControlName="name" placeholder="输入数据源名称">
+        <mat-error *ngIf="form.get('name')?.invalid && form.get('name')?.touched">
+          名称不能为空
+        </mat-error>
+      </mat-form-field>
+
+      <mat-form-field class="form-field">
+        <mat-label>类型</mat-label>
+        <mat-select formControlName="type">
+          <mat-option *ngFor="let type of dataSourceTypes" [value]="type.value">
+            {{ type.label }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <mat-form-field class="form-field">
+      <mat-label>工作空间</mat-label>
+      <mat-select formControlName="workspace">
+        <mat-option value="" disabled>-- 请选择 --</mat-option>
+        <mat-option *ngFor="let ws of workspaces" [value]="ws.name">
+          {{ ws.title || ws.name }}
+        </mat-option>
+      </mat-select>
+      <mat-error *ngIf="form.get('workspace')?.invalid && form.get('workspace')?.touched">
+        请选择工作空间
+      </mat-error>
+    </mat-form-field>
+
+    <ng-container *ngIf="selectedType === 'postgis'">
+      <mat-divider></mat-divider>
+
+      <h3 class="section-title">PostGIS 连接配置</h3>
+
+      <div class="form-row">
+        <mat-form-field class="form-field">
+          <mat-label>主机</mat-label>
+          <input matInput formControlName="host" placeholder="localhost">
+        </mat-form-field>
+
+        <mat-form-field class="form-field">
+          <mat-label>端口</mat-label>
+          <input matInput formControlName="port" type="number" placeholder="5432">
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field class="form-field">
+          <mat-label>数据库</mat-label>
+          <input matInput formControlName="database" placeholder="数据库名称">
+        </mat-form-field>
+
+        <mat-form-field class="form-field">
+          <mat-label>Schema</mat-label>
+          <input matInput formControlName="schema" placeholder="public">
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field class="form-field">
+          <mat-label>用户名</mat-label>
+          <input matInput formControlName="username" placeholder="用户名">
+        </mat-form-field>
+
+        <mat-form-field class="form-field">
+          <mat-label>密码</mat-label>
+          <input matInput formControlName="password" type="password" placeholder="密码">
+        </mat-form-field>
+      </div>
+    </ng-container>
+
+    <div class="form-row" *ngIf="selectedType !== 'postgis'">
+      <mat-slide-toggle formControlName="enabled">
+        启用数据源
+      </mat-slide-toggle>
+    </div>
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions>
+  <button mat-button (click)="testConnection()" [disabled]="isTesting">
+    <mat-icon>{{ isTesting ? 'hourglass_empty' : 'network_check' }}</mat-icon>
+    {{ isTesting ? '测试中...' : '测试连接' }}
+  </button>
+  <button mat-button (click)="onCancel()">取消</button>
+  <button mat-raised-button color="primary" (click)="onSubmit()">
+    {{ mode === 'create' ? '创建' : '更新' }}
+  </button>
+</mat-dialog-actions>
