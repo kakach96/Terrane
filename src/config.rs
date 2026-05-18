@@ -5,6 +5,8 @@ use config::{Config, File};
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GeoServerConfig {
     pub server: ServerConfig,
+    pub database: DatabaseConfig,
+    pub logging: LoggingConfig,
     pub data_dir: PathBuf,
     pub workspaces: Vec<WorkspaceConfig>,
 }
@@ -14,6 +16,42 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub api_context: String,
+    /// 静态文件目录
+    #[serde(default = "default_static_dir")]
+    pub static_dir: PathBuf,
+    /// PostgreSQL 连接超时秒数
+    #[serde(default = "default_connect_timeout")]
+    pub connect_timeout_secs: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DatabaseConfig {
+    /// SQLite 数据库文件路径
+    #[serde(default = "default_sqlite_path")]
+    pub sqlite_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LoggingConfig {
+    /// 日志级别 (trace/debug/info/warn/error)
+    #[serde(default = "default_log_level")]
+    pub level: String,
+}
+
+fn default_static_dir() -> PathBuf {
+    PathBuf::from("./static")
+}
+
+fn default_connect_timeout() -> u64 {
+    10
+}
+
+fn default_sqlite_path() -> PathBuf {
+    PathBuf::from("geoserver.sqlite")
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -35,6 +73,7 @@ pub struct StoreConfig {
 pub struct LayerConfig {
     pub name: String,
     pub title: String,
+    #[serde(rename = "abstract")]
     pub abstract_text: String,
     pub srs: String,
     pub bounds: BoundsConfig,
@@ -56,6 +95,14 @@ impl Default for GeoServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 8080,
                 api_context: "/geoserver".to_string(),
+                static_dir: default_static_dir(),
+                connect_timeout_secs: default_connect_timeout(),
+            },
+            database: DatabaseConfig {
+                sqlite_path: default_sqlite_path(),
+            },
+            logging: LoggingConfig {
+                level: default_log_level(),
             },
             data_dir: PathBuf::from("./data"),
             workspaces: vec![],

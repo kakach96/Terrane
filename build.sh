@@ -104,7 +104,13 @@ if [ "$BUILD_MODE" = "release" ]; then
     else
         echo "No config file found, skipping"
     fi
-    
+
+    echo "Copying config template..."
+    if [ -f "geoserver.toml.example" ]; then
+        cp "geoserver.toml.example" "$RELEASE_DIR/"
+        echo "Config template copied"
+    fi
+
     echo "Creating README..."
     cat > "$RELEASE_DIR/README.txt" << EOF
 RRGeoServer v1.0.0

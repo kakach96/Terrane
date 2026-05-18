@@ -5,6 +5,7 @@ use crate::models::{Feature, FeatureCollection, GeoJsonGeometry, Layer, Coordina
 use crate::config::WorkspaceConfig;
 use crate::error::GeoServerError;
 use crate::utils::rendering;
+use std::time::Instant;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
@@ -430,11 +431,12 @@ pub async fn list_workspaces(state: web::Data<AppState>) -> Result<HttpResponse,
             })
         })
         .collect();
-    
+
+    let base_url = format!("http://{}:{}{}", state.config.server.host, state.config.server.port, state.config.server.api_context);
     let default_workspace = serde_json::json!({
         "name": "default",
         "title": "默认工作空间",
-        "uri": "http://localhost:8080/geoserver/workspaces/default",
+        "uri": format!("{}/workspaces/default", base_url),
         "enabled": true,
         "layerCount": workspace_stats.get("default").map(|(c, _)| *c).unwrap_or(0),
         "description": "系统默认工作空间",
@@ -465,9 +467,10 @@ pub async fn create_workspace(
         )));
     }
     
+    let base_url = format!("http://{}:{}{}", state.config.server.host, state.config.server.port, state.config.server.api_context);
     let new_workspace = WorkspaceConfig {
         name: body.name.clone(),
-        uri: format!("http://localhost:8080/geoserver/workspaces/{}", body.name),
+        uri: format!("{}/workspaces/{}", base_url, body.name),
         stores: vec![],
     };
     
@@ -1194,88 +1197,107 @@ pub async fn get_data_source_tables(
     req: HttpRequest,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
+    let start_total = Instant::now();
     let name = req.match_info().get("name").unwrap_or("");
+    tracing::debug!("[get_data_source_tables] 开始处理, name={}", name);
 
     if let Some(store) = &state.store {
+        let t1 = Instant::now();
         match store.get_data_source(name).await {
             Ok(Some(data_source)) => {
+                let elapsed_get_ds = t1.elapsed();
+                tracing::debug!("[get_data_source_tables] get_data_source 耗时: {:?}", elapsed_get_ds);
+
                 if data_source.data_source_type != crate::models::DataSourceType::Postgis {
+                    tracing::debug!("[get_data_source_tables] 非 PostGIS 数据源, 跳过");
                     return Err(GeoServerError::BadRequest("Only PostGIS data sources support table listing".to_string()));
                 }
 
                 if let Some(conn_info) = &data_source.connection {
-                    let tables = list_postgis_tables(conn_info).await;
+                    let t2 = Instant::now();
+                    let pool = state.get_pg_pool(&data_source.name, conn_info);
+                    let elapsed_get_pool = t2.elapsed();
+                    tracing::debug!("[get_data_source_tables] get_pg_pool 耗时: {:?}", elapsed_get_pool);
+
+                    let t3 = Instant::now();
+                    let tables = list_postgis_tables_from_pool(&pool, conn_info).await;
+                    let elapsed_query = t3.elapsed();
+                    tracing::debug!("[get_data_source_tables] list_postgis_tables_from_pool 查询耗时: {:?}, 返回 {} 个表", elapsed_query, tables.len());
+
+                    let total = start_total.elapsed();
+                    tracing::debug!("[get_data_source_tables] 总耗时: {:?}", total);
+
                     Ok(HttpResponse::Ok().json(ApiResponse::success(tables)))
                 } else {
+                    tracing::debug!("[get_data_source_tables] 数据源无连接配置");
                     Err(GeoServerError::BadRequest("Data source has no connection configuration".to_string()))
                 }
             }
             Ok(None) => {
+                tracing::debug!("[get_data_source_tables] 数据源 '{}' 未找到", name);
                 Err(GeoServerError::NotFound(format!("Data source '{}' not found", name)))
             }
             Err(e) => {
+                tracing::debug!("[get_data_source_tables] 获取数据源失败: {}", e);
                 eprintln!("Failed to get data source: {}", e);
                 Err(GeoServerError::InternalError("Failed to get data source".to_string()))
             }
         }
     } else {
+        tracing::debug!("[get_data_source_tables] 数据库不可用");
         Err(GeoServerError::InternalError("Database not available".to_string()))
     }
 }
 
-async fn list_postgis_tables(conn: &crate::models::DataSourceConnection) -> Vec<String> {
-    let conn_str = format!(
-        "host={} port={} dbname={} user={} {}",
-        conn.host,
-        conn.port,
-        conn.database,
-        conn.username,
-        if let Some(pwd) = &conn.password {
-            format!("password={}", pwd)
-        } else {
-            "".to_string()
+async fn list_postgis_tables_from_pool(
+    pool: &deadpool_postgres::Pool,
+    conn: &crate::models::DataSourceConnection,
+) -> Vec<String> {
+    let start = Instant::now();
+
+    let t1 = Instant::now();
+    let client = match pool.get().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::debug!("[list_postgis_tables_from_pool] pool.get() 失败: {}, 耗时: {:?}", e, t1.elapsed());
+            eprintln!("Failed to get PG client from pool: {}", e);
+            return vec![];
         }
+    };
+    tracing::debug!("[list_postgis_tables_from_pool] pool.get() 耗时: {:?}", t1.elapsed());
+
+    let schema_filter = if conn.schema.is_empty() || conn.schema == "public" {
+        "AND n.nspname = 'public'".to_string()
+    } else {
+        format!("AND n.nspname = '{}'", conn.schema)
+    };
+
+    let query = format!(
+        "SELECT c.relname
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE c.relkind IN ('r', 'v')
+         AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+         {}
+         ORDER BY c.relname",
+        schema_filter
     );
+    tracing::debug!("[list_postgis_tables_from_pool] 查询SQL: {}", query);
 
-    match tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await {
-        Ok((client, connection)) => {
-            tokio::spawn(async move {
-                if let Err(e) = connection.await {
-                    eprintln!("Postgres connection error: {}", e);
-                }
-            });
-
-            let schema_filter = if conn.schema.is_empty() || conn.schema == "public" {
-                "AND n.nspname = 'public'".to_string()
-            } else {
-                format!("AND n.nspname = '{}'", conn.schema)
-            };
-
-            let query = format!(
-                "SELECT c.relname 
-                 FROM pg_class c
-                 JOIN pg_namespace n ON n.oid = c.relnamespace
-                 WHERE c.relkind IN ('r', 'v')
-                 AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-                 {}
-                 ORDER BY c.relname",
-                schema_filter
-            );
-
-            match client.query(&query, &[]).await {
-                Ok(rows) => {
-                    rows.iter()
-                        .map(|row| row.get::<_, String>(0))
-                        .collect()
-                }
-                Err(e) => {
-                    eprintln!("Failed to query tables: {}", e);
-                    vec![]
-                }
-            }
+    let t2 = Instant::now();
+    match client.query(&query, &[]).await {
+        Ok(rows) => {
+            let elapsed_query = t2.elapsed();
+            let tables: Vec<String> = rows.iter()
+                .map(|row| row.get::<_, String>(0))
+                .collect();
+            tracing::debug!("[list_postgis_tables_from_pool] client.query 执行耗时: {:?}, 返回 {} 行", elapsed_query, tables.len());
+            tracing::debug!("[list_postgis_tables_from_pool] 总耗时: {:?}", start.elapsed());
+            tables
         }
         Err(e) => {
-            eprintln!("Failed to connect to PostgreSQL: {}", e);
+            tracing::debug!("[list_postgis_tables_from_pool] 查询失败: {}, 耗时: {:?}", e, t2.elapsed());
+            eprintln!("Failed to query tables: {}", e);
             vec![]
         }
     }

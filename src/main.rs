@@ -54,10 +54,10 @@ struct Args {
     port: Option<u16>,
 }
 
-fn init_tracing() {
+fn init_tracing(default_level: &str) {
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| default_level.into()),
         ))
         .with(
             tracing_subscriber::fmt::layer()
@@ -102,26 +102,28 @@ async fn serve_index() -> HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    init_tracing();
-    
     let args = Args::parse();
     let config = load_config(&args.config);
-    
+
+    init_tracing(&config.logging.level);
+
     let host = args.host.unwrap_or(config.server.host.clone());
     let port = args.port.unwrap_or(config.server.port);
     let api_context = config.server.api_context.clone();
-    
+    let static_dir = config.server.static_dir.clone();
+    let static_dir_str = static_dir.to_string_lossy().to_string();
+
     print_startup_info(&host, port, &api_context);
-    
+
     let app_state = web::Data::new(AppState::new(config).await);
-    
+
     HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone())
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .configure(|svc| routes::configure_routes(svc, &api_context))
-            .service(Files::new("/", "./static")
+            .service(Files::new("/", &static_dir_str)
                 .index_file("index.html")
                 .use_etag(false)
                 .use_last_modified(false))

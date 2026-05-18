@@ -121,7 +121,13 @@ if %BUILD_MODE%==release (
     ) else (
         echo No config file found, skipping
     )
-    
+
+    echo Copying config template...
+    if exist "geoserver.toml.example" (
+        copy "geoserver.toml.example" "!RELEASE_DIR!\" >nul
+        echo Config template copied
+    )
+
     echo Creating README...
     (
         echo RRGeoServer v1.0.0
