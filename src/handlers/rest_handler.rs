@@ -1,7 +1,7 @@
 use actix_web::{HttpResponse, web, HttpRequest};
 use serde::{Deserialize, Serialize};
 use crate::state::AppState;
-use crate::models::{Feature, FeatureCollection, GeoJsonGeometry, Layer, CoordinateReferenceSystem, BoundingBox, Bounds};
+use crate::models::{Feature, FeatureCollection, GeoJsonGeometry, Layer, CoordinateReferenceSystem};
 use crate::config::WorkspaceConfig;
 use crate::error::GeoServerError;
 use crate::utils::rendering;

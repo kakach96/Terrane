@@ -1,5 +1,6 @@
 use image::{Rgba, RgbaImage, ColorType};
 use image::codecs::png::PngEncoder;
+use image::ImageEncoder;
 use geo_types::{Point, LineString, Polygon, Geometry};
 use crate::models::{Bounds, GeoJsonGeometry, Feature};
 
@@ -9,10 +10,12 @@ pub struct RenderOptions {
     pub height: u32,
     pub transparent: bool,
     pub bg_color: Option<[u8; 4]>,
+    #[allow(dead_code)]
     pub format: RenderFormat,
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum RenderFormat {
     PNG,
     JPEG,
@@ -275,6 +278,7 @@ impl Default for Style {
 #[derive(Debug, Clone)]
 pub struct FillStyle {
     pub color: String,
+    #[allow(dead_code)]
     pub opacity: f64,
 }
 
@@ -291,6 +295,7 @@ impl Default for FillStyle {
 pub struct StrokeStyle {
     pub color: String,
     pub width: Option<f64>,
+    #[allow(dead_code)]
     pub opacity: f64,
 }
 
@@ -308,7 +313,7 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
     if features.is_empty() {
         let img = RgbaImage::new(img_width, img_height);
         let mut buf = Vec::new();
-        PngEncoder::new(&mut buf).encode(&img, img_width, img_height, ColorType::Rgba8).unwrap();
+        PngEncoder::new(&mut buf).write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8).unwrap();
         return buf;
     }
 
@@ -354,7 +359,7 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
     }
 
     let mut world_width = maxx - minx;
-    let mut world_height = maxy - miny;
+    let world_height = maxy - miny;
     
     if world_width < 0.01 {
         world_width = 1.0;
@@ -363,7 +368,6 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
     }
     
     if world_height < 0.01 {
-        world_height = 1.0;
         miny = miny - 0.5;
         maxy = maxy + 0.5;
     }
@@ -393,6 +397,6 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
     let img = renderer.render(features_with_style);
     
     let mut buf = Vec::new();
-    PngEncoder::new(&mut buf).encode(&img, img_width, img_height, ColorType::Rgba8).unwrap();
+    PngEncoder::new(&mut buf).write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8).unwrap();
     buf
 }

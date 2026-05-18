@@ -199,7 +199,8 @@ pub struct CoverageDomain {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpatialDomain {
     pub bounding_boxes: Vec<BoundingBoxMetadata>,
-    pub gridCRS: Option<GridCrs>,
+    #[serde(rename = "gridCRS")]
+    pub grid_crs: Option<GridCrs>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -260,7 +261,7 @@ impl CoverageDescription {
             coverage_domain: CoverageDomain {
                 spatial_domain: SpatialDomain {
                     bounding_boxes: vec![],
-                    gridCRS: Some(GridCrs {
+                    grid_crs: Some(GridCrs {
                         crs: "EPSG:4326".to_string(),
                         grid_base_crs: None,
                         horizontal_xy: Some(true),

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use actix_web::{web, App, HttpServer, middleware, HttpResponse};
 use actix_files::Files;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
