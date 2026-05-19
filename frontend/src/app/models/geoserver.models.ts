@@ -3,8 +3,10 @@ export interface Layer {
   title: string;
   workspace: string;
   store: string;
+  native_name?: string;
   srs: string;
   bounds: LayerBounds;
+  native_bounds?: NativeBounds;
   enabled: boolean;
   abstract?: string;
 }
@@ -14,6 +16,11 @@ export interface LayerBounds {
   miny: number;
   maxx: number;
   maxy: number;
+}
+
+export interface NativeBounds {
+  crs: string;
+  bounds: LayerBounds;
 }
 
 export interface Feature {
@@ -34,11 +41,19 @@ export interface FeatureCollection {
   totalFeatures?: number;
 }
 
+export interface PropertyDef {
+  name: string;
+  type: string;
+  length?: number | null;
+  nullable: boolean;
+}
+
 export interface CreateLayerRequest {
   name: string;
   title: string;
   workspace: string;
   store: string;
+  native_name?: string;
   srs?: string;
   minx?: number;
   miny?: number;
@@ -50,6 +65,7 @@ export interface CreateLayerRequest {
 export interface UpdateLayerRequest {
   title?: string;
   abstract?: string;
+  native_name?: string;
   enabled?: boolean;
 }
 

@@ -23,6 +23,7 @@ pub struct Layer {
     pub store: String,
     pub srs: String,
     pub abstract_text: Option<String>,
+    pub native_name: Option<String>,
     pub enabled: bool,
     pub minx: f64,
     pub miny: f64,
@@ -101,6 +102,7 @@ impl SqliteStore {
                 store TEXT NOT NULL,
                 srs TEXT DEFAULT 'EPSG:4326',
                 abstract_text TEXT,
+                native_name TEXT,
                 enabled INTEGER DEFAULT 1,
                 minx REAL DEFAULT -180,
                 miny REAL DEFAULT -90,
@@ -111,6 +113,20 @@ impl SqliteStore {
             )",
             [],
         )?;
+
+        // 检查并添加 native_name 列（向后兼容）
+        let native_name_exists: Result<bool, _> = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('layers') WHERE name='native_name'",
+            [],
+            |row| row.get::<_, i32>(0).map(|c| c > 0),
+        );
+
+        if let Ok(false) = native_name_exists {
+            conn.execute(
+                "ALTER TABLE layers ADD COLUMN native_name TEXT",
+                [],
+            )?;
+        }
 
         Ok(())
     }
@@ -446,28 +462,63 @@ impl SqliteStore {
 
     pub async fn get_layer(&self, name: &str) -> SqlResult<Option<Layer>> {
         let conn = self.conn.read().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT name, title, workspace, store, srs, abstract_text, enabled, minx, miny, maxx, maxy, created, modified
-             FROM layers WHERE name = ?"
+
+        // 检查 native_name 列是否存在
+        let native_name_exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('layers') WHERE name='native_name'",
+            [],
+            |row| row.get::<_, i32>(0).map(|c| c > 0),
         )?;
+
+        let mut stmt = if native_name_exists {
+            conn.prepare(
+                "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified
+                 FROM layers WHERE name = ?"
+            )?
+        } else {
+            conn.prepare(
+                "SELECT name, title, workspace, store, srs, abstract_text, enabled, minx, miny, maxx, maxy, created, modified
+                 FROM layers WHERE name = ?"
+            )?
+        };
 
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
-            Ok(Some(Layer {
-                name: row.get(0)?,
-                title: row.get(1)?,
-                workspace: row.get(2)?,
-                store: row.get(3)?,
-                srs: row.get(4)?,
-                abstract_text: row.get(5)?,
-                enabled: row.get::<_, i32>(6)? == 1,
-                minx: row.get(7)?,
-                miny: row.get(8)?,
-                maxx: row.get(9)?,
-                maxy: row.get(10)?,
-                created: row.get(11)?,
-                modified: row.get(12)?,
-            }))
+            if native_name_exists {
+                Ok(Some(Layer {
+                    name: row.get(0)?,
+                    title: row.get(1)?,
+                    workspace: row.get(2)?,
+                    store: row.get(3)?,
+                    srs: row.get(4)?,
+                    abstract_text: row.get(5)?,
+                    native_name: row.get(6)?,
+                    enabled: row.get::<_, i32>(7)? == 1,
+                    minx: row.get(8)?,
+                    miny: row.get(9)?,
+                    maxx: row.get(10)?,
+                    maxy: row.get(11)?,
+                    created: row.get(12)?,
+                    modified: row.get(13)?,
+                }))
+            } else {
+                Ok(Some(Layer {
+                    name: row.get(0)?,
+                    title: row.get(1)?,
+                    workspace: row.get(2)?,
+                    store: row.get(3)?,
+                    srs: row.get(4)?,
+                    abstract_text: row.get(5)?,
+                    native_name: None,
+                    enabled: row.get::<_, i32>(6)? == 1,
+                    minx: row.get(7)?,
+                    miny: row.get(8)?,
+                    maxx: row.get(9)?,
+                    maxy: row.get(10)?,
+                    created: row.get(11)?,
+                    modified: row.get(12)?,
+                }))
+            }
         } else {
             Ok(None)
         }
@@ -475,27 +526,62 @@ impl SqliteStore {
 
     pub async fn get_all_layers(&self) -> SqlResult<Vec<Layer>> {
         let conn = self.conn.read().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT name, title, workspace, store, srs, abstract_text, enabled, minx, miny, maxx, maxy, created, modified
-             FROM layers ORDER BY name"
+
+        // 检查 native_name 列是否存在
+        let native_name_exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('layers') WHERE name='native_name'",
+            [],
+            |row| row.get::<_, i32>(0).map(|c| c > 0),
         )?;
 
-        let rows = stmt.query_map([], |row| {
-            Ok(Layer {
-                name: row.get(0)?,
-                title: row.get(1)?,
-                workspace: row.get(2)?,
-                store: row.get(3)?,
-                srs: row.get(4)?,
-                abstract_text: row.get(5)?,
-                enabled: row.get::<_, i32>(6)? == 1,
-                minx: row.get(7)?,
-                miny: row.get(8)?,
-                maxx: row.get(9)?,
-                maxy: row.get(10)?,
-                created: row.get(11)?,
-                modified: row.get(12)?,
-            })
+        let mut stmt = if native_name_exists {
+            conn.prepare(
+                "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified
+                 FROM layers ORDER BY name"
+            )?
+        } else {
+            conn.prepare(
+                "SELECT name, title, workspace, store, srs, abstract_text, enabled, minx, miny, maxx, maxy, created, modified
+                 FROM layers ORDER BY name"
+            )?
+        };
+
+        let rows = stmt.query_map([], move |row| {
+            if native_name_exists {
+                Ok(Layer {
+                    name: row.get(0)?,
+                    title: row.get(1)?,
+                    workspace: row.get(2)?,
+                    store: row.get(3)?,
+                    srs: row.get(4)?,
+                    abstract_text: row.get(5)?,
+                    native_name: row.get(6)?,
+                    enabled: row.get::<_, i32>(7)? == 1,
+                    minx: row.get(8)?,
+                    miny: row.get(9)?,
+                    maxx: row.get(10)?,
+                    maxy: row.get(11)?,
+                    created: row.get(12)?,
+                    modified: row.get(13)?,
+                })
+            } else {
+                Ok(Layer {
+                    name: row.get(0)?,
+                    title: row.get(1)?,
+                    workspace: row.get(2)?,
+                    store: row.get(3)?,
+                    srs: row.get(4)?,
+                    abstract_text: row.get(5)?,
+                    native_name: None,
+                    enabled: row.get::<_, i32>(6)? == 1,
+                    minx: row.get(7)?,
+                    miny: row.get(8)?,
+                    maxx: row.get(9)?,
+                    maxy: row.get(10)?,
+                    created: row.get(11)?,
+                    modified: row.get(12)?,
+                })
+            }
         })?;
 
         rows.collect()
@@ -506,8 +592,8 @@ impl SqliteStore {
         let conn = self.conn.write().unwrap();
 
         conn.execute(
-            "INSERT INTO layers (name, title, workspace, store, srs, abstract_text, enabled, minx, miny, maxx, maxy, created, modified)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO layers (name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 layer.name,
                 layer.title,
@@ -515,6 +601,7 @@ impl SqliteStore {
                 layer.store,
                 layer.srs,
                 layer.abstract_text,
+                layer.native_name,
                 layer.enabled as i32,
                 layer.minx,
                 layer.miny,
@@ -532,6 +619,7 @@ impl SqliteStore {
             store: layer.store.clone(),
             srs: layer.srs.clone(),
             abstract_text: layer.abstract_text.clone(),
+            native_name: layer.native_name.clone(),
             enabled: layer.enabled,
             minx: layer.minx,
             miny: layer.miny,
@@ -542,7 +630,7 @@ impl SqliteStore {
         })
     }
 
-    pub async fn update_layer(&self, name: &str, title: Option<String>, abstract_text: Option<String>, enabled: Option<bool>) -> SqlResult<()> {
+    pub async fn update_layer(&self, name: &str, title: Option<String>, abstract_text: Option<String>, native_name: Option<String>, enabled: Option<bool>) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.write().unwrap();
 
@@ -556,6 +644,10 @@ impl SqliteStore {
         if let Some(a) = abstract_text {
             updates.push(format!("abstract_text = ?"));
             values.push(Box::new(a));
+        }
+        if let Some(n) = native_name {
+            updates.push(format!("native_name = ?"));
+            values.push(Box::new(n));
         }
         if let Some(e) = enabled {
             updates.push(format!("enabled = ?"));

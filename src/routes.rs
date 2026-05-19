@@ -32,6 +32,10 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                     .route(web::get().to(crate::handlers::preview_layer))
             )
             .service(
+                web::resource("/layers/{layer}/feature-type")
+                    .route(web::get().to(crate::handlers::get_layer_feature_type))
+            )
+            .service(
                 web::resource("/layers/{layer}/features")
                     .route(web::get().to(crate::handlers::get_layer_features))
                     .route(web::post().to(crate::handlers::create_feature))

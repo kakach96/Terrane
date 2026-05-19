@@ -42,6 +42,7 @@ pub async fn list_layers(state: web::Data<AppState>) -> Result<HttpResponse, Geo
                         "title": l.title,
                         "workspace": l.workspace,
                         "store": l.store,
+                        "native_name": l.native_name,
                         "srs": l.srs,
                         "bounds": {
                             "minx": l.minx,
@@ -68,6 +69,7 @@ pub async fn list_layers(state: web::Data<AppState>) -> Result<HttpResponse, Geo
                 "title": l.title,
                 "workspace": l.workspace,
                 "store": l.store,
+                "native_name": l.native_name,
                 "srs": l.srs.to_epsg(),
                 "bounds": {
                     "minx": l.native_bounds.bounds.minx,
@@ -98,6 +100,7 @@ pub async fn get_layer(
                     "abstract": layer.abstract_text,
                     "workspace": layer.workspace,
                     "store": layer.store,
+                    "native_name": layer.native_name,
                     "srs": layer.srs,
                     "native_bounds": {
                         "crs": layer.srs,
@@ -139,6 +142,7 @@ pub async fn get_layer(
                 "abstract": layer.abstract_text,
                 "workspace": layer.workspace,
                 "store": layer.store,
+                "native_name": layer.native_name,
                 "srs": layer.srs.to_epsg(),
                 "native_bounds": {
                     "crs": layer.native_bounds.crs.to_epsg(),
@@ -653,6 +657,7 @@ pub struct CreateLayerRequest {
     pub title: String,
     pub workspace: String,
     pub store: String,
+    pub native_name: Option<String>,
     pub srs: Option<String>,
     pub minx: Option<f64>,
     pub miny: Option<f64>,
@@ -684,6 +689,7 @@ pub async fn create_layer(
             store: body.store.clone(),
             srs: srs.clone(),
             abstract_text: body.abstract_text.clone(),
+            native_name: body.native_name.clone(),
             enabled: true,
             minx,
             miny,
@@ -708,6 +714,7 @@ pub async fn create_layer(
                     "title": created_layer.title,
                     "workspace": created_layer.workspace,
                     "store": created_layer.store,
+                    "native_name": created_layer.native_name,
                     "srs": created_layer.srs,
                     "bounds": {
                         "minx": created_layer.minx,
@@ -736,6 +743,7 @@ pub struct UpdateLayerRequest {
     pub title: Option<String>,
     #[serde(rename = "abstract")]
     pub abstract_text: Option<String>,
+    pub native_name: Option<String>,
     pub enabled: Option<bool>,
 }
 
@@ -751,6 +759,7 @@ pub async fn update_layer(
             layer_name,
             body.title.clone(),
             body.abstract_text.clone(),
+            body.native_name.clone(),
             body.enabled,
         ).await {
             Ok(_) => {
@@ -1298,6 +1307,100 @@ async fn list_postgis_tables_from_pool(
         Err(e) => {
             tracing::debug!("[list_postgis_tables_from_pool] 查询失败: {}, 耗时: {:?}", e, t2.elapsed());
             eprintln!("Failed to query tables: {}", e);
+            vec![]
+        }
+    }
+}
+
+pub async fn get_layer_feature_type(
+    req: HttpRequest,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let layer_name = req.match_info().get("layer").unwrap_or("");
+
+    if let Some(store) = &state.store {
+        let layer = store.get_layer(layer_name).await
+            .map_err(|e| {
+                eprintln!("Failed to get layer: {}", e);
+                GeoServerError::InternalError("Failed to get layer".to_string())
+            })?
+            .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+
+        let data_source = store.get_data_source(&layer.store).await
+            .map_err(|e| {
+                eprintln!("Failed to get data source: {}", e);
+                GeoServerError::InternalError("Failed to get data source".to_string())
+            })?
+            .ok_or_else(|| GeoServerError::NotFound(format!("Data source '{}' not found", layer.store)))?;
+
+        if data_source.data_source_type != crate::models::DataSourceType::Postgis {
+            return Err(GeoServerError::BadRequest(
+                "Feature type information is only available for PostGIS data sources".to_string()
+            ));
+        }
+
+        let table_name = layer.native_name
+            .as_ref()
+            .ok_or_else(|| GeoServerError::BadRequest(
+                "Layer has no native table name configured".to_string()
+            ))?;
+
+        if let Some(conn_info) = &data_source.connection {
+            let pool = state.get_pg_pool(&data_source.name, conn_info);
+            let columns = get_postgis_table_columns(&pool, conn_info, table_name).await;
+            Ok(HttpResponse::Ok().json(ApiResponse::success(columns)))
+        } else {
+            Err(GeoServerError::BadRequest("Data source has no connection configuration".to_string()))
+        }
+    } else {
+        Err(GeoServerError::InternalError("Database not available".to_string()))
+    }
+}
+
+async fn get_postgis_table_columns(
+    pool: &deadpool_postgres::Pool,
+    conn: &crate::models::DataSourceConnection,
+    table_name: &str,
+) -> Vec<serde_json::Value> {
+    let client = match pool.get().await {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to get PG client from pool: {}", e);
+            return vec![];
+        }
+    };
+
+    let schema_filter = if conn.schema.is_empty() || conn.schema == "public" {
+        "'public'".to_string()
+    } else {
+        format!("'{}'", conn.schema.replace('\'', "''"))
+    };
+
+    let query = format!(
+        "SELECT column_name, data_type, character_maximum_length, is_nullable
+         FROM information_schema.columns
+         WHERE table_schema = {} AND table_name = $1
+         ORDER BY ordinal_position",
+        schema_filter
+    );
+
+    match client.query(&query, &[&table_name]).await {
+        Ok(rows) => {
+            rows.iter().map(|row| {
+                let col_name: String = row.get(0);
+                let data_type: String = row.get(1);
+                let max_length: Option<i32> = row.get(2);
+                let is_nullable: String = row.get(3);
+                serde_json::json!({
+                    "name": col_name,
+                    "type": data_type,
+                    "length": max_length,
+                    "nullable": is_nullable == "YES",
+                })
+            }).collect()
+        }
+        Err(e) => {
+            eprintln!("Failed to query table columns: {}", e);
             vec![]
         }
     }

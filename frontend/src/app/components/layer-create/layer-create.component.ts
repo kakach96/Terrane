@@ -129,6 +129,7 @@ export class LayerCreateComponent implements OnInit {
       title: formValue.title,
       workspace: formValue.workspace,
       store: formValue.dataSource,
+      native_name: formValue.table,
       srs: formValue.srs,
       abstract: formValue.abstract,
       bounds: {

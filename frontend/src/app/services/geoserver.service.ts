@@ -9,6 +9,7 @@ import {
   CreateLayerRequest,
   UpdateLayerRequest,
   CreateFeatureRequest,
+  PropertyDef,
   ApiResponse,
   DashboardStats,
   PreviewOptions,
@@ -172,6 +173,11 @@ export class GeoserverService {
 
   getDataSourceTables(dataSourceName: string): Observable<string[]> {
     return this.http.get<ApiResponse<string[]>>(`${this.apiUrl}/data-sources/${dataSourceName}/tables`)
+      .pipe(map(response => response.data || []));
+  }
+
+  getLayerFeatureType(layerName: string): Observable<PropertyDef[]> {
+    return this.http.get<ApiResponse<PropertyDef[]>>(`${this.apiUrl}/layers/${layerName}/feature-type`)
       .pipe(map(response => response.data || []));
   }
 }

@@ -39,15 +39,11 @@
 
 .info-section {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-  }
 }
 
-.info-card, .preview-card, .features-card {
+.info-card, .bounds-card, .feature-type-card {
   border-radius: var(--radius-lg);
 
   mat-card-header {
@@ -75,6 +71,14 @@
   }
 }
 
+.bounds-card mat-icon[matCardAvatar] {
+  background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%) !important;
+}
+
+.feature-type-card mat-icon[matCardAvatar] {
+  background: linear-gradient(135deg, #43a047 0%, #2e7d32 100%) !important;
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -94,13 +98,26 @@
     .value {
       font-size: 15px;
       color: var(--text-primary);
-
-      &.bounds {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
-        line-height: 1.6;
-      }
     }
+  }
+}
+
+.native-name.full-width {
+  margin-top: 16px;
+
+  .label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .value {
+    font-size: 15px;
+    color: var(--text-primary);
   }
 }
 
@@ -125,67 +142,39 @@
   }
 }
 
-.preview-card {
-  .preview-actions {
-    margin-left: auto;
-  }
+.bounds-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
 
-  .preview-container {
-    background: #f5f5f7;
-    border-radius: 12px;
-    min-height: 300px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    margin-bottom: 16px;
-
-    img {
-      max-width: 100%;
-      max-height: 400px;
-      border-radius: 8px;
+  .bounds-item {
+    .label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
-    .preview-placeholder {
-      text-align: center;
-      cursor: pointer;
-      padding: 60px;
-      transition: all 0.3s;
+    .value {
+      font-size: 15px;
+      color: var(--text-primary);
 
-      &:hover {
-        background: rgba(0, 0, 0, 0.05);
-      }
-
-      mat-icon {
-        font-size: 64px;
-        width: 64px;
-        height: 64px;
-        color: #ccc;
-        margin-bottom: 16px;
-      }
-
-      p {
-        color: var(--text-secondary);
+      &.mono {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px;
       }
     }
-  }
 
-  .preview-controls {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-
-    mat-form-field {
-      width: 120px;
-    }
-
-    button {
-      margin-left: auto;
+    &.crs {
+      grid-column: 1 / -1;
     }
   }
 }
 
-.features-card {
+.feature-type-card {
   .feature-count {
     margin-left: auto;
     font-size: 14px;
@@ -210,7 +199,31 @@
   }
 }
 
-.features-table {
+.geom-types {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+
+  .geom-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    font-size: 13px;
+    font-weight: 500;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+}
+
+.properties-table {
   width: 100%;
 
   th {
@@ -221,13 +234,32 @@
   }
 
   td {
-    font-size: 13px;
-
-    &.coordinates {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-    }
+    font-size: 14px;
   }
+}
+
+.type-chip {
+  font-size: 12px !important;
+  padding: 2px 10px !important;
+  min-height: 24px !important;
+  background: #e3f2fd !important;
+  color: #1565c0 !important;
+}
+
+.nullable-yes {
+  font-size: 12px !important;
+  padding: 2px 10px !important;
+  min-height: 24px !important;
+  background: #e8f5e9 !important;
+  color: #2e7d32 !important;
+}
+
+.nullable-no {
+  font-size: 12px !important;
+  padding: 2px 10px !important;
+  min-height: 24px !important;
+  background: #fbe9e7 !important;
+  color: #c62828 !important;
 }
 
 .loading-container {
