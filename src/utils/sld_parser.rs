@@ -1,0 +1,440 @@
+use quick_xml::events::Event;
+use quick_xml::Reader;
+use super::rendering::{Style, FillStyle, StrokeStyle};
+use crate::models::{Feature, PropertyValue};
+use std::collections::HashMap;
+
+const MARK_NAMES: &[&str] = &["circle", "square", "cross", "x", "star", "triangle"];
+
+#[derive(Debug, Clone)]
+pub struct ParsedRule {
+    pub name: Option<String>,
+    pub min_scale: Option<f64>,
+    pub max_scale: Option<f64>,
+    pub filters: Vec<OgcFilter>,
+    pub style: Style,
+}
+
+#[derive(Debug, Clone)]
+pub enum OgcFilter {
+    PropertyIsEqualTo(String, String),
+    PropertyIsNotEqualTo(String, String),
+    PropertyIsLessThan(String, String),
+    PropertyIsGreaterThan(String, String),
+    PropertyIsLike(String, String),
+    PropertyIsNull(String),
+    PropertyIsBetween(String, String, String),
+    And(Vec<OgcFilter>),
+    Or(Vec<OgcFilter>),
+    Not(Box<OgcFilter>),
+}
+
+pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
+    let mut reader = Reader::from_str(xml);
+    reader.trim_text(true);
+    let mut buf = Vec::new();
+    let mut rules = Vec::new();
+    let mut in_rule = false;
+
+    let mut current_rule = ParsedRule {
+        name: None,
+        min_scale: None,
+        max_scale: None,
+        filters: vec![],
+        style: Style::new(),
+    };
+    let mut in_polygon_symbolizer = false;
+    let mut in_line_symbolizer = false;
+    let mut in_point_symbolizer = false;
+    let mut _in_text_symbolizer = false;
+    let mut in_fill = false;
+    let mut in_stroke = false;
+    let mut in_graphic = false;
+    let mut in_mark = false;
+    let mut in_ogc_filter = false;
+    let mut _current_property = String::new();
+    let mut current_literal = String::new();
+    let mut collect_text = false;
+    let mut css_param_name = String::new();
+    let mut css_param_value = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let local = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                let tag = local.split(':').last().unwrap_or(&local).to_string();
+
+                match tag.as_str() {
+                    "Rule" => {
+                        in_rule = true;
+                        current_rule = ParsedRule {
+                            name: None,
+                            min_scale: None,
+                            max_scale: None,
+                            filters: vec![],
+                            style: Style::new(),
+                        };
+                    }
+                    "Name" if in_rule => {
+                        collect_text = true;
+                    }
+                    "MinScaleDenominator" if in_rule => {
+                        collect_text = true;
+                    }
+                    "MaxScaleDenominator" if in_rule => {
+                        collect_text = true;
+                    }
+                    "PolygonSymbolizer" => in_polygon_symbolizer = true,
+                    "LineSymbolizer" => in_line_symbolizer = true,
+                    "PointSymbolizer" => in_point_symbolizer = true,
+                    "TextSymbolizer" => _in_text_symbolizer = true,
+                    "Fill" if in_polygon_symbolizer || in_mark => in_fill = true,
+                    "Stroke" if in_polygon_symbolizer || in_line_symbolizer || in_mark => in_stroke = true,
+                    "Graphic" if in_point_symbolizer => in_graphic = true,
+                    "Mark" if in_graphic => in_mark = true,
+                    "WellKnownName" if in_mark => {
+                        collect_text = true;
+                    }
+                    "Size" if in_graphic => {
+                        collect_text = true;
+                    }
+                    "CssParameter" => {
+                        css_param_name = e.attributes()
+                            .filter_map(|a| a.ok())
+                            .find(|a| String::from_utf8_lossy(a.key.as_ref()) == "name")
+                            .map(|a| String::from_utf8_lossy(&a.value).to_string())
+                            .unwrap_or_default();
+                        collect_text = true;
+                    }
+                    "PropertyName" if in_ogc_filter => {
+                        collect_text = true;
+                    }
+                    "Literal" if in_ogc_filter => {
+                        collect_text = true;
+                    }
+                    "Filter" | "ogc:Filter" => {
+                        in_ogc_filter = true;
+                    }
+                    _ => {}
+                }
+            }
+
+            Ok(Event::Text(ref e)) => {
+                if collect_text {
+                    let text = String::from_utf8_lossy(e.as_ref()).trim().to_string();
+                    if !text.is_empty() {
+                        if in_ogc_filter {
+                            current_literal = text;
+                        } else if !css_param_name.is_empty() {
+                            css_param_value = text;
+                        } else if in_mark && text.len() < 20 {
+                            current_literal = text;
+                        } else if in_graphic {
+                            current_literal = text;
+                        }
+                    }
+                }
+            }
+
+            Ok(Event::End(ref e)) => {
+                let local = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                let tag = local.split(':').last().unwrap_or(&local).to_string();
+
+                match tag.as_str() {
+                    "Rule" => {
+                        in_rule = false;
+                        rules.push(current_rule.clone());
+                    }
+                    "Name" if in_rule => {
+                        current_rule.name = Some(current_literal.clone());
+                        current_literal.clear();
+                        collect_text = false;
+                    }
+                    "MinScaleDenominator" => {
+                        if let Ok(v) = current_literal.parse::<f64>() {
+                            current_rule.min_scale = Some(v);
+                        }
+                        current_literal.clear();
+                        collect_text = false;
+                    }
+                    "MaxScaleDenominator" => {
+                        if let Ok(v) = current_literal.parse::<f64>() {
+                            current_rule.max_scale = Some(v);
+                        }
+                        current_literal.clear();
+                        collect_text = false;
+                    }
+                    "PolygonSymbolizer" => in_polygon_symbolizer = false,
+                    "LineSymbolizer" => in_line_symbolizer = false,
+                    "PointSymbolizer" => in_point_symbolizer = false,
+                    "TextSymbolizer" => _in_text_symbolizer = false,
+                    "Fill" => {
+                        in_fill = false;
+                        if !css_param_value.is_empty() {
+                            apply_css_param(&mut current_rule.style, &css_param_name, &css_param_value, true);
+                            css_param_value.clear();
+                        }
+                    }
+                    "Stroke" => {
+                        in_stroke = false;
+                        if !css_param_value.is_empty() {
+                            apply_css_param(&mut current_rule.style, &css_param_name, &css_param_value, false);
+                            css_param_value.clear();
+                        }
+                    }
+                    "Graphic" => in_graphic = false,
+                    "Mark" => {
+                        in_mark = false;
+                        if !current_literal.is_empty() {
+                            let name = current_literal.to_lowercase();
+                            if MARK_NAMES.contains(&name.as_str()) {
+                                current_rule.style.mark = Some(name);
+                            }
+                            current_literal.clear();
+                            collect_text = false;
+                        }
+                    }
+                    "WellKnownName" => {
+                        current_literal.clear();
+                        collect_text = false;
+                    }
+                    "Size" => {
+                        if let Ok(s) = current_literal.parse::<f64>() {
+                            current_rule.style.point_size = Some(s);
+                        }
+                        current_literal.clear();
+                        collect_text = false;
+                    }
+                    "CssParameter" => {
+                        if !css_param_value.is_empty() {
+                            if in_fill {
+                                apply_css_param(&mut current_rule.style, &css_param_name, &css_param_value, true);
+                            } else if in_stroke {
+                                apply_css_param(&mut current_rule.style, &css_param_name, &css_param_value, false);
+                            }
+                        }
+                        css_param_name.clear();
+                        css_param_value.clear();
+                        collect_text = false;
+                    }
+                    "PropertyName" => {
+                        _current_property = current_literal.clone();
+                        current_literal.clear();
+                        collect_text = false;
+                    }
+                    "Literal" => {
+                        current_literal.clear();
+                        collect_text = false;
+                    }
+                    "Filter" | "ogc:Filter" => {
+                        in_ogc_filter = false;
+                    }
+                    _ => {}
+                }
+            }
+
+            Ok(Event::Eof) => break,
+            Err(e) => {
+                eprintln!("SLD parse error: {}", e);
+                break;
+            }
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    rules
+}
+
+fn apply_css_param(style: &mut Style, name: &str, value: &str, is_fill: bool) {
+    match name {
+        "fill" if is_fill => {
+            let color = if value.starts_with('#') { value.to_string() } else { format!("#{}", value) };
+            style.fill = Some(FillStyle { color, opacity: style.fill.as_ref().map(|f| f.opacity).unwrap_or(1.0) });
+        }
+        "fill-opacity" if is_fill => {
+            if let Ok(opacity) = value.parse::<f64>() {
+                let color = style.fill.as_ref().map(|f| f.color.clone()).unwrap_or_else(|| "#808080".to_string());
+                style.fill = Some(FillStyle { color, opacity });
+            }
+        }
+        "stroke" if !is_fill => {
+            let color = if value.starts_with('#') { value.to_string() } else { format!("#{}", value) };
+            let w = style.stroke.as_ref().and_then(|s| s.width);
+            let o = style.stroke.as_ref().map(|s| s.opacity).unwrap_or(1.0);
+            let d = style.stroke.as_ref().and_then(|s| s.dash_array.clone());
+            style.stroke = Some(StrokeStyle { color, width: w, opacity: o, dash_array: d });
+        }
+        "stroke-width" if !is_fill => {
+            if let Ok(w) = value.parse::<f64>() {
+                let color = style.stroke.as_ref().map(|s| s.color.clone()).unwrap_or_else(|| "#000000".to_string());
+                let o = style.stroke.as_ref().map(|s| s.opacity).unwrap_or(1.0);
+                let d = style.stroke.as_ref().and_then(|s| s.dash_array.clone());
+                style.stroke = Some(StrokeStyle { color, width: Some(w), opacity: o, dash_array: d });
+            }
+        }
+        "stroke-opacity" if !is_fill => {
+            if let Ok(opacity) = value.parse::<f64>() {
+                let color = style.stroke.as_ref().map(|s| s.color.clone()).unwrap_or_else(|| "#000000".to_string());
+                let w = style.stroke.as_ref().and_then(|s| s.width);
+                let d = style.stroke.as_ref().and_then(|s| s.dash_array.clone());
+                style.stroke = Some(StrokeStyle { color, width: w, opacity, dash_array: d });
+            }
+        }
+        "stroke-dasharray" if !is_fill => {
+            let dash: Vec<f64> = value.split(|c: char| c == ' ' || c == ',')
+                .filter_map(|s| s.trim().parse().ok())
+                .collect();
+            if !dash.is_empty() {
+                let color = style.stroke.as_ref().map(|s| s.color.clone()).unwrap_or_else(|| "#000000".to_string());
+                let w = style.stroke.as_ref().and_then(|s| s.width);
+                let o = style.stroke.as_ref().map(|s| s.opacity).unwrap_or(1.0);
+                style.stroke = Some(StrokeStyle { color, width: w, opacity: o, dash_array: Some(dash) });
+            }
+        }
+        _ => {}
+    }
+}
+
+pub fn match_rule(rule: &ParsedRule, feature_properties: &HashMap<String, PropertyValue>, scale_denom: Option<f64>) -> bool {
+    if let Some(scale) = scale_denom {
+        if let Some(min) = rule.min_scale {
+            if scale < min { return false; }
+        }
+        if let Some(max) = rule.max_scale {
+            if scale > max { return false; }
+        }
+    }
+    if rule.filters.is_empty() {
+        return true;
+    }
+    rule.filters.iter().any(|f| evaluate_filter(f, feature_properties))
+}
+
+fn evaluate_filter(filter: &OgcFilter, props: &HashMap<String, PropertyValue>) -> bool {
+    match filter {
+        OgcFilter::PropertyIsEqualTo(prop, val) => {
+            props.get(prop).map(|v| v.to_string() == *val).unwrap_or(false)
+        }
+        OgcFilter::PropertyIsNotEqualTo(prop, val) => {
+            props.get(prop).map(|v| v.to_string() != *val).unwrap_or(true)
+        }
+        OgcFilter::PropertyIsLessThan(prop, val) => {
+            props.get(prop).and_then(|v| v.to_string().parse::<f64>().ok())
+                .zip(val.parse::<f64>().ok())
+                .map(|(a, b)| a < b)
+                .unwrap_or(false)
+        }
+        OgcFilter::PropertyIsGreaterThan(prop, val) => {
+            props.get(prop).and_then(|v| v.to_string().parse::<f64>().ok())
+                .zip(val.parse::<f64>().ok())
+                .map(|(a, b)| a > b)
+                .unwrap_or(false)
+        }
+        OgcFilter::PropertyIsLike(prop, pattern) => {
+            props.get(prop).map(|v| wildcard_match(&v.to_string(), pattern)).unwrap_or(false)
+        }
+        OgcFilter::PropertyIsNull(prop) => {
+            !props.contains_key(prop) || matches!(props.get(prop), Some(PropertyValue::Null))
+        }
+        OgcFilter::PropertyIsBetween(prop, low, high) => {
+            props.get(prop).and_then(|v| v.to_string().parse::<f64>().ok())
+                .zip(low.parse::<f64>().ok())
+                .zip(high.parse::<f64>().ok())
+                .map(|((v, l), h)| v >= l && v <= h)
+                .unwrap_or(false)
+        }
+        OgcFilter::And(filters) => filters.iter().all(|f| evaluate_filter(f, props)),
+        OgcFilter::Or(filters) => filters.iter().any(|f| evaluate_filter(f, props)),
+        OgcFilter::Not(filter) => !evaluate_filter(filter, props),
+    }
+}
+
+pub fn resolve_style(rules: &[ParsedRule], feature: &Feature, scale_denom: Option<f64>) -> Style {
+    let props = &feature.properties;
+    for rule in rules {
+        if match_rule(rule, props, scale_denom) {
+            return rule.style.clone();
+        }
+    }
+    Style::default()
+}
+
+pub fn default_sld(layer_name: &str) -> String {
+    format!(r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0"
+  xmlns="http://www.opengis.net/sld"
+  xmlns:ogc="http://www.opengis.net/ogc"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <NamedLayer>
+    <Name>{name}</Name>
+    <UserStyle>
+      <FeatureTypeStyle>
+        <Rule>
+          <PolygonSymbolizer>
+            <Fill>
+              <CssParameter name="fill">#6688aa</CssParameter>
+              <CssParameter name="fill-opacity">0.6</CssParameter>
+            </Fill>
+            <Stroke>
+              <CssParameter name="stroke">#334455</CssParameter>
+              <CssParameter name="stroke-width">1</CssParameter>
+            </Stroke>
+          </PolygonSymbolizer>
+          <LineSymbolizer>
+            <Stroke>
+              <CssParameter name="stroke">#334455</CssParameter>
+              <CssParameter name="stroke-width">1</CssParameter>
+            </Stroke>
+          </LineSymbolizer>
+          <PointSymbolizer>
+            <Graphic>
+              <Mark>
+                <WellKnownName>circle</WellKnownName>
+                <Fill>
+                  <CssParameter name="fill">#6688aa</CssParameter>
+                </Fill>
+                <Stroke>
+                  <CssParameter name="stroke">#334455</CssParameter>
+                  <CssParameter name="stroke-width">1</CssParameter>
+                </Stroke>
+              </Mark>
+              <Size>8</Size>
+            </Graphic>
+          </PointSymbolizer>
+        </Rule>
+      </FeatureTypeStyle>
+    </UserStyle>
+  </NamedLayer>
+</StyledLayerDescriptor>"#, name = layer_name)
+}
+
+fn wildcard_match(text: &str, pattern: &str) -> bool {
+    let mut ti = 0;
+    let mut pi = 0;
+    let text_bytes = text.as_bytes();
+    let pat_bytes = pattern.as_bytes();
+    let mut star = None;
+
+    while ti < text_bytes.len() {
+        if pi < pat_bytes.len() && (pat_bytes[pi] == b'_' || pat_bytes[pi] == text_bytes[ti]) {
+            ti += 1;
+            pi += 1;
+        } else if pi < pat_bytes.len() && pat_bytes[pi] == b'%' {
+            star = Some((ti, pi));
+            pi += 1;
+        } else if let Some((st, sp)) = star {
+            ti = st + 1;
+            pi = sp + 1;
+            star = Some((ti, pi));
+        } else {
+            return false;
+        }
+    }
+
+    while pi < pat_bytes.len() && pat_bytes[pi] == b'%' {
+        pi += 1;
+    }
+
+    pi == pat_bytes.len()
+}

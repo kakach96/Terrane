@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Layer, Feature, PropertyDef } from '../../models/geoserver.models';
@@ -13,11 +14,14 @@ export class LayerDetailComponent implements OnInit {
   layer: Layer | null = null;
   features: Feature[] = [];
   properties: PropertyDef[] = [];
+  previewUrl = '';
+  safePreviewUrl: SafeResourceUrl = '';
   loading = true;
 
   constructor(
     private route: ActivatedRoute,
     private router: Router,
+    private sanitizer: DomSanitizer,
     private geoserverService: GeoserverService,
     private notificationService: NotificationService
   ) {}
@@ -35,6 +39,8 @@ export class LayerDetailComponent implements OnInit {
     this.geoserverService.getLayer(name).subscribe({
       next: (layer) => {
         this.layer = layer;
+        this.previewUrl = this.geoserverService.getWmsPreviewUrl(layer, 800, 400);
+        this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
         this.loading = false;
       },
       error: (error) => {

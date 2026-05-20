@@ -5,8 +5,9 @@ use std::sync::Mutex;
 use tokio::sync::RwLock;
 use std::time::Instant;
 use crate::config::GeoServerConfig;
-use crate::models::{Layer, Feature};
+use crate::models::{Layer, Feature, layer::LayerGroup};
 use crate::store::SqliteStore;
+use crate::utils::sld_parser;
 
 pub struct AppState {
     pub config: GeoServerConfig,
@@ -15,6 +16,7 @@ pub struct AppState {
     pub styles: Arc<RwLock<HashMap<String, String>>>,
     pub store: Option<Arc<SqliteStore>>,
     pub pg_pools: Arc<Mutex<HashMap<String, deadpool_postgres::Pool>>>,
+    pub layer_groups: Arc<RwLock<Vec<LayerGroup>>>,
     pub start_time: Instant,
     pub request_count: AtomicU64,
     pub error_count: AtomicU64,
@@ -94,11 +96,20 @@ impl AppState {
             all_layers.clone()
         };
 
+        let mut default_styles = HashMap::new();
+        for layer in &features_layers {
+            let style_name = layer.styles.first().map(|s| s.name.clone()).unwrap_or_else(|| "default".to_string());
+            if !default_styles.contains_key(&style_name) {
+                default_styles.insert(style_name, sld_parser::default_sld(&layer.name));
+            }
+        }
+
         AppState {
             config,
             layers: Arc::new(RwLock::new(features_layers)),
             features: Arc::new(RwLock::new(HashMap::new())),
-            styles: Arc::new(RwLock::new(HashMap::new())),
+            styles: Arc::new(RwLock::new(default_styles)),
+            layer_groups: Arc::new(RwLock::new(Vec::new())),
             store,
             pg_pools: Arc::new(Mutex::new(HashMap::new())),
             start_time: Instant::now(),

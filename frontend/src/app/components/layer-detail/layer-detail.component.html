@@ -15,38 +15,36 @@
   </div>
 
   <div class="detail-content">
-    <div class="info-section">
-      <mat-card class="info-card">
-        <mat-card-header>
-          <mat-icon matCardAvatar>info</mat-icon>
-          <mat-card-title>基本信息</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="label">工作空间</span>
-              <span class="value">{{ layer.workspace }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">数据源</span>
-              <span class="value">{{ layer.store }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">坐标系统</span>
-              <span class="value">{{ layer.srs }}</span>
-            </div>
+    <mat-card class="info-card">
+      <mat-card-header>
+        <mat-icon matCardAvatar>info</mat-icon>
+        <mat-card-title>基本信息</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="label">工作空间</span>
+            <span class="value">{{ layer.workspace }}</span>
           </div>
-          <div class="native-name full-width">
-            <span class="label">原生表名</span>
-            <span class="value">{{ layer.native_name || '-' }}</span>
+          <div class="info-item">
+            <span class="label">数据源</span>
+            <span class="value">{{ layer.store }}</span>
           </div>
-          <div *ngIf="layer.abstract" class="abstract">
-            <span class="label">描述</span>
-            <p>{{ layer.abstract }}</p>
+          <div class="info-item">
+            <span class="label">坐标系统</span>
+            <span class="value">{{ layer.srs }}</span>
           </div>
-        </mat-card-content>
-      </mat-card>
-    </div>
+        </div>
+        <div class="native-name full-width">
+          <span class="label">原生表名</span>
+          <span class="value">{{ layer.native_name || '-' }}</span>
+        </div>
+        <div *ngIf="layer.abstract" class="abstract">
+          <span class="label">描述</span>
+          <p>{{ layer.abstract }}</p>
+        </div>
+      </mat-card-content>
+    </mat-card>
 
     <mat-card class="bounds-card">
       <mat-card-header>
@@ -130,6 +128,16 @@
             <tr mat-row *matRowDef="let row; columns: ['name', 'type', 'length', 'nullable'];"></tr>
           </table>
         </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="preview-card" *ngIf="previewUrl">
+      <mat-card-header>
+        <mat-icon matCardAvatar>map</mat-icon>
+        <mat-card-title>地图预览</mat-card-title>
+      </mat-card-header>
+      <mat-card-content class="preview-content">
+        <iframe [src]="safePreviewUrl" class="preview-iframe" title="地图预览"></iframe>
       </mat-card-content>
     </mat-card>
   </div>

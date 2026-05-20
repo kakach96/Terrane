@@ -24,6 +24,8 @@ pub struct WmsRequest {
     pub feature_count: Option<u32>,
     pub i: Option<f64>,
     pub j: Option<f64>,
+    pub sld: Option<String>,
+    pub sld_body: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -396,6 +398,8 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
     let mut feature_count = None;
     let mut i = None;
     let mut j = None;
+    let mut sld = None;
+    let mut sld_body = None;
 
     for (key, value) in params {
         match key.to_uppercase().as_str() {
@@ -421,12 +425,13 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
                     .filter_map(|s| s.trim().parse().ok())
                     .collect();
                 if parts.len() == 4 {
-                    bbox = Some(Bbox {
+                    let raw = Bbox {
                         minx: parts[0],
                         miny: parts[1],
                         maxx: parts[2],
                         maxy: parts[3],
-                    });
+                    };
+                    bbox = Some(normalize_bbox(raw, version.as_deref(), crs.as_deref()));
                 }
             }
             "WIDTH" => width = value.parse().ok(),
@@ -444,6 +449,8 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
             "X" => i = value.parse().ok(),
             "J" => j = value.parse().ok(),
             "Y" => j = value.parse().ok(),
+            "SLD" => sld = Some(value.clone()),
+            "SLD_BODY" | "SLDBODY" => sld_body = Some(value.clone()),
             _ => {}
         }
     }
@@ -477,7 +484,71 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
         feature_count,
         i,
         j,
+        sld,
+        sld_body,
     })
+}
+
+fn normalize_bbox(raw: Bbox, version: Option<&str>, crs: Option<&str>) -> Bbox {
+    let epsg = crs.unwrap_or("EPSG:4326");
+    let ver = version.unwrap_or("1.3.0");
+    if ver == "1.3.0" {
+        match epsg {
+            "EPSG:4326" | "4326" => {
+                Bbox {
+                    minx: raw.miny,
+                    miny: raw.minx,
+                    maxx: raw.maxy,
+                    maxy: raw.maxx,
+                }
+            }
+            _ => raw,
+        }
+    } else {
+        raw
+    }
+}
+
+pub fn format_wms_exception(err: &GeoServerError, exceptions: Option<&str>, width: u32, height: u32) -> (Vec<u8>, &'static str) {
+    let msg = format!("{}", err);
+    let fmt = exceptions.unwrap_or("application/vnd.ogc.se_xml");
+
+    match fmt {
+        "application/vnd.ogc.se_inimage" => {
+            let mut img = image::RgbaImage::new(width.max(1), height.max(1));
+            for pixel in img.pixels_mut() {
+                *pixel = image::Rgba([255, 255, 255, 255]);
+            }
+            let mut buf = Vec::new();
+            use image::ImageEncoder;
+            use image::codecs::png::PngEncoder;
+            PngEncoder::new(&mut buf)
+                .write_image(img.as_raw(), width.max(1), height.max(1), image::ColorType::Rgba8)
+                .ok();
+            (buf, "image/png")
+        }
+        "application/vnd.ogc.se_blank" => {
+            let img = image::RgbaImage::new(width.max(1), height.max(1));
+            let mut buf = Vec::new();
+            use image::ImageEncoder;
+            use image::codecs::png::PngEncoder;
+            PngEncoder::new(&mut buf)
+                .write_image(img.as_raw(), width.max(1), height.max(1), image::ColorType::Rgba8)
+                .ok();
+            (buf, "image/png")
+        }
+        _ => {
+            let xml = format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<ServiceExceptionReport version="1.3.0" xmlns="http://www.opengis.net/ogc">
+  <ServiceException code="{}">{}</ServiceException>
+</ServiceExceptionReport>"#,
+                "InvalidRequest",
+                msg.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+            );
+            (xml.into_bytes(), "application/vnd.ogc.se_xml")
+        }
+    }
 }
 
 pub fn validate_wms_getmap_request(req: &WmsRequest) -> Result<(), GeoServerError> {

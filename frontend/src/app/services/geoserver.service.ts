@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
   Layer,
+  LayerBounds,
   Feature,
   FeatureCollection,
   CreateLayerRequest,
@@ -89,6 +90,24 @@ export class GeoserverService {
     }
     const queryString = params.toString();
     return `${this.apiUrl}/layers/${layerName}/preview${queryString ? '?' + queryString : ''}`;
+  }
+
+  getWmsPreviewUrl(layer: Layer, width = 600, height = 400): string {
+    const bounds: LayerBounds = (layer as any).native_bounds?.bounds || layer.bounds;
+    if (!bounds) return '';
+    const srs = (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
+    const params = new URLSearchParams({
+      service: 'WMS',
+      version: '1.3.0',
+      request: 'GetMap',
+      layers: layer.name,
+      crs: srs,
+      bbox: `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`,
+      width: width.toString(),
+      height: height.toString(),
+      format: 'application/openlayers',
+    });
+    return `/wms?${params}`;
   }
 
   getDashboardStats(): Observable<DashboardStats> {

@@ -73,5 +73,22 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                     .route(web::delete().to(crate::handlers::delete_data_source))
             )
             .route("/data-sources/{name}/test", web::post().to(crate::handlers::test_data_source_connection))
+            .service(
+                web::resource("/layers/{layer}/style")
+                    .route(web::get().to(crate::handlers::get_layer_style))
+                    .route(web::put().to(crate::handlers::put_layer_style))
+            )
+            .route("/styles", web::get().to(crate::handlers::list_styles))
+            .service(
+                web::resource("/layer-groups")
+                    .route(web::get().to(crate::handlers::list_layer_groups))
+                    .route(web::post().to(crate::handlers::create_layer_group))
+            )
+            .service(
+                web::resource("/layer-groups/{name}")
+                    .route(web::get().to(crate::handlers::get_layer_group))
+                    .route(web::delete().to(crate::handlers::delete_layer_group))
+            )
+            .route("/tiles/{layer}/{z}/{x}/{y}", web::get().to(crate::handlers::get_tile))
     );
 }
