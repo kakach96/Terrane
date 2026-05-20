@@ -3,7 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
-import { Layer, Feature, PropertyDef } from '../../models/geoserver.models';
+import { Layer, Feature, PropertyDef, StyleInfo } from '../../models/geoserver.models';
 
 @Component({
   selector: 'app-layer-detail',
@@ -16,6 +16,8 @@ export class LayerDetailComponent implements OnInit {
   properties: PropertyDef[] = [];
   previewUrl = '';
   safePreviewUrl: SafeResourceUrl = '';
+  styleNames: string[] = [];
+  currentStyleName = '';
   loading = true;
 
   constructor(
@@ -32,6 +34,7 @@ export class LayerDetailComponent implements OnInit {
       this.loadLayer(layerName);
       this.loadFeatures(layerName);
       this.loadFeatureType(layerName);
+      this.loadStyleNames();
     }
   }
 
@@ -39,6 +42,7 @@ export class LayerDetailComponent implements OnInit {
     this.geoserverService.getLayer(name).subscribe({
       next: (layer) => {
         this.layer = layer;
+        this.currentStyleName = layer.styles?.[0]?.name || 'default';
         this.previewUrl = this.geoserverService.getWmsPreviewUrl(layer, 800, 400);
         this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
         this.loading = false;
@@ -68,6 +72,34 @@ export class LayerDetailComponent implements OnInit {
           this.properties = this.deriveProperties(this.features);
         }
       }
+    });
+  }
+
+  loadStyleNames(): void {
+    this.geoserverService.getStyles().subscribe({
+      next: (data) => {
+        this.styleNames = data.map(s => s.name);
+      }
+    });
+  }
+
+  onStyleChange(styleName: string): void {
+    if (!this.layer) return;
+    this.geoserverService.getStyle(styleName).subscribe({
+      next: (style) => {
+        if (style.content) {
+          this.geoserverService.updateLayerStyle(this.layer!.name, style.content).subscribe({
+            next: () => {
+              this.currentStyleName = styleName;
+              this.notificationService.success(`样式已切换为 ${style.title}`);
+              this.previewUrl = this.geoserverService.getWmsPreviewUrl(this.layer!, 800, 400);
+              this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
+            },
+            error: () => this.notificationService.error('样式切换失败')
+          });
+        }
+      },
+      error: () => this.notificationService.error('加载样式失败')
     });
   }
 

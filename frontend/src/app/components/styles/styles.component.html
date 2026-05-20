@@ -1,0 +1,57 @@
+<div class="styles-page fade-in">
+  <div class="page-header">
+    <div>
+      <h1>样式管理</h1>
+      <p class="subtitle">管理图层的 SLD 样式</p>
+    </div>
+    <button mat-raised-button color="primary" (click)="createStyle()">
+      <mat-icon>add</mat-icon>
+      新建样式
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="loading-container">
+    <mat-spinner diameter="48"></mat-spinner>
+  </div>
+
+  <div *ngIf="!loading && styles.length === 0" class="empty-state">
+    <mat-icon>style</mat-icon>
+    <p>暂无样式</p>
+  </div>
+
+  <table *ngIf="!loading && styles.length > 0" mat-table [dataSource]="styles" class="styles-table">
+    <ng-container matColumnDef="name">
+      <th mat-header-cell *matHeaderCellDef>名称</th>
+      <td mat-cell *matCellDef="let s">{{ s.name }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="title">
+      <th mat-header-cell *matHeaderCellDef>标题</th>
+      <td mat-cell *matCellDef="let s">{{ s.title }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="type">
+      <th mat-header-cell *matHeaderCellDef>类型</th>
+      <td mat-cell *matCellDef="let s">
+        <mat-chip [class.builtin]="s.is_builtin" [class.custom]="!s.is_builtin">
+          {{ s.is_builtin ? '内置' : '自定义' }}
+        </mat-chip>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef>操作</th>
+      <td mat-cell *matCellDef="let s">
+        <button mat-icon-button color="primary" (click)="editStyle(s)" matTooltip="编辑">
+          <mat-icon>edit</mat-icon>
+        </button>
+        <button mat-icon-button color="warn" (click)="deleteStyle(s)" [disabled]="s.is_builtin" matTooltip="删除">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="['name', 'title', 'type', 'actions']"></tr>
+    <tr mat-row *matRowDef="let row; columns: ['name', 'title', 'type', 'actions'];"></tr>
+  </table>
+</div>

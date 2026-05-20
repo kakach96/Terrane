@@ -112,20 +112,22 @@ async fn handle_get_map(state: &AppState, request: &WmsRequest) -> Result<HttpRe
             let needs_reproject = layer_crs != output_crs;
 
             let rules = get_layer_rules(request, &styles_lock, layer);
-            if let Some(features) = state.get_layer_features(&layer.name).await {
-                for feature in &features {
-                    let geom = if needs_reproject {
-                        reproject_geometry(&feature.geometry, &layer_crs, output_crs)
-                    } else {
-                        feature.geometry.clone()
-                    };
-                    let style = if !rules.is_empty() {
-                        sld_parser::resolve_style(&rules, feature, Some(scale_denom))
-                    } else {
-                        crate::utils::rendering::Style::default()
-                    };
-                    render_items.push((geom, style));
-                }
+            let features = crate::handlers::features::query_layer_features(
+                state, &layer.name, Some(&bounds), None, None,
+            ).await.unwrap_or_default();
+
+            for feature in &features {
+                let geom = if needs_reproject {
+                    reproject_geometry(&feature.geometry, &layer_crs, output_crs)
+                } else {
+                    feature.geometry.clone()
+                };
+                let style = if !rules.is_empty() {
+                    sld_parser::resolve_style(&rules, feature, Some(scale_denom))
+                } else {
+                    crate::utils::rendering::Style::default()
+                };
+                render_items.push((geom, style));
             }
         }
     }

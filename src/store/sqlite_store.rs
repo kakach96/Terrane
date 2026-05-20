@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 use rusqlite::{Connection, Result as SqlResult, params};
 use chrono::Utc;
 use crate::models::{DataSource, DataSourceType, DataSourceConnection};
@@ -34,7 +34,7 @@ pub struct Layer {
 }
 
 pub struct SqliteStore {
-    conn: Arc<RwLock<Connection>>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 unsafe impl Send for SqliteStore {}
@@ -45,7 +45,7 @@ impl SqliteStore {
         let conn = Connection::open(path)?;
         Self::init_db(&conn)?;
         Ok(Self {
-            conn: Arc::new(RwLock::new(conn)),
+            conn: Arc::new(Mutex::new(conn)),
         })
     }
 
@@ -132,7 +132,7 @@ impl SqliteStore {
     }
 
     pub async fn get_workspace(&self, name: &str) -> SqlResult<Option<Workspace>> {
-        let conn = self.conn.read().unwrap();
+        let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT name, title, description, enabled, layer_count, created, modified 
              FROM workspaces WHERE name = ?"
@@ -155,7 +155,7 @@ impl SqliteStore {
     }
 
     pub async fn get_all_workspaces(&self) -> SqlResult<Vec<Workspace>> {
-        let conn = self.conn.read().unwrap();
+        let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT name, title, description, enabled, layer_count, created, modified 
              FROM workspaces ORDER BY name"
@@ -180,7 +180,7 @@ impl SqliteStore {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let title = request.title.clone().unwrap_or_else(|| request.name.clone());
         let description = request.description.clone().unwrap_or_default();
-        let conn = self.conn.write().unwrap();
+        let conn = self.conn.lock().unwrap();
         
         conn.execute(
             "INSERT INTO workspaces (name, title, description, enabled, layer_count, created, modified)
@@ -207,7 +207,7 @@ impl SqliteStore {
 
     pub async fn update_workspace(&self, name: &str, title: Option<String>, description: Option<String>, enabled: Option<bool>) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let conn = self.conn.write().unwrap();
+        let conn = self.conn.lock().unwrap();
         
         let mut updates: Vec<String> = vec!["modified = ?".to_string()];
         let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now.clone())];
@@ -234,13 +234,13 @@ impl SqliteStore {
     }
 
     pub async fn delete_workspace(&self, name: &str) -> SqlResult<()> {
-        let conn = self.conn.write().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM workspaces WHERE name = ?", [name])?;
         Ok(())
     }
 
     pub async fn get_data_source(&self, name: &str) -> SqlResult<Option<DataSource>> {
-        let conn = self.conn.read().unwrap();
+        let conn = self.conn.lock().unwrap();
         
         // 检查 schema_name 列是否存在
         let schema_exists: bool = conn.query_row(
@@ -303,7 +303,7 @@ impl SqliteStore {
     }
 
     pub async fn get_all_data_sources(&self) -> SqlResult<Vec<DataSource>> {
-        let conn = self.conn.read().unwrap();
+        let conn = self.conn.lock().unwrap();
         
         // 检查 schema_name 列是否存在
         let schema_exists: bool = conn.query_row(
@@ -373,7 +373,7 @@ impl SqliteStore {
         connection: &DataSourceConnection,
     ) -> SqlResult<DataSource> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let conn = self.conn.write().unwrap();
+        let conn = self.conn.lock().unwrap();
         
         conn.execute(
             "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified)
@@ -414,7 +414,7 @@ impl SqliteStore {
         connection: Option<DataSourceConnection>,
     ) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let conn = self.conn.write().unwrap();
+        let conn = self.conn.lock().unwrap();
         
         let mut updates: Vec<String> = vec!["modified = ?".to_string()];
         let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now)];
@@ -455,13 +455,13 @@ impl SqliteStore {
     }
 
     pub async fn delete_data_source(&self, name: &str) -> SqlResult<()> {
-        let conn = self.conn.write().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM data_sources WHERE name = ?", [name])?;
         Ok(())
     }
 
     pub async fn get_layer(&self, name: &str) -> SqlResult<Option<Layer>> {
-        let conn = self.conn.read().unwrap();
+        let conn = self.conn.lock().unwrap();
 
         // 检查 native_name 列是否存在
         let native_name_exists: bool = conn.query_row(
@@ -525,7 +525,7 @@ impl SqliteStore {
     }
 
     pub async fn get_all_layers(&self) -> SqlResult<Vec<Layer>> {
-        let conn = self.conn.read().unwrap();
+        let conn = self.conn.lock().unwrap();
 
         // 检查 native_name 列是否存在
         let native_name_exists: bool = conn.query_row(
@@ -589,7 +589,7 @@ impl SqliteStore {
 
     pub async fn create_layer(&self, layer: &Layer) -> SqlResult<Layer> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let conn = self.conn.write().unwrap();
+        let conn = self.conn.lock().unwrap();
 
         conn.execute(
             "INSERT INTO layers (name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified)
@@ -632,7 +632,7 @@ impl SqliteStore {
 
     pub async fn update_layer(&self, name: &str, title: Option<String>, abstract_text: Option<String>, native_name: Option<String>, enabled: Option<bool>) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let conn = self.conn.write().unwrap();
+        let conn = self.conn.lock().unwrap();
 
         let mut updates: Vec<String> = vec!["modified = ?".to_string()];
         let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now)];
@@ -663,7 +663,7 @@ impl SqliteStore {
     }
 
     pub async fn delete_layer(&self, name: &str) -> SqlResult<()> {
-        let conn = self.conn.write().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM layers WHERE name = ?", [name])?;
         Ok(())
     }

@@ -9,11 +9,20 @@ use crate::models::{Layer, Feature, layer::LayerGroup};
 use crate::store::SqliteStore;
 use crate::utils::sld_parser;
 
+#[derive(Debug, Clone)]
+pub struct StyleMeta {
+    pub title: String,
+    pub is_builtin: bool,
+}
+
+pub type StyleMap = HashMap<String, String>;
+
 pub struct AppState {
     pub config: GeoServerConfig,
     pub layers: Arc<RwLock<Vec<Layer>>>,
     pub features: Arc<RwLock<HashMap<String, Vec<Feature>>>>,
     pub styles: Arc<RwLock<HashMap<String, String>>>,
+    pub styles_meta: Arc<RwLock<HashMap<String, StyleMeta>>>,
     pub store: Option<Arc<SqliteStore>>,
     pub pg_pools: Arc<Mutex<HashMap<String, deadpool_postgres::Pool>>>,
     pub layer_groups: Arc<RwLock<Vec<LayerGroup>>>,
@@ -97,10 +106,25 @@ impl AppState {
         };
 
         let mut default_styles = HashMap::new();
+        let mut styles_meta_map = HashMap::new();
+
+        for builtin in sld_parser::builtin_styles() {
+            default_styles.insert(builtin.name.to_string(), builtin.sld.to_string());
+            styles_meta_map.insert(builtin.name.to_string(), StyleMeta {
+                title: builtin.title.to_string(),
+                is_builtin: true,
+            });
+        }
+
         for layer in &features_layers {
             let style_name = layer.styles.first().map(|s| s.name.clone()).unwrap_or_else(|| "default".to_string());
             if !default_styles.contains_key(&style_name) {
-                default_styles.insert(style_name, sld_parser::default_sld(&layer.name));
+                let sld = sld_parser::default_sld(&layer.name);
+                default_styles.insert(style_name.clone(), sld);
+                styles_meta_map.entry(style_name).or_insert(StyleMeta {
+                    title: layer.title.clone(),
+                    is_builtin: false,
+                });
             }
         }
 
@@ -109,6 +133,7 @@ impl AppState {
             layers: Arc::new(RwLock::new(features_layers)),
             features: Arc::new(RwLock::new(HashMap::new())),
             styles: Arc::new(RwLock::new(default_styles)),
+            styles_meta: Arc::new(RwLock::new(styles_meta_map)),
             layer_groups: Arc::new(RwLock::new(Vec::new())),
             store,
             pg_pools: Arc::new(Mutex::new(HashMap::new())),

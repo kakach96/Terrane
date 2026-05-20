@@ -35,6 +35,19 @@
             <span class="value">{{ layer.srs }}</span>
           </div>
         </div>
+        <div class="info-item">
+          <span class="label">样式</span>
+          <span class="value">
+            <mat-select
+              *ngIf="styleNames.length > 0"
+              [value]="currentStyleName"
+              (selectionChange)="onStyleChange($event.value)"
+              class="style-select">
+              <mat-option *ngFor="let s of styleNames" [value]="s">{{ s }}</mat-option>
+            </mat-select>
+            <span *ngIf="styleNames.length === 0">{{ currentStyleName }}</span>
+          </span>
+        </div>
         <div class="native-name full-width">
           <span class="label">原生表名</span>
           <span class="value">{{ layer.native_name || '-' }}</span>

@@ -40,6 +40,8 @@ import { DataSourcesComponent } from './components/data-sources/data-sources.com
 import { DataSourceDialogComponent } from './components/data-sources/data-source-dialog/data-source-dialog.component';
 import { TileLayersComponent } from './components/tile-layers/tile-layers.component';
 import { ServerStatusComponent } from './components/server-status/server-status.component';
+import { StylesComponent } from './components/styles/styles.component';
+import { StyleEditorDialogComponent } from './components/styles/style-editor-dialog.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
@@ -50,6 +52,7 @@ const routes: Routes = [
   { path: 'layers/create', component: LayerCreateComponent },
   { path: 'layers/:name', component: LayerDetailComponent },
   { path: 'layer-preview', component: PreviewComponent },
+  { path: 'styles', component: StylesComponent },
   { path: 'tile-layers', component: TileLayersComponent },
   { path: 'server-status', component: ServerStatusComponent },
 ];
@@ -68,7 +71,9 @@ const routes: Routes = [
     DataSourcesComponent,
     DataSourceDialogComponent,
     TileLayersComponent,
-    ServerStatusComponent
+    ServerStatusComponent,
+    StylesComponent,
+    StyleEditorDialogComponent
   ],
   imports: [
     BrowserModule,

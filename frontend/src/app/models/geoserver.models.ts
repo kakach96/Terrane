@@ -9,6 +9,19 @@ export interface Layer {
   native_bounds?: NativeBounds;
   enabled: boolean;
   abstract?: string;
+  styles?: StyleRef[];
+}
+
+export interface StyleRef {
+  name: string;
+  href?: string;
+}
+
+export interface StyleInfo {
+  name: string;
+  title: string;
+  is_builtin: boolean;
+  content?: string;
 }
 
 export interface LayerBounds {

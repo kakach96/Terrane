@@ -360,6 +360,119 @@ pub fn resolve_style(rules: &[ParsedRule], feature: &Feature, scale_denom: Optio
     Style::default()
 }
 
+pub struct BuiltinStyle {
+    pub name: &'static str,
+    pub title: &'static str,
+    pub sld: &'static str,
+}
+
+pub fn builtin_styles() -> Vec<BuiltinStyle> {
+    vec![
+        BuiltinStyle {
+            name: "default",
+            title: "默认样式",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>default</Name><UserStyle><FeatureTypeStyle><Rule>
+    <PolygonSymbolizer><Fill><CssParameter name="fill">#6688aa</CssParameter><CssParameter name="fill-opacity">0.6</CssParameter></Fill><Stroke><CssParameter name="stroke">#334455</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke></PolygonSymbolizer>
+    <LineSymbolizer><Stroke><CssParameter name="stroke">#334455</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke></LineSymbolizer>
+    <PointSymbolizer><Graphic><Mark><WellKnownName>circle</WellKnownName><Fill><CssParameter name="fill">#6688aa</CssParameter></Fill><Stroke><CssParameter name="stroke">#334455</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke></Mark><Size>8</Size></Graphic></PointSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+        BuiltinStyle {
+            name: "red-polygon",
+            title: "红色面",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>red-polygon</Name><UserStyle><FeatureTypeStyle><Rule>
+    <PolygonSymbolizer><Fill><CssParameter name="fill">#e53935</CssParameter><CssParameter name="fill-opacity">0.5</CssParameter></Fill><Stroke><CssParameter name="stroke">#b71c1c</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke></PolygonSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+        BuiltinStyle {
+            name: "blue-line",
+            title: "蓝色线",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>blue-line</Name><UserStyle><FeatureTypeStyle><Rule>
+    <LineSymbolizer><Stroke><CssParameter name="stroke">#1e88e5</CssParameter><CssParameter name="stroke-width">2</CssParameter></Stroke></LineSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+        BuiltinStyle {
+            name: "green-point",
+            title: "绿色点",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>green-point</Name><UserStyle><FeatureTypeStyle><Rule>
+    <PointSymbolizer><Graphic><Mark><WellKnownName>circle</WellKnownName><Fill><CssParameter name="fill">#43a047</CssParameter></Fill><Stroke><CssParameter name="stroke">#2e7d32</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke></Mark><Size>10</Size></Graphic></PointSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+        BuiltinStyle {
+            name: "water",
+            title: "水域",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>water</Name><UserStyle><FeatureTypeStyle><Rule>
+    <PolygonSymbolizer><Fill><CssParameter name="fill">#bbdefb</CssParameter><CssParameter name="fill-opacity">0.7</CssParameter></Fill><Stroke><CssParameter name="stroke">#1976d2</CssParameter><CssParameter name="stroke-width">0.5</CssParameter></Stroke></PolygonSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+        BuiltinStyle {
+            name: "roads",
+            title: "道路",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>roads</Name><UserStyle><FeatureTypeStyle><Rule>
+    <LineSymbolizer><Stroke><CssParameter name="stroke">#ff8f00</CssParameter><CssParameter name="stroke-width">1.5</CssParameter></Stroke></LineSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+        BuiltinStyle {
+            name: "buildings",
+            title: "建筑",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>buildings</Name><UserStyle><FeatureTypeStyle><Rule>
+    <PolygonSymbolizer><Fill><CssParameter name="fill">#eeeeee</CssParameter><CssParameter name="fill-opacity">1</CssParameter></Fill><Stroke><CssParameter name="stroke">#424242</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke></PolygonSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+        BuiltinStyle {
+            name: "land-use",
+            title: "土地利用",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>land-use</Name><UserStyle><FeatureTypeStyle><Rule>
+    <PolygonSymbolizer><Fill><CssParameter name="fill">#a5d6a7</CssParameter><CssParameter name="fill-opacity">0.5</CssParameter></Fill><Stroke><CssParameter name="stroke">#388e3c</CssParameter><CssParameter name="stroke-width">0.8</CssParameter></Stroke></PolygonSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+        BuiltinStyle {
+            name: "orange-point",
+            title: "橙色点",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>orange-point</Name><UserStyle><FeatureTypeStyle><Rule>
+    <PointSymbolizer><Graphic><Mark><WellKnownName>square</WellKnownName><Fill><CssParameter name="fill">#ff9800</CssParameter></Fill><Stroke><CssParameter name="stroke">#e65100</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke></Mark><Size>8</Size></Graphic></PointSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+        BuiltinStyle {
+            name: "purple-polygon",
+            title: "紫色面",
+            sld: r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>purple-polygon</Name><UserStyle><FeatureTypeStyle><Rule>
+    <PolygonSymbolizer><Fill><CssParameter name="fill">#ce93d8</CssParameter><CssParameter name="fill-opacity">0.5</CssParameter></Fill><Stroke><CssParameter name="stroke">#8e24aa</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke></PolygonSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#,
+        },
+    ]
+}
+
 pub fn default_sld(layer_name: &str) -> String {
     format!(r#"<?xml version="1.0" encoding="UTF-8"?>
 <StyledLayerDescriptor version="1.0.0"

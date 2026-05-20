@@ -78,7 +78,17 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                     .route(web::get().to(crate::handlers::get_layer_style))
                     .route(web::put().to(crate::handlers::put_layer_style))
             )
-            .route("/styles", web::get().to(crate::handlers::list_styles))
+            .service(
+                web::resource("/styles")
+                    .route(web::get().to(crate::handlers::list_styles))
+                    .route(web::post().to(crate::handlers::create_style))
+            )
+            .service(
+                web::resource("/styles/{name}")
+                    .route(web::get().to(crate::handlers::get_style_by_name))
+                    .route(web::put().to(crate::handlers::update_style_by_name))
+                    .route(web::delete().to(crate::handlers::delete_style_by_name))
+            )
             .service(
                 web::resource("/layer-groups")
                     .route(web::get().to(crate::handlers::list_layer_groups))

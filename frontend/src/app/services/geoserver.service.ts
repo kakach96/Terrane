@@ -11,6 +11,7 @@ import {
   UpdateLayerRequest,
   CreateFeatureRequest,
   PropertyDef,
+  StyleInfo,
   ApiResponse,
   DashboardStats,
   PreviewOptions,
@@ -193,6 +194,41 @@ export class GeoserverService {
   getDataSourceTables(dataSourceName: string): Observable<string[]> {
     return this.http.get<ApiResponse<string[]>>(`${this.apiUrl}/data-sources/${dataSourceName}/tables`)
       .pipe(map(response => response.data || []));
+  }
+
+  getStyles(): Observable<StyleInfo[]> {
+    return this.http.get<ApiResponse<StyleInfo[]>>(`${this.apiUrl}/styles`)
+      .pipe(map(response => response.data || []));
+  }
+
+  getStyle(name: string): Observable<StyleInfo> {
+    return this.http.get<ApiResponse<StyleInfo>>(`${this.apiUrl}/styles/${name}`)
+      .pipe(map(response => response.data as StyleInfo));
+  }
+
+  createStyle(style: { name: string; title?: string; content: string }): Observable<any> {
+    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/styles`, style)
+      .pipe(map(response => response.data));
+  }
+
+  updateStyle(name: string, updates: { title?: string; content?: string }): Observable<any> {
+    return this.http.put<ApiResponse<any>>(`${this.apiUrl}/styles/${name}`, updates)
+      .pipe(map(response => response.data));
+  }
+
+  deleteStyle(name: string): Observable<any> {
+    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/styles/${name}`)
+      .pipe(map(response => response.data));
+  }
+
+  getLayerStyle(layerName: string): Observable<string> {
+    return this.http.get(`${this.apiUrl}/layers/${layerName}/style`, { responseType: 'text' });
+  }
+
+  updateLayerStyle(layerName: string, sldContent: string): Observable<any> {
+    return this.http.put<ApiResponse<any>>(`${this.apiUrl}/layers/${layerName}/style`, sldContent, {
+      headers: { 'Content-Type': 'application/vnd.ogc.sld+xml' }
+    }).pipe(map(response => response.data));
   }
 
   getLayerFeatureType(layerName: string): Observable<PropertyDef[]> {
