@@ -80,7 +80,7 @@ async fn handle_get_capabilities(state: &AppState, _request: &WmsRequest) -> Res
 }
 
 async fn handle_get_map(state: &AppState, request: &WmsRequest) -> Result<HttpResponse, GeoServerError> {
-    wms::validate_wms_getmap_request(request)?;
+    wms::validate_wms_get_map_request(request)?;
 
     let layers_param = request.layers.as_ref().unwrap();
     let width = request.width.unwrap_or(512) as u32;

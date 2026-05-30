@@ -551,7 +551,7 @@ pub fn format_wms_exception(err: &GeoServerError, exceptions: Option<&str>, widt
     }
 }
 
-pub fn validate_wms_getmap_request(req: &WmsRequest) -> Result<(), GeoServerError> {
+pub fn validate_wms_get_map_request(req: &WmsRequest) -> Result<(), GeoServerError> {
     if req.layers.is_none() || req.layers.as_ref().unwrap().is_empty() {
         return Err(GeoServerError::BadRequest("LAYERS parameter is required".to_string()));
     }
