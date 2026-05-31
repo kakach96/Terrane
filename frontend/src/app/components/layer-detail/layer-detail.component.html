@@ -148,9 +148,52 @@
       <mat-card-header>
         <mat-icon matCardAvatar>map</mat-icon>
         <mat-card-title>地图预览</mat-card-title>
+        <div class="preview-actions">
+          <button mat-icon-button (click)="refreshPreview()" matTooltip="刷新预览">
+            <mat-icon>refresh</mat-icon>
+          </button>
+        </div>
       </mat-card-header>
       <mat-card-content class="preview-content">
-        <iframe [src]="safePreviewUrl" class="preview-iframe" title="地图预览"></iframe>
+        <div class="preview-controls">
+          <mat-form-field appearance="outline" class="preview-control">
+            <mat-label>格式</mat-label>
+            <mat-select [value]="previewOptions.format" (selectionChange)="updatePreviewParam('format', $event.value)">
+              <mat-option *ngFor="let fmt of previewFormats" [value]="fmt.value">
+                {{ fmt.label }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="preview-control">
+            <mat-label>宽度</mat-label>
+            <input matInput type="number" [value]="previewOptions.width"
+                   (change)="updatePreviewParam('width', $any($event.target).value)">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="preview-control">
+            <mat-label>高度</mat-label>
+            <input matInput type="number" [value]="previewOptions.height"
+                   (change)="updatePreviewParam('height', $any($event.target).value)">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="preview-control">
+            <mat-label>坐标系</mat-label>
+            <mat-select [value]="previewOptions.crs" (selectionChange)="updatePreviewParam('crs', $event.value)">
+              <mat-option *ngFor="let crs of previewCrsOptions" [value]="crs">
+                {{ crs }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-checkbox [checked]="previewOptions.transparent"
+                        (change)="onTransparentChange($event)">
+            透明背景
+          </mat-checkbox>
+        </div>
+        <div class="preview-image-container">
+          <img [src]="previewUrl" alt="地图预览" class="preview-image" (error)="onPreviewError()">
+        </div>
       </mat-card-content>
     </mat-card>
   </div>

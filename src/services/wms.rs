@@ -489,24 +489,9 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
     })
 }
 
-fn normalize_bbox(raw: Bbox, version: Option<&str>, crs: Option<&str>) -> Bbox {
-    let epsg = crs.unwrap_or("EPSG:4326");
-    let ver = version.unwrap_or("1.3.0");
-    if ver == "1.3.0" {
-        match epsg {
-            "EPSG:4326" | "4326" => {
-                Bbox {
-                    minx: raw.miny,
-                    miny: raw.minx,
-                    maxx: raw.maxy,
-                    maxy: raw.maxx,
-                }
-            }
-            _ => raw,
-        }
-    } else {
-        raw
-    }
+#[allow(dead_code)]
+fn normalize_bbox(raw: Bbox, _version: Option<&str>, _crs: Option<&str>) -> Bbox {
+    raw
 }
 
 pub fn format_wms_exception(err: &GeoServerError, exceptions: Option<&str>, width: u32, height: u32) -> (Vec<u8>, &'static str) {

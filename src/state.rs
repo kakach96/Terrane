@@ -70,7 +70,7 @@ impl AppState {
         if let Some(ref store) = store {
             if let Ok(db_layers) = store.get_all_layers().await {
                 for db_layer in db_layers {
-                    let layer = Layer::new(
+                    let mut layer = Layer::new(
                         db_layer.name.clone(),
                         db_layer.title.clone(),
                         db_layer.workspace.clone(),
@@ -85,6 +85,10 @@ impl AppState {
                             db_layer.maxy,
                         ),
                     ));
+
+                    if let Some(native_name) = db_layer.native_name {
+                        layer.native_name = Some(native_name);
+                    }
 
                     if !all_layers.iter().any(|l| l.name == layer.name) {
                         all_layers.push(layer);

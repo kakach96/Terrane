@@ -20,6 +20,21 @@ export class LayerDetailComponent implements OnInit {
   currentStyleName = '';
   loading = true;
 
+  previewOptions = {
+    width: 800,
+    height: 400,
+    format: 'image/png' as 'image/png' | 'image/jpeg',
+    transparent: true,
+    crs: 'EPSG:4326'
+  };
+
+  previewFormats = [
+    { value: 'image/png', label: 'PNG (透明)' },
+    { value: 'image/jpeg', label: 'JPEG' }
+  ];
+
+  previewCrsOptions = ['EPSG:4326', 'EPSG:3857'];
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
@@ -43,8 +58,8 @@ export class LayerDetailComponent implements OnInit {
       next: (layer) => {
         this.layer = layer;
         this.currentStyleName = layer.styles?.[0]?.name || 'default';
-        this.previewUrl = this.geoserverService.getWmsPreviewUrl(layer, 800, 400);
-        this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
+        this.previewOptions.crs = (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
+        this.refreshPreview();
         this.loading = false;
       },
       error: (error) => {
@@ -52,6 +67,23 @@ export class LayerDetailComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  refreshPreview(): void {
+    if (!this.layer) return;
+    this.previewUrl = this.geoserverService.getMapImageUrl(this.layer, {
+      width: this.previewOptions.width,
+      height: this.previewOptions.height,
+      format: this.previewOptions.format,
+      transparent: this.previewOptions.transparent,
+      crs: this.previewOptions.crs,
+    });
+    this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
+  }
+
+  updatePreviewParam(param: string, value: number | boolean | string): void {
+    (this.previewOptions as Record<string, number | boolean | string>)[param] = value;
+    this.refreshPreview();
   }
 
   loadFeatures(layerName: string): void {
@@ -92,8 +124,7 @@ export class LayerDetailComponent implements OnInit {
             next: () => {
               this.currentStyleName = styleName;
               this.notificationService.success(`样式已切换为 ${style.title}`);
-              this.previewUrl = this.geoserverService.getWmsPreviewUrl(this.layer!, 800, 400);
-              this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
+              this.refreshPreview();
             },
             error: () => this.notificationService.error('样式切换失败')
           });
@@ -128,6 +159,15 @@ export class LayerDetailComponent implements OnInit {
 
   getGeometryTypes(): string[] {
     return [...new Set(this.features.map(f => f.geometry.type))];
+  }
+
+  onPreviewError(): void {
+    console.warn('地图预览加载失败，可能图层暂无数据');
+  }
+
+  onTransparentChange(event: any): void {
+    this.previewOptions.transparent = event.checked;
+    this.refreshPreview();
   }
 
   goBack(): void {

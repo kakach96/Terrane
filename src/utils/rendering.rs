@@ -54,11 +54,47 @@ impl MapRenderer {
             }
         }
 
+        if features.is_empty() && self.options.transparent {
+            let bg = [230, 230, 230, 255];
+            for pixel in img.pixels_mut() {
+                *pixel = Rgba(bg);
+            }
+            self.draw_rect(&mut img, 0, 0, self.options.width - 1, self.options.height - 1, [200, 200, 200, 255], 2);
+        }
+
         for (geometry, style) in features {
             self.render_feature(&mut img, &geometry, &style);
         }
 
         img
+    }
+
+    fn draw_rect(&self, img: &mut RgbaImage, x1: u32, y1: u32, x2: u32, y2: u32, color: [u8; 4], width: u32) {
+        let min_x = x1.min(x2);
+        let max_x = x1.max(x2);
+        let min_y = y1.min(y2);
+        let max_y = y1.max(y2);
+
+        for x in min_x..=max_x {
+            for w in 0..width {
+                if y1 < self.options.height && x + w < self.options.width {
+                    img.put_pixel(x + w, y1, Rgba(color));
+                }
+                if y2 < self.options.height && x + w < self.options.width {
+                    img.put_pixel(x + w, max_y, Rgba(color));
+                }
+            }
+        }
+        for y in min_y..=max_y {
+            for w in 0..width {
+                if x1 < self.options.width && y + w < self.options.height {
+                    img.put_pixel(x1, y + w, Rgba(color));
+                }
+                if max_x < self.options.width && y + w < self.options.height {
+                    img.put_pixel(max_x, y + w, Rgba(color));
+                }
+            }
+        }
     }
 
     fn render_feature(&self, img: &mut RgbaImage, geometry: &GeoJsonGeometry, style: &Style) {

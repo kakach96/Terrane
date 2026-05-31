@@ -25,6 +25,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatRippleModule } from '@angular/material/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 
 import { AppComponent } from './app.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
@@ -102,6 +103,7 @@ const routes: Routes = [
     MatBadgeModule,
     MatRippleModule,
     MatSlideToggleModule,
+    MatCheckboxModule,
     FeatureDetailDialogComponent
   ],
   providers: [],

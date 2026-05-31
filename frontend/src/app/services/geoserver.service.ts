@@ -111,6 +111,48 @@ export class GeoserverService {
     return `/wms?${params}`;
   }
 
+  getMapImageUrl(
+    layer: Layer,
+    options?: {
+      width?: number;
+      height?: number;
+      crs?: string;
+      bbox?: string;
+      format?: 'image/png' | 'image/jpeg';
+      transparent?: boolean;
+      styles?: string;
+    }
+  ): string {
+    const bounds: LayerBounds = (layer as any).native_bounds?.bounds || layer.bounds;
+    if (!bounds) return '';
+
+    const crs = options?.crs || (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
+    const bbox = options?.bbox || `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`;
+
+    const layerName = layer.name.includes(':') 
+      ? layer.name 
+      : `${layer.workspace}:${layer.name}`;
+
+    const params = new URLSearchParams({
+      service: 'WMS',
+      version: '1.3.0',
+      request: 'GetMap',
+      layers: layerName,
+      crs: crs,
+      bbox: bbox,
+      width: (options?.width || 600).toString(),
+      height: (options?.height || 400).toString(),
+      format: options?.format || 'image/png',
+      transparent: (options?.transparent ?? true).toString(),
+    });
+
+    if (options?.styles) {
+      params.set('styles', options.styles);
+    }
+
+    return `/wms?${params}`;
+  }
+
   getDashboardStats(): Observable<DashboardStats> {
     return this.getLayers().pipe(
       map(layers => ({

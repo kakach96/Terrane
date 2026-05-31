@@ -2,14 +2,46 @@ use actix_web::{HttpRequest, HttpResponse, web};
 use crate::services::wms::{self, WmsRequest, WmsCapabilities};
 use crate::error::GeoServerError;
 use crate::state::AppState;
-use crate::utils::rendering::{MapRenderer, RenderOptions, RenderFormat};
+use crate::utils::rendering::{MapRenderer, RenderOptions, RenderFormat, Style};
 use crate::utils::sld_parser::{self, ParsedRule};
 use crate::utils::projection::ProjectionTransformer;
-use crate::models::{Bounds, CoordinateReferenceSystem, GeoJsonGeometry};
+use crate::models::{Bounds, CoordinateReferenceSystem, GeoJsonGeometry, Feature, DataSourceType, Layer};
 use quick_xml::se::to_string;
 use std::io::Cursor;
 use std::collections::HashMap;
 use image::ImageFormat;
+use tracing::{info, debug};
+
+struct GetMapContext {
+    layers: Vec<String>,
+    bounds: Bounds,
+    output_crs: String,
+    width: u32,
+    height: u32,
+    format: String,
+    transparent: bool,
+    bg_color: Option<[u8; 4]>,
+    scale_denominator: f64,
+    options: RenderOptions,
+}
+
+struct LayerMetadata {
+    layer_name: String,
+    workspace: String,
+    layer_obj: Layer,
+    data_source_type: DataSourceType,
+    connection: Option<crate::models::DataSourceConnection>,
+    native_name: String,
+    native_crs: String,
+    rules: Vec<ParsedRule>,
+    max_features: u32,
+}
+
+struct LayerRenderContext {
+    metadata: LayerMetadata,
+    features: Vec<Feature>,
+    render_items: Vec<(GeoJsonGeometry, Style)>,
+}
 
 pub async fn handle_wms_request(
     _req: HttpRequest,
@@ -80,66 +112,617 @@ async fn handle_get_capabilities(state: &AppState, _request: &WmsRequest) -> Res
 }
 
 async fn handle_get_map(state: &AppState, request: &WmsRequest) -> Result<HttpResponse, GeoServerError> {
+    info!("[GetMap] 开始处理请求");
+    debug!("[GetMap] 请求参数: layers={:?}, format={:?}, bbox={:?}, crs={:?}", 
+           request.layers, request.format, request.bbox, request.crs);
+    
     wms::validate_wms_get_map_request(request)?;
 
-    let layers_param = request.layers.as_ref().unwrap();
+    let context = parse_get_map_params(request)?;
+    info!("[GetMap] 参数解析完成, format={}, bbox={:?}, output_crs={}, size={}x{}", 
+          context.format, context.bounds, context.output_crs, context.width, context.height);
+
+    if context.format.to_lowercase().contains("openlayers") {
+        info!("[GetMap] 返回 OpenLayers 预览页面");
+        return render_openlayers_preview(&context, state);
+    }
+
+    info!("[GetMap] 开始查询图层元数据");
+    let layer_metadata_list = resolve_layer_metadata(state, &context).await?;
+
+    info!("[GetMap] 开始查询图层要素");
+    let mut layer_contexts = query_all_layer_features(state, &context, &layer_metadata_list).await?;
+
+    info!("[GetMap] 开始解析样式");
+    resolve_feature_styles(&mut layer_contexts, context.scale_denominator);
+
+    info!("[GetMap] 开始渲染输出");
+    render_map_image(&context, &layer_contexts)
+}
+
+fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServerError> {
+    let layers_param = request.layers.as_ref()
+        .ok_or_else(|| GeoServerError::BadRequest("LAYERS parameter is required".to_string()))?;
+
     let width = request.width.unwrap_or(512) as u32;
     let height = request.height.unwrap_or(512) as u32;
-    let format = request.format.as_ref().unwrap();
-    let bbox = request.bbox.as_ref().unwrap();
+
+    let bbox = request.bbox.as_ref()
+        .ok_or_else(|| GeoServerError::BadRequest("BBOX parameter is required".to_string()))?;
     let bounds = Bounds::new(bbox.minx, bbox.miny, bbox.maxx, bbox.maxy);
 
-    let output_crs = request.crs.as_deref().unwrap_or("EPSG:4326");
-    let scale_denom = calculate_scale_denom(&bounds, width, height, output_crs);
+    let output_crs = request.crs.as_deref().unwrap_or("EPSG:4326").to_string();
+    let scale_denominator = calculate_scale_denom(&bounds, width, height, &output_crs);
+
+    let format = request.format.as_ref()
+        .ok_or_else(|| GeoServerError::BadRequest("FORMAT parameter is required".to_string()))?
+        .clone();
+
+    let transparent = request.transparent.unwrap_or(false);
+    let bg_color = request.bgcolor.as_ref().map(|c| parse_color(c));
 
     let options = RenderOptions {
         width,
         height,
-        transparent: request.transparent.unwrap_or(false),
-        bg_color: request.bgcolor.as_ref().map(|c| parse_color(c)),
+        transparent,
+        bg_color,
         format: RenderFormat::PNG,
     };
 
-    let renderer = MapRenderer::new(options, bounds.clone());
+    Ok(GetMapContext {
+        layers: layers_param.clone(),
+        bounds,
+        output_crs,
+        width,
+        height,
+        format,
+        transparent,
+        bg_color,
+        scale_denominator,
+        options,
+    })
+}
 
+async fn resolve_layer_metadata(
+    state: &AppState,
+    context: &GetMapContext,
+) -> Result<Vec<LayerMetadata>, GeoServerError> {
+    info!("[resolve_layer_metadata] 开始处理 {} 个图层", context.layers.len());
     let layers_lock = state.layers.read().await;
     let styles_lock = state.styles.read().await;
-    let mut render_items = Vec::new();
 
-    for layer_name in layers_param {
-        if let Some(layer) = layers_lock.iter().find(|l| l.name == *layer_name) {
-            let layer_crs = layer.srs.to_epsg();
-            let needs_reproject = layer_crs != output_crs;
+    let mut metadata_list = Vec::with_capacity(context.layers.len());
 
-            let rules = get_layer_rules(request, &styles_lock, layer);
+    for layer_name in &context.layers {
+        let (workspace, layer_short_name) = if layer_name.contains(':') {
+            let parts: Vec<&str> = layer_name.splitn(2, ':').collect();
+            (parts[0].to_string(), parts[1].to_string())
+        } else {
+            info!("[resolve_layer_metadata] 图层名 '{}' 无工作空间前缀，使用默认", layer_name);
+            (String::new(), layer_name.clone())
+        };
+
+        info!("[resolve_layer_metadata] 解析图层: 输入='{}', workspace='{}', layer='{}'", 
+              layer_name, workspace, layer_short_name);
+
+        let layer = layers_lock.iter()
+            .find(|l| l.name == *layer_name || (l.workspace == workspace && l.name == layer_short_name))
+            .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+
+        let data_source = if let Some(store) = &state.store {
+            store.get_data_source(&layer.store).await
+                .map_err(|e| GeoServerError::InternalError(format!("Failed to get data source: {}", e)))?
+        } else {
+            None
+        };
+
+        let (data_source_type, connection) = data_source
+            .map(|ds| (ds.data_source_type, ds.connection))
+            .unwrap_or((DataSourceType::Shapefile, None));
+
+        let native_name = if let Some(ref nn) = layer.native_name {
+            nn.clone()
+        } else {
+            layer_short_name.clone()
+        };
+
+        let native_crs = layer.srs.to_epsg();
+
+        let sld_xml = request_sld_body(layer, &styles_lock);
+        let rules = sld_parser::parse_sld(&sld_xml);
+
+        info!("[resolve_layer_metadata] 图层 '{}' 详情: workspace='{}', layer='{}', native_name='{}', native_crs='{}', data_source_type={:?}, rules_count={}", 
+              layer_name, layer.workspace, layer.name, native_name, native_crs, data_source_type, rules.len());
+
+        metadata_list.push(LayerMetadata {
+            layer_name: layer_name.clone(),
+            workspace: layer.workspace.clone(),
+            layer_obj: layer.clone(),
+            data_source_type,
+            connection,
+            native_name,
+            native_crs,
+            rules,
+            max_features: 5000,
+        });
+    }
+
+    info!("[resolve_layer_metadata] 完成元数据查询，共 {} 个图层", metadata_list.len());
+    Ok(metadata_list)
+}
+
+fn request_sld_body(layer: &Layer, styles: &HashMap<String, String>) -> String {
+    let style_name = layer.styles.first()
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
+
+    styles.get(&style_name)
+        .cloned()
+        .unwrap_or_else(|| sld_parser::default_sld(&layer.name))
+}
+
+async fn query_all_layer_features(
+    state: &AppState,
+    context: &GetMapContext,
+    metadata_list: &[LayerMetadata],
+) -> Result<Vec<LayerRenderContext>, GeoServerError> {
+    info!("[query_all_layer_features] 开始查询 {} 个图层的要素，查询范围: {:?}, 坐标系: {}", 
+          metadata_list.len(), context.bounds, context.output_crs);
+    let mut contexts = Vec::with_capacity(metadata_list.len());
+
+    for metadata in metadata_list {
+        info!("[query_all_layer_features] 查询图层: {}", metadata.layer_name);
+        let features = query_layer_features_optimized(
+            state,
+            metadata,
+            &context.bounds,
+            &context.output_crs,
+            context.scale_denominator,
+        ).await?;
+
+        debug!("[query_all_layer_features] 图层 '{}' 查询到 {} 个要素", 
+               metadata.layer_name, features.len());
+
+        contexts.push(LayerRenderContext {
+            metadata: LayerMetadata {
+                layer_name: metadata.layer_name.clone(),
+                workspace: metadata.workspace.clone(),
+                layer_obj: metadata.layer_obj.clone(),
+                data_source_type: metadata.data_source_type.clone(),
+                connection: metadata.connection.clone(),
+                native_name: metadata.native_name.clone(),
+                native_crs: metadata.native_crs.clone(),
+                rules: metadata.rules.clone(),
+                max_features: metadata.max_features,
+            },
+            features,
+            render_items: Vec::new(),
+        });
+    }
+
+    info!("[query_all_layer_features] 要素查询完成");
+    Ok(contexts)
+}
+
+async fn query_layer_features_optimized(
+    state: &AppState,
+    metadata: &LayerMetadata,
+    bbox: &Bounds,
+    output_crs: &str,
+    scale_denominator: f64,
+) -> Result<Vec<Feature>, GeoServerError> {
+    info!("[query_layer_features_optimized] 查询图层 '{}', native_name='{}', native_crs='{}', data_source_type='{:?}'",
+          metadata.layer_name, metadata.native_name, metadata.native_crs, metadata.data_source_type);
+
+    let features = match metadata.data_source_type {
+        DataSourceType::Postgis => {
+            if let Some(ref conn) = metadata.connection {
+                query_postgis_features_optimized(
+                    state,
+                    conn,
+                    &metadata.native_name,
+                    &metadata.native_crs,
+                    output_crs,
+                    bbox,
+                    scale_denominator,
+                    metadata.max_features,
+                ).await
+            } else {
+                debug!("[query_layer_features_optimized] 无PostGIS连接配置，使用默认查询");
+                Ok(Vec::new())
+            }
+        }
+        _ => {
+            debug!("[query_layer_features_optimized] 使用默认查询方式");
             let features = crate::handlers::features::query_layer_features(
-                state, &layer.name, Some(&bounds), None, None,
+                state,
+                &metadata.layer_name,
+                Some(bbox),
+                None,
+                None,
             ).await.unwrap_or_default();
 
-            for feature in &features {
-                let geom = if needs_reproject {
-                    reproject_geometry(&feature.geometry, &layer_crs, output_crs)
-                } else {
-                    feature.geometry.clone()
-                };
-                let style = if !rules.is_empty() {
-                    sld_parser::resolve_style(&rules, feature, Some(scale_denom))
-                } else {
-                    crate::utils::rendering::Style::default()
-                };
-                render_items.push((geom, style));
+            let needs_reproject = metadata.native_crs != output_crs;
+            if needs_reproject {
+                debug!("[query_layer_features_optimized] 需要坐标转换: {} -> {}", metadata.native_crs, output_crs);
+                Ok(features.into_iter()
+                    .map(|mut f| {
+                        f.geometry = reproject_geometry(&f.geometry, &metadata.native_crs, output_crs);
+                        f
+                    })
+                    .collect())
+            } else {
+                Ok(features)
             }
+        }
+    };
+
+    info!("[query_layer_features_optimized] 图层 '{}' 查询结果: {} 个要素", metadata.layer_name, features.as_ref().map(|f| f.len()).unwrap_or(0));
+    features
+}
+
+async fn query_postgis_features_optimized(
+    state: &AppState,
+    conn: &crate::models::DataSourceConnection,
+    table_name: &str,
+    storage_crs: &str,
+    output_crs: &str,
+    bbox: &Bounds,
+    scale_denominator: f64,
+    max_features: u32,
+) -> Result<Vec<Feature>, GeoServerError> {
+    info!("[PostGIS] 开始查询 PostGIS, table='{}', schema='{}', storage_crs='{}', output_crs='{}'",
+          table_name, conn.schema, storage_crs, output_crs);
+
+    let pool = state.get_pg_pool(table_name, conn);
+    let client = pool.get().await
+        .map_err(|e| GeoServerError::InternalError(format!("Pool error: {}", e)))?;
+
+    let schema = if conn.schema.is_empty() || conn.schema == "public" {
+        "public".to_string()
+    } else {
+        conn.schema.clone()
+    };
+
+    let geom_col = get_geometry_column(&client, &schema, table_name).await
+        .unwrap_or_else(|| "geom".to_string());
+
+    let needs_transform = storage_crs != output_crs;
+    let storage_srid = parse_srid(storage_crs);
+    let output_srid = parse_srid(output_crs);
+
+    let simplify_tolerance = calculate_simplify_tolerance(scale_denominator, bbox);
+
+    debug!("[PostGIS] 查询参数: needs_transform={}, storage_srid={}, output_srid={}, simplify_tolerance={:?}",
+           needs_transform, storage_srid, output_srid, simplify_tolerance);
+
+    let geom_expr = if needs_transform {
+        if let Some(tol) = simplify_tolerance {
+            format!("ST_AsBinary(ST_SimplifyPreserveTopology(ST_Transform({}, {}), {}))",
+                geom_col, output_srid, tol)
+        } else {
+            format!("ST_AsBinary(ST_Transform({}, {}))", geom_col, output_srid)
+        }
+    } else {
+        if let Some(tol) = simplify_tolerance {
+            format!("ST_AsBinary(ST_SimplifyPreserveTopology({}, {}))", geom_col, tol)
+        } else {
+            format!("ST_AsBinary({})", geom_col)
+        }
+    };
+
+    let sql = format!(
+        "SELECT {} as geom_wkb, {} && ST_MakeEnvelope({}, {}, {}, {}, {}) as _in_bbox \
+         FROM \"{}\".\"{}\" \
+         WHERE {} && ST_MakeEnvelope({}, {}, {}, {}, {}) \
+         LIMIT {}",
+        geom_expr,
+        geom_col, bbox.minx, bbox.miny, bbox.maxx, bbox.maxy, storage_srid,
+        schema, table_name,
+        geom_col, bbox.minx, bbox.miny, bbox.maxx, bbox.maxy, storage_srid,
+        max_features
+    );
+
+    debug!("[PostGIS] 执行SQL: {}", sql);
+
+    let rows = client.query(&sql, &[]).await
+        .map_err(|e| GeoServerError::InternalError(format!("PostGIS query error: {}", e)))?;
+
+    info!("[PostGIS] SQL执行完成, 返回 {} 行", rows.len());
+
+    let mut features = Vec::with_capacity(rows.len());
+    for (idx, row) in rows.iter().enumerate() {
+        let wkb: Vec<u8> = row.try_get("geom_wkb").unwrap_or_default();
+        let geometry = parse_wkb_geometry(&wkb);
+        let mut properties = HashMap::new();
+        properties.insert("id".to_string(), crate::models::PropertyValue::String(format!("feat_{}", idx)));
+        features.push(Feature::with_id(format!("feat_{}", idx), geometry, properties));
+    }
+
+    info!("[PostGIS] 解析完成, 共 {} 个要素", features.len());
+    Ok(features)
+}
+
+fn parse_srid(crs: &str) -> i32 {
+    crs.trim_start_matches("EPSG:")
+        .trim_start_matches("epsg:")
+        .parse()
+        .unwrap_or(4326)
+}
+
+fn calculate_simplify_tolerance(scale_denom: f64, bbox: &Bounds) -> Option<f64> {
+    if scale_denom > 100000.0 {
+        let range = (bbox.maxx - bbox.minx).max(bbox.maxy - bbox.miny);
+        Some(range / 1000.0)
+    } else {
+        None
+    }
+}
+
+fn parse_wkb_geometry(wkb: &[u8]) -> GeoJsonGeometry {
+    if wkb.is_empty() {
+        return GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] };
+    }
+
+    match wkb[0] {
+        0x01 | 0x00 => parse_ewkb_geometry(wkb),
+        _ => GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+    }
+}
+
+fn parse_ewkb_geometry(wkb: &[u8]) -> GeoJsonGeometry {
+    if wkb.len() < 5 {
+        return GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] };
+    }
+
+    let is_little_endian = wkb[0] == 0x01;
+    let geom_type = if is_little_endian {
+        u32::from_le_bytes([wkb[1], wkb[2], wkb[3], wkb[4]])
+    } else {
+        u32::from_be_bytes([wkb[1], wkb[2], wkb[3], wkb[4]])
+    };
+
+    match geom_type {
+        1 => parse_wkb_point(wkb, is_little_endian),
+        2 => parse_wkb_linestring(wkb, is_little_endian),
+        3 => parse_wkb_polygon(wkb, is_little_endian),
+        _ => GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+    }
+}
+
+fn parse_wkb_point(wkb: &[u8], little: bool) -> GeoJsonGeometry {
+    if wkb.len() < 21 {
+        return GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] };
+    }
+
+    let x = if little {
+        f64::from_le_bytes([wkb[5], wkb[6], wkb[7], wkb[8], wkb[9], wkb[10], wkb[11], wkb[12]])
+    } else {
+        f64::from_be_bytes([wkb[5], wkb[6], wkb[7], wkb[8], wkb[9], wkb[10], wkb[11], wkb[12]])
+    };
+
+    let y = if little {
+        f64::from_le_bytes([wkb[13], wkb[14], wkb[15], wkb[16], wkb[17], wkb[18], wkb[19], wkb[20]])
+    } else {
+        f64::from_be_bytes([wkb[13], wkb[14], wkb[15], wkb[16], wkb[17], wkb[18], wkb[19], wkb[20]])
+    };
+
+    GeoJsonGeometry::Point { coordinates: vec![x, y] }
+}
+
+fn parse_wkb_linestring(wkb: &[u8], little: bool) -> GeoJsonGeometry {
+    if wkb.len() < 9 {
+        return GeoJsonGeometry::LineString { coordinates: vec![] };
+    }
+
+    let num_points = if little {
+        u32::from_le_bytes([wkb[5], wkb[6], wkb[7], wkb[8]]) as usize
+    } else {
+        u32::from_be_bytes([wkb[5], wkb[6], wkb[7], wkb[8]]) as usize
+    };
+
+    let mut coords = Vec::with_capacity(num_points);
+    for i in 0..num_points {
+        let offset = 9 + i * 16;
+        if offset + 16 > wkb.len() {
+            break;
+        }
+
+        let x = if little {
+            f64::from_le_bytes([
+                wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3],
+                wkb[offset+4], wkb[offset+5], wkb[offset+6], wkb[offset+7]
+            ])
+        } else {
+            f64::from_be_bytes([
+                wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3],
+                wkb[offset+4], wkb[offset+5], wkb[offset+6], wkb[offset+7]
+            ])
+        };
+
+        let y = if little {
+            f64::from_le_bytes([
+                wkb[offset+8], wkb[offset+9], wkb[offset+10], wkb[offset+11],
+                wkb[offset+12], wkb[offset+13], wkb[offset+14], wkb[offset+15]
+            ])
+        } else {
+            f64::from_be_bytes([
+                wkb[offset+8], wkb[offset+9], wkb[offset+10], wkb[offset+11],
+                wkb[offset+12], wkb[offset+13], wkb[offset+14], wkb[offset+15]
+            ])
+        };
+
+        coords.push(vec![x, y]);
+    }
+
+    GeoJsonGeometry::LineString { coordinates: coords }
+}
+
+fn parse_wkb_polygon(wkb: &[u8], little: bool) -> GeoJsonGeometry {
+    if wkb.len() < 9 {
+        return GeoJsonGeometry::Polygon { coordinates: vec![vec![]] };
+    }
+
+    let num_rings = if little {
+        u32::from_le_bytes([wkb[5], wkb[6], wkb[7], wkb[8]]) as usize
+    } else {
+        u32::from_be_bytes([wkb[5], wkb[6], wkb[7], wkb[8]]) as usize
+    };
+
+    let mut rings = Vec::with_capacity(num_rings);
+    let mut offset = 9;
+
+    for _ in 0..num_rings {
+        if offset + 4 > wkb.len() {
+            break;
+        }
+
+        let num_points = if little {
+            u32::from_le_bytes([wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3]]) as usize
+        } else {
+            u32::from_be_bytes([wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3]]) as usize
+        };
+
+        offset += 4;
+
+        let mut ring = Vec::with_capacity(num_points);
+        for _ in 0..num_points {
+            if offset + 16 > wkb.len() {
+                break;
+            }
+
+            let x = if little {
+                f64::from_le_bytes([
+                    wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3],
+                    wkb[offset+4], wkb[offset+5], wkb[offset+6], wkb[offset+7]
+                ])
+            } else {
+                f64::from_be_bytes([
+                    wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3],
+                    wkb[offset+4], wkb[offset+5], wkb[offset+6], wkb[offset+7]
+                ])
+            };
+
+            let y = if little {
+                f64::from_le_bytes([
+                    wkb[offset+8], wkb[offset+9], wkb[offset+10], wkb[offset+11],
+                    wkb[offset+12], wkb[offset+13], wkb[offset+14], wkb[offset+15]
+                ])
+            } else {
+                f64::from_be_bytes([
+                    wkb[offset+8], wkb[offset+9], wkb[offset+10], wkb[offset+11],
+                    wkb[offset+12], wkb[offset+13], wkb[offset+14], wkb[offset+15]
+                ])
+            };
+
+            ring.push(vec![x, y]);
+            offset += 16;
+        }
+
+        rings.push(ring);
+    }
+
+    GeoJsonGeometry::Polygon { coordinates: rings }
+}
+
+async fn get_geometry_column(
+    client: &tokio_postgres::Client,
+    schema: &str,
+    table: &str,
+) -> Option<String> {
+    let sql = "SELECT f_geometry_column FROM geometry_columns WHERE f_table_schema = $1 AND f_table_name = $2";
+    if let Ok(rows) = client.query(sql, &[&schema, &table]).await {
+        if let Some(row) = rows.first() {
+            return row.get::<_, String>(0).into();
+        }
+    }
+    None
+}
+
+fn resolve_feature_styles(
+    layer_contexts: &mut [LayerRenderContext],
+    scale_denominator: f64,
+) {
+    info!("[resolve_feature_styles] 开始解析样式，比例尺分母: {}", scale_denominator);
+    let mut total_items = 0;
+
+    for layer_ctx in layer_contexts.iter_mut() {
+        debug!("[resolve_feature_styles] 处理图层: {}, 要素数: {}", 
+               layer_ctx.metadata.layer_name, layer_ctx.features.len());
+        
+        for feature in &layer_ctx.features {
+            let style = layer_ctx.metadata.rules.iter()
+                .find(|rule| sld_parser::match_rule(rule, &feature.properties, Some(scale_denominator)))
+                .map(|rule| rule.style.clone())
+                .unwrap_or_default();
+
+            layer_ctx.render_items.push((feature.geometry.clone(), style));
+            total_items += 1;
         }
     }
 
-    if format.to_lowercase().contains("openlayers") {
-        let host = state.config.server.host.clone();
-        let port = state.config.server.port;
-        let base_url = format!("http://{}:{}", host, port);
-        let wms_url = format!("{}/wms?", base_url);
+    info!("[resolve_feature_styles] 样式解析完成，共 {} 个渲染项", total_items);
+}
 
-        let html = format!(
-            r#"<!DOCTYPE html>
+fn render_map_image(
+    context: &GetMapContext,
+    layer_contexts: &[LayerRenderContext],
+) -> Result<HttpResponse, GeoServerError> {
+    info!("[render_map_image] 开始渲染地图，尺寸: {}x{}, 透明背景: {}", 
+          context.width, context.height, context.transparent);
+    
+    let renderer = MapRenderer::new(context.options.clone(), context.bounds.clone());
+
+    let all_render_items: Vec<(GeoJsonGeometry, Style)> = layer_contexts.iter()
+        .flat_map(|ctx| ctx.render_items.clone())
+        .collect();
+
+    info!("[render_map_image] 共 {} 个渲染项待渲染", all_render_items.len());
+
+    let img = renderer.render(all_render_items);
+
+    let image_format = match context.format.to_lowercase().as_str() {
+        s if s.contains("png") => ImageFormat::Png,
+        s if s.contains("jpeg") || s.contains("jpg") => ImageFormat::Jpeg,
+        s if s.contains("gif") => ImageFormat::Gif,
+        s if s.contains("webp") => ImageFormat::WebP,
+        _ => ImageFormat::Png,
+    };
+
+    debug!("[render_map_image] 渲染格式: {:?}", image_format);
+
+    let mut buffer = Cursor::new(Vec::new());
+    img.write_to(&mut buffer, image_format)
+        .map_err(|e| GeoServerError::RenderingError(format!("Failed to render image: {}", e)))?;
+
+    let image_size = buffer.get_ref().len();
+    let content_type = match image_format {
+        ImageFormat::Png => "image/png",
+        ImageFormat::Jpeg => "image/jpeg",
+        ImageFormat::Gif => "image/gif",
+        ImageFormat::WebP => "image/webp",
+        _ => "image/png",
+    };
+
+    info!("[render_map_image] 渲染完成，返回图片，大小: {} 字节, Content-Type: {}", 
+          image_size, content_type);
+
+    Ok(HttpResponse::Ok()
+        .content_type(content_type)
+        .body(buffer.into_inner()))
+}
+
+fn render_openlayers_preview(
+    context: &GetMapContext,
+    state: &AppState,
+) -> Result<HttpResponse, GeoServerError> {
+    let host = state.config.server.host.clone();
+    let port = state.config.server.port;
+    let base_url = format!("http://{}:{}", host, port);
+    let wms_url = format!("{}/wms?", base_url);
+
+    let html = format!(
+        r#"<!DOCTYPE html>
 <html>
 <head>
   <title>Layer Preview - {layer_name}</title>
@@ -174,60 +757,18 @@ async fn handle_get_map(state: &AppState, request: &WmsRequest) -> Result<HttpRe
   </script>
 </body>
 </html>"#,
-            layer_name = layers_param.join(","),
-            layers_json = serde_json::to_string(layers_param).unwrap_or_default(),
-            wms_url = wms_url,
-            crs = output_crs,
-            center_x = (bounds.minx + bounds.maxx) / 2.0,
-            center_y = (bounds.miny + bounds.maxy) / 2.0,
-            zoom = calculate_openlayers_zoom(&bounds, output_crs),
-        );
-
-        return Ok(HttpResponse::Ok()
-            .content_type("text/html")
-            .body(html));
-    }
-
-    let img = renderer.render(render_items);
-
-    let image_format = match format.to_lowercase().as_str() {
-        s if s.contains("png") => ImageFormat::Png,
-        s if s.contains("jpeg") || s.contains("jpg") => ImageFormat::Jpeg,
-        s if s.contains("gif") => ImageFormat::Gif,
-        s if s.contains("webp") => ImageFormat::WebP,
-        _ => ImageFormat::Png,
-    };
-
-    let mut buffer = Cursor::new(Vec::new());
-    img.write_to(&mut buffer, image_format)
-        .map_err(|e| GeoServerError::RenderingError(format!("Failed to render image: {}", e)))?;
-
-    let content_type = match image_format {
-        ImageFormat::Png => "image/png",
-        ImageFormat::Jpeg => "image/jpeg",
-        ImageFormat::Gif => "image/gif",
-        ImageFormat::WebP => "image/webp",
-        _ => "image/png",
-    };
+        layer_name = context.layers.join(","),
+        layers_json = serde_json::to_string(&context.layers).unwrap_or_default(),
+        wms_url = wms_url,
+        crs = context.output_crs,
+        center_x = (context.bounds.minx + context.bounds.maxx) / 2.0,
+        center_y = (context.bounds.miny + context.bounds.maxy) / 2.0,
+        zoom = calculate_openlayers_zoom(&context.bounds, &context.output_crs),
+    );
 
     Ok(HttpResponse::Ok()
-        .content_type(content_type)
-        .body(buffer.into_inner()))
-}
-
-fn get_layer_rules(
-    request: &WmsRequest,
-    styles: &std::collections::HashMap<String, String>,
-    layer: &crate::models::Layer,
-) -> Vec<ParsedRule> {
-    let sld_xml = request.sld_body.clone().or_else(|| {
-        let style_name = layer.styles.first().map(|s| &s.name).cloned().unwrap_or_default();
-        styles.get(&style_name).cloned()
-    });
-    match sld_xml {
-        Some(xml) => sld_parser::parse_sld(&xml),
-        None => sld_parser::parse_sld(&sld_parser::default_sld(&layer.name)),
-    }
+        .content_type("text/html")
+        .body(html))
 }
 
 async fn handle_get_feature_info(state: &AppState, request: &WmsRequest) -> Result<HttpResponse, GeoServerError> {
@@ -516,6 +1057,21 @@ async fn handle_get_legend_graphic(state: &AppState, request: &WmsRequest) -> Re
     Ok(HttpResponse::Ok()
         .content_type("image/png")
         .body(buffer.into_inner()))
+}
+
+fn get_layer_rules(
+    request: &WmsRequest,
+    styles: &std::collections::HashMap<String, String>,
+    layer: &crate::models::Layer,
+) -> Vec<ParsedRule> {
+    let sld_xml = request.sld_body.clone().or_else(|| {
+        let style_name = layer.styles.first().map(|s| &s.name).cloned().unwrap_or_default();
+        styles.get(&style_name).cloned()
+    });
+    match sld_xml {
+        Some(xml) => sld_parser::parse_sld(&xml),
+        None => sld_parser::parse_sld(&sld_parser::default_sld(&layer.name)),
+    }
 }
 
 fn parse_color_opt(color: &str) -> Option<[u8; 4]> {
