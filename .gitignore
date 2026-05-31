@@ -31,3 +31,6 @@ static/*
 
 .tmp_check/*
 geoserver.sqlite
+
+# Trae IDE
+.trae/
