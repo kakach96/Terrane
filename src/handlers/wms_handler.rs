@@ -5,6 +5,7 @@ use crate::state::AppState;
 use crate::utils::rendering::{MapRenderer, RenderOptions, RenderFormat, Style};
 use crate::utils::sld_parser::{self, ParsedRule};
 use crate::utils::projection::ProjectionTransformer;
+use crate::utils::wkb;
 use crate::models::{Bounds, CoordinateReferenceSystem, GeoJsonGeometry, Feature, DataSourceType, Layer};
 use quick_xml::se::to_string;
 use std::io::Cursor;
@@ -432,8 +433,8 @@ async fn query_postgis_features_optimized(
 
     let mut features = Vec::with_capacity(rows.len());
     for (idx, row) in rows.iter().enumerate() {
-        let wkb: Vec<u8> = row.try_get("geom_wkb").unwrap_or_default();
-        let geometry = parse_wkb_geometry(&wkb);
+        let wkb_data: Vec<u8> = row.try_get("geom_wkb").unwrap_or_default();
+        let geometry = wkb::parse_wkb_geometry(&wkb_data);
         let mut properties = HashMap::new();
         properties.insert("id".to_string(), crate::models::PropertyValue::String(format!("feat_{}", idx)));
         features.push(Feature::with_id(format!("feat_{}", idx), geometry, properties));
@@ -457,172 +458,6 @@ fn calculate_simplify_tolerance(scale_denom: f64, bbox: &Bounds) -> Option<f64> 
     } else {
         None
     }
-}
-
-fn parse_wkb_geometry(wkb: &[u8]) -> GeoJsonGeometry {
-    if wkb.is_empty() {
-        return GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] };
-    }
-
-    match wkb[0] {
-        0x01 | 0x00 => parse_ewkb_geometry(wkb),
-        _ => GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
-    }
-}
-
-fn parse_ewkb_geometry(wkb: &[u8]) -> GeoJsonGeometry {
-    if wkb.len() < 5 {
-        return GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] };
-    }
-
-    let is_little_endian = wkb[0] == 0x01;
-    let geom_type = if is_little_endian {
-        u32::from_le_bytes([wkb[1], wkb[2], wkb[3], wkb[4]])
-    } else {
-        u32::from_be_bytes([wkb[1], wkb[2], wkb[3], wkb[4]])
-    };
-
-    match geom_type {
-        1 => parse_wkb_point(wkb, is_little_endian),
-        2 => parse_wkb_linestring(wkb, is_little_endian),
-        3 => parse_wkb_polygon(wkb, is_little_endian),
-        _ => GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
-    }
-}
-
-fn parse_wkb_point(wkb: &[u8], little: bool) -> GeoJsonGeometry {
-    if wkb.len() < 21 {
-        return GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] };
-    }
-
-    let x = if little {
-        f64::from_le_bytes([wkb[5], wkb[6], wkb[7], wkb[8], wkb[9], wkb[10], wkb[11], wkb[12]])
-    } else {
-        f64::from_be_bytes([wkb[5], wkb[6], wkb[7], wkb[8], wkb[9], wkb[10], wkb[11], wkb[12]])
-    };
-
-    let y = if little {
-        f64::from_le_bytes([wkb[13], wkb[14], wkb[15], wkb[16], wkb[17], wkb[18], wkb[19], wkb[20]])
-    } else {
-        f64::from_be_bytes([wkb[13], wkb[14], wkb[15], wkb[16], wkb[17], wkb[18], wkb[19], wkb[20]])
-    };
-
-    GeoJsonGeometry::Point { coordinates: vec![x, y] }
-}
-
-fn parse_wkb_linestring(wkb: &[u8], little: bool) -> GeoJsonGeometry {
-    if wkb.len() < 9 {
-        return GeoJsonGeometry::LineString { coordinates: vec![] };
-    }
-
-    let num_points = if little {
-        u32::from_le_bytes([wkb[5], wkb[6], wkb[7], wkb[8]]) as usize
-    } else {
-        u32::from_be_bytes([wkb[5], wkb[6], wkb[7], wkb[8]]) as usize
-    };
-
-    let mut coords = Vec::with_capacity(num_points);
-    for i in 0..num_points {
-        let offset = 9 + i * 16;
-        if offset + 16 > wkb.len() {
-            break;
-        }
-
-        let x = if little {
-            f64::from_le_bytes([
-                wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3],
-                wkb[offset+4], wkb[offset+5], wkb[offset+6], wkb[offset+7]
-            ])
-        } else {
-            f64::from_be_bytes([
-                wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3],
-                wkb[offset+4], wkb[offset+5], wkb[offset+6], wkb[offset+7]
-            ])
-        };
-
-        let y = if little {
-            f64::from_le_bytes([
-                wkb[offset+8], wkb[offset+9], wkb[offset+10], wkb[offset+11],
-                wkb[offset+12], wkb[offset+13], wkb[offset+14], wkb[offset+15]
-            ])
-        } else {
-            f64::from_be_bytes([
-                wkb[offset+8], wkb[offset+9], wkb[offset+10], wkb[offset+11],
-                wkb[offset+12], wkb[offset+13], wkb[offset+14], wkb[offset+15]
-            ])
-        };
-
-        coords.push(vec![x, y]);
-    }
-
-    GeoJsonGeometry::LineString { coordinates: coords }
-}
-
-fn parse_wkb_polygon(wkb: &[u8], little: bool) -> GeoJsonGeometry {
-    if wkb.len() < 9 {
-        return GeoJsonGeometry::Polygon { coordinates: vec![vec![]] };
-    }
-
-    let num_rings = if little {
-        u32::from_le_bytes([wkb[5], wkb[6], wkb[7], wkb[8]]) as usize
-    } else {
-        u32::from_be_bytes([wkb[5], wkb[6], wkb[7], wkb[8]]) as usize
-    };
-
-    let mut rings = Vec::with_capacity(num_rings);
-    let mut offset = 9;
-
-    for _ in 0..num_rings {
-        if offset + 4 > wkb.len() {
-            break;
-        }
-
-        let num_points = if little {
-            u32::from_le_bytes([wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3]]) as usize
-        } else {
-            u32::from_be_bytes([wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3]]) as usize
-        };
-
-        offset += 4;
-
-        let mut ring = Vec::with_capacity(num_points);
-        for _ in 0..num_points {
-            if offset + 16 > wkb.len() {
-                break;
-            }
-
-            let x = if little {
-                f64::from_le_bytes([
-                    wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3],
-                    wkb[offset+4], wkb[offset+5], wkb[offset+6], wkb[offset+7]
-                ])
-            } else {
-                f64::from_be_bytes([
-                    wkb[offset], wkb[offset+1], wkb[offset+2], wkb[offset+3],
-                    wkb[offset+4], wkb[offset+5], wkb[offset+6], wkb[offset+7]
-                ])
-            };
-
-            let y = if little {
-                f64::from_le_bytes([
-                    wkb[offset+8], wkb[offset+9], wkb[offset+10], wkb[offset+11],
-                    wkb[offset+12], wkb[offset+13], wkb[offset+14], wkb[offset+15]
-                ])
-            } else {
-                f64::from_be_bytes([
-                    wkb[offset+8], wkb[offset+9], wkb[offset+10], wkb[offset+11],
-                    wkb[offset+12], wkb[offset+13], wkb[offset+14], wkb[offset+15]
-                ])
-            };
-
-            ring.push(vec![x, y]);
-            offset += 16;
-        }
-
-        rings.push(ring);
-    }
-
-    GeoJsonGeometry::Polygon { coordinates: rings }
 }
 
 async fn get_geometry_column(

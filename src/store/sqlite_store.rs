@@ -4,6 +4,23 @@ use chrono::Utc;
 use crate::models::{DataSource, DataSourceType, DataSourceConnection};
 use crate::handlers::CreateWorkspaceRequest;
 
+fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
+    conn.query_row(
+        &format!("SELECT COUNT(*) FROM pragma_table_info('{}') WHERE name='{}'", table, column),
+        [],
+        |row| row.get::<_, i32>(0).map(|c| c > 0),
+    ).unwrap_or(false)
+}
+
+fn parse_ds_type(type_str: &str) -> DataSourceType {
+    match type_str {
+        "postgis" => DataSourceType::Postgis,
+        "shapefile" => DataSourceType::Shapefile,
+        "geotiff" => DataSourceType::Geotiff,
+        _ => DataSourceType::Postgis,
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Workspace {
     pub name: String,
@@ -81,13 +98,7 @@ impl SqliteStore {
         )?;
 
         // 检查并添加 schema_name 列（向后兼容）
-        let schema_exists: Result<bool, _> = conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_info('data_sources') WHERE name='schema_name'",
-            [],
-            |row| row.get::<_, i32>(0).map(|c| c > 0),
-        );
-
-        if let Ok(false) = schema_exists {
+        if !column_exists(conn, "data_sources", "schema_name") {
             conn.execute(
                 "ALTER TABLE data_sources ADD COLUMN schema_name TEXT DEFAULT 'public'",
                 [],
@@ -115,13 +126,7 @@ impl SqliteStore {
         )?;
 
         // 检查并添加 native_name 列（向后兼容）
-        let native_name_exists: Result<bool, _> = conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_info('layers') WHERE name='native_name'",
-            [],
-            |row| row.get::<_, i32>(0).map(|c| c > 0),
-        );
-
-        if let Ok(false) = native_name_exists {
+        if !column_exists(conn, "layers", "native_name") {
             conn.execute(
                 "ALTER TABLE layers ADD COLUMN native_name TEXT",
                 [],
@@ -241,23 +246,17 @@ impl SqliteStore {
 
     pub async fn get_data_source(&self, name: &str) -> SqlResult<Option<DataSource>> {
         let conn = self.conn.lock().unwrap();
-        
-        // 检查 schema_name 列是否存在
-        let schema_exists: bool = conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_info('data_sources') WHERE name='schema_name'",
-            [],
-            |row| row.get::<_, i32>(0).map(|c| c > 0),
-        )?;
 
-        let (stmt, num_columns) = if schema_exists {
+        let has_schema = column_exists(&conn, "data_sources", "schema_name");
+        let (stmt, num_columns) = if has_schema {
             let stmt = conn.prepare(
-                "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified 
+                "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified
                  FROM data_sources WHERE name = ?"
             )?;
             (stmt, 12)
         } else {
             let stmt = conn.prepare(
-                "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified 
+                "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified
                  FROM data_sources WHERE name = ?"
             )?;
             (stmt, 11)
@@ -274,12 +273,7 @@ impl SqliteStore {
 
             Ok(Some(DataSource {
                 name: row.get(0)?,
-                data_source_type: match row.get::<_, String>(1)?.as_str() {
-                    "postgis" => DataSourceType::Postgis,
-                    "shapefile" => DataSourceType::Shapefile,
-                    "geotiff" => DataSourceType::Geotiff,
-                    _ => DataSourceType::Postgis,
-                },
+                data_source_type: parse_ds_type(&row.get::<_, String>(1)?),
                 workspace: row.get(2)?,
                 enabled: row.get::<_, i32>(3)? == 1,
                 connection: Some(DataSourceConnection {
@@ -304,23 +298,17 @@ impl SqliteStore {
 
     pub async fn get_all_data_sources(&self) -> SqlResult<Vec<DataSource>> {
         let conn = self.conn.lock().unwrap();
-        
-        // 检查 schema_name 列是否存在
-        let schema_exists: bool = conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_info('data_sources') WHERE name='schema_name'",
-            [],
-            |row| row.get::<_, i32>(0).map(|c| c > 0),
-        )?;
 
-        let (stmt, num_columns) = if schema_exists {
+        let has_schema = column_exists(&conn, "data_sources", "schema_name");
+        let (stmt, num_columns) = if has_schema {
             let stmt = conn.prepare(
-                "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified 
+                "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified
                  FROM data_sources ORDER BY name"
             )?;
             (stmt, 12)
         } else {
             let stmt = conn.prepare(
-                "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified 
+                "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified
                  FROM data_sources ORDER BY name"
             )?;
             (stmt, 11)
@@ -336,12 +324,7 @@ impl SqliteStore {
 
             Ok(DataSource {
                 name: row.get(0)?,
-                data_source_type: match row.get::<_, String>(1)?.as_str() {
-                    "postgis" => DataSourceType::Postgis,
-                    "shapefile" => DataSourceType::Shapefile,
-                    "geotiff" => DataSourceType::Geotiff,
-                    _ => DataSourceType::Postgis,
-                },
+                data_source_type: parse_ds_type(&row.get::<_, String>(1)?),
                 workspace: row.get(2)?,
                 enabled: row.get::<_, i32>(3)? == 1,
                 connection: Some(DataSourceConnection {
@@ -463,14 +446,8 @@ impl SqliteStore {
     pub async fn get_layer(&self, name: &str) -> SqlResult<Option<Layer>> {
         let conn = self.conn.lock().unwrap();
 
-        // 检查 native_name 列是否存在
-        let native_name_exists: bool = conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_info('layers') WHERE name='native_name'",
-            [],
-            |row| row.get::<_, i32>(0).map(|c| c > 0),
-        )?;
-
-        let mut stmt = if native_name_exists {
+        let has_native_name = column_exists(&conn, "layers", "native_name");
+        let mut stmt = if has_native_name {
             conn.prepare(
                 "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified
                  FROM layers WHERE name = ?"
@@ -484,7 +461,7 @@ impl SqliteStore {
 
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
-            if native_name_exists {
+            if has_native_name {
                 Ok(Some(Layer {
                     name: row.get(0)?,
                     title: row.get(1)?,
@@ -527,14 +504,8 @@ impl SqliteStore {
     pub async fn get_all_layers(&self) -> SqlResult<Vec<Layer>> {
         let conn = self.conn.lock().unwrap();
 
-        // 检查 native_name 列是否存在
-        let native_name_exists: bool = conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_info('layers') WHERE name='native_name'",
-            [],
-            |row| row.get::<_, i32>(0).map(|c| c > 0),
-        )?;
-
-        let mut stmt = if native_name_exists {
+        let has_native_name = column_exists(&conn, "layers", "native_name");
+        let mut stmt = if has_native_name {
             conn.prepare(
                 "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified
                  FROM layers ORDER BY name"
@@ -547,7 +518,7 @@ impl SqliteStore {
         };
 
         let rows = stmt.query_map([], move |row| {
-            if native_name_exists {
+            if has_native_name {
                 Ok(Layer {
                     name: row.get(0)?,
                     title: row.get(1)?,

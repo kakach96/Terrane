@@ -1,7 +1,7 @@
 use crate::state::AppState;
-use crate::models::{Feature, GeoJsonGeometry, PropertyValue, Bounds, DataSourceType};
+use crate::models::{Feature, GeoJsonGeometry, Bounds, DataSourceType};
 use crate::error::GeoServerError;
-use std::collections::HashMap;
+use crate::utils::wkb;
 
 pub async fn query_layer_features(
     state: &AppState,
@@ -121,21 +121,17 @@ async fn query_postgis_features(
 
     let mut features = Vec::with_capacity(rows.len());
     for row in &rows {
-        let id: String = row.try_get("_id").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
         let geojson_str: String = row.try_get("_geometry").unwrap_or_default();
-        let geometry = parse_geojson_geometry(&geojson_str);
-        let mut properties = HashMap::new();
-        for col in &non_geom_cols {
-            if let Ok(val) = row.try_get::<_, String>(col.as_str()) {
-                properties.insert(col.to_string(), PropertyValue::String(val));
-            } else if let Ok(val) = row.try_get::<_, i64>(col.as_str()) {
-                properties.insert(col.to_string(), PropertyValue::Integer(val));
-            } else if let Ok(val) = row.try_get::<_, f64>(col.as_str()) {
-                properties.insert(col.to_string(), PropertyValue::Number(val));
-            } else if let Ok(val) = row.try_get::<_, bool>(col.as_str()) {
-                properties.insert(col.to_string(), PropertyValue::Boolean(val));
+        let geometry = wkb::parse_geojson_geometry(&geojson_str);
+
+        let (id, properties) = match wkb::parse_postgres_row(row, &non_geom_cols, &geom_col) {
+            Ok((id, _, props)) => (id, props),
+            Err(_) => {
+                let id: String = row.try_get("_id").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
+                let props = std::collections::HashMap::new();
+                (id, props)
             }
-        }
+        };
         features.push(Feature::with_id(id, geometry, properties));
     }
 
@@ -187,88 +183,4 @@ async fn get_id_expr(
         Ok(rows) if !rows.is_empty() => rows[0].get::<_, String>(0),
         Err(_) | Ok(_) => format!("'{}'", uuid::Uuid::new_v4()),
     }
-}
-
-fn parse_geojson_geometry(geojson: &str) -> GeoJsonGeometry {
-    if let Ok(val) = serde_json::from_str::<serde_json::Value>(geojson) {
-        let typ = val.get("type").and_then(|t| t.as_str()).unwrap_or("Point");
-        let coords = val.get("coordinates");
-        match typ {
-            "Point" => GeoJsonGeometry::Point {
-                coordinates: extract_coords_1d(coords),
-            },
-            "LineString" => GeoJsonGeometry::LineString {
-                coordinates: extract_coords_2d(coords),
-            },
-            "Polygon" => GeoJsonGeometry::Polygon {
-                coordinates: extract_coords_3d(coords),
-            },
-            "MultiPoint" => GeoJsonGeometry::MultiPoint {
-                coordinates: extract_coords_2d(coords),
-            },
-            "MultiLineString" => GeoJsonGeometry::MultiLineString {
-                coordinates: extract_coords_3d(coords),
-            },
-            "MultiPolygon" => GeoJsonGeometry::MultiPolygon {
-                coordinates: extract_coords_4d(coords),
-            },
-            _ => GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
-        }
-    } else {
-        GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] }
-    }
-}
-
-fn extract_coords_1d(v: Option<&serde_json::Value>) -> Vec<f64> {
-    v.and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|n| n.as_f64()).collect())
-        .unwrap_or_default()
-}
-
-fn extract_coords_2d(v: Option<&serde_json::Value>) -> Vec<Vec<f64>> {
-    v.and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|c| c.as_array().map(|a| a.iter().filter_map(|n| n.as_f64()).collect()))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn extract_coords_3d(v: Option<&serde_json::Value>) -> Vec<Vec<Vec<f64>>> {
-    v.and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|ring| {
-                    ring.as_array().map(|a| {
-                        a.iter()
-                            .filter_map(|c| c.as_array().map(|ca| ca.iter().filter_map(|n| n.as_f64()).collect()))
-                            .collect()
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn extract_coords_4d(v: Option<&serde_json::Value>) -> Vec<Vec<Vec<Vec<f64>>>> {
-    v.and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|poly| {
-                    poly.as_array().map(|a| {
-                        a.iter()
-                            .filter_map(|ring| {
-                                ring.as_array().map(|ra| {
-                                    ra.iter()
-                                        .filter_map(|c| c.as_array().map(|ca| ca.iter().filter_map(|n| n.as_f64()).collect()))
-                                        .collect()
-                                })
-                            })
-                            .collect()
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default()
 }
