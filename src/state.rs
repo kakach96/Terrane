@@ -161,20 +161,22 @@ impl AppState {
             return pool.clone();
         }
 
-        tracing::debug!("[get_pg_pool] 缓存未命中, 开始创建新连接池, ds_name={}, host={}, port={}", ds_name, conn_info.host, conn_info.port);
+        let host_str = conn_info.host.as_deref().unwrap_or("127.0.0.1");
+        let port_u16 = conn_info.port.unwrap_or(5432);
+        tracing::debug!("[get_pg_pool] 缓存未命中, 开始创建新连接池, ds_name={}, host={}, port={}", ds_name, host_str, port_u16);
 
         let t2 = Instant::now();
         let mut cfg = deadpool_postgres::Config::new();
         // 将 localhost 转为 127.0.0.1 以避免 IPv6 解析导致的连接超时
-        let host = if conn_info.host.eq_ignore_ascii_case("localhost") {
+        let host = if host_str.eq_ignore_ascii_case("localhost") {
             "127.0.0.1".to_string()
         } else {
-            conn_info.host.clone()
+            host_str.to_string()
         };
         cfg.host = Some(host);
-        cfg.port = Some(conn_info.port);
-        cfg.dbname = Some(conn_info.database.clone());
-        cfg.user = Some(conn_info.username.clone());
+        cfg.port = Some(port_u16);
+        cfg.dbname = conn_info.database.clone().or_else(|| Some("geoserver".to_string()));
+        cfg.user = conn_info.username.clone().or_else(|| Some("postgres".to_string()));
         cfg.password = conn_info.password.clone();
         // 设置连接超时，避免因网络问题长时间挂起
         cfg.connect_timeout = Some(std::time::Duration::from_secs(self.config.server.connect_timeout_secs));

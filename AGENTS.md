@@ -1,5 +1,9 @@
 # Rust GeoServer — agent guidelines
 
+## Overview
+
+- **Goal**: rewrite geoserver by rust and angular
+
 ## Project structure
 
 ```
@@ -17,15 +21,31 @@ frontend/         — Angular 17 + Material
 
 ## Key commands
 
-```powershell
-# Dev mode (fast: skip frontend build)
-$env:SKIP_FRONTEND=1; cargo run
-# Frontend dev server (hot reload, proxies /api /wms /wfs /wcs -> :8080)
-cd frontend; ng serve
+### Build(Windows)
 
-# Full production build
-cargo run                        # auto-builds frontend first
-cd frontend; npm run build       # frontend only (--configuration production)
+```powershell
+# Full
+./build.bat
+
+# Frontend Only
+cd frontend
+npm run build
+
+# Backend Only
+cargo build
+```
+
+### Build(Unix like)
+
+```bash
+# Full
+./build.sh
+
+# Frontend Only
+cd frontend && npm run build
+
+# Backend Only
+cargo build
 ```
 
 ## Important quirks
@@ -40,3 +60,9 @@ cd frontend; npm run build       # frontend only (--configuration production)
 - **Config**: `geoserver.toml` optional; defaults work without it. Environment variables: `RUST_LOG`, `GEOSERVER__SERVER__HOST` etc. (double-underscore separator)
 - **Frontend proxy**: `proxy.conf.json` routes `/api`, `/wms`, `/wfs`, `/wcs` to `http://localhost:8080`
 - **AGENTS.md** is the single instruction file (no .cursorrules, no copilot-instructions.md)
+
+## Commit Messages Stype
+
+- **Format**: `type: changes content`, 
+  - `type` is feat, fix, refactor, chore etc; 
+  - `changes content` should be brief description of what has been changed. 

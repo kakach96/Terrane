@@ -105,6 +105,22 @@ impl SqliteStore {
             )?;
         }
 
+        // 检查并添加 file_path 列（支持 shapefile/geotiff 文件型数据源）
+        if !column_exists(conn, "data_sources", "file_path") {
+            conn.execute(
+                "ALTER TABLE data_sources ADD COLUMN file_path TEXT",
+                [],
+            )?;
+        }
+
+        // 检查并添加 file_storage_type 列
+        if !column_exists(conn, "data_sources", "file_storage_type") {
+            conn.execute(
+                "ALTER TABLE data_sources ADD COLUMN file_storage_type TEXT DEFAULT 'local'",
+                [],
+            )?;
+        }
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS layers (
                 name TEXT PRIMARY KEY,
@@ -132,6 +148,18 @@ impl SqliteStore {
                 [],
             )?;
         }
+
+        // 要素存储表（用于 GeoJSON 上传持久化）
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS features (
+                layer_name TEXT NOT NULL,
+                feature_id TEXT NOT NULL,
+                geometry TEXT NOT NULL,
+                properties TEXT,
+                PRIMARY KEY (layer_name, feature_id)
+            )",
+            [],
+        )?;
 
         Ok(())
     }
@@ -244,53 +272,91 @@ impl SqliteStore {
         Ok(())
     }
 
+    /// 从行中读取 DataSource（支持多种 schema 版本）
+    fn row_to_data_source(row: &rusqlite::Row, has_schema: bool, has_file: bool) -> rusqlite::Result<DataSource> {
+        let host: Option<String> = row.get(4)?;
+        let port: Option<u16> = row.get(5)?;
+        let db: Option<String> = row.get(6)?;
+
+        let schema = if has_schema {
+            row.get::<_, Option<String>>(7)?.unwrap_or_else(|| "public".to_string())
+        } else {
+            "public".to_string()
+        };
+
+        let (user_idx, pass_idx, file_path_idx, file_storage_idx, created_idx, modified_idx) = if has_file {
+            // name,type,workspace,enabled,host,port,db,schema,user,pass,file_path,file_storage,created,modified
+            (8, 9, 10, 11, 12, 13)
+        } else if has_schema {
+            // name,type,workspace,enabled,host,port,db,schema,user,pass,created,modified
+            (8, 9, 10, 11, 12, 13) // file columns at end (dummy), will be None
+        } else {
+            // name,type,workspace,enabled,host,port,db,user,pass,created,modified
+            (7, 8, 99, 99, 9, 10) // file_path/storage idx unused
+        };
+
+        let username: Option<String> = if has_schema || has_file {
+            row.get(user_idx)?
+        } else {
+            Some(row.get::<_, String>(user_idx)?)
+        };
+        let password: Option<String> = row.get(pass_idx)?;
+
+        let file_path: Option<String> = if has_file {
+            row.get(file_path_idx)?
+        } else {
+            None
+        };
+        let file_storage: Option<String> = if has_file {
+            row.get(file_storage_idx)?
+        } else {
+            None
+        };
+
+        let created: Option<String> = row.get(created_idx)?;
+        let modified: Option<String> = row.get(modified_idx)?;
+
+        Ok(DataSource {
+            name: row.get(0)?,
+            data_source_type: parse_ds_type(&row.get::<_, String>(1)?),
+            workspace: row.get(2)?,
+            enabled: row.get::<_, i32>(3)? == 1,
+            connection: Some(DataSourceConnection {
+                host,
+                port,
+                database: db,
+                schema: Some(schema),
+                username,
+                password,
+                file_path,
+                file_storage_type: file_storage,
+            }),
+            created,
+            modified,
+        })
+    }
+
     pub async fn get_data_source(&self, name: &str) -> SqlResult<Option<DataSource>> {
         let conn = self.conn.lock().unwrap();
 
         let has_schema = column_exists(&conn, "data_sources", "schema_name");
-        let (stmt, num_columns) = if has_schema {
-            let stmt = conn.prepare(
-                "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified
-                 FROM data_sources WHERE name = ?"
-            )?;
-            (stmt, 12)
+        let has_file = column_exists(&conn, "data_sources", "file_path");
+
+        let sql = if has_file {
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, created, modified
+             FROM data_sources WHERE name = ?"
+        } else if has_schema {
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified
+             FROM data_sources WHERE name = ?"
         } else {
-            let stmt = conn.prepare(
-                "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified
-                 FROM data_sources WHERE name = ?"
-            )?;
-            (stmt, 11)
+            "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified
+             FROM data_sources WHERE name = ?"
         };
 
-        let mut stmt = stmt;
+        let mut stmt = conn.prepare(sql)?;
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
-            let (schema_idx, username_idx, password_idx, created_idx, modified_idx) = if num_columns == 12 {
-                (7, 8, 9, 10, 11)
-            } else {
-                (7, 7, 8, 9, 10)
-            };
-
-            Ok(Some(DataSource {
-                name: row.get(0)?,
-                data_source_type: parse_ds_type(&row.get::<_, String>(1)?),
-                workspace: row.get(2)?,
-                enabled: row.get::<_, i32>(3)? == 1,
-                connection: Some(DataSourceConnection {
-                    host: row.get(4)?,
-                    port: row.get(5)?,
-                    database: row.get(6)?,
-                    schema: if num_columns == 12 {
-                        row.get::<_, Option<String>>(schema_idx)?.unwrap_or_else(|| "public".to_string())
-                    } else {
-                        "public".to_string()
-                    },
-                    username: row.get(username_idx)?,
-                    password: row.get(password_idx)?,
-                }),
-                created: row.get(created_idx)?,
-                modified: row.get(modified_idx)?,
-            }))
+            Ok(Some(Self::row_to_data_source(row, has_schema, has_file)?))
         } else {
             Ok(None)
         }
@@ -300,50 +366,26 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
 
         let has_schema = column_exists(&conn, "data_sources", "schema_name");
-        let (stmt, num_columns) = if has_schema {
-            let stmt = conn.prepare(
-                "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified
-                 FROM data_sources ORDER BY name"
-            )?;
-            (stmt, 12)
+        let has_file = column_exists(&conn, "data_sources", "file_path");
+
+        let sql = if has_file {
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, created, modified
+             FROM data_sources ORDER BY name"
+        } else if has_schema {
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified
+             FROM data_sources ORDER BY name"
         } else {
-            let stmt = conn.prepare(
-                "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified
-                 FROM data_sources ORDER BY name"
-            )?;
-            (stmt, 11)
+            "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified
+             FROM data_sources ORDER BY name"
         };
 
-        let mut stmt = stmt;
+        let mut stmt = conn.prepare(sql)?;
+        let has_schema_ref = has_schema;
+        let has_file_ref = has_file;
         let rows = stmt.query_map([], move |row| {
-            let (schema_idx, username_idx, password_idx, created_idx, modified_idx) = if num_columns == 12 {
-                (7, 8, 9, 10, 11)
-            } else {
-                (7, 7, 8, 9, 10)
-            };
-
-            Ok(DataSource {
-                name: row.get(0)?,
-                data_source_type: parse_ds_type(&row.get::<_, String>(1)?),
-                workspace: row.get(2)?,
-                enabled: row.get::<_, i32>(3)? == 1,
-                connection: Some(DataSourceConnection {
-                    host: row.get(4)?,
-                    port: row.get(5)?,
-                    database: row.get(6)?,
-                    schema: if num_columns == 12 {
-                        row.get::<_, Option<String>>(schema_idx)?.unwrap_or_else(|| "public".to_string())
-                    } else {
-                        "public".to_string()
-                    },
-                    username: row.get(username_idx)?,
-                    password: row.get(password_idx)?,
-                }),
-                created: row.get(created_idx)?,
-                modified: row.get(modified_idx)?,
-            })
+            Self::row_to_data_source(row, has_schema_ref, has_file_ref)
         })?;
-        
+
         rows.collect()
     }
 
@@ -357,26 +399,51 @@ impl SqliteStore {
     ) -> SqlResult<DataSource> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
-        
-        conn.execute(
-            "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params![
-                name,
-                format!("{}", data_source_type).to_lowercase(),
-                workspace,
-                enabled as i32,
-                connection.host,
-                connection.port,
-                connection.database,
-                connection.schema,
-                connection.username,
-                connection.password,
-                now.clone(),
-                now
-            ],
-        )?;
-        
+
+        let has_file = column_exists(&conn, "data_sources", "file_path");
+
+        if has_file {
+            conn.execute(
+                "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, created, modified)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    name,
+                    format!("{}", data_source_type).to_lowercase(),
+                    workspace,
+                    enabled as i32,
+                    connection.host,
+                    connection.port,
+                    connection.database,
+                    connection.schema,
+                    connection.username,
+                    connection.password,
+                    connection.file_path,
+                    connection.file_storage_type,
+                    now.clone(),
+                    now
+                ],
+            )?;
+        } else {
+            conn.execute(
+                "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    name,
+                    format!("{}", data_source_type).to_lowercase(),
+                    workspace,
+                    enabled as i32,
+                    connection.host,
+                    connection.port,
+                    connection.database,
+                    connection.schema,
+                    connection.username,
+                    connection.password,
+                    now.clone(),
+                    now
+                ],
+            )?;
+        }
+
         Ok(DataSource {
             name: name.to_string(),
             data_source_type: data_source_type.clone(),
@@ -398,10 +465,12 @@ impl SqliteStore {
     ) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
-        
+
+        let has_file = column_exists(&conn, "data_sources", "file_path");
+
         let mut updates: Vec<String> = vec!["modified = ?".to_string()];
         let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now)];
-        
+
         if let Some(t) = data_source_type {
             updates.push("type = ?".to_string());
             values.push(Box::new(t.to_string()));
@@ -427,12 +496,18 @@ impl SqliteStore {
             values.push(Box::new(c.username));
             updates.push("password = ?".to_string());
             values.push(Box::new(c.password));
+            if has_file {
+                updates.push("file_path = ?".to_string());
+                values.push(Box::new(c.file_path));
+                updates.push("file_storage_type = ?".to_string());
+                values.push(Box::new(c.file_storage_type));
+            }
         }
-        
+
         let query = format!("UPDATE data_sources SET {} WHERE name = ?", updates.join(", "));
         let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
         params.push(&name);
-        
+
         conn.execute(&query, params.as_slice())?;
         Ok(())
     }
@@ -637,5 +712,70 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM layers WHERE name = ?", [name])?;
         Ok(())
+    }
+
+    // ---- 要素持久化 ----
+
+    /// 保存要素到 features 表（GeoJSON 上传持久化）
+    pub async fn save_features(
+        &self,
+        layer_name: &str,
+        features: &[crate::models::Feature],
+    ) -> SqlResult<usize> {
+        let conn = self.conn.lock().unwrap();
+
+        // 清空该图层的旧数据
+        conn.execute("DELETE FROM features WHERE layer_name = ?", [layer_name])?;
+
+        let mut count = 0;
+        for feature in features {
+            let geometry = serde_json::to_string(&feature.geometry)
+                .unwrap_or_else(|_| "{}".to_string());
+            let properties = serde_json::to_string(&feature.properties)
+                .unwrap_or_else(|_| "{}".to_string());
+
+            conn.execute(
+                "INSERT OR REPLACE INTO features (layer_name, feature_id, geometry, properties)
+                 VALUES (?, ?, ?, ?)",
+                rusqlite::params![layer_name, feature.id, geometry, properties],
+            )?;
+            count += 1;
+        }
+
+        Ok(count)
+    }
+
+    /// 加载指定图层的所有要素
+    pub async fn load_features(
+        &self,
+        layer_name: &str,
+    ) -> SqlResult<Vec<crate::models::Feature>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT feature_id, geometry, properties FROM features WHERE layer_name = ? ORDER BY feature_id"
+        )?;
+
+        let rows = stmt.query_map([layer_name], |row| {
+            let id: String = row.get(0)?;
+            let geometry_str: String = row.get(1)?;
+            let properties_str: Option<String> = row.get(2)?;
+
+            let geometry = serde_json::from_str(&geometry_str)
+                .unwrap_or(crate::models::GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] });
+            let properties = properties_str
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+
+            Ok(crate::models::Feature::with_id(id, geometry, properties))
+        })?;
+
+        rows.collect()
+    }
+
+    /// 删除指定图层的所有要素
+    pub async fn delete_features(&self, layer_name: &str) -> SqlResult<usize> {
+        let conn = self.conn.lock().unwrap();
+        let count = conn.execute("DELETE FROM features WHERE layer_name = ?", [layer_name])?;
+        Ok(count)
     }
 }

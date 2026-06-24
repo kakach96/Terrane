@@ -2,6 +2,7 @@ use crate::state::AppState;
 use crate::models::{Feature, GeoJsonGeometry, Bounds, DataSourceType};
 use crate::error::GeoServerError;
 use crate::utils::wkb;
+use tracing::info;
 
 pub async fn query_layer_features(
     state: &AppState,
@@ -24,16 +25,27 @@ pub async fn query_layer_features(
     };
 
     if let Some(ref ds) = data_source {
-        if ds.data_source_type == DataSourceType::Postgis {
-            if let Some(ref conn) = ds.connection {
-                if let Some(ref native_name) = layer.native_name {
-                    let pool = state.get_pg_pool(&ds.name, conn);
-                    return query_postgis_features(&pool, conn, native_name, bbox, limit, offset).await;
+        match ds.data_source_type {
+            DataSourceType::Postgis => {
+                if let Some(ref conn) = ds.connection {
+                    if let Some(ref native_name) = layer.native_name {
+                        let pool = state.get_pg_pool(&ds.name, conn);
+                        return query_postgis_features(&pool, conn, native_name, bbox, limit, offset).await;
+                    }
                 }
+            }
+            DataSourceType::Shapefile => {
+                return query_shapefile_features(ds, bbox, limit, offset);
+            }
+            DataSourceType::Geotiff => {
+                // GeoTIFF 是栅格格式，通过 WCS 访问，不支持矢量要素查询
+                info!("[Features] GeoTIFF 数据源 '{}' 不返回矢量要素", ds.name);
+                return Ok(Vec::new());
             }
         }
     }
 
+    // 回退到内存要素
     let in_memory = state.features.read().await;
     let all = in_memory.get(layer_name).cloned().unwrap_or_default();
     let mut filtered = filter_features(all, bbox);
@@ -44,6 +56,46 @@ pub async fn query_layer_features(
         filtered = filtered.into_iter().take(l as usize).collect();
     }
     Ok(filtered)
+}
+
+/// 从 Shapefile 数据源查询要素
+fn query_shapefile_features(
+    ds: &crate::models::DataSource,
+    bbox: Option<&Bounds>,
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Result<Vec<Feature>, GeoServerError> {
+    let file_path = ds.connection.as_ref()
+        .and_then(|c| c.file_path.as_ref())
+        .ok_or_else(|| GeoServerError::BadRequest("Shapefile 数据源缺少文件路径".to_string()))?;
+
+    info!("[Features] 从 Shapefile 读取要素: {}", file_path);
+
+    let result = crate::utils::shapefile::read_shapefile(file_path)
+        .map_err(|e| GeoServerError::InternalError(format!("读取 Shapefile 失败: {}", e)))?;
+
+    let mut features = result.features;
+
+    // 应用 bbox 过滤
+    if let Some(b) = bbox {
+        features.retain(|f| feature_in_bbox(f, b));
+    }
+
+    // 应用 offset / limit
+    let total = features.len();
+    if let Some(o) = offset {
+        let o = o as usize;
+        if o < total {
+            features = features.into_iter().skip(o).collect();
+        } else {
+            return Ok(Vec::new());
+        }
+    }
+    if let Some(l) = limit {
+        features.truncate(l as usize);
+    }
+
+    Ok(features)
 }
 
 fn filter_features(features: Vec<Feature>, bbox: Option<&Bounds>) -> Vec<Feature> {
@@ -78,11 +130,10 @@ async fn query_postgis_features(
     let client = pool.get().await
         .map_err(|e| GeoServerError::InternalError(format!("Pool error: {}", e)))?;
 
-    let schema = if conn.schema.is_empty() || conn.schema == "public" {
-        "public".to_string()
-    } else {
-        conn.schema.clone()
-    };
+    let schema = conn.schema.as_deref()
+        .map(|s| if s.is_empty() || s == "public" { "public" } else { s })
+        .unwrap_or("public")
+        .to_string();
 
     let cols = get_table_columns(&client, &schema, native_name).await;
     let geom_col = get_geometry_column(&client, &schema, native_name).await

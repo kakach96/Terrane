@@ -8,6 +8,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
     .service(
         web::scope("/wfs")
             .route("", web::get().to(crate::handlers::handle_wfs_request))
+            .route("", web::post().to(crate::handlers::handle_wfs_post_request))
     )
     .service(
         web::scope("/wcs")
@@ -59,6 +60,8 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
             )
             .route("/server/status", web::get().to(crate::handlers::get_server_status))
             .route("/data/upload", web::post().to(crate::handlers::upload_geojson))
+            .route("/data/upload/shapefile", web::post().to(crate::handlers::upload_handler::upload_shapefile))
+            .route("/data/upload/geotiff", web::post().to(crate::handlers::upload_handler::upload_geotiff))
             .service(
                 web::resource("/data-sources")
                     .route(web::get().to(crate::handlers::list_data_sources))

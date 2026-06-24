@@ -75,15 +75,35 @@
       </div>
     </ng-container>
 
-    <div class="form-row" *ngIf="selectedType !== 'postgis'">
-      <mat-slide-toggle formControlName="enabled">
-        启用数据源
-      </mat-slide-toggle>
-    </div>
+    <!-- 文件型数据源配置 -->
+    <ng-container *ngIf="selectedType !== 'postgis'">
+      <mat-divider></mat-divider>
+
+      <h3 class="section-title">文件配置</h3>
+
+      <mat-form-field class="form-field" *ngIf="mode === 'edit'">
+        <mat-label>文件路径</mat-label>
+        <input matInput formControlName="file_path" placeholder="数据文件路径">
+      </mat-form-field>
+
+      <div class="form-row file-upload-row" *ngIf="mode === 'create'">
+        <input #fileInput type="file" (change)="onFileSelected($event)" accept=".zip,.tif,.tiff" class="file-input">
+        <button type="button" mat-raised-button color="accent" (click)="fileInput.click()">
+          <mat-icon>upload_file</mat-icon> 选择文件
+        </button>
+        <span class="file-name">{{ selectedFile ? selectedFile.name : '未选择文件' }}</span>
+      </div>
+
+      <div class="form-row">
+        <mat-slide-toggle formControlName="enabled">
+          启用数据源
+        </mat-slide-toggle>
+      </div>
+    </ng-container>
   </form>
 </mat-dialog-content>
 <mat-dialog-actions>
-  <button mat-button (click)="testConnection()" [disabled]="isTesting">
+  <button mat-button (click)="testConnection()" [disabled]="isTesting || selectedType !== 'postgis'">
     <mat-icon>{{ isTesting ? 'hourglass_empty' : 'network_check' }}</mat-icon>
     {{ isTesting ? '测试中...' : '测试连接' }}
   </button>

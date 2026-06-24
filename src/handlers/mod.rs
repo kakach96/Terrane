@@ -8,6 +8,7 @@ pub mod workspace_handler;
 pub mod data_source_handler;
 pub mod style_handler;
 pub mod features;
+pub mod upload_handler;
 
 pub use wms_handler::*;
 pub use wfs_handler::*;

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use crate::models::{Bounds, Feature};
+use crate::models::{Bounds, Feature, GeoJsonGeometry};
+use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WfsRequest {
@@ -276,18 +277,22 @@ impl DescribeFeatureTypeResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionRequest {
     pub handle: Option<String>,
-    pub lock_expire: Option<u32>,
-    pub release_action: Option<String>,
-    pub insert: Vec<Feature>,
-    pub update: Vec<UpdateElement>,
-    pub delete: Vec<DeleteElement>,
+    pub inserts: Vec<InsertElement>,
+    pub updates: Vec<UpdateElement>,
+    pub deletes: Vec<DeleteElement>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsertElement {
+    pub type_name: String,
+    pub features: Vec<Feature>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateElement {
     pub type_name: String,
     pub filter: Option<Filter>,
-    pub property: Vec<PropertyElement>,
+    pub properties: Vec<PropertyElement>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,7 +318,7 @@ pub struct TransactionResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InsertResult {
-    pub feature_id: Vec<String>,
+    pub feature_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -469,4 +474,233 @@ pub fn validate_filter(feature: &Feature, filter: &Filter) -> bool {
         Filter::FeatureId(ids) => ids.contains(&feature.id),
         _ => true,
     }
+}
+
+/// 解析 WFS-T Transaction XML
+///
+/// 支持 WFS 2.0 Transaction 格式：
+/// - wfs:Insert / wfs:Update / wfs:Delete
+#[allow(unused_assignments, unused_variables)]
+pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate::error::GeoServerError> {
+    use quick_xml::Reader;
+    use quick_xml::events::Event;
+
+    let mut reader = Reader::from_str(xml_text);
+    reader.trim_text(true);
+    let mut buf = Vec::new();
+
+    let mut transaction = TransactionRequest {
+        handle: None,
+        inserts: Vec::new(),
+        updates: Vec::new(),
+        deletes: Vec::new(),
+    };
+
+    let mut current_insert: Option<InsertElement> = None;
+    let mut current_update: Option<UpdateElement> = None;
+    let mut current_delete: Option<DeleteElement> = None;
+    let mut current_feature: Option<Feature> = None;
+    let mut current_property: Option<PropertyElement> = None;
+
+    let mut text_content = String::new();
+    let mut in_insert = false;
+    let mut in_update = false;
+    let mut in_delete = false;
+    let mut in_feature = false;
+    let mut in_property = false;
+    let mut in_name = false;
+    let mut in_value = false;
+    let mut in_pos = false;
+    let mut in_poslist = false;
+    let mut in_linestring = false;
+    let mut in_polygon = false;
+    let mut in_exterior = false;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let tag = String::from_utf8_lossy(e.name().as_ref())
+                    .split(':').last().unwrap_or("").to_string();
+                text_content.clear();
+
+                match tag.as_str() {
+                    "Insert" => {
+                        in_insert = true;
+                        current_insert = Some(InsertElement {
+                            type_name: String::new(),
+                            features: Vec::new(),
+                        });
+                    }
+                    "Update" => {
+                        in_update = true;
+                        current_update = Some(UpdateElement {
+                            type_name: String::new(),
+                            filter: None,
+                            properties: Vec::new(),
+                        });
+                    }
+                    "Delete" => {
+                        in_delete = true;
+                        current_delete = Some(DeleteElement {
+                            type_name: String::new(),
+                            filter: Filter::FeatureId(vec![]),
+                        });
+                    }
+                    "TypeName" | "Typename" | "TYPENAME" => {
+                        text_content.clear();
+                    }
+                    "Feature" | "feature" if in_insert => {
+                        in_feature = true;
+                        current_feature = Some(Feature::new(
+                            GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+                            std::collections::HashMap::new(),
+                        ));
+                    }
+                    "Property" | "property" if in_update => {
+                        in_property = true;
+                        current_property = Some(PropertyElement {
+                            name: String::new(),
+                            value: String::new(),
+                        });
+                    }
+                    "Name" | "name" if in_property => {
+                        in_name = true;
+                        text_content.clear();
+                    }
+                    "Value" | "value" if in_property => {
+                        in_value = true;
+                        text_content.clear();
+                    }
+                    "Point" | "point" => {}
+                    "LineString" | "linestring" => {
+                        in_linestring = true;
+                    }
+                    "Polygon" | "polygon" => {
+                        in_polygon = true;
+                    }
+                    "exterior" | "Exterior" => {
+                        in_exterior = true;
+                    }
+                    "LinearRing" | "linearring" => {}
+                    "pos" | "Pos" => in_pos = true,
+                    "posList" | "PosList" => in_poslist = true,
+                    _ => {}
+                }
+            }
+            Ok(Event::Text(ref e)) => {
+                text_content = e.unescape().unwrap_or_default().to_string();
+            }
+            Ok(Event::End(ref e)) => {
+                let tag = String::from_utf8_lossy(e.name().as_ref())
+                    .split(':').last().unwrap_or("").to_string();
+
+                match tag.as_str() {
+                    "Insert" => {
+                        if let Some(insert) = current_insert.take() {
+                            transaction.inserts.push(insert);
+                        }
+                        in_insert = false;
+                    }
+                    "Update" => {
+                        if let Some(update) = current_update.take() {
+                            transaction.updates.push(update);
+                        }
+                        in_update = false;
+                    }
+                    "Delete" => {
+                        if let Some(delete) = current_delete.take() {
+                            transaction.deletes.push(delete);
+                        }
+                        in_delete = false;
+                    }
+                    "TypeName" | "Typename" | "TYPENAME" => {
+                        let name = text_content.trim().to_string();
+                        if let Some(ref mut insert) = current_insert {
+                            insert.type_name = name.clone();
+                        }
+                        if let Some(ref mut update) = current_update {
+                            update.type_name = name.clone();
+                        }
+                        if let Some(ref mut delete) = current_delete {
+                            delete.type_name = name.clone();
+                        }
+                    }
+                    "Feature" | "feature" if in_insert => {
+                        if let Some(feature) = current_feature.take() {
+                            if let Some(ref mut insert) = current_insert {
+                                insert.features.push(feature);
+                            }
+                        }
+                        in_feature = false;
+                    }
+                    "Property" | "property" if in_update => {
+                        if let Some(prop) = current_property.take() {
+                            if let Some(ref mut update) = current_update {
+                                update.properties.push(prop);
+                            }
+                        }
+                        in_property = false;
+                    }
+                    "Name" | "name" if in_name => {
+                        if let Some(ref mut prop) = current_property {
+                            prop.name = text_content.trim().to_string();
+                        }
+                        in_name = false;
+                    }
+                    "Value" | "value" if in_value => {
+                        if let Some(ref mut prop) = current_property {
+                            prop.value = text_content.trim().to_string();
+                        }
+                        in_value = false;
+                    }
+                    "pos" | "Pos" => {
+                        let coords: Vec<f64> = text_content.split_whitespace()
+                            .filter_map(|v| v.parse().ok())
+                            .collect();
+                        if coords.len() >= 2 {
+                            if let Some(ref mut feature) = current_feature {
+                                feature.geometry = GeoJsonGeometry::Point {
+                                    coordinates: vec![coords[0], coords[1]],
+                                };
+                            }
+                        }
+                        in_pos = false;
+                    }
+                    "posList" | "PosList" => {
+                        let coords: Vec<f64> = text_content.split_whitespace()
+                            .filter_map(|v| v.parse().ok())
+                            .collect();
+                        let points: Vec<Vec<f64>> = coords.chunks(2)
+                            .filter(|c| c.len() == 2)
+                            .map(|c| vec![c[0], c[1]])
+                            .collect();
+
+                        if let Some(ref mut feature) = current_feature {
+                            if in_linestring || (in_polygon && in_exterior) {
+                                feature.geometry = if in_polygon {
+                                    GeoJsonGeometry::Polygon { coordinates: vec![points] }
+                                } else {
+                                    GeoJsonGeometry::LineString { coordinates: points }
+                                };
+                            }
+                        }
+                        in_poslist = false;
+                    }
+                    "LineString" | "linestring" => in_linestring = false,
+                    "Polygon" | "polygon" => in_polygon = false,
+                    "exterior" | "Exterior" => in_exterior = false,
+                    _ => {}
+                }
+                text_content.clear();
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => {
+                warn!("[WFS-T] XML 解析警告: {}", e);
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(transaction)
 }

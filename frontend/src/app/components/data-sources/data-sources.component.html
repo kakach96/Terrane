@@ -31,7 +31,15 @@
         <mat-cell *matCellDef="let ds">
           <div class="cell-content">
             <mat-icon class="type-icon">{{ getTypeIcon(ds.type) }}</mat-icon>
-            <span>{{ ds.name }}</span>
+            <div>
+              <div>{{ ds.name }}</div>
+              <div class="cell-subtitle" *ngIf="ds.connection?.file_path">
+                {{ ds.connection?.file_path }}
+              </div>
+              <div class="cell-subtitle" *ngIf="ds.connection?.host">
+                {{ ds.connection?.host }}:{{ ds.connection?.port }}
+              </div>
+            </div>
           </div>
         </mat-cell>
       </ng-container>

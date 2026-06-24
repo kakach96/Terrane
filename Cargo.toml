@@ -28,7 +28,20 @@ sysinfo = "0.30"
 rusqlite = { version = "0.29", features = ["chrono", "bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
 deadpool-postgres = "0.10"
+futures-util = "0.3"
 postgres-native-tls = "0.5"
+
+# Shapefile 解析 (纯 Rust)
+shapefile = "0.5"
+
+# 文件上传
+actix-multipart = "0.6"
+# GeoTIFF 原生标签读取
+tiff = "0.9"
+# ZIP 解压 (用于 shapefile 上传)
+zip = "2"
+# 临时文件
+tempfile = "3"
 
 [dev-dependencies]
 actix-rt = "2"

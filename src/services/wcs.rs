@@ -104,6 +104,12 @@ pub struct WcsOnlineResource {
 }
 
 impl WcsCapabilities {
+    /// 添加覆盖数据到 Capabilities（WCS 2.0 中可选，名称仅用于日志）
+    pub fn add_coverage(&mut self, _name: &str, _title: &str) {
+        // WCS 2.0 GetCapabilities 不需要列出各个 Coverage，
+        // 通过 DescribeCoverage 获取详细信息
+    }
+
     pub fn new(base_url: &str) -> Self {
         WcsCapabilities {
             version: "2.0.1".to_string(),
@@ -282,6 +288,40 @@ impl CoverageDescription {
                 }],
             },
         }
+    }
+
+    /// 设置地理边界
+    pub fn set_bounds(&mut self, minx: f64, miny: f64, maxx: f64, maxy: f64) {
+        self.bounding_boxes = vec![BoundingBoxMetadata {
+            crs: "EPSG:4326".to_string(),
+            minx,
+            miny,
+            maxx,
+            maxy,
+        }];
+        self.coverage_domain.spatial_domain.bounding_boxes = vec![BoundingBoxMetadata {
+            crs: "EPSG:4326".to_string(),
+            minx,
+            miny,
+            maxx,
+            maxy,
+        }];
+    }
+
+    /// 设置图像尺寸和波段数
+    pub fn set_size(&mut self, width: u32, height: u32, band_count: usize) {
+        self.range = Range {
+            field: (0..band_count).map(|i| Field {
+                name: format!("band_{}", i),
+                definition: "GridCoverage".to_string(),
+                description: Some(format!("{}x{} band {}", width, height, i)),
+                unit: Some(Unit {
+                    name: "digital_number".to_string(),
+                    code: Some("DN".to_string()),
+                }),
+                null_values: vec![NullValue { value: "0".to_string() }],
+            }).collect(),
+        };
     }
 }
 

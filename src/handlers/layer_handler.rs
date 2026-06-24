@@ -365,12 +365,38 @@ pub async fn upload_geojson(
         .unwrap_or("uploaded")
         .to_string();
 
+    // 写入内存缓存
     {
         let mut features_map = state.features.write().await;
-        features_map.insert(layer_name.clone(), fc.features);
+        features_map.insert(layer_name.clone(), fc.features.clone());
+    }
+
+    // 持久化到 SQLite（如可用）
+    if let Some(store) = &state.store {
+        // 确保图层定义存在
+        let layers = state.layers.read().await;
+        let layer_exists = layers.iter().any(|l| l.name == layer_name);
+        drop(layers);
+
+        if !layer_exists {
+            // 自动创建图层定义
+            let new_layer = crate::models::Layer::new(
+                layer_name.clone(),
+                layer_name.clone(),
+                "default".to_string(),
+                "memory".to_string(),
+                crate::models::CoordinateReferenceSystem::EPSG4326,
+            );
+            state.layers.write().await.push(new_layer);
+        }
+
+        // 保存要素到数据库 features 表
+        if let Err(e) = store.save_features(&layer_name, &fc.features).await {
+            tracing::warn!("[Upload] 保存要素到 SQLite 失败: {}", e);
+        }
     }
 
     Ok(HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
-        "message": format!("Uploaded to layer '{}'", layer_name),
+        "message": format!("Uploaded {} features to layer '{}'", fc.features.len(), layer_name),
     }))))
 }

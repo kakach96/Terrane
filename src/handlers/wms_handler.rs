@@ -61,6 +61,7 @@ pub async fn handle_wms_request(
         wms::WmsOperation::GetFeatureInfo => handle_get_feature_info(&state, &wms_request).await,
         wms::WmsOperation::GetLegendGraphic => handle_get_legend_graphic(&state, &wms_request).await,
         wms::WmsOperation::DescribeLayer => handle_describe_layer(&state, &wms_request).await,
+        wms::WmsOperation::GetStyles => handle_get_styles(&state, &wms_request).await,
         _ => Err(GeoServerError::BadRequest("Operation not implemented".to_string())),
     };
 
@@ -372,18 +373,19 @@ async fn query_postgis_features_optimized(
     scale_denominator: f64,
     max_features: u32,
 ) -> Result<Vec<Feature>, GeoServerError> {
+    let schema_name = conn.schema.as_deref()
+        .map(|s| if s.is_empty() || s == "public" { "public" } else { s })
+        .unwrap_or("public")
+        .to_string();
+
     info!("[PostGIS] 开始查询 PostGIS, table='{}', schema='{}', storage_crs='{}', output_crs='{}'",
-          table_name, conn.schema, storage_crs, output_crs);
+          table_name, schema_name, storage_crs, output_crs);
 
     let pool = state.get_pg_pool(table_name, conn);
     let client = pool.get().await
         .map_err(|e| GeoServerError::InternalError(format!("Pool error: {}", e)))?;
 
-    let schema = if conn.schema.is_empty() || conn.schema == "public" {
-        "public".to_string()
-    } else {
-        conn.schema.clone()
-    };
+    let schema = schema_name;
 
     let geom_col = get_geometry_column(&client, &schema, table_name).await
         .unwrap_or_else(|| "geom".to_string());
@@ -818,6 +820,58 @@ async fn handle_describe_layer(state: &AppState, request: &WmsRequest) -> Result
     Ok(HttpResponse::Ok()
         .content_type("text/xml")
         .body(xml))
+}
+
+async fn handle_get_styles(state: &AppState, request: &WmsRequest) -> Result<HttpResponse, GeoServerError> {
+    let layers_param = request.layers.as_ref()
+        .ok_or_else(|| GeoServerError::BadRequest("LAYERS parameter required for GetStyles".to_string()))?;
+
+    let styles_lock = state.styles.read().await;
+    let layers_lock = state.layers.read().await;
+
+    let mut sld_doc = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0"
+  xmlns="http://www.opengis.net/sld"
+  xmlns:ogc="http://www.opengis.net/ogc"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+"#
+    );
+
+    for layer_name in layers_param {
+        let style_name = layers_lock.iter()
+            .find(|l| l.name == *layer_name)
+            .and_then(|l| l.styles.first().map(|s| s.name.clone()))
+            .unwrap_or_else(|| "default".to_string());
+
+        let style_content = styles_lock.get(&style_name)
+            .cloned()
+            .unwrap_or_else(|| String::new());
+
+        sld_doc.push_str(&format!(
+            r#"  <NamedLayer>
+    <Name>{}</Name>
+    <UserStyle>
+      <Name>{}</Name>
+      {}
+    </UserStyle>
+  </NamedLayer>
+"#,
+            layer_name,
+            style_name,
+            if style_content.is_empty() {
+                "<FeatureTypeStyle><Rule><PolygonSymbolizer><Fill><CssParameter name=\"fill\">#808080</CssParameter></Fill></PolygonSymbolizer></Rule></FeatureTypeStyle>".to_string()
+            } else {
+                style_content
+            }
+        ));
+    }
+
+    sld_doc.push_str("</StyledLayerDescriptor>");
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/vnd.ogc.sld+xml")
+        .body(sld_doc))
 }
 
 async fn handle_get_legend_graphic(state: &AppState, request: &WmsRequest) -> Result<HttpResponse, GeoServerError> {

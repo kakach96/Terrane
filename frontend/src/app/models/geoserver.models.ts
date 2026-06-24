@@ -159,12 +159,16 @@ export interface DataSource {
 }
 
 export interface DataSourceConnection {
-  host: string;
-  port: number;
-  database: string;
+  // PostGIS 字段
+  host?: string;
+  port?: number;
+  database?: string;
   schema?: string;
-  username: string;
+  username?: string;
   password?: string;
+  // 文件型字段
+  file_path?: string;
+  file_storage_type?: string;
 }
 
 export interface CreateDataSourceRequest {
@@ -172,7 +176,7 @@ export interface CreateDataSourceRequest {
   type: 'postgis' | 'shapefile' | 'geotiff';
   workspace?: string;
   enabled?: boolean;
-  connection: DataSourceConnection;
+  connection?: DataSourceConnection;
 }
 
 export interface UpdateDataSourceRequest {
@@ -185,4 +189,12 @@ export interface UpdateDataSourceRequest {
 export interface ConnectionTestResult {
   success: boolean;
   message?: string;
+}
+
+/** 上传结果 */
+export interface UploadResult {
+  name: string;
+  type: string;
+  file_path?: string;
+  message: string;
 }

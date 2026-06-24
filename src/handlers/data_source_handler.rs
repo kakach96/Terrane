@@ -234,10 +234,15 @@ async fn test_postgis_connection(ds: &DataSource) -> serde_json::Value {
         }),
     };
 
+    let pg_host = conn_info.host.as_deref().unwrap_or("localhost");
+    let pg_port = conn_info.port.unwrap_or(5432);
+    let pg_db = conn_info.database.as_deref().unwrap_or("geoserver");
+    let pg_user = conn_info.username.as_deref().unwrap_or("postgres");
+
     match tokio_postgres::connect(
         &format!("host={} port={} dbname={} user={} password={}",
-            conn_info.host, conn_info.port, conn_info.database,
-            conn_info.username,
+            pg_host, pg_port, pg_db,
+            pg_user,
             conn_info.password.as_deref().unwrap_or("")),
         tokio_postgres::NoTls,
     ).await {
@@ -334,11 +339,10 @@ async fn list_postgis_tables_from_pool(
     };
     tracing::debug!("[list_postgis_tables_from_pool] pool.get() 耗时: {:?}", t1.elapsed());
 
-    let schema_filter = if conn.schema.is_empty() || conn.schema == "public" {
-        "AND n.nspname = 'public'".to_string()
-    } else {
-        format!("AND n.nspname = '{}'", conn.schema)
-    };
+    let schema_val = conn.schema.as_deref()
+        .map(|s| if s.is_empty() || s == "public" { "public" } else { s })
+        .unwrap_or("public");
+    let schema_filter = format!("AND n.nspname = '{}'", schema_val);
 
     let query = format!(
         "SELECT c.relname
@@ -429,11 +433,10 @@ async fn get_postgis_table_columns(
         }
     };
 
-    let schema_filter = if conn.schema.is_empty() || conn.schema == "public" {
-        "'public'".to_string()
-    } else {
-        format!("'{}'", conn.schema.replace('\'', "''"))
-    };
+    let schema_val = conn.schema.as_deref()
+        .map(|s| if s.is_empty() || s == "public" { "public" } else { s })
+        .unwrap_or("public");
+    let schema_filter = format!("'{}'", schema_val.replace('\'', "''"));
 
     let query = format!(
         "SELECT column_name, data_type, character_maximum_length, is_nullable

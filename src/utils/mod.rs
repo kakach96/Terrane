@@ -3,3 +3,5 @@ pub mod projection;
 pub mod rendering;
 pub mod sld_parser;
 pub mod wkb;
+pub mod shapefile;
+pub mod geotiff;

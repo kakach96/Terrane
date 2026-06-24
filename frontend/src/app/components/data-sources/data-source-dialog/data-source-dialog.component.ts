@@ -21,6 +21,7 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'geotiff', label: 'GeoTIFF' }
   ];
   isTesting = false;
+  selectedFile: File | null = null;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { mode: 'create' | 'edit'; dataSource?: DataSource },
@@ -41,6 +42,7 @@ export class DataSourceDialogComponent implements OnInit {
       schema: ['public'],
       username: [''],
       password: [''],
+      file_path: [''],
       enabled: [true]
     });
   }
@@ -58,6 +60,7 @@ export class DataSourceDialogComponent implements OnInit {
         database: this.dataSource.connection?.database || '',
         schema: this.dataSource.connection?.schema || 'public',
         username: this.dataSource.connection?.username || '',
+        file_path: this.dataSource.connection?.file_path || '',
         enabled: this.dataSource.enabled
       });
       this.form.get('name')?.disable();
@@ -83,7 +86,23 @@ export class DataSourceDialogComponent implements OnInit {
     return this.form.get('type')?.value;
   }
 
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.selectedFile = input.files[0];
+      // 自动填充名称为文件名（不含扩展名）
+      const nameCtrl = this.form.get('name');
+      if (nameCtrl && !nameCtrl.value) {
+        nameCtrl.setValue(this.selectedFile.name.replace(/\.[^.]+$/, ''));
+      }
+    }
+  }
+
   testConnection(): void {
+    if (this.selectedType !== 'postgis') {
+      this.notificationService.info('仅 PostGIS 支持连接测试');
+      return;
+    }
     if (!this.form.valid) {
       this.notificationService.warning('请填写必填字段');
       return;
@@ -91,6 +110,11 @@ export class DataSourceDialogComponent implements OnInit {
 
     this.isTesting = true;
     const request = this.buildCreateRequest();
+    if (!request.connection) {
+      this.notificationService.error('缺少连接配置');
+      this.isTesting = false;
+      return;
+    }
     this.geoserverService.testConnection(request).subscribe({
       next: (result: ConnectionTestResult) => {
         this.isTesting = false;
@@ -114,7 +138,7 @@ export class DataSourceDialogComponent implements OnInit {
       name: this.form.get('name')?.value,
       type: type,
       workspace: this.form.get('workspace')?.value,
-      enabled: this.form.get('enabled')?.value,
+      enabled: this.form.get('enabled')?.value ?? true,
     };
 
     if (type === 'postgis') {
@@ -126,6 +150,11 @@ export class DataSourceDialogComponent implements OnInit {
         username: this.form.get('username')?.value,
         password: this.form.get('password')?.value
       };
+    } else {
+      const filePath = this.form.get('file_path')?.value || this.selectedFile?.name;
+      if (filePath) {
+        request.connection = { file_path: filePath };
+      }
     }
 
     return request;
@@ -136,7 +165,7 @@ export class DataSourceDialogComponent implements OnInit {
     const request: any = {
       type: type,
       workspace: this.form.get('workspace')?.value,
-      enabled: this.form.get('enabled')?.value,
+      enabled: this.form.get('enabled')?.value ?? true,
     };
 
     if (type === 'postgis') {
@@ -148,6 +177,11 @@ export class DataSourceDialogComponent implements OnInit {
         username: this.form.get('username')?.value,
         password: this.form.get('password')?.value
       };
+    } else {
+      const filePath = this.form.get('file_path')?.value;
+      if (filePath) {
+        request.connection = { file_path: filePath };
+      }
     }
 
     return request;
@@ -159,7 +193,26 @@ export class DataSourceDialogComponent implements OnInit {
       return;
     }
 
-    if (this.mode === 'create') {
+    const type = this.form.get('type')?.value;
+
+    if (this.mode === 'create' && type !== 'postgis' && this.selectedFile) {
+      // 文件型数据源：通过上传接口创建
+      const dsName = this.form.get('name')?.value;
+      const upload$ = type === 'shapefile'
+        ? this.geoserverService.uploadShapefile(this.selectedFile, dsName)
+        : this.geoserverService.uploadGeoTiff(this.selectedFile, dsName);
+
+      upload$.subscribe({
+        next: () => {
+          this.notificationService.success(`${type === 'shapefile' ? 'Shapefile' : 'GeoTIFF'} 上传并创建成功`);
+          this.dialogRef.close(true);
+        },
+        error: (err: any) => {
+          console.error('Upload failed:', err);
+          this.notificationService.error(err.error?.message || '上传创建失败');
+        }
+      });
+    } else if (this.mode === 'create') {
       this.geoserverService.createDataSource(this.buildCreateRequest()).subscribe({
         next: () => {
           this.notificationService.success('创建成功');

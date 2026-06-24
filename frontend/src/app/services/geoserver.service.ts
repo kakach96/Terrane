@@ -22,7 +22,8 @@ import {
   DataSource,
   CreateDataSourceRequest,
   UpdateDataSourceRequest,
-  ConnectionTestResult
+  ConnectionTestResult,
+  UploadResult
 } from '../models/geoserver.models';
 
 @Injectable({
@@ -276,5 +277,28 @@ export class GeoserverService {
   getLayerFeatureType(layerName: string): Observable<PropertyDef[]> {
     return this.http.get<ApiResponse<PropertyDef[]>>(`${this.apiUrl}/layers/${layerName}/feature-type`)
       .pipe(map(response => response.data || []));
+  }
+
+  // ---- 文件上传 ----
+
+  /** 上传 Shapefile (.zip) */
+  uploadShapefile(file: File, name?: string): Observable<ApiResponse<UploadResult>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const params = name ? `?name=${encodeURIComponent(name)}` : '';
+    return this.http.post<ApiResponse<UploadResult>>(`${this.apiUrl}/data/upload/shapefile${params}`, formData);
+  }
+
+  /** 上传 GeoTIFF (.tif/.tiff) */
+  uploadGeoTiff(file: File, name?: string): Observable<ApiResponse<UploadResult>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const params = name ? `?name=${encodeURIComponent(name)}` : '';
+    return this.http.post<ApiResponse<UploadResult>>(`${this.apiUrl}/data/upload/geotiff${params}`, formData);
+  }
+
+  /** 上传 GeoJSON (JSON body) */
+  uploadGeoJson(geojson: any): Observable<ApiResponse<any>> {
+    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/data/upload`, geojson);
   }
 }
