@@ -369,6 +369,105 @@ async fn count_files(dir: &Path) -> u64 {
     count
 }
 
+// ---------------------------------------------------------------------------
+// 测试
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gridset_epsg4326_name() {
+        assert_eq!(Gridset::Epsg4326.name(), "EPSG:4326");
+        assert_eq!(Gridset::Epsg3857.name(), "EPSG:3857");
+    }
+
+    #[test]
+    fn test_gridset_top_level_tiles() {
+        assert_eq!(Gridset::Epsg4326.top_level_tiles(), (2, 1));
+        assert_eq!(Gridset::Epsg3857.top_level_tiles(), (1, 1));
+    }
+
+    #[test]
+    fn test_gridset_max_zoom() {
+        assert!(Gridset::Epsg4326.max_zoom() > 0);
+        assert_eq!(Gridset::Epsg4326.tile_size(), 256);
+    }
+
+    #[test]
+    fn test_tile_bounds_epsg4326_z0() {
+        // z=0, n=2^0=1, 瓦片覆盖全球
+        let bounds = Gridset::Epsg4326.tile_bounds(0, 0, 0).unwrap();
+        assert!((bounds.0 - (-180.0)).abs() < 0.001);  // minx
+        assert!((bounds.1 - (-90.0)).abs() < 0.001);   // miny
+        assert!((bounds.2 - 180.0).abs() < 0.001);     // maxx = 全球
+        assert!((bounds.3 - 90.0).abs() < 0.001);      // maxy
+    }
+
+    #[test]
+    fn test_tile_bounds_epsg4326_z1() {
+        // z=1, x=1, y=0 (右上角)
+        let bounds = Gridset::Epsg4326.tile_bounds(1, 1, 0).unwrap();
+        assert_eq!(bounds.0, 0.0);     // minx
+        assert_eq!(bounds.1, -90.0);   // miny
+        assert_eq!(bounds.2, 180.0);   // maxx
+        assert_eq!(bounds.3, 0.0);     // maxy
+    }
+
+    #[test]
+    fn test_tile_bounds_epsg3857_z0() {
+        let bounds = Gridset::Epsg3857.tile_bounds(0, 0, 0).unwrap();
+        assert!(bounds.0 < -100.0);    // 应该在 -180 附近
+        assert!(bounds.1 <= -85.0);    // 应该在 -85.0511 附近
+        assert!(bounds.2 > 100.0);     // 应该在 180 附近
+        assert!(bounds.3 >= 85.0);     // 应该在 85.0511 附近
+    }
+
+    #[test]
+    fn test_gwc_config_default() {
+        let config = GwcConfig::default();
+        assert!(config.enabled);
+        assert_eq!(config.expire_after_secs, 86400);
+        assert_eq!(config.max_tiles, 100_000);
+        assert_eq!(config.default_gridset, "EPSG:4326");
+    }
+
+    #[test]
+    fn test_tile_path_format() {
+        let config = GwcConfig::default();
+        let path = config.tile_path("test_layer", "EPSG:4326", 5, 10, 15);
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains("test_layer"));
+        assert!(path_str.contains("EPSG:4326"));
+        assert!(path_str.contains("5"));
+        assert!(path_str.contains("10"));
+        assert!(path_str.ends_with("15.png"));
+    }
+
+    #[test]
+    fn test_tile_cache_new() {
+        let config = GwcConfig::default();
+        let cache = TileCache::new(config);
+        assert_eq!(cache.stats().hits, 0);
+        assert_eq!(cache.stats().misses, 0);
+        assert_eq!(cache.hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_hit_rate_calculation() {
+        let config = GwcConfig::default();
+        let cache = TileCache::new(config);
+        // 初始状态
+        assert_eq!(cache.hit_rate(), 0.0);
+        // 部分命中: 2 hits, 3 misses = 40%
+        cache.hits.fetch_add(2, Ordering::Relaxed);
+        cache.misses.fetch_add(3, Ordering::Relaxed);
+        let rate = cache.hit_rate();
+        assert!((rate - 0.4).abs() < 0.001);
+    }
+}
+
 /// 递归统计目录下的文件数和总大小 (使用迭代，避免递归 async fn)
 async fn count_files_and_size(dir: &Path) -> (u64, u64) {
     let mut stack = vec![dir.to_path_buf()];

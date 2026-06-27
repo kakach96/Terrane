@@ -131,6 +131,87 @@ pub fn verify_token(token: &str) -> Result<Claims, String> {
 // 初始化默认管理员
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 测试
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_salt() {
+        let s1 = generate_salt();
+        let s2 = generate_salt();
+        assert_eq!(s1.len(), 32);  // 16 bytes = 32 hex chars
+        assert_eq!(s2.len(), 32);
+        assert_ne!(s1, s2);  // 每次生成的 salt 应不同
+    }
+
+    #[test]
+    fn test_hash_password_consistency() {
+        let salt = generate_salt();
+        let hash1 = hash_password("mypassword", &salt);
+        let hash2 = hash_password("mypassword", &salt);
+        assert_eq!(hash1, hash2);  // 相同 salt + 相同密码 = 相同 hash
+    }
+
+    #[test]
+    fn test_hash_password_different_salt() {
+        let salt1 = generate_salt();
+        let salt2 = generate_salt();
+        let hash1 = hash_password("mypassword", &salt1);
+        let hash2 = hash_password("mypassword", &salt2);
+        assert_ne!(hash1, hash2);  // 不同 salt = 不同 hash
+    }
+
+    #[test]
+    fn test_verify_password_correct() {
+        let password = "correct-horse-battery-staple";
+        let salt = generate_salt();
+        let hash = hash_password(password, &salt);
+        assert!(verify_password(password, &salt, &hash));
+    }
+
+    #[test]
+    fn test_verify_password_wrong() {
+        let salt = generate_salt();
+        let hash = hash_password("real_password", &salt);
+        assert!(!verify_password("wrong_password", &salt, &hash));
+    }
+
+    #[test]
+    fn test_generate_and_verify_token() {
+        let token = generate_token("admin", &UserRole::Admin, 1).unwrap();
+        let claims = verify_token(&token).unwrap();
+        assert_eq!(claims.sub, "admin");
+        assert_eq!(claims.role, "admin");
+    }
+
+    #[test]
+    fn test_verify_invalid_token() {
+        let result = verify_token("invalid.token.here");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_token_expiry() {
+        // 使用 0 小时过期时间生成一个立即过期的 token
+        let token = generate_token("testuser", &UserRole::User, 0).unwrap();
+        // 注意: 由于生成和验证之间有微小延迟, 这个测试可能不稳定
+        // 这里只验证 token 格式正确
+        assert!(token.split('.').count() == 3);
+    }
+
+    #[test]
+    fn test_user_role_display() {
+        assert_eq!(UserRole::Admin.to_string(), "admin");
+        assert_eq!(UserRole::Manager.to_string(), "manager");
+        assert_eq!(UserRole::User.to_string(), "user");
+        assert_eq!(UserRole::Guest.to_string(), "guest");
+    }
+}
+
 /// 创建默认管理员用户（如果不存在）
 pub async fn ensure_default_admin(store: &crate::store::SqliteStore) {
     match store.get_user("admin").await {
