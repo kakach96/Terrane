@@ -115,6 +115,10 @@ pub async fn get_layer(
                 map.insert("store".into(), serde_json::Value::String(layer.store.clone()));
                 map.insert("native_name".into(), layer.native_name.clone().map(|v| serde_json::Value::String(v)).unwrap_or(serde_json::Value::Null));
                 map.insert("srs".into(), serde_json::Value::String(layer.srs.clone()));
+                map.insert("bounds".into(), serde_json::json!({
+                    "minx": layer.minx, "miny": layer.miny,
+                    "maxx": layer.maxx, "maxy": layer.maxy,
+                }));
                 map.insert("native_bounds".into(), serde_json::json!({
                     "crs": layer.srs, "bounds": {
                         "minx": layer.minx, "miny": layer.miny,
@@ -144,6 +148,10 @@ pub async fn get_layer(
             map.insert("store".into(), serde_json::Value::String(layer.store.clone()));
             map.insert("native_name".into(), layer.native_name.clone().map(|v| serde_json::Value::String(v)).unwrap_or(serde_json::Value::Null));
             map.insert("srs".into(), serde_json::Value::String(layer.srs.to_epsg()));
+            map.insert("bounds".into(), serde_json::json!({
+                "minx": layer.native_bounds.bounds.minx, "miny": layer.native_bounds.bounds.miny,
+                "maxx": layer.native_bounds.bounds.maxx, "maxy": layer.native_bounds.bounds.maxy,
+            }));
             map.insert("native_bounds".into(), serde_json::json!({
                 "crs": layer.native_bounds.crs.to_epsg(), "bounds": {
                     "minx": layer.native_bounds.bounds.minx, "miny": layer.native_bounds.bounds.miny,
@@ -174,12 +182,61 @@ pub async fn create_layer(
     let srs = body.srs.clone()
         .unwrap_or_else(|| "EPSG:4326".to_string());
 
-    let (minx, miny, maxx, maxy) = if let (Some(x1), Some(y1), Some(x2), Some(y2)) =
+    // 1. 用户显式提供了边界 → 优先使用
+    let (mut minx, mut miny, mut maxx, mut maxy) = if let (Some(x1), Some(y1), Some(x2), Some(y2)) =
         (body.minx, body.miny, body.maxx, body.maxy) {
         (x1, y1, x2, y2)
     } else {
-        (-180.0, -90.0, 180.0, 90.0)
+        // 未提供 → 标记为未设置，后续尝试自动计算
+        (f64::MAX, f64::MAX, f64::MIN, f64::MIN)
     };
+
+    // 2. 如果边界是默认/未设置状态，尝试从数据源自动计算
+    let user_provided = minx != f64::MAX;
+    if !user_provided {
+        if let Some(ref store) = state.store {
+            if let Ok(Some(ds)) = store.get_data_source(&body.store).await {
+                let crs = crate::models::CoordinateReferenceSystem::from_epsg(&srs);
+                let native_name = body.native_name.as_deref();
+
+                // 获取 PostGIS 连接池（如适用）
+                let pg_pool = if ds.data_source_type == crate::models::DataSourceType::Postgis {
+                    state.pg_pools.lock().unwrap().get(&body.store).cloned()
+                } else {
+                    None
+                };
+
+                match crate::utils::bounds::compute_layer_bounds(&ds, native_name, pg_pool.as_ref()).await {
+                    Ok(Some(computed)) => {
+                        minx = computed.bounds.minx;
+                        miny = computed.bounds.miny;
+                        maxx = computed.bounds.maxx;
+                        maxy = computed.bounds.maxy;
+                        tracing::info!("[create_layer] 从数据源自动计算边界: ({}, {}, {}, {})", minx, miny, maxx, maxy);
+                    }
+                    _ => {
+                        // 自动计算失败 → 使用 CRS 世界范围
+                        let world = crate::models::BoundingBox::world(crs.clone());
+                        minx = world.bounds.minx;
+                        miny = world.bounds.miny;
+                        maxx = world.bounds.maxx;
+                        maxy = world.bounds.maxy;
+                        tracing::info!("[create_layer] 使用 CRS({}) 世界范围作为默认边界", srs);
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. 如果仍为初始值，用 CRS 世界范围兜底
+    if minx == f64::MAX {
+        let crs = crate::models::CoordinateReferenceSystem::from_epsg(&srs);
+        let world = crate::models::BoundingBox::world(crs);
+        minx = world.bounds.minx;
+        miny = world.bounds.miny;
+        maxx = world.bounds.maxx;
+        maxy = world.bounds.maxy;
+    }
 
     if let Some(store) = &state.store {
         let layer = crate::store::sqlite_store::Layer {

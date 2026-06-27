@@ -551,12 +551,29 @@ fn render_map_image(
 
 fn render_openlayers_preview(
     context: &GetMapContext,
-    state: &AppState,
+    _state: &AppState,
 ) -> Result<HttpResponse, GeoServerError> {
-    let host = state.config.server.host.clone();
-    let port = state.config.server.port;
-    let base_url = format!("http://{}:{}", host, port);
-    let wms_url = format!("{}/wms?", base_url);
+    // 使用相对 URL，通过前端代理或同源访问 WMS
+    let wms_url = "/wms?";
+
+    // 如果输出 CRS 不是 Web Mercator，用 EPSG:4326 作为备用
+    let view_crs = if context.output_crs.to_uppercase().contains("3857")
+        || context.output_crs.to_uppercase().contains("900913")
+    {
+        context.output_crs.clone()
+    } else {
+        // 默认使用 EPSG:4326，但 TileWMS 在 4326 下格子显示不正常
+        // 改用 ImageWMS 方式，通过单次请求渲染
+        "EPSG:4326".to_string()
+    };
+
+    let center_x = (context.bounds.minx + context.bounds.maxx) / 2.0;
+    let center_y = (context.bounds.miny + context.bounds.maxy) / 2.0;
+    let zoom = calculate_openlayers_zoom(&context.bounds, &view_crs);
+    let layers_json = serde_json::to_string(&context.layers).unwrap_or_default();
+    let extent = format!("{}, {}, {}, {}",
+        context.bounds.minx, context.bounds.miny,
+        context.bounds.maxx, context.bounds.maxy);
 
     let html = format!(
         r#"<!DOCTYPE html>
@@ -565,42 +582,66 @@ fn render_openlayers_preview(
   <title>Layer Preview - {layer_name}</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="https://openlayers.org/en/v4.6.5/css/ol.css" type="text/css">
-  <script src="https://openlayers.org/en/v4.6.5/build/ol.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v10.4.0/ol.css" type="text/css">
+  <script src="https://cdn.jsdelivr.net/npm/ol@v10.4.0/dist/ol.min.js"></script>
   <style>
     html, body, #map {{ height: 100%; width: 100%; margin: 0; padding: 0; }}
+    .ol-zoom {{ top: 1em; left: 1em; }}
+    .layer-info {{ position: absolute; bottom: 1em; left: 1em; background: rgba(255,255,255,0.85); padding: 6px 12px; border-radius: 4px; font: 13px sans-serif; }}
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <div class="layer-info">图层: {layer_name}</div>
   <script>
     var layers = {layers_json};
+    var extent = ol.proj.transformExtent([{extent}], 'EPSG:4326', '{view_crs}');
+
+    var wmsSource = new ol.source.ImageWMS({{
+      url: '{wms_url}',
+      params: {{
+        'LAYERS': layers.join(','),
+        'VERSION': '1.1.1',
+        'FORMAT': 'image/png',
+        'TRANSPARENT': true
+      }},
+      ratio: 1,
+      serverType: 'geoserver'
+    }});
+
     var map = new ol.Map({{
       target: 'map',
-      layers: layers.map(function(name) {{
-        return new ol.layer.Tile({{
-          source: new ol.source.TileWMS({{
-            url: '{wms_url}',
-            params: {{ 'LAYERS': name, 'TILED': true, 'VERSION': '1.3.0' }}
-          }})
-        }});
-      }}),
+      layers: [
+        new ol.layer.Image({{
+          source: wmsSource,
+          extent: extent
+        }})
+      ],
       view: new ol.View({{
-        projection: '{crs}',
-        center: [{center_x}, {center_y}],
-        zoom: {zoom}
+        projection: '{view_crs}',
+        center: ol.proj.fromLonLat([{center_x}, {center_y}], '{view_crs}'),
+        zoom: {zoom},
+        extent: extent
       }})
+    }});
+
+    // 视图变化时更新 WMS 请求
+    map.getView().on('change:resolution', function() {{
+      wmsSource.updateParams({{
+        'TIME': new Date().getTime().toString()
+      }});
     }});
   </script>
 </body>
 </html>"#,
         layer_name = context.layers.join(","),
-        layers_json = serde_json::to_string(&context.layers).unwrap_or_default(),
+        layers_json = layers_json,
         wms_url = wms_url,
-        crs = context.output_crs,
-        center_x = (context.bounds.minx + context.bounds.maxx) / 2.0,
-        center_y = (context.bounds.miny + context.bounds.maxy) / 2.0,
-        zoom = calculate_openlayers_zoom(&context.bounds, &context.output_crs),
+        view_crs = view_crs,
+        center_x = center_x,
+        center_y = center_y,
+        zoom = zoom,
+        extent = extent,
     );
 
     Ok(HttpResponse::Ok()
@@ -1041,8 +1082,10 @@ fn calculate_openlayers_zoom(bounds: &Bounds, crs: &str) -> f64 {
     };
     let range = (bounds.maxx - bounds.minx).max(bounds.maxy - bounds.miny);
     if range <= 0.0 { return 1.0; }
+    // ImageWMS 不需要匹配瓦片网格，直接计算合适的缩放级别
     let zoom = (world_width / range).log2().max(0.0).min(20.0);
-    zoom - 1.0
+    // 减少 0.5 让视图稍微缩小，确保数据完整显示
+    (zoom - 0.5).max(0.0)
 }
 
 fn calculate_scale_denom(bounds: &Bounds, width: u32, height: u32, crs: &str) -> f64 {

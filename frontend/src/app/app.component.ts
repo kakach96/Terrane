@@ -19,6 +19,7 @@ export class AppComponent implements OnInit {
     '/layers': '图层',
     '/layer-preview': '图层预览',
     '/tile-layers': '切片图层',
+    '/layer-groups': '图层组',
     '/styles': '样式管理',
     '/server-status': '服务器状态'
   };

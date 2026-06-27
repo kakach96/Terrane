@@ -20,6 +20,28 @@ export class LayerDetailComponent implements OnInit {
   currentStyleName = '';
   loading = true;
 
+  /** 显示的边界（优先 native_bounds，回退到 bounds） */
+  get displayBounds(): { minx: number; miny: number; maxx: number; maxy: number } {
+    const b = this.layer?.native_bounds?.bounds || this.layer?.bounds;
+    return b || { minx: -180, miny: -90, maxx: 180, maxy: 90 };
+  }
+
+  /** 显示的坐标系 */
+  get displayCrs(): string {
+    return this.layer?.native_bounds?.crs || this.layer?.srs || 'EPSG:4326';
+  }
+
+  /** 是否为默认世界范围 */
+  get isDefaultBounds(): boolean {
+    const b = this.displayBounds;
+    const is4326Default = b.minx === -180 && b.miny === -90 && b.maxx === 180 && b.maxy === 90;
+    const is3857Default = Math.abs(b.minx - (-20037508.34)) < 0.01
+      && Math.abs(b.miny - (-20037508.34)) < 0.01
+      && Math.abs(b.maxx - 20037508.34) < 0.01
+      && Math.abs(b.maxy - 20037508.34) < 0.01;
+    return is4326Default || is3857Default;
+  }
+
   previewOptions = {
     width: 800,
     height: 400,
@@ -58,7 +80,7 @@ export class LayerDetailComponent implements OnInit {
       next: (layer) => {
         this.layer = layer;
         this.currentStyleName = layer.styles?.[0]?.name || 'default';
-        this.previewOptions.crs = (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
+        this.previewOptions.crs = this.displayCrs;
         this.refreshPreview();
         this.loading = false;
       },
@@ -71,12 +93,14 @@ export class LayerDetailComponent implements OnInit {
 
   refreshPreview(): void {
     if (!this.layer) return;
+    const bbox = `${this.displayBounds.minx},${this.displayBounds.miny},${this.displayBounds.maxx},${this.displayBounds.maxy}`;
     this.previewUrl = this.geoserverService.getMapImageUrl(this.layer, {
       width: this.previewOptions.width,
       height: this.previewOptions.height,
       format: this.previewOptions.format,
       transparent: this.previewOptions.transparent,
       crs: this.previewOptions.crs,
+      bbox,
     });
     this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
   }
@@ -172,5 +196,37 @@ export class LayerDetailComponent implements OnInit {
 
   goBack(): void {
     this.router.navigate(['/layers']);
+  }
+
+  downloadGeoJson(): void {
+    if (!this.layer) return;
+    this.geoserverService.exportFeaturesGeoJson(this.layer.name).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${this.layer!.name}.geojson`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.notificationService.success('GeoJSON 已下载');
+      },
+      error: () => this.notificationService.error('下载 GeoJSON 失败')
+    });
+  }
+
+  downloadCsv(): void {
+    if (!this.layer) return;
+    this.geoserverService.exportFeaturesCsv(this.layer.name).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${this.layer!.name}.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.notificationService.success('CSV 已下载');
+      },
+      error: () => this.notificationService.error('下载 CSV 失败')
+    });
   }
 }

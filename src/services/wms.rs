@@ -489,9 +489,30 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
     })
 }
 
-#[allow(dead_code)]
-fn normalize_bbox(raw: Bbox, _version: Option<&str>, _crs: Option<&str>) -> Bbox {
-    raw
+/// WMS 1.3.0 对地理坐标系（EPSG:4326）要求 BBOX 轴序为 lat,lon
+/// 需要转换为内部的 lon,lat 表示
+fn normalize_bbox(raw: Bbox, version: Option<&str>, crs: Option<&str>) -> Bbox {
+    let is_130 = version.map_or(false, |v| v.starts_with("1.3"));
+    let is_geographic = crs.map_or(false, |c| {
+        let upper = c.to_uppercase();
+        upper == "EPSG:4326" || upper == "4326" || upper == "CRS:84"
+    });
+
+    if is_130 && is_geographic {
+        // WMS 1.3.0 要求 BBOX = minLat, minLon, maxLat, maxLon
+        // 内部使用 minx=lon, miny=lat，所以需要交换
+        tracing::debug!("[normalize_bbox] WMS 1.3.0 地理CRS: 交换轴序 ({}, {}, {}, {}) -> ({}, {}, {}, {})",
+            raw.minx, raw.miny, raw.maxx, raw.maxy,
+            raw.miny, raw.minx, raw.maxy, raw.maxx);
+        Bbox {
+            minx: raw.miny,  // 纬度 → 经度
+            miny: raw.minx,  // 经度 → 纬度
+            maxx: raw.maxy,
+            maxy: raw.maxx,
+        }
+    } else {
+        raw
+    }
 }
 
 pub fn format_wms_exception(err: &GeoServerError, exceptions: Option<&str>, width: u32, height: u32) -> (Vec<u8>, &'static str) {

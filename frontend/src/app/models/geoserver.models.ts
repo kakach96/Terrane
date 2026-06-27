@@ -191,6 +191,14 @@ export interface ConnectionTestResult {
   message?: string;
 }
 
+/** 图层组 */
+export interface LayerGroup {
+  name: string;
+  title: string;
+  layers: string[];
+  styles?: (string | null)[];
+}
+
 /** 上传结果 */
 export interface UploadResult {
   name: string;

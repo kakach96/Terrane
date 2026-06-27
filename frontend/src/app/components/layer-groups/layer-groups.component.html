@@ -1,0 +1,57 @@
+<div class="layer-groups-page fade-in">
+  <div class="page-header">
+    <div>
+      <h1>图层组</h1>
+      <p class="subtitle">管理图层组 — 将多个图层组合为一个组统一发布</p>
+    </div>
+    <button mat-raised-button color="primary" (click)="createGroup()">
+      <mat-icon>add</mat-icon>
+      新建图层组
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="loading-container">
+    <mat-spinner diameter="48"></mat-spinner>
+  </div>
+
+  <div *ngIf="!loading && groups.length === 0" class="empty-state">
+    <mat-icon>layers</mat-icon>
+    <p>暂无图层组</p>
+    <button mat-stroked-button color="primary" (click)="createGroup()">创建第一个图层组</button>
+  </div>
+
+  <div class="card" *ngIf="!loading && groups.length > 0">
+    <div class="card-content">
+      <table mat-table [dataSource]="groups" class="groups-table">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>名称</th>
+          <td mat-cell *matCellDef="let g">{{ g.name }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="title">
+          <th mat-header-cell *matHeaderCellDef>标题</th>
+          <td mat-cell *matCellDef="let g">{{ g.title }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="layerCount">
+          <th mat-header-cell *matHeaderCellDef>图层数</th>
+          <td mat-cell *matCellDef="let g">
+            <mat-chip>{{ g.layers.length }}</mat-chip>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>操作</th>
+          <td mat-cell *matCellDef="let g">
+            <button mat-icon-button color="warn" (click)="deleteGroup(g)" matTooltip="删除">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+      </table>
+    </div>
+  </div>
+</div>

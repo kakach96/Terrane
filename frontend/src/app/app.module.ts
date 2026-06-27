@@ -26,6 +26,7 @@ import { MatBadgeModule } from '@angular/material/badge';
 import { MatRippleModule } from '@angular/material/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 
 import { AppComponent } from './app.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
@@ -43,6 +44,8 @@ import { TileLayersComponent } from './components/tile-layers/tile-layers.compon
 import { ServerStatusComponent } from './components/server-status/server-status.component';
 import { StylesComponent } from './components/styles/styles.component';
 import { StyleEditorDialogComponent } from './components/styles/style-editor-dialog.component';
+import { LayerGroupsComponent } from './components/layer-groups/layer-groups.component';
+import { CreateLayerGroupDialogComponent } from './components/layer-groups/create-layer-group-dialog.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
@@ -53,6 +56,7 @@ const routes: Routes = [
   { path: 'layers/create', component: LayerCreateComponent },
   { path: 'layers/:name', component: LayerDetailComponent },
   { path: 'layer-preview', component: PreviewComponent },
+  { path: 'layer-groups', component: LayerGroupsComponent },
   { path: 'styles', component: StylesComponent },
   { path: 'tile-layers', component: TileLayersComponent },
   { path: 'server-status', component: ServerStatusComponent },
@@ -74,7 +78,9 @@ const routes: Routes = [
     TileLayersComponent,
     ServerStatusComponent,
     StylesComponent,
-    StyleEditorDialogComponent
+    StyleEditorDialogComponent,
+    LayerGroupsComponent,
+    CreateLayerGroupDialogComponent
   ],
   imports: [
     BrowserModule,
@@ -104,6 +110,7 @@ const routes: Routes = [
     MatRippleModule,
     MatSlideToggleModule,
     MatCheckboxModule,
+    MatButtonToggleModule,
     FeatureDetailDialogComponent
   ],
   providers: [],

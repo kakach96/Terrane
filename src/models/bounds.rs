@@ -104,9 +104,21 @@ impl BoundingBox {
     }
 
     pub fn world(crs: CoordinateReferenceSystem) -> Self {
-        BoundingBox {
-            crs,
-            bounds: Bounds::default(),
-        }
+        let bounds = match &crs {
+            CoordinateReferenceSystem::EPSG4326 => {
+                Bounds::new(-180.0, -90.0, 180.0, 90.0)
+            }
+            CoordinateReferenceSystem::EPSG3857 => {
+                Bounds::new(-20037508.34, -20037508.34, 20037508.34, 20037508.34)
+            }
+            CoordinateReferenceSystem::Custom(code) => {
+                if code.contains("3857") || code.contains("900913") {
+                    Bounds::new(-20037508.34, -20037508.34, 20037508.34, 20037508.34)
+                } else {
+                    Bounds::new(-180.0, -90.0, 180.0, 90.0)
+                }
+            }
+        };
+        BoundingBox { crs, bounds }
     }
 }

@@ -1,0 +1,49 @@
+.layer-groups-page {
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 500;
+    }
+
+    .subtitle {
+      margin: 4px 0 0;
+      color: var(--text-secondary, #666);
+      font-size: 14px;
+    }
+  }
+
+  .loading-container {
+    display: flex;
+    justify-content: center;
+    padding: 64px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 64px;
+    color: var(--text-secondary, #999);
+
+    mat-icon {
+      font-size: 64px;
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    p {
+      font-size: 16px;
+      margin-bottom: 16px;
+    }
+  }
+}
+
+.groups-table {
+  width: 100%;
+}

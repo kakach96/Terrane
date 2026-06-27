@@ -63,30 +63,42 @@
       <mat-card-header>
         <mat-icon matCardAvatar>fullscreen</mat-icon>
         <mat-card-title>边界范围</mat-card-title>
+        <div class="header-badges">
+          <mat-chip class="bounds-source" *ngIf="isDefaultBounds" color="warn" selected>
+            默认值
+          </mat-chip>
+          <mat-chip class="bounds-source" *ngIf="!isDefaultBounds" color="primary" selected>
+            已设定
+          </mat-chip>
+        </div>
       </mat-card-header>
       <mat-card-content>
         <div class="bounds-grid">
           <div class="bounds-item">
             <span class="label">最小经度</span>
-            <span class="value mono">{{ (layer.native_bounds?.bounds || layer.bounds).minx | number:'1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds.minx | number:'1.4-4' }}</span>
           </div>
           <div class="bounds-item">
             <span class="label">最小纬度</span>
-            <span class="value mono">{{ (layer.native_bounds?.bounds || layer.bounds).miny | number:'1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds.miny | number:'1.4-4' }}</span>
           </div>
           <div class="bounds-item">
             <span class="label">最大经度</span>
-            <span class="value mono">{{ (layer.native_bounds?.bounds || layer.bounds).maxx | number:'1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds.maxx | number:'1.4-4' }}</span>
           </div>
           <div class="bounds-item">
             <span class="label">最大纬度</span>
-            <span class="value mono">{{ (layer.native_bounds?.bounds || layer.bounds).maxy | number:'1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds.maxy | number:'1.4-4' }}</span>
           </div>
           <div class="bounds-item crs">
             <span class="label">坐标系</span>
-            <span class="value">{{ layer.native_bounds?.crs || layer.srs }}</span>
+            <span class="value">{{ displayCrs }}</span>
           </div>
         </div>
+        <p class="bounds-hint" *ngIf="isDefaultBounds">
+          <mat-icon>info</mat-icon>
+          此边界为默认范围，建议创建时指定精确边界或从数据源自动计算。
+        </p>
       </mat-card-content>
     </mat-card>
 
@@ -95,6 +107,16 @@
         <mat-icon matCardAvatar>category</mat-icon>
         <mat-card-title>要素类型</mat-card-title>
         <span class="feature-count">{{ features.length }} 个要素</span>
+        <span class="spacer"></span>
+        <button mat-stroked-button color="primary" (click)="downloadGeoJson()" matTooltip="下载 GeoJSON">
+          <mat-icon>download</mat-icon>
+          GeoJSON
+        </button>
+        &nbsp;
+        <button mat-stroked-button color="accent" (click)="downloadCsv()" matTooltip="下载 CSV">
+          <mat-icon>table_chart</mat-icon>
+          CSV
+        </button>
       </mat-card-header>
       <mat-card-content>
         <div *ngIf="properties.length === 0" class="empty-features">

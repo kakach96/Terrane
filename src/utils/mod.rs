@@ -5,3 +5,4 @@ pub mod sld_parser;
 pub mod wkb;
 pub mod shapefile;
 pub mod geotiff;
+pub mod bounds;

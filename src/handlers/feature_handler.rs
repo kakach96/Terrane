@@ -10,6 +10,7 @@ pub struct FeatureQuery {
     pub bbox: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
+    pub format: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,17 +49,27 @@ pub async fn get_layer_features(
         query.offset.map(|o| o as u64),
     ).await?;
 
-    let total_count = features.len();
+    let format = query.format.as_deref().unwrap_or("application/json");
 
-    let response = serde_json::json!({
-        "type": "FeatureCollection",
-        "totalFeatures": total_count,
-        "features": features,
-    });
-
-    Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .json(response))
+    match format {
+        "text/csv" => {
+            let csv_content = features_to_csv(&features);
+            Ok(HttpResponse::Ok()
+                .content_type("text/csv; charset=utf-8")
+                .append_header(("Content-Disposition", format!("attachment; filename=\"{}.csv\"", layer_name)))
+                .body(csv_content))
+        }
+        _ => {
+            let response = serde_json::json!({
+                "type": "FeatureCollection",
+                "totalFeatures": features.len(),
+                "features": features,
+            });
+            Ok(HttpResponse::Ok()
+                .content_type("application/json")
+                .json(response))
+        }
+    }
 }
 
 pub async fn create_feature(
@@ -192,4 +203,140 @@ pub async fn update_feature(
     }
 
     Err(GeoServerError::NotFound(format!("Feature '{}' not found", feature_id)))
+}
+
+/// 将 Feature 列表转换为 CSV 字符串
+fn features_to_csv(features: &[Feature]) -> String {
+    use crate::models::PropertyValue;
+
+    if features.is_empty() {
+        return "id,geometry\n".to_string();
+    }
+
+    // 收集所有可能的属性键
+    let mut keys: Vec<String> = Vec::new();
+    for f in features {
+        for key in f.properties.keys() {
+            if !keys.contains(key) {
+                keys.push(key.clone());
+            }
+        }
+    }
+
+    // 写入 CSV 头
+    let mut csv = String::from("id,geometry");
+    for key in &keys {
+        csv.push(',');
+        csv.push_str(&escape_csv_field(key));
+    }
+    csv.push('\n');
+
+    // 写入每一行
+    for f in features {
+        csv.push_str(&escape_csv_field(&f.id));
+        csv.push(',');
+        csv.push_str(&escape_csv_field(&geometry_to_wkt(&f.geometry)));
+
+        for key in &keys {
+            csv.push(',');
+            match f.properties.get(key) {
+                Some(PropertyValue::String(s)) => csv.push_str(&escape_csv_field(s)),
+                Some(PropertyValue::Number(n)) => csv.push_str(&n.to_string()),
+                Some(PropertyValue::Integer(i)) => csv.push_str(&i.to_string()),
+                Some(PropertyValue::Boolean(b)) => csv.push_str(&b.to_string()),
+                Some(PropertyValue::Null) => {},
+                Some(PropertyValue::Array(arr)) => {
+                    let vals: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
+                    csv.push_str(&escape_csv_field(&format!("[{}]", vals.join(";"))));
+                }
+                Some(PropertyValue::Object(obj)) => {
+                    let vals: Vec<String> = obj.iter().map(|(k, v)| format!("{}:{}", k, v)).collect();
+                    csv.push_str(&escape_csv_field(&format!("{{{}}}", vals.join(";"))));
+                }
+                None => {}
+            }
+        }
+        csv.push('\n');
+    }
+
+    csv
+}
+
+fn escape_csv_field(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+fn geometry_to_wkt(geom: &crate::models::GeoJsonGeometry) -> String {
+    match geom {
+        crate::models::GeoJsonGeometry::Point { coordinates } => {
+            if coordinates.len() >= 2 {
+                format!("POINT ({} {})", coordinates[0], coordinates[1])
+            } else {
+                "POINT EMPTY".to_string()
+            }
+        }
+        crate::models::GeoJsonGeometry::MultiPoint { coordinates } => {
+            let pts: Vec<String> = coordinates.iter()
+                .filter(|c| c.len() >= 2)
+                .map(|c| format!("{} {}", c[0], c[1]))
+                .collect();
+            format!("MULTIPOINT ({})", pts.join(", "))
+        }
+        crate::models::GeoJsonGeometry::LineString { coordinates } => {
+            let pts: Vec<String> = coordinates.iter()
+                .filter(|c| c.len() >= 2)
+                .map(|c| format!("{} {}", c[0], c[1]))
+                .collect();
+            format!("LINESTRING ({})", pts.join(", "))
+        }
+        crate::models::GeoJsonGeometry::MultiLineString { coordinates } => {
+            let lines: Vec<String> = coordinates.iter()
+                .map(|line| {
+                    let pts: Vec<String> = line.iter()
+                        .filter(|c| c.len() >= 2)
+                        .map(|c| format!("{} {}", c[0], c[1]))
+                        .collect();
+                    format!("({})", pts.join(", "))
+                })
+                .collect();
+            format!("MULTILINESTRING ({})", lines.join(", "))
+        }
+        crate::models::GeoJsonGeometry::Polygon { coordinates } => {
+            let rings: Vec<String> = coordinates.iter()
+                .map(|ring| {
+                    let pts: Vec<String> = ring.iter()
+                        .filter(|c| c.len() >= 2)
+                        .map(|c| format!("{} {}", c[0], c[1]))
+                        .collect();
+                    format!("({})", pts.join(", "))
+                })
+                .collect();
+            format!("POLYGON ({})", rings.join(", "))
+        }
+        crate::models::GeoJsonGeometry::MultiPolygon { coordinates } => {
+            let polys: Vec<String> = coordinates.iter()
+                .map(|poly| {
+                    let rings: Vec<String> = poly.iter()
+                        .map(|ring| {
+                            let pts: Vec<String> = ring.iter()
+                                .filter(|c| c.len() >= 2)
+                                .map(|c| format!("{} {}", c[0], c[1]))
+                                .collect();
+                            format!("({})", pts.join(", "))
+                        })
+                        .collect();
+                    format!("({})", rings.join(", "))
+                })
+                .collect();
+            format!("MULTIPOLYGON ({})", polys.join(", "))
+        }
+        crate::models::GeoJsonGeometry::GeometryCollection { geometries } => {
+            let geoms: Vec<String> = geometries.iter().map(|g| geometry_to_wkt(g)).collect();
+            format!("GEOMETRYCOLLECTION ({})", geoms.join(", "))
+        }
+    }
 }

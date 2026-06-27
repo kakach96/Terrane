@@ -23,7 +23,8 @@ import {
   CreateDataSourceRequest,
   UpdateDataSourceRequest,
   ConnectionTestResult,
-  UploadResult
+  UploadResult,
+  LayerGroup
 } from '../models/geoserver.models';
 
 @Injectable({
@@ -98,12 +99,13 @@ export class GeoserverService {
     const bounds: LayerBounds = (layer as any).native_bounds?.bounds || layer.bounds;
     if (!bounds) return '';
     const srs = (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
+    // 使用 WMS 1.1.1 避免 EPSG:4326 轴序问题
     const params = new URLSearchParams({
       service: 'WMS',
-      version: '1.3.0',
+      version: '1.1.1',
       request: 'GetMap',
       layers: layer.name,
-      crs: srs,
+      srs: srs,
       bbox: `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`,
       width: width.toString(),
       height: height.toString(),
@@ -124,11 +126,15 @@ export class GeoserverService {
       styles?: string;
     }
   ): string {
-    const bounds: LayerBounds = (layer as any).native_bounds?.bounds || layer.bounds;
-    if (!bounds) return '';
-
     const crs = options?.crs || (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
-    const bbox = options?.bbox || `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`;
+
+    // 优先使用显式传入的 bbox，其次从图层中读取
+    let bbox = options?.bbox;
+    if (!bbox) {
+      const bounds: LayerBounds = (layer as any).native_bounds?.bounds || layer.bounds;
+      if (!bounds) return '';
+      bbox = `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`;
+    }
 
     const layerName = layer.name.includes(':') 
       ? layer.name 
@@ -136,10 +142,10 @@ export class GeoserverService {
 
     const params = new URLSearchParams({
       service: 'WMS',
-      version: '1.3.0',
+      version: '1.1.1',
       request: 'GetMap',
       layers: layerName,
-      crs: crs,
+      srs: crs,
       bbox: bbox,
       width: (options?.width || 600).toString(),
       height: (options?.height || 400).toString(),
@@ -300,5 +306,43 @@ export class GeoserverService {
   /** 上传 GeoJSON (JSON body) */
   uploadGeoJson(geojson: any): Observable<ApiResponse<any>> {
     return this.http.post<ApiResponse<any>>(`${this.apiUrl}/data/upload`, geojson);
+  }
+
+  // ---- 图层组 ----
+
+  getLayerGroups(): Observable<LayerGroup[]> {
+    return this.http.get<ApiResponse<LayerGroup[]>>(`${this.apiUrl}/layer-groups`)
+      .pipe(map(response => response.data || []));
+  }
+
+  getLayerGroup(name: string): Observable<LayerGroup> {
+    return this.http.get<ApiResponse<LayerGroup>>(`${this.apiUrl}/layer-groups/${name}`)
+      .pipe(map(response => response.data as LayerGroup));
+  }
+
+  createLayerGroup(group: { name: string; title?: string; layers: string[] }): Observable<any> {
+    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/layer-groups`, group)
+      .pipe(map(response => response.data));
+  }
+
+  deleteLayerGroup(name: string): Observable<any> {
+    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/layer-groups/${name}`)
+      .pipe(map(response => response.data));
+  }
+
+  /** 导出图层要素为 GeoJSON */
+  exportFeaturesGeoJson(layerName: string): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/layers/${layerName}/features`, {
+      params: { format: 'application/json' },
+      responseType: 'blob'
+    });
+  }
+
+  /** 导出图层要素为 CSV */
+  exportFeaturesCsv(layerName: string): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/layers/${layerName}/features`, {
+      params: { format: 'text/csv' },
+      responseType: 'blob'
+    });
   }
 }
