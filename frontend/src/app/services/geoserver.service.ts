@@ -24,6 +24,8 @@ import {
   SqlView,
   CreateSqlViewRequest,
   UpdateSqlViewRequest,
+  Permission,
+  CreatePermissionRequest,
   ServerStatus,
   DataSource,
   CreateDataSourceRequest,
@@ -294,6 +296,29 @@ export class GeoserverService {
   deleteNamespace(prefix: string): Observable<void> {
     return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/namespaces/${prefix}`)
       .pipe(map(() => void 0));
+  }
+
+  // ---- 权限 ----
+
+  getPermissions(): Observable<Permission[]> {
+    return this.http.get<ApiResponse<Permission[]>>(`${this.apiUrl}/permissions`)
+      .pipe(map(response => response.data || []));
+  }
+
+  createPermission(request: CreatePermissionRequest): Observable<any> {
+    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/permissions`, request)
+      .pipe(map(response => response.data));
+  }
+
+  deletePermission(id: number): Observable<any> {
+    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/permissions/${id}`)
+      .pipe(map(response => response.data));
+  }
+
+  checkPermission(type: string, name: string, mode?: string): Observable<any> {
+    const modeParam = mode ? `?mode=${mode}` : '';
+    return this.http.get<ApiResponse<any>>(`${this.apiUrl}/permissions/check/${type}/${name}${modeParam}`)
+      .pipe(map(response => response.data));
   }
 
   getServerStatus(): Observable<ServerStatus> {

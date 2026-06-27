@@ -264,6 +264,28 @@ export interface UpdateSqlViewRequest {
   description?: string;
 }
 
+/** 权限 */
+export interface Permission {
+  id?: number;
+  username: string;
+  role: string;
+  resourceType: string;
+  resourceName: string;
+  accessMode: 'read' | 'write' | 'admin';
+  effect: 'allow' | 'deny';
+  priority: number;
+}
+
+export interface CreatePermissionRequest {
+  username?: string;
+  role?: string;
+  resourceType: string;
+  resourceName?: string;
+  accessMode?: string;
+  effect?: string;
+  priority?: number;
+}
+
 /** 上传结果 */
 export interface UploadResult {
   name: string;
