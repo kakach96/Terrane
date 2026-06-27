@@ -142,15 +142,15 @@ impl AppState {
 
         // GeoWebCache 初始化
         let tile_cache = config.gwc.as_ref().map(|gwc_config| {
-            let cache = TileCache::new(gwc_config.clone());
-            let rt = tokio::runtime::Handle::current();
-            rt.block_on(async {
-                if let Err(e) = cache.init().await {
-                    eprintln!("[GWC] 瓦片缓存初始化失败: {}", e);
-                }
-            });
-            cache
+            TileCache::new(gwc_config.clone())
         });
+
+        // 异步初始化瓦片缓存目录
+        if let Some(ref cache) = tile_cache {
+            if let Err(e) = cache.init().await {
+                eprintln!("[GWC] 瓦片缓存初始化失败: {}", e);
+            }
+        }
 
         AppState {
             config,
