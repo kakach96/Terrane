@@ -32,6 +32,10 @@ struct GetMapContext {
     angle: Option<f64>,
     /// 环境变量 (SLD 替换)
     env: Option<HashMap<String, String>>,
+    /// 时间过滤 (ISO 8601)
+    time: Option<String>,
+    /// 高程过滤
+    elevation: Option<String>,
 }
 
 struct LayerMetadata {
@@ -215,6 +219,8 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
         cql_filter,
         feature_id,
         angle: request.angle,
+        time: request.time.clone(),
+        elevation: request.elevation.clone(),
         env,
     })
 }
@@ -337,6 +343,16 @@ async fn query_all_layer_features(
         // 应用 FeatureId 过滤
         if let Some(ref fid_list) = context.feature_id {
             features.retain(|f| fid_list.contains(&f.id));
+        }
+
+        // 应用时间过滤 (TIME)
+        if let Some(ref time_str) = context.time {
+            filter_by_time(&mut features, time_str);
+        }
+
+        // 应用高程过滤 (ELEVATION)
+        if let Some(ref elev_str) = context.elevation {
+            filter_by_elevation(&mut features, elev_str);
         }
 
         debug!("[query_all_layer_features] 图层 '{}' 过滤后剩余 {} 个要素", 
@@ -1216,6 +1232,139 @@ fn calculate_scale_denom(bounds: &Bounds, width: u32, height: u32, crs: &str) ->
             ground_res * meters_per_degree / PIXEL_SIZE
         }
     }
+}
+
+/// 按时间过滤要素
+///
+/// TIME 参数格式: ISO 8601
+/// - 单个时间点: `2024-01-15`
+/// - 时间范围: `2024-01-01/2024-02-01`
+/// - 逗号分隔多个值: `2024-01-01,2024-02-01`
+///
+/// 要素属性中匹配字段: `time`, `datetime`, `date`, `timestamp`, `t`
+fn filter_by_time(features: &mut Vec<crate::models::Feature>, time_str: &str) {
+    let time_str = time_str.trim();
+    if time_str.is_empty() { return; }
+
+    // 尝试解析时间
+    let parse_time = |s: &str| -> Option<chrono::NaiveDateTime> {
+        // 尝试多种格式
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
+            return Some(dt);
+        }
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+            return Some(d.and_hms_opt(0, 0, 0).unwrap());
+        }
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+            return Some(dt);
+        }
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+            return Some(dt.naive_utc());
+        }
+        None
+    };
+
+    // 解析时间范围: start/end 或 comma,separated,values
+    let ranges: Vec<(Option<chrono::NaiveDateTime>, Option<chrono::NaiveDateTime>)> = if time_str.contains('/') {
+        // 范围格式
+        time_str.split('/').map(|part| {
+            let t = parse_time(part.trim());
+            (t, t)
+        }).collect::<Vec<_>>()
+        .chunks(2)
+        .filter_map(|chunk| {
+            if chunk.len() == 2 {
+                Some((chunk[0].0, chunk[1].0))
+            } else if chunk.len() == 1 {
+                Some((chunk[0].0, chunk[0].0))
+            } else {
+                None
+            }
+        }).collect()
+    } else {
+        // 逗号分隔或单个值
+        time_str.split(',').filter_map(|s| {
+            let t = parse_time(s.trim());
+            t.map(|t| (Some(t), Some(t)))
+        }).collect()
+    };
+
+    if ranges.is_empty() { return; }
+
+    // 查找要素中的时间属性
+    let time_keys = ["time", "datetime", "date", "timestamp", "t"];
+    features.retain(|f| {
+        for key in &time_keys {
+            if let Some(val) = f.properties.get(*key) {
+                let val_str = val.to_string();
+                if let Some(ft) = parse_time(&val_str) {
+                    // 检查是否在任意一个时间范围内
+                    return ranges.iter().any(|(start, end)| {
+                        match (start, end) {
+                            (Some(s), Some(e)) => ft >= *s && ft <= *e,
+                            (Some(s), None) => ft >= *s,
+                            (None, Some(e)) => ft <= *e,
+                            (None, None) => true,
+                        }
+                    });
+                }
+            }
+        }
+        // 没有时间属性则不过滤（保留）
+        true
+    });
+}
+
+/// 按高程过滤要素
+///
+/// ELEVATION 参数格式:
+/// - 单个值: `1000`
+/// - 范围: `500/2000`
+/// - 逗号分隔: `100,200,300`
+fn filter_by_elevation(features: &mut Vec<crate::models::Feature>, elev_str: &str) {
+    let elev_str = elev_str.trim();
+    if elev_str.is_empty() { return; }
+
+    let elev_keys = ["elevation", "elev", "height", "z", "altitude", "depth"];
+
+    // 解析高程范围
+    let ranges: Vec<(Option<f64>, Option<f64>)> = if elev_str.contains('/') {
+        let parts: Vec<&str> = elev_str.split('/').collect();
+        if parts.len() == 2 {
+            let low = parts[0].trim().parse::<f64>().ok();
+            let high = parts[1].trim().parse::<f64>().ok();
+            vec![(low, high)]
+        } else {
+            vec![]
+        }
+    } else {
+        // 逗号分隔或单个值
+        elev_str.split(',').filter_map(|s| {
+            let v = s.trim().parse::<f64>().ok();
+            v.map(|v| (Some(v), Some(v)))
+        }).collect()
+    };
+
+    if ranges.is_empty() { return; }
+
+    features.retain(|f| {
+        for key in &elev_keys {
+            if let Some(val) = f.properties.get(*key) {
+                let val_str = val.to_string();
+                if let Ok(fe) = val_str.parse::<f64>() {
+                    return ranges.iter().any(|(start, end)| {
+                        match (start, end) {
+                            (Some(s), Some(e)) => fe >= *s && fe <= *e,
+                            (Some(s), None) => fe >= *s,
+                            (None, Some(e)) => fe <= *e,
+                            (None, None) => true,
+                        }
+                    });
+                }
+            }
+        }
+        true
+    });
 }
 
 fn parse_color(color: &str) -> [u8; 4] {
