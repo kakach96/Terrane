@@ -2,6 +2,7 @@
 
 use actix_web::{web, App, HttpServer, middleware, HttpResponse};
 use actix_files::Files;
+use actix_cors::Cors;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::fmt::format::Writer;
@@ -119,9 +120,41 @@ async fn main() -> std::io::Result<()> {
 
     let app_state = web::Data::new(AppState::new(config).await);
 
+    let cors_config = app_state.config.cors.clone();
+
     HttpServer::new(move || {
+        // CORS 中间件
+        let cors_middleware = if cors_config.enabled {
+            let has_specific_origins = cors_config.allowed_origins.iter()
+                .any(|o| o != "*");
+            let mut cors = if has_specific_origins {
+                let mut c = Cors::default();
+                for origin in &cors_config.allowed_origins {
+                    c = c.allowed_origin(origin);
+                }
+                for method in &cors_config.allowed_methods {
+                    c = c.allowed_methods(vec![method.as_str()]);
+                }
+                for header in &cors_config.allowed_headers {
+                    c = c.allowed_header(header);
+                }
+                c
+            } else {
+                Cors::permissive()
+            };
+            cors = cors.max_age(Some(cors_config.max_age as usize));
+            if cors_config.allow_credentials {
+                cors = cors.supports_credentials();
+            }
+
+            cors
+        } else {
+            Cors::default()
+        };
+
         App::new()
             .app_data(app_state.clone())
+            .wrap(cors_middleware)
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .configure(|svc| routes::configure_routes(svc, &api_context))

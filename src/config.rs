@@ -13,6 +13,9 @@ pub struct GeoServerConfig {
     /// GeoWebCache 瓦片缓存配置
     #[serde(default)]
     pub gwc: Option<GwcConfig>,
+    /// CORS 配置
+    #[serde(default)]
+    pub cors: CorsConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -84,6 +87,52 @@ pub struct LayerConfig {
     pub style: Option<String>,
 }
 
+/// CORS 配置
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CorsConfig {
+    /// 是否启用 CORS (默认: true)
+    #[serde(default = "default_cors_enabled")]
+    pub enabled: bool,
+    /// 允许的来源 (默认: ["*"])
+    #[serde(default = "default_cors_origins")]
+    pub allowed_origins: Vec<String>,
+    /// 允许的方法 (默认: ["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    #[serde(default = "default_cors_methods")]
+    pub allowed_methods: Vec<String>,
+    /// 允许的头 (默认: ["*"])
+    #[serde(default = "default_cors_headers")]
+    pub allowed_headers: Vec<String>,
+    /// 是否允许凭据 (默认: true)
+    #[serde(default = "default_cors_credentials")]
+    pub allow_credentials: bool,
+    /// 预检请求缓存时间 (秒, 默认: 3600)
+    #[serde(default = "default_cors_max_age")]
+    pub max_age: u64,
+}
+
+fn default_cors_enabled() -> bool { true }
+fn default_cors_origins() -> Vec<String> { vec!["*".to_string()] }
+fn default_cors_methods() -> Vec<String> { vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string(), "OPTIONS".to_string(), "PATCH".to_string()] }
+fn default_cors_headers() -> Vec<String> { vec!["*".to_string()] }
+fn default_cors_credentials() -> bool { true }
+fn default_cors_max_age() -> u64 { 3600 }
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        CorsConfig {
+            enabled: true,
+            allowed_origins: vec!["*".to_string()],
+            allowed_methods: vec![
+                "GET".to_string(), "POST".to_string(), "PUT".to_string(),
+                "DELETE".to_string(), "OPTIONS".to_string(), "PATCH".to_string()
+            ],
+            allowed_headers: vec!["*".to_string()],
+            allow_credentials: true,
+            max_age: 3600,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BoundsConfig {
     pub minx: f64,
@@ -115,6 +164,7 @@ impl Default for GeoServerConfig {
                 meta_dir: PathBuf::from("./data/gwc/meta"),
                 ..Default::default()
             }),
+            cors: CorsConfig::default(),
         }
     }
 }
