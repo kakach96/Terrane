@@ -5,6 +5,7 @@ pub mod style;
 pub mod data_source;
 pub mod namespace;
 pub mod sql_view;
+pub mod permission;
 
 pub use bounds::{Bounds, BoundingBox, CoordinateReferenceSystem};
 pub use feature::{Feature, FeatureCollection, GeoJsonGeometry, PropertyValue};

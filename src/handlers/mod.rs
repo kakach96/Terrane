@@ -12,6 +12,7 @@ pub mod namespace_handler;
 pub mod store_handler;
 pub mod sql_view_handler;
 pub mod auth_handler;
+pub mod permission_handler;
 pub mod features;
 pub mod upload_handler;
 
@@ -29,3 +30,4 @@ pub use store_handler::*;
 pub use wmts_handler::*;
 pub use sql_view_handler::*;
 pub use auth_handler::*;
+pub use permission_handler::*;

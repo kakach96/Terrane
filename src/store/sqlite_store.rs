@@ -235,6 +235,28 @@ impl SqliteStore {
             [],
         )?;
 
+        // 权限表
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS permissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL DEFAULT '*',
+                role TEXT NOT NULL DEFAULT '*',
+                resource_type TEXT NOT NULL,
+                resource_name TEXT NOT NULL DEFAULT '*',
+                access_mode TEXT NOT NULL DEFAULT 'read',
+                effect TEXT NOT NULL DEFAULT 'allow',
+                priority INTEGER DEFAULT 0
+            )",
+            [],
+        )?;
+
+        // 默认权限: admin 拥有所有权限
+        conn.execute(
+            "INSERT OR IGNORE INTO permissions (username, role, resource_type, resource_name, access_mode, effect, priority)
+             VALUES ('*', 'admin', '*', '*', 'admin', 'allow', 100)",
+            [],
+        ).ok();
+
         Ok(())
     }
 
@@ -1184,5 +1206,84 @@ impl SqliteStore {
             rusqlite::params![username, action, resource, detail, ip_address, now],
         )?;
         Ok(())
+    }
+
+    // ========================================================================
+    // 权限管理
+    // ========================================================================
+
+    pub async fn get_permissions(&self) -> SqlResult<Vec<crate::models::permission::Permission>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, username, role, resource_type, resource_name, access_mode, effect, priority
+             FROM permissions ORDER BY priority DESC, resource_type, resource_name"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(crate::models::permission::Permission {
+                id: Some(row.get(0)?),
+                username: row.get(1)?,
+                role: row.get(2)?,
+                resource_type: row.get(3)?,
+                resource_name: row.get(4)?,
+                access_mode: row.get::<_, String>(5)?.parse().unwrap_or(crate::models::permission::AccessMode::Read),
+                effect: row.get::<_, String>(6)?.parse().unwrap_or(crate::models::permission::Effect::Allow),
+                priority: row.get(7)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub async fn create_permission(&self, p: &crate::models::permission::Permission) -> SqlResult<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO permissions (username, role, resource_type, resource_name, access_mode, effect, priority)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![p.username, p.role, p.resource_type, p.resource_name,
+                   p.access_mode.to_string(), p.effect.to_string(), p.priority],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub async fn delete_permission(&self, id: i64) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM permissions WHERE id = ?", [id])?;
+        Ok(())
+    }
+
+    /// 检查用户是否有权访问指定资源
+    pub async fn check_permission(
+        &self,
+        username: &str,
+        role: &str,
+        resource_type: &str,
+        resource_name: &str,
+        required_mode: &str,
+    ) -> SqlResult<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        // 查询匹配的权限规则，按优先级排序
+        let sql = "SELECT effect, priority FROM permissions
+                   WHERE (username = ?1 OR username = '*')
+                     AND (role = ?2 OR role = '*')
+                     AND (resource_type = ?3 OR resource_type = '*')
+                     AND (resource_name = ?4 OR resource_name = '*')
+                     AND (access_mode = ?5 OR access_mode = 'admin')
+                   ORDER BY priority DESC LIMIT 1";
+
+        let result = conn.query_row(sql, rusqlite::params![username, role, resource_type, resource_name, required_mode],
+            |row| {
+                let effect: String = row.get(0)?;
+                Ok(effect == "allow")
+            }
+        );
+
+        match result {
+            Ok(allowed) => Ok(allowed),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                // 没有匹配规则时，admin 默认有权限，其他人默认无权限
+                Ok(role == "admin")
+            }
+            Err(e) => Err(e),
+        }
     }
 }

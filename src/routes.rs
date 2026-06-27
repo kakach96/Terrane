@@ -145,6 +145,14 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
             .route("/auth/users", web::get().to(crate::handlers::list_users))
             .route("/auth/users", web::post().to(crate::handlers::create_user))
             .route("/auth/users/{username}", web::delete().to(crate::handlers::delete_user))
+            // 权限
+            .service(
+                web::resource("/permissions")
+                    .route(web::get().to(crate::handlers::list_permissions))
+                    .route(web::post().to(crate::handlers::create_permission))
+            )
+            .route("/permissions/{id}", web::delete().to(crate::handlers::delete_permission))
+            .route("/permissions/check/{type}/{name}", web::get().to(crate::handlers::check_permission_handler))
             .service(
                 web::resource("/sql-views")
                     .route(web::get().to(crate::handlers::list_sql_views))
