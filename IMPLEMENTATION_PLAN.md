@@ -8,14 +8,14 @@
 
 | 功能领域 | 已实现 | 部分实现 | 未实现 | 总进度 |
 |---------|:-----:|:--------:|:-----:|:-----:|
-| OGC 核心服务 | 4/7 | 0 | 3 | **57%** |
-| REST API | 9/16 | 0 | 7 | **56%** |
+| OGC 核心服务 | 5/7 | 0 | 2 | **71%** |
+| REST API | 11/16 | 0 | 5 | **69%** |
 | 数据源类型 | 3/15 | 0 | 12 | **20%** |
 | 样式系统 | 1/5 | 1 | 3 | **30%** |
-| 瓦片缓存 | 1/6 | 1 | 4 | **25%** |
+| 瓦片缓存 | 2/6 | 0 | 4 | **33%** |
 | 安全性 | 0/7 | 0 | 7 | **0%** |
 | 扩展功能 | 0/14 | 0 | 14 | **0%** |
-| **总进度** | | | | **~32%** |
+| **总进度** | | | | **~42%** |
 
 ---
 
@@ -67,16 +67,50 @@
 - ✅ **Shapefile** — ESRI Shapefile 矢量格式
 - ✅ **GeoTIFF** — GeoTIFF 栅格格式
 
-### 1.4 前端功能
+### 1.4 扩展 REST API
+
+| 端点 | 功能 | 状态 |
+|------|------|:----:|
+| `/namespaces` | 命名空间 CRUD | ✅ **新** |
+| `/stores` | 存储管理 (DataStore/CoverageStore) | ✅ **新** |
+| `/workspaces/{ws}/stores` | 按工作空间列存储 | ✅ **新** |
+| `/sql-views` | SQL 视图 CRUD | ✅ **新** |
+| `/sql-views/preview` | SQL 预览执行 | ✅ **新** |
+| `/tiles/cache/clear/{layer}` | 清除瓦片缓存 | ✅ **新** |
+| `/tiles/cache/stats` | 缓存统计 | ✅ **新** |
+
+### 1.5 新增 OGC 服务
+
+| 服务 | 操作 | 状态 |
+|------|------|:----:|
+| **WMTS 1.0.0** | GetCapabilities / GetTile / GetFeatureInfo | ✅ **新** |
+| **CQL/ECQL Filter** | 比较/逻辑/空间/IN/BETWEEN/LIKE | ✅ **新** |
+
+### 1.6 新增输出格式
+
+- ✅ **WMS 多格式**: SVG (矢量) / KML / GeoJSON
+- ✅ **WFS 多格式**: CSV / GML 2.1.2 / GML 3.2.1
+- ✅ **WMS Vendor 参数**: cql_filter / env / angle / featureId
+- ✅ **WMS TIME/ELEVATION**: ISO 8601 时间过滤 + 数值高程过滤
+
+### 1.7 基础设施
+
+- ✅ **GeoWebCache 瓦片缓存**: 磁盘缓存 + 过期 + Gridset
+- ✅ **SQL 视图**: 参数化 SQL → 虚拟图层
+- ✅ **WCS 子集增强**: 空间裁剪 + 分辨率重采样
+
+### 1.8 前端功能
 
 - ✅ 仪表盘 (Dashboard)
 - ✅ 图层列表/创建/详情/预览
 - ✅ 要素 CRUD
 - ✅ 工作区管理
+- ✅ 命名空间管理 (NamespacesComponent) — **新**
+- ✅ 存储管理 (StoresComponent) — **新**
 - ✅ 数据源管理（PostGIS/Shapefile/GeoTIFF）
 - ✅ SLD 样式管理（含模板）
 - ✅ 图层组管理
-- ✅ 瓦片图层页面（静态演示数据）
+- ✅ 瓦片图层 + GeoWebCache 统计 (TileLayersComponent 改版) — **新**
 - ✅ 服务器状态页面
 - ✅ 文件上传支持（GeoJSON/Shapefile/GeoTIFF）
 
@@ -84,12 +118,7 @@
 
 ## 二、⚠️ 部分实现功能
 
-### 2.1 瓦片服务 (Tile Service)
-
-- 基本瓦片端点已实现：`/tiles/{layer}/{z}/{x}/{y}`
-- **缺少**：GeoWebCache 完整缓存机制、Gridsets、磁盘配额、BlobStore 管理、种子/刷新、WMTS 标准协议
-
-### 2.2 SLD 样式
+### 2.1 SLD 样式
 
 - 基本 CRUD 和 SLD 渲染支持
 - **缺少**：CSS Styling、YSLD、MBStyle、渲染变换、几何变换、标注障碍、z-order、复合/混合模式
@@ -98,27 +127,22 @@
 
 ## 三、❌ 未实现功能（按优先级排序）
 
-### P0 — 核心基础（建议优先实现）
+### P0 — 核心基础 ✅ 已完成
 
-| # | 功能 | 说明 | 预估工作量 |
-|---|------|------|:---------:|
-| 1 | **WMTS 标准服务** | 实现 WMTS 1.0.0 的 GetCapabilities/GetTile/GetFeatureInfo，支持多 Gridset | 2-3 周 |
-| 2 | **GeoWebCache 缓存引擎** | 瓦片缓存层：磁盘缓存、缓存过期、条件刷新、种子任务 | 3-4 周 |
-| 3 | **命名空间 (Namespace) 管理** | REST API：`/namespaces` CRUD，将命名空间从工作区中分离 | 1 周 |
-| 4 | **Store 独立管理** | 将数据源拆分为 CoverageStore / DataStore，与 Layer 解耦 | 2 周 |
-| 5 | **SQL 视图 (SQL View)** | 允许用户定义参数化 SQL 查询作为虚拟图层 | 2 周 |
+- ✅ WMTS 标准服务
+- ✅ GeoWebCache 缓存引擎
+- ✅ 命名空间管理
+- ✅ Store 独立管理
+- ✅ SQL 视图
 
-### P1 — OGC 服务增强
+### P1 — OGC 服务增强 ✅ 已完成
 
-| # | 功能 | 说明 | 预估工作量 |
-|---|------|------|:---------:|
-| 6 | **WMS 时间 & 高程支持** | 支持 TIME/ELEVATION 维度参数，多维数据可视化 | 2-3 周 |
-| 7 | **WMS 多格式输出** | SVG、PDF、KML 等更多输出格式 | 1-2 周 |
-| 8 | **WMS Vendor 参数** | cql_filter、env、featureId、angle 等 GeoServer 特有参数 | 1 周 |
-| 9 | **WFS 2.0 完整支持** | GetPropertyValue、StoredQuery、联接查询 | 2 周 |
-| 10 | **WFS 多格式输出** | CSV、Shapefile-Download、GeoJSON、GML2/3 等 | 1-2 周 |
-| 11 | **WCS 范围子集 (Subsetting)** | 更完善的时间和空间子集支持 | 1 周 |
-| 12 | **ECQL/CQL 过滤器** | 增强 WFS/WMS 过滤器语法支持 | 1-2 周 |
+- ✅ WMS 时间 & 高程支持
+- ✅ WMS 多格式输出 (SVG/KML/GeoJSON)
+- ✅ WMS Vendor 参数 (cql_filter/env/angle/featureId)
+- ✅ WFS 多格式输出 (CSV/GML2/GML3.2)
+- ✅ WCS 范围子集
+- ✅ ECQL/CQL 过滤器 |
 
 ### P2 — 数据源扩展
 
@@ -239,13 +263,13 @@
 ## 六、📊 当前功能清单汇总
 
 ```
-OGC 服务     ████████░░░░░░░░░  43%
-REST API     ████████░░░░░░░░░  44%
+OGC 服务     █████████████░░░░  71%
+REST API     █████████████░░░░  69%
 数据源        ████░░░░░░░░░░░░  20%
 样式系统      ██████░░░░░░░░░░  30%
-瓦片缓存      ██░░░░░░░░░░░░░░   8%
+瓦片缓存      ██████░░░░░░░░░░  33%
 安全性        ░░░░░░░░░░░░░░░░   0%
 扩展功能      ░░░░░░░░░░░░░░░░   0%
 ──────────────────────────────
-总进度        ████░░░░░░░░░░░░  24%
+总进度        ████████░░░░░░░░  42%
 ```
