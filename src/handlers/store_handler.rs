@@ -27,6 +27,7 @@ fn ds_type_to_store_type(ds_type: &DataSourceType) -> &'static str {
     match ds_type {
         DataSourceType::Postgis | DataSourceType::Shapefile | DataSourceType::Geopackage => "DataStore",
         DataSourceType::Geotiff | DataSourceType::WorldImage => "CoverageStore",
+        DataSourceType::CascadedWms => "CascadedStore",
     }
 }
 

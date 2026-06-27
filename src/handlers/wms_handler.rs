@@ -144,6 +144,18 @@ async fn handle_get_map(state: &AppState, request: &WmsRequest) -> Result<HttpRe
     info!("[GetMap] 开始查询图层元数据");
     let layer_metadata_list = resolve_layer_metadata(state, &context).await?;
 
+    // 检查是否有级联 WMS 图层 → 直接代理请求
+    for meta in &layer_metadata_list {
+        if meta.data_source_type == DataSourceType::CascadedWms {
+            if let Some(ref conn) = meta.connection {
+                if let Some(ref _host) = conn.host {
+                    info!("[GetMap] 图层 '{}' 使用级联 WMS，开始代理请求", meta.layer_name);
+                    return handle_cascaded_wms_request(state, &context, meta).await;
+                }
+            }
+        }
+    }
+
     info!("[GetMap] 开始查询图层要素");
     let mut layer_contexts = query_all_layer_features(state, &context, &layer_metadata_list).await?;
 
@@ -1365,6 +1377,60 @@ fn filter_by_elevation(features: &mut Vec<crate::models::Feature>, elev_str: &st
         }
         true
     });
+}
+
+/// 处理级联 WMS 请求 — 代理到上游 WMS 服务器
+async fn handle_cascaded_wms_request(
+    state: &AppState,
+    context: &GetMapContext,
+    meta: &LayerMetadata,
+) -> Result<HttpResponse, GeoServerError> {
+    use crate::utils::cascaded::{extract_cascaded_config, fetch_cascaded_map};
+
+    let conn = meta.connection.as_ref()
+        .ok_or_else(|| GeoServerError::BadRequest("级联 WMS 缺少连接配置".to_string()))?;
+
+    let config = extract_cascaded_config(conn)
+        .ok_or_else(|| GeoServerError::BadRequest("无法解析级联 WMS 配置".to_string()))?;
+
+    // 如果请求的是 OpenLayers 预览，回退到本地渲染
+    if context.format.to_lowercase().contains("openlayers") {
+        return render_openlayers_preview(context, state);
+    }
+
+    // 映射输出格式
+    let remote_format = match context.format.to_lowercase().as_str() {
+        s if s.contains("png") => "image/png",
+        s if s.contains("jpeg") || s.contains("jpg") => "image/jpeg",
+        s if s.contains("gif") => "image/gif",
+        s if s.contains("geojson") || s.contains("json") => "application/json",
+        s if s.contains("svg") => "image/svg+xml",
+        _ => "image/png",
+    };
+
+    let bbox_str = format!("{},{},{},{}",
+        context.bounds.minx, context.bounds.miny,
+        context.bounds.maxx, context.bounds.maxy);
+
+    let srs = &context.output_crs;
+    let style = context.layers.first()
+        .and_then(|_| None); // 暂不使用样式
+
+    match fetch_cascaded_map(
+        &config, &bbox_str, context.width, context.height,
+        remote_format, srs, style, context.transparent,
+    ).await {
+        Ok((bytes, content_type)) => {
+            state.request_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(HttpResponse::Ok()
+                .content_type(content_type.as_str())
+                .body(bytes))
+        }
+        Err(e) => {
+            warn!("[Cascaded] 代理请求失败: {}", e);
+            Err(GeoServerError::ServiceError(format!("级联 WMS 请求失败: {}", e)))
+        }
+    }
 }
 
 fn parse_color(color: &str) -> [u8; 4] {

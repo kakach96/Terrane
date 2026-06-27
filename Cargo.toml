@@ -42,6 +42,8 @@ tiff = "0.9"
 zip = "2"
 # 临时文件
 tempfile = "3"
+# HTTP 客户端 (级联服务)
+reqwest = { version = "0.11", features = ["json"] }
 
 [dev-dependencies]
 actix-rt = "2"

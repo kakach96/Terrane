@@ -20,7 +20,8 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'shapefile', label: 'Shapefile' },
     { value: 'geotiff', label: 'GeoTIFF' },
     { value: 'geopackage', label: 'GeoPackage' },
-    { value: 'worldimage', label: 'WorldImage' }
+    { value: 'worldimage', label: 'WorldImage' },
+    { value: 'cascaded_wms', label: '级联 WMS' }
   ];
   isTesting = false;
   selectedFile: File | null = null;

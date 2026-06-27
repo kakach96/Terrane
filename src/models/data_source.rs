@@ -35,6 +35,7 @@ pub enum DataSourceType {
     Geotiff,
     Geopackage,
     WorldImage,
+    CascadedWms,
 }
 
 impl std::fmt::Display for DataSourceType {
@@ -45,6 +46,7 @@ impl std::fmt::Display for DataSourceType {
             DataSourceType::Geotiff => write!(f, "geotiff"),
             DataSourceType::Geopackage => write!(f, "geopackage"),
             DataSourceType::WorldImage => write!(f, "worldimage"),
+            DataSourceType::CascadedWms => write!(f, "cascaded_wms"),
         }
     }
 }

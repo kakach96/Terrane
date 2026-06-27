@@ -10,3 +10,4 @@ pub mod worldimage;
 pub mod bounds;
 pub mod tile_cache;
 pub mod cql_filter;
+pub mod cascaded;

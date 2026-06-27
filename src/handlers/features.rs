@@ -49,6 +49,10 @@ pub async fn query_layer_features(
                 info!("[Features] WorldImage 是栅格格式，通过 WCS 访问");
                 return Ok(Vec::new());
             }
+            DataSourceType::CascadedWms => {
+                info!("[Features] CascadedWms 是级联服务，通过 WMS 代理访问");
+                return Ok(Vec::new());
+            }
         }
     }
 

@@ -36,6 +36,7 @@ pub async fn compute_layer_bounds(
         }
         DataSourceType::Geopackage => compute_geopackage_bounds(ds),
         DataSourceType::WorldImage => compute_worldimage_bounds(ds),
+        DataSourceType::CascadedWms => Ok(None),
     }
 }
 

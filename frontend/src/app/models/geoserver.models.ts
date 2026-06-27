@@ -180,7 +180,7 @@ export interface CreateDataSourceRequest {
 }
 
 export interface UpdateDataSourceRequest {
-  type?: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage';
+  type?: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage' | 'worldimage' | 'cascaded_wms';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;
