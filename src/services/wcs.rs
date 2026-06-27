@@ -406,39 +406,94 @@ pub fn parse_wcs_request(params: &[(String, String)]) -> Result<WcsRequest, crat
 }
 
 fn parse_subset(value: &str) -> Result<Subset, crate::error::GeoServerError> {
+    // WCS 2.0 SUBSET 格式:
+    //   SUBSET=axis_label,min_value,max_value[,crs][,resolution]
+    //   SUBSET=axis_label,value[,crs]
+    //   SUBSET=axis_label(min_value,max_value)  (备用格式)
+    let value = value.trim();
     let parts: Vec<&str> = value.split(',').collect();
+
     if parts.is_empty() {
-        return Err(crate::error::GeoServerError::BadRequest("Invalid subset format".to_string()));
+        return Err(crate::error::GeoServerError::BadRequest(
+            "Invalid SUBSET format: empty".to_string()
+        ));
     }
-    
-    let axis_label = parts[0].to_string();
-    let crs = parts.get(3).map(|s| s.to_string());
-    
-    if parts.len() >= 3 {
-        if parts[1] == "min" && parts.len() >= 4 {
-            Ok(Subset {
-                axis_label,
-                crs,
-                subset_type: SubsetType::Intervals {
-                    min: parts[2].parse().unwrap_or(0.0),
-                    max: parts[3].parse().unwrap_or(0.0),
-                    resolution: parts.get(5).and_then(|s| s.parse().ok()),
-                },
-            })
-        } else {
-            Ok(Subset {
-                axis_label,
+
+    let axis_label = parts[0].trim().to_string();
+    let crs = parts.get(3).map(|s| s.trim().to_string())
+        .or_else(|| parts.get(2).map(|s| s.trim().to_string()).filter(|s| s.to_uppercase().starts_with("EPSG:")));
+
+    // 解析括号格式: axis(min,max) 或 axis(value)
+    if axis_label.contains('(') && value.ends_with(')') {
+        if let Some(paren_idx) = axis_label.find('(') {
+            let clean_axis = axis_label[..paren_idx].trim().to_string();
+            let inner = &value[value.find('(').unwrap_or(0) + 1..value.len() - 1];
+            let inner_parts: Vec<&str> = inner.split(',').collect();
+            if inner_parts.len() >= 2 {
+                let min: f64 = inner_parts[0].trim().parse().unwrap_or(0.0);
+                let max: f64 = inner_parts[1].trim().parse().unwrap_or(0.0);
+                let resolution = inner_parts.get(2).and_then(|s| s.trim().parse().ok());
+                return Ok(Subset {
+                    axis_label: clean_axis,
+                    crs,
+                    subset_type: SubsetType::Intervals { min, max, resolution },
+                });
+            }
+            return Ok(Subset {
+                axis_label: clean_axis,
                 crs,
                 subset_type: SubsetType::Position {
-                    value: parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                    value: inner.trim().parse().unwrap_or(0.0),
                 },
-            })
+            });
         }
-    } else {
-        Ok(Subset {
-            axis_label,
-            crs,
-            subset_type: SubsetType::Position { value: 0.0 },
-        })
     }
+
+    // 逗号分隔格式
+    if parts.len() >= 3 {
+        let first_val = parts[1].trim();
+        let second_val = parts.get(2).map(|s| s.trim()).unwrap_or("");
+
+        // 检查是否为 intervals (两个数值)
+        if let (Ok(min), Ok(max)) = (first_val.parse::<f64>(), second_val.parse::<f64>()) {
+            // 检查第四个参数是否为 resolution 而非 CRS
+            let resolution = if parts.len() >= 5 {
+                parts[4].trim().parse::<f64>().ok()
+            } else if parts.len() >= 4 {
+                // 判断第四个值是 EPSG 还是 resolution
+                let fourth = parts[3].trim();
+                if !fourth.to_uppercase().starts_with("EPSG:") && !fourth.to_uppercase().starts_with("CRS:") {
+                    fourth.parse::<f64>().ok()
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            return Ok(Subset {
+                axis_label,
+                crs,
+                subset_type: SubsetType::Intervals { min, max, resolution },
+            });
+        }
+    }
+
+    // 单值格式 (Position)
+    if parts.len() >= 2 {
+        if let Ok(val) = parts[1].trim().parse::<f64>() {
+            return Ok(Subset {
+                axis_label,
+                crs,
+                subset_type: SubsetType::Position { value: val },
+            });
+        }
+    }
+
+    // 回退: 默认 position=0
+    Ok(Subset {
+        axis_label,
+        crs,
+        subset_type: SubsetType::Position { value: 0.0 },
+    })
 }

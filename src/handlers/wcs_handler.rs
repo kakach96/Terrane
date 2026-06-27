@@ -5,7 +5,7 @@ use crate::error::GeoServerError;
 use crate::models::DataSourceType;
 use crate::utils::geotiff;
 use quick_xml::se::to_string;
-use tracing::info;
+use tracing::{info, warn};
 
 pub async fn handle_wcs_request(
     query: web::Query<Vec<(String, String)>>,
@@ -135,51 +135,13 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
 
                         match geotiff::read_geotiff(file_path) {
                             Ok(coverage_data) => {
-                                // 应用子集（裁剪）
-                                let img = if let Some(ref subsets) = request.subsets {
-                                    let mut bbox_minx = None;
-                                    let mut bbox_miny = None;
-                                    let mut bbox_maxx = None;
-                                    let mut bbox_maxy = None;
+                                // 1. 应用子集（空间裁剪 / 时间裁剪）
+                                let img = apply_coverage_subsets(&coverage_data, &request.subsets, &request.size);
 
-                                    for subset in subsets {
-                                        if let crate::services::wcs::SubsetType::Intervals { min, max, .. } = subset.subset_type {
-                                            match subset.axis_label.to_lowercase().as_str() {
-                                                "x" | "long" | "i" => {
-                                                    bbox_minx = Some(min);
-                                                    bbox_maxx = Some(max);
-                                                }
-                                                "y" | "lat" | "j" => {
-                                                    bbox_miny = Some(min);
-                                                    bbox_maxy = Some(max);
-                                                }
-                                                _ => {}
-                                            }
-                                        }
-                                    }
-
-                                    if let (Some(minx), Some(miny), Some(maxx), Some(maxy)) =
-                                        (bbox_minx, bbox_miny, bbox_maxx, bbox_maxy)
-                                    {
-                                        let bounds = crate::models::Bounds::new(minx, miny, maxx, maxy);
-                                        geotiff::crop_coverage(&coverage_data, &bounds)
-                                            .unwrap_or(coverage_data.rgba_image.clone())
-                                    } else {
-                                        coverage_data.rgba_image.clone()
-                                    }
-                                } else {
-                                    coverage_data.rgba_image.clone()
-                                };
-
-                                // 按请求的宽度/高度缩放
-                                let mut width = img.width();
-                                let mut height = img.height();
-                                if let Some(ref size) = request.size {
-                                    if size.len() >= 2 {
-                                        width = size[0] as u32;
-                                        height = size[1] as u32;
-                                    }
-                                }
+                                // 2. 按请求的宽度/高度缩放
+                                let (width, height) = calculate_output_size(
+                                    img.width(), img.height(), &request.size
+                                );
 
                                 let final_img = if width != img.width() || height != img.height() {
                                     image::imageops::resize(&img, width, height, image::imageops::FilterType::Lanczos3)
@@ -187,43 +149,8 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
                                     img
                                 };
 
-                                // 编码输出
-                                let mut buffer = Vec::new();
-                                let (content_type, fmt) = match output_format.as_str() {
-                                    "image/png" => ("image/png", image::ImageFormat::Png),
-                                    "image/jpeg" | "image/jpg" => ("image/jpeg", image::ImageFormat::Jpeg),
-                                    "image/tiff" | "image/tif" | _ => ("image/tiff", image::ImageFormat::Tiff),
-                                };
-
-                                if fmt == image::ImageFormat::Jpeg {
-                                    let rgb = image::DynamicImage::ImageRgba8(final_img).to_rgb8();
-                                    rgb.write_to(&mut std::io::Cursor::new(&mut buffer), fmt)
-                                        .map_err(|e| GeoServerError::RenderingError(e.to_string()))?;
-                                } else {
-                                    // TIFF 编码：先转为 RGB（TIFF 不能直接编码 RGBA）
-                                    let encoded = if fmt == image::ImageFormat::Tiff {
-                                        let rgb = image::DynamicImage::ImageRgba8(final_img).to_rgb8();
-                                        let mut b = Vec::new();
-                                        rgb.write_to(&mut std::io::Cursor::new(&mut b), fmt)
-                                            .map_err(|e| GeoServerError::RenderingError(e.to_string()))?;
-                                        b
-                                    } else {
-                                        let mut b = Vec::new();
-                                        final_img.write_to(&mut std::io::Cursor::new(&mut b), fmt)
-                                            .map_err(|e| GeoServerError::RenderingError(e.to_string()))?;
-                                        b
-                                    };
-
-                                    return Ok(HttpResponse::Ok()
-                                        .content_type(content_type)
-                                        .append_header(("Content-Description", format!("Coverage: {}", coverage_id)))
-                                        .body(encoded));
-                                }
-
-                                return Ok(HttpResponse::Ok()
-                                    .content_type(content_type)
-                                    .append_header(("Content-Description", format!("Coverage: {}", coverage_id)))
-                                    .body(buffer));
+                                // 3. 编码输出
+                                return encode_coverage_output(final_img, &output_format, coverage_id);
                             }
                             Err(e) => {
                                 info!("[WCS] GeoTIFF 读取失败: {}, 回退到生成图像", e);
@@ -254,13 +181,137 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
         }
     }
 
-    let mut buffer = Vec::new();
-    let (content_type, fmt) = match output_format.as_str() {
-        "image/png" => ("image/png", image::ImageFormat::Png),
-        "image/jpeg" | "image/jpg" => ("image/jpeg", image::ImageFormat::Jpeg),
-        "image/tiff" | "image/tif" | _ => ("image/tiff", image::ImageFormat::Tiff),
+    encode_coverage_output(img, &output_format, coverage_id)
+}
+
+/// 应用 WCS 子集参数（空间裁剪、时间裁剪等）
+fn apply_coverage_subsets(
+    coverage: &crate::utils::geotiff::CoverageData,
+    subsets: &Option<Vec<crate::services::wcs::Subset>>,
+    size: &Option<Vec<i64>>,
+) -> image::RgbaImage {
+    let img = coverage.rgba_image.clone();
+
+    let subsets = match subsets {
+        Some(s) => s,
+        None => return img,
     };
 
+    let mut bbox_minx: Option<f64> = None;
+    let mut bbox_miny: Option<f64> = None;
+    let mut bbox_maxx: Option<f64> = None;
+    let mut bbox_maxy: Option<f64> = None;
+    let mut use_resolution: Option<f64> = None;
+
+    for subset in subsets {
+        match subset.subset_type {
+            crate::services::wcs::SubsetType::Intervals { min, max, resolution } => {
+                match subset.axis_label.to_lowercase().as_str() {
+                    "x" | "long" | "longitude" | "i" => {
+                        bbox_minx = Some(min);
+                        bbox_maxx = Some(max);
+                        if resolution.is_some() { use_resolution = resolution; }
+                    }
+                    "y" | "lat" | "latitude" | "j" => {
+                        bbox_miny = Some(min);
+                        bbox_maxy = Some(max);
+                        if resolution.is_some() { use_resolution = resolution; }
+                    }
+                    "time" | "t" | "elevation" | "z" | "e" => {
+                        // 时间/高程子集: 对于 GeoTIFF，这些目前仅做记录
+                        info!("[WCS] 非空间子集: axis={}, range=[{}, {}]",
+                            subset.axis_label, min, max);
+                    }
+                    _ => {
+                        info!("[WCS] 未知轴子集: axis={}, range=[{}, {}]",
+                            subset.axis_label, min, max);
+                    }
+                }
+            }
+            crate::services::wcs::SubsetType::Position { value } => {
+                match subset.axis_label.to_lowercase().as_str() {
+                    "time" | "t" => {
+                        info!("[WCS] 时间位置子集: axis={}, value={}", subset.axis_label, value);
+                    }
+                    _ => {
+                        info!("[WCS] 未知轴位置子集: axis={}, value={}", subset.axis_label, value);
+                    }
+                }
+            }
+        }
+    }
+
+    // 应用空间裁剪
+    if let (Some(minx), Some(miny), Some(maxx), Some(maxy)) = (bbox_minx, bbox_miny, bbox_maxx, bbox_maxy) {
+        let bounds = crate::models::Bounds::new(minx, miny, maxx, maxy);
+        match crate::utils::geotiff::crop_coverage(coverage, &bounds) {
+            Some(cropped) => {
+                info!("[WCS] 空间裁剪完成: [{}, {}, {}, {}]", minx, miny, maxx, maxy);
+                // 如果指定了 resolution，则按分辨率重采样
+                if let Some(res) = use_resolution {
+                    if res > 0.0 {
+                        if let Some(ref cov_bounds) = coverage.bounds {
+                        let cov_width = ((cov_bounds.maxx - cov_bounds.minx) / res) as u32;
+                        let cov_height = ((cov_bounds.maxy - cov_bounds.miny) / res) as u32;
+                        if cov_width > 0 && cov_height > 0 {
+                            return image::imageops::resize(&cropped, cov_width, cov_height,
+                                image::imageops::FilterType::Lanczos3);
+                        }
+                        }
+                    }
+                }
+                // 如果指定了 SIZE，使用 SIZE
+                if let Some(ref sz) = size {
+                    if sz.len() >= 2 && sz[0] > 0 && sz[1] > 0 {
+                        return image::imageops::resize(&cropped, sz[0] as u32, sz[1] as u32,
+                            image::imageops::FilterType::Lanczos3);
+                    }
+                }
+                return cropped;
+            }
+            None => {
+                warn!("[WCS] 空间裁剪失败: 返回 None");
+            }
+        }
+    }
+
+    img
+}
+
+/// 计算输出尺寸
+fn calculate_output_size(orig_width: u32, orig_height: u32, size: &Option<Vec<i64>>) -> (u32, u32) {
+    match size {
+        Some(sz) if sz.len() >= 2 => {
+            let w = if sz[0] > 0 { sz[0] as u32 } else { orig_width };
+            let h = if sz[1] > 0 { sz[1] as u32 } else { orig_height };
+            (w, h)
+        }
+        _ => (orig_width, orig_height),
+    }
+}
+
+/// 编码覆盖输出图像
+fn encode_coverage_output(
+    img: image::RgbaImage,
+    output_format: &str,
+    coverage_id: &str,
+) -> Result<HttpResponse, GeoServerError> {
+    let (content_type, fmt) = match output_format {
+        "image/png" => ("image/png", image::ImageFormat::Png),
+        "image/jpeg" | "image/jpg" => ("image/jpeg", image::ImageFormat::Jpeg),
+        "image/tiff" | "image/tif" => ("image/tiff", image::ImageFormat::Tiff),
+        "image/gif" => ("image/gif", image::ImageFormat::Gif),
+        "image/webp" => ("image/webp", image::ImageFormat::WebP),
+        "application/x-grib" | "application/x-netcdf" => {
+            // 不支持的原生格式，回退到 GeoTIFF
+            ("image/tiff", image::ImageFormat::Tiff)
+        }
+        _ => ("image/tiff", image::ImageFormat::Tiff), // WCS 默认输出 TIFF
+    };
+
+    let mut buffer = Vec::new();
+
+    // JPEG 和 TIFF 需要 RGB 而非 RGBA
     if fmt == image::ImageFormat::Jpeg || fmt == image::ImageFormat::Tiff {
         let rgb = image::DynamicImage::ImageRgba8(img).to_rgb8();
         rgb.write_to(&mut std::io::Cursor::new(&mut buffer), fmt)
