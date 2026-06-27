@@ -153,6 +153,14 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
             )
             .route("/permissions/{id}", web::delete().to(crate::handlers::delete_permission))
             .route("/permissions/check/{type}/{name}", web::get().to(crate::handlers::check_permission_handler))
+            // 矢量瓦片 (MVT)
+            .route("/tiles/{layer}/{z}/{x}/{y}.pbf", web::get().to(crate::handlers::handle_mvt_tile))
+            .route("/mvt/{layer}/{z}/{x}/{y}", web::get().to(crate::handlers::handle_mvt_tile))
+            // 监控
+            .route("/monitor/stats", web::get().to(crate::handlers::get_monitor_stats))
+            .route("/monitor/requests", web::get().to(crate::handlers::get_recent_requests))
+            .route("/monitor/logs", web::get().to(crate::handlers::get_audit_logs))
+            .route("/monitor/reset", web::delete().to(crate::handlers::reset_monitor_stats))
             // 备份/恢复
             .route("/backup/export", web::get().to(crate::handlers::handle_export))
             .route("/backup/import", web::post().to(crate::handlers::handle_import))

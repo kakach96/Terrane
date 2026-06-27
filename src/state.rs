@@ -9,6 +9,7 @@ use crate::models::{Layer, Feature, layer::LayerGroup};
 use crate::store::SqliteStore;
 use crate::utils::sld_parser;
 use crate::utils::tile_cache::TileCache;
+use serde::Serialize;
 
 #[derive(Debug, Clone)]
 pub struct StyleMeta {
@@ -17,6 +18,39 @@ pub struct StyleMeta {
 }
 
 pub type StyleMap = HashMap<String, String>;
+
+/// 端点统计 (用于监控)
+#[derive(Debug, Clone, Serialize)]
+pub struct EndpointStats {
+    pub count: u64,
+    pub error_count: u64,
+    pub avg_duration_ms: f64,
+    pub max_duration_ms: f64,
+}
+
+impl Default for EndpointStats {
+    fn default() -> Self {
+        EndpointStats {
+            count: 0,
+            error_count: 0,
+            avg_duration_ms: 0.0,
+            max_duration_ms: 0.0,
+        }
+    }
+}
+
+/// 请求记录 (用于监控)
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestRecord {
+    pub id: u64,
+    pub timestamp: String,
+    pub method: String,
+    pub path: String,
+    pub status: u16,
+    pub duration_ms: f64,
+    pub user_agent: String,
+    pub remote_addr: String,
+}
 
 pub struct AppState {
     pub config: GeoServerConfig,
@@ -30,6 +64,16 @@ pub struct AppState {
     pub start_time: Instant,
     pub request_count: AtomicU64,
     pub error_count: AtomicU64,
+    /// 监控: 端点统计
+    pub endpoint_stats: Arc<RwLock<HashMap<String, EndpointStats>>>,
+    /// 监控: HTTP 方法统计
+    pub method_stats: Arc<RwLock<HashMap<String, u64>>>,
+    /// 监控: 状态码统计
+    pub status_code_stats: Arc<RwLock<HashMap<u16, u64>>>,
+    /// 监控: 最近请求日志 (最多 10000 条)
+    pub request_log: Arc<RwLock<Vec<RequestRecord>>>,
+    /// 监控: 近5分钟请求计数 (每秒重置)
+    pub recent_request_count: AtomicU64,
     /// GeoWebCache 瓦片缓存引擎
     pub tile_cache: Option<TileCache>,
 }
@@ -164,6 +208,11 @@ impl AppState {
             start_time: Instant::now(),
             request_count: AtomicU64::new(0),
             error_count: AtomicU64::new(0),
+            endpoint_stats: Arc::new(RwLock::new(HashMap::new())),
+            method_stats: Arc::new(RwLock::new(HashMap::new())),
+            status_code_stats: Arc::new(RwLock::new(HashMap::new())),
+            request_log: Arc::new(RwLock::new(Vec::with_capacity(10000))),
+            recent_request_count: AtomicU64::new(0),
             tile_cache,
         }
     }

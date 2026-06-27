@@ -32,7 +32,10 @@ import {
   UpdateDataSourceRequest,
   ConnectionTestResult,
   UploadResult,
-  LayerGroup
+  LayerGroup,
+  MonitorStats,
+  RequestRecord,
+  AuditLogEntry
 } from '../models/geoserver.models';
 
 @Injectable({
@@ -463,5 +466,31 @@ export class GeoserverService {
       params: { format: 'text/csv' },
       responseType: 'blob'
     });
+  }
+
+  // ===== 监控 =====
+
+  /** 获取监控统计 */
+  getMonitorStats(): Observable<MonitorStats> {
+    return this.http.get<MonitorStats>(`${this.apiUrl}/monitor/stats`);
+  }
+
+  /** 获取最近请求记录 */
+  getRecentRequests(limit: number = 100): Observable<RequestRecord[]> {
+    return this.http.get<RequestRecord[]>(`${this.apiUrl}/monitor/requests`, {
+      params: { limit: limit.toString() }
+    });
+  }
+
+  /** 获取审计日志 */
+  getAuditLogs(limit: number = 100, offset: number = 0): Observable<AuditLogEntry[]> {
+    return this.http.get<AuditLogEntry[]>(`${this.apiUrl}/monitor/logs`, {
+      params: { limit: limit.toString(), offset: offset.toString() }
+    });
+  }
+
+  /** 重置监控统计 */
+  resetMonitorStats(): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/monitor/reset`);
   }
 }

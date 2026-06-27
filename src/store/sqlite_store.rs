@@ -15,6 +15,18 @@ pub struct NamespaceRecord {
     pub modified: String,
 }
 
+/// 审计日志记录
+#[derive(Debug, Clone)]
+pub struct AuditLogRecord {
+    pub id: i64,
+    pub username: String,
+    pub action: String,
+    pub resource: Option<String>,
+    pub detail: Option<String>,
+    pub ip_address: Option<String>,
+    pub created_at: String,
+}
+
 fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
     conn.query_row(
         &format!("SELECT COUNT(*) FROM pragma_table_info('{}') WHERE name='{}'", table, column),
@@ -1206,6 +1218,31 @@ impl SqliteStore {
             rusqlite::params![username, action, resource, detail, ip_address, now],
         )?;
         Ok(())
+    }
+
+    /// 查询审计日志
+    pub async fn get_audit_logs(&self, limit: usize, offset: usize) -> SqlResult<Vec<AuditLogRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, username, action, resource, detail, ip_address, timestamp
+             FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?"
+        )?;
+        let rows = stmt.query_map(rusqlite::params![limit as i64, offset as i64], |row| {
+            Ok(AuditLogRecord {
+                id: row.get(0)?,
+                username: row.get(1)?,
+                action: row.get(2)?,
+                resource: row.get(3)?,
+                detail: row.get(4)?,
+                ip_address: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(row?);
+        }
+        Ok(records)
     }
 
     // ========================================================================

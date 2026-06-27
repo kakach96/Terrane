@@ -293,3 +293,53 @@ export interface UploadResult {
   file_path?: string;
   message: string;
 }
+
+// ===== 监控 =====
+
+export interface MonitorStats {
+  uptime_seconds: number;
+  total_requests: number;
+  total_errors: number;
+  error_rate: number;
+  requests_per_second: number;
+  endpoints: Record<string, EndpointStats>;
+  methods: Record<string, number>;
+  status_codes: Record<string, number>;
+  system: SystemInfo;
+}
+
+export interface EndpointStats {
+  count: number;
+  error_count: number;
+  avg_duration_ms: number;
+  max_duration_ms: number;
+}
+
+export interface SystemInfo {
+  version: string;
+  rust_version: string;
+  os: string;
+  hostname: string;
+  cpu_cores: number;
+  memory_mb: number;
+}
+
+export interface RequestRecord {
+  id: number;
+  timestamp: string;
+  method: string;
+  path: string;
+  status: number;
+  duration_ms: number;
+  user_agent: string;
+  remote_addr: string;
+}
+
+export interface AuditLogEntry {
+  id: number;
+  timestamp: string;
+  action: string;
+  username: string;
+  resource?: string;
+  detail?: string;
+}
