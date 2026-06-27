@@ -51,6 +51,8 @@ import { NamespaceDialogComponent } from './components/namespaces/namespace-dial
 import { StoresComponent } from './components/stores/stores.component';
 import { LoginComponent } from './components/login/login.component';
 import { MonitorComponent } from './components/monitor/monitor.component';
+import { UsersComponent } from './components/users/users.component';
+import { PermissionsComponent } from './components/permissions/permissions.component';
 import { AuthInterceptor } from './services/auth.interceptor';
 
 const routes: Routes = [
@@ -70,6 +72,8 @@ const routes: Routes = [
   { path: 'tile-layers', component: TileLayersComponent },
   { path: 'server-status', component: ServerStatusComponent },
   { path: 'monitor', component: MonitorComponent },
+  { path: 'users', component: UsersComponent },
+  { path: 'permissions', component: PermissionsComponent },
 ];
 
 @NgModule({
@@ -95,7 +99,9 @@ const routes: Routes = [
     NamespaceDialogComponent,
     StoresComponent,
     LoginComponent,
-    MonitorComponent
+    MonitorComponent,
+    UsersComponent,
+    PermissionsComponent
   ],
   providers: [
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }

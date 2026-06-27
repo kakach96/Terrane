@@ -1,0 +1,130 @@
+<div class="users-container">
+  <div class="page-header">
+    <h1><mat-icon>people</mat-icon> 用户管理</h1>
+    <div class="header-actions">
+      <button mat-raised-button color="primary" (click)="showCreateForm = !showCreateForm">
+        <mat-icon>person_add</mat-icon> 创建用户
+      </button>
+      <button mat-raised-button (click)="showPasswordForm = !showPasswordForm">
+        <mat-icon>lock</mat-icon> 修改密码
+      </button>
+    </div>
+  </div>
+
+  <!-- 创建用户表单 -->
+  <mat-card *ngIf="showCreateForm" class="form-card">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>person_add</mat-icon>
+      <mat-card-title>创建新用户</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="form-row">
+        <mat-form-field appearance="outline">
+          <mat-label>用户名</mat-label>
+          <input matInput [(ngModel)]="newUsername" placeholder="username">
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>密码</mat-label>
+          <input matInput type="password" [(ngModel)]="newPassword" placeholder="••••••">
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>角色</mat-label>
+          <mat-select [(ngModel)]="newRole">
+            <mat-option value="admin">管理员</mat-option>
+            <mat-option value="manager">经理</mat-option>
+            <mat-option value="user">用户</mat-option>
+            <mat-option value="guest">访客</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-button (click)="showCreateForm = false">取消</button>
+      <button mat-raised-button color="primary" (click)="createUser()" [disabled]="!newUsername || !newPassword">
+        <mat-icon>check</mat-icon> 创建
+      </button>
+    </mat-card-actions>
+  </mat-card>
+
+  <!-- 修改密码表单 -->
+  <mat-card *ngIf="showPasswordForm" class="form-card">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>lock</mat-icon>
+      <mat-card-title>修改当前用户密码</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="form-row">
+        <mat-form-field appearance="outline">
+          <mat-label>当前密码</mat-label>
+          <input matInput type="password" [(ngModel)]="oldPassword">
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>新密码</mat-label>
+          <input matInput type="password" [(ngModel)]="newPassword1">
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>确认新密码</mat-label>
+          <input matInput type="password" [(ngModel)]="newPassword2">
+        </mat-form-field>
+      </div>
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-button (click)="showPasswordForm = false">取消</button>
+      <button mat-raised-button color="primary" (click)="changePassword()" [disabled]="!oldPassword || !newPassword1">
+        <mat-icon>check</mat-icon> 确认修改
+      </button>
+    </mat-card-actions>
+  </mat-card>
+
+  <!-- 加载中 -->
+  <div *ngIf="loading" class="loading-spinner">
+    <mat-spinner diameter="40"></mat-spinner>
+  </div>
+
+  <div *ngIf="error" class="error-message"><mat-icon>error</mat-icon> {{ error }}</div>
+
+  <!-- 用户列表 -->
+  <mat-card>
+    <mat-card-header>
+      <mat-icon mat-card-avatar>list</mat-icon>
+      <mat-card-title>用户列表 ({{ users.length }})</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>用户名</th>
+              <th>角色</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let u of users">
+              <td><strong>{{ u.username }}</strong></td>
+              <td>
+                <span class="role-badge" [style.background]="u.role === 'admin' ? '#ffebee' : u.role === 'manager' ? '#e3f2fd' : '#e8f5e9'"
+                      [style.color]="u.role === 'admin' ? '#c62828' : u.role === 'manager' ? '#1565c0' : '#2e7d32'">
+                  {{ u.role === 'admin' ? '管理员' : u.role === 'manager' ? '经理' : u.role === 'guest' ? '访客' : '用户' }}
+                </span>
+              </td>
+              <td>
+                <mat-icon [style.color]="u.enabled ? '#2e7d32' : '#c62828'">{{ u.enabled ? 'check_circle' : 'cancel' }}</mat-icon>
+                {{ u.enabled ? '启用' : '禁用' }}
+              </td>
+              <td class="time-cell">{{ u.created || '-' }}</td>
+              <td>
+                <button mat-icon-button color="warn" (click)="deleteUser(u.username)" [disabled]="u.username === 'admin'"
+                        matTooltip="删除用户">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

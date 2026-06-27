@@ -68,6 +68,19 @@
           <mat-icon matListItemIcon>bar_chart</mat-icon>
           <span matListItemTitle>监控面板</span>
         </a>
+
+        <mat-divider></mat-divider>
+        <div class="nav-section-label">系统管理</div>
+
+        <a mat-list-item routerLink="/users" routerLinkActive="active" *ngIf="auth.isLoggedIn()">
+          <mat-icon matListItemIcon>people</mat-icon>
+          <span matListItemTitle>用户管理</span>
+        </a>
+
+        <a mat-list-item routerLink="/permissions" routerLinkActive="active" *ngIf="auth.isLoggedIn()">
+          <mat-icon matListItemIcon>security</mat-icon>
+          <span matListItemTitle>权限管理</span>
+        </a>
       </mat-nav-list>
     </mat-sidenav>
     
@@ -82,13 +95,18 @@
           <mat-icon>account_circle</mat-icon>
         </button>
         <mat-menu #menu="matMenu">
-          <button mat-menu-item>
-            <mat-icon>settings</mat-icon>
-            <span>设置</span>
+          <div *ngIf="auth.isLoggedIn()" class="user-info-menu">
+            <span class="menu-username">{{ auth.getCurrentUser()?.username }}</span>
+            <span class="menu-role">{{ auth.getCurrentUser()?.role }}</span>
+          </div>
+          <mat-divider *ngIf="auth.isLoggedIn()"></mat-divider>
+          <button mat-menu-item *ngIf="auth.isLoggedIn()" (click)="logout()">
+            <mat-icon>logout</mat-icon>
+            <span>退出登录</span>
           </button>
-          <button mat-menu-item>
-            <mat-icon>info</mat-icon>
-            <span>关于</span>
+          <button mat-menu-item *ngIf="!auth.isLoggedIn()" routerLink="/login">
+            <mat-icon>login</mat-icon>
+            <span>登录</span>
           </button>
         </mat-menu>
       </mat-toolbar>

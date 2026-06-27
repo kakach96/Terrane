@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { AuthService } from './services/auth.service';
 
 @Component({
   selector: 'app-root',
@@ -15,16 +16,25 @@ export class AppComponent implements OnInit {
   private menuTitles: { [key: string]: string } = {
     '/dashboard': '仪表盘',
     '/workspaces': '工作空间',
+    '/namespaces': '命名空间',
     '/data-sources': '数据源',
+    '/stores': '存储管理',
     '/layers': '图层',
     '/layer-preview': '图层预览',
     '/tile-layers': '切片图层',
     '/layer-groups': '图层组',
     '/styles': '样式管理',
-    '/server-status': '服务器状态'
+    '/server-status': '服务器状态',
+    '/monitor': '监控面板',
+    '/users': '用户管理',
+    '/permissions': '权限管理',
+    '/login': '登录',
   };
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    public auth: AuthService,
+  ) {}
 
   ngOnInit(): void {
     this.router.events.pipe(
@@ -39,5 +49,10 @@ export class AppComponent implements OnInit {
   private updatePageTitle(url: string): void {
     const basePath = url.split('?')[0];
     this.pageTitle = this.menuTitles[basePath] || 'RRGeoServer';
+  }
+
+  logout(): void {
+    this.auth.logout();
+    this.router.navigate(['/login']);
   }
 }

@@ -493,4 +493,30 @@ export class GeoserverService {
   resetMonitorStats(): Observable<any> {
     return this.http.delete(`${this.apiUrl}/monitor/reset`);
   }
+
+  // ===== 用户管理 =====
+
+  /** 列出所有用户 */
+  listUsers(): Observable<any[]> {
+    return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/auth/users`)
+      .pipe(map(r => r.data || []));
+  }
+
+  /** 创建用户 */
+  createUser(username: string, password: string, role: string): Observable<any> {
+    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/auth/users`, { username, password, role })
+      .pipe(map(r => r.data));
+  }
+
+  /** 删除用户 */
+  deleteUser(username: string): Observable<any> {
+    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/auth/users/${username}`)
+      .pipe(map(r => r.data));
+  }
+
+  /** 修改密码 */
+  changePassword(oldPassword: string, newPassword: string): Observable<any> {
+    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/auth/change-password`, { old_password: oldPassword, new_password: newPassword })
+      .pipe(map(r => r.data));
+  }
 }
