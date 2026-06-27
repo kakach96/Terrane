@@ -20,6 +20,7 @@ mod utils;
 mod state;
 mod routes;
 mod store;
+mod auth;
 
 use config::GeoServerConfig;
 use state::AppState;

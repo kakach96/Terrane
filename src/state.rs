@@ -135,6 +135,11 @@ impl AppState {
             }
         }
 
+        // 初始化默认管理员
+        if let Some(ref store) = store {
+            crate::auth::ensure_default_admin(store).await;
+        }
+
         // GeoWebCache 初始化
         let tile_cache = config.gwc.as_ref().map(|gwc_config| {
             let cache = TileCache::new(gwc_config.clone());

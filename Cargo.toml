@@ -46,6 +46,11 @@ tempfile = "3"
 reqwest = { version = "0.11", features = ["json"] }
 # CORS 中间件
 actix-cors = "0.7"
+# 密码哈希 & JWT (安全性)
+sha2 = "0.10"
+hex = "0.4"
+jsonwebtoken = "9"
+rand = "0.8"
 
 [dev-dependencies]
 actix-rt = "2"

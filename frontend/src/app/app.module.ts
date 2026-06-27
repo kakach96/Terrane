@@ -1,6 +1,6 @@
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
-import { HttpClientModule } from '@angular/common/http';
+import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
@@ -49,9 +49,12 @@ import { CreateLayerGroupDialogComponent } from './components/layer-groups/creat
 import { NamespacesComponent } from './components/namespaces/namespaces.component';
 import { NamespaceDialogComponent } from './components/namespaces/namespace-dialog.component';
 import { StoresComponent } from './components/stores/stores.component';
+import { LoginComponent } from './components/login/login.component';
+import { AuthInterceptor } from './services/auth.interceptor';
 
 const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
+  { path: 'login', component: LoginComponent },
   { path: 'dashboard', component: DashboardComponent },
   { path: 'workspaces', component: WorkspacesComponent },
   { path: 'namespaces', component: NamespacesComponent },
@@ -88,7 +91,11 @@ const routes: Routes = [
     CreateLayerGroupDialogComponent,
     NamespacesComponent,
     NamespaceDialogComponent,
-    StoresComponent
+    StoresComponent,
+    LoginComponent
+  ],
+  providers: [
+    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }
   ],
   imports: [
     BrowserModule,
@@ -119,9 +126,7 @@ const routes: Routes = [
     MatSlideToggleModule,
     MatCheckboxModule,
     MatButtonToggleModule,
-    FeatureDetailDialogComponent
   ],
-  providers: [],
   bootstrap: [AppComponent]
 })
 export class AppModule { }

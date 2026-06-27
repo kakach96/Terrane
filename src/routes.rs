@@ -138,6 +138,13 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
             .route("/wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}", web::get().to(crate::handlers::handle_wmts_rest_tile))
             .route("/tiles/cache/clear/{layer}", web::delete().to(crate::handlers::clear_tile_cache))
             .route("/tiles/cache/stats", web::get().to(crate::handlers::get_tile_cache_stats))
+            // 认证
+            .route("/auth/login", web::post().to(crate::handlers::login))
+            .route("/auth/verify", web::get().to(crate::handlers::verify))
+            .route("/auth/change-password", web::post().to(crate::handlers::change_password))
+            .route("/auth/users", web::get().to(crate::handlers::list_users))
+            .route("/auth/users", web::post().to(crate::handlers::create_user))
+            .route("/auth/users/{username}", web::delete().to(crate::handlers::delete_user))
             .service(
                 web::resource("/sql-views")
                     .route(web::get().to(crate::handlers::list_sql_views))

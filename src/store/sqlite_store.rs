@@ -207,6 +207,34 @@ impl SqliteStore {
             [],
         )?;
 
+        // 用户表
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user',
+                enabled INTEGER DEFAULT 1,
+                created TEXT,
+                modified TEXT
+            )",
+            [],
+        )?;
+
+        // 操作日志表
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                action TEXT NOT NULL,
+                resource TEXT,
+                detail TEXT,
+                ip_address TEXT,
+                timestamp TEXT
+            )",
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -1040,6 +1068,121 @@ impl SqliteStore {
     pub async fn delete_sql_view(&self, name: &str) -> SqlResult<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM sql_views WHERE name = ?", [name])?;
+        Ok(())
+    }
+
+    // ========================================================================
+    // 用户管理
+    // ========================================================================
+
+    pub async fn get_user(&self, username: &str) -> SqlResult<Option<crate::auth::User>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT username, password_hash, salt, role, enabled, created, modified
+             FROM users WHERE username = ?"
+        )?;
+        let mut rows = stmt.query([username])?;
+        if let Some(row) = rows.next()? {
+            let role_str: String = row.get(3)?;
+            let role = match role_str.as_str() {
+                "admin" => crate::auth::UserRole::Admin,
+                "manager" => crate::auth::UserRole::Manager,
+                "guest" => crate::auth::UserRole::Guest,
+                _ => crate::auth::UserRole::User,
+            };
+            Ok(Some(crate::auth::User {
+                username: row.get(0)?,
+                password_hash: row.get(1)?,
+                salt: row.get(2)?,
+                role,
+                enabled: row.get::<_, i32>(4)? == 1,
+                created: row.get(5)?,
+                modified: row.get(6)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn get_all_users(&self) -> SqlResult<Vec<crate::auth::User>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT username, password_hash, salt, role, enabled, created, modified
+             FROM users ORDER BY username"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let role_str: String = row.get(3)?;
+            let role = match role_str.as_str() {
+                "admin" => crate::auth::UserRole::Admin,
+                "manager" => crate::auth::UserRole::Manager,
+                "guest" => crate::auth::UserRole::Guest,
+                _ => crate::auth::UserRole::User,
+            };
+            Ok(crate::auth::User {
+                username: row.get(0)?,
+                password_hash: row.get(1)?,
+                salt: row.get(2)?,
+                role,
+                enabled: row.get::<_, i32>(4)? == 1,
+                created: row.get(5)?,
+                modified: row.get(6)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub async fn create_user(&self, username: &str, password_hash: &str, salt: &str,
+                              role: &crate::auth::UserRole, enabled: bool) -> SqlResult<()> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO users (username, password_hash, salt, role, enabled, created, modified)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![username, password_hash, salt, role.to_string(), enabled as i32, now, now],
+        )?;
+        Ok(())
+    }
+
+    pub async fn update_user(&self, username: &str, role: Option<&crate::auth::UserRole>,
+                              enabled: Option<bool>) -> SqlResult<()> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let conn = self.conn.lock().unwrap();
+        let mut updates = vec!["modified = ?".to_string()];
+        let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now)];
+
+        if let Some(r) = role {
+            updates.push("role = ?".to_string());
+            values.push(Box::new(r.to_string()));
+        }
+        if let Some(e) = enabled {
+            updates.push("enabled = ?".to_string());
+            values.push(Box::new(e as i32));
+        }
+
+        let query = format!("UPDATE users SET {} WHERE username = ?", updates.join(", "));
+        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        params.push(&username);
+        conn.execute(&query, params.as_slice())?;
+        Ok(())
+    }
+
+    pub async fn delete_user(&self, username: &str) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM users WHERE username = ?", [username])?;
+        Ok(())
+    }
+
+    /// 记录审计日志
+    pub async fn audit_log(&self, username: &str, action: &str,
+                           resource: Option<&str>, detail: Option<&str>,
+                           ip_address: Option<&str>) -> SqlResult<()> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO audit_log (username, action, resource, detail, ip_address, timestamp)
+             VALUES (?, ?, ?, ?, ?, ?)",
+            rusqlite::params![username, action, resource, detail, ip_address, now],
+        )?;
         Ok(())
     }
 }
