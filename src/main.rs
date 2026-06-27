@@ -21,6 +21,7 @@ mod state;
 mod routes;
 mod store;
 mod auth;
+mod backup;
 
 use config::GeoServerConfig;
 use state::AppState;

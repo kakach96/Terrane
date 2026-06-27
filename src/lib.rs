@@ -10,3 +10,4 @@ pub mod state;
 pub mod store;
 pub mod auth;
 pub mod routes;
+pub mod backup;

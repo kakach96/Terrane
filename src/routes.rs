@@ -153,6 +153,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
             )
             .route("/permissions/{id}", web::delete().to(crate::handlers::delete_permission))
             .route("/permissions/check/{type}/{name}", web::get().to(crate::handlers::check_permission_handler))
+            // 备份/恢复
+            .route("/backup/export", web::get().to(crate::handlers::handle_export))
+            .route("/backup/import", web::post().to(crate::handlers::handle_import))
             .service(
                 web::resource("/sql-views")
                     .route(web::get().to(crate::handlers::list_sql_views))
