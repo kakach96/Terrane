@@ -34,6 +34,7 @@ pub async fn compute_layer_bounds(
                 Ok(None)
             }
         }
+        DataSourceType::Geopackage => compute_geopackage_bounds(ds),
     }
 }
 
@@ -165,6 +166,44 @@ fn parse_postgis_extent(ext: &str) -> Option<Bounds> {
         Some(Bounds::new(min[0], min[1], max[0], max[1]))
     } else {
         None
+    }
+}
+
+/// 从 GeoPackage 计算边界
+fn compute_geopackage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+    let file_path = ds.connection.as_ref()
+        .and_then(|c| c.file_path.as_ref())
+        .ok_or_else(|| GeoServerError::BadRequest("GeoPackage 数据源缺少文件路径".to_string()))?;
+
+    info!("[Bounds] 从 GeoPackage 计算边界: {}", file_path);
+
+    let layers = match crate::utils::geopackage::read_geopackage_layers(file_path) {
+        Ok(l) => l,
+        Err(e) => {
+            info!("[Bounds] GeoPackage 读取失败: {}", e);
+            return Ok(None);
+        }
+    };
+
+    if layers.is_empty() {
+        info!("[Bounds] GeoPackage 中没有图层");
+        return Ok(None);
+    }
+
+    // 读取第一个图层的数据以获取边界
+    match crate::utils::geopackage::read_geopackage_layer_features(file_path, &layers[0].table_name, Some(1000)) {
+        Ok(result) => {
+            let crs = CoordinateReferenceSystem::from_epsg(&result.crs);
+            info!("[Bounds] GeoPackage 边界: {:?}, CRS: {}", result.bounds, result.crs);
+            Ok(Some(ComputedBounds {
+                bounds: result.bounds,
+                crs,
+            }))
+        }
+        Err(e) => {
+            info!("[Bounds] GeoPackage 要素读取失败: {}", e);
+            Ok(None)
+        }
     }
 }
 
