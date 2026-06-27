@@ -10,12 +10,12 @@
 |---------|:-----:|:--------:|:-----:|:-----:|
 | OGC 核心服务 | 5/7 | 0 | 2 | **71%** |
 | REST API | 11/16 | 0 | 5 | **69%** |
-| 数据源类型 | 3/15 | 0 | 12 | **20%** |
+| 数据源类型 | 7/15 | 0 | 8 | **47%** |
 | 样式系统 | 1/5 | 1 | 3 | **30%** |
 | 瓦片缓存 | 2/6 | 0 | 4 | **33%** |
 | 安全性 | 0/7 | 0 | 7 | **0%** |
 | 扩展功能 | 0/14 | 0 | 14 | **0%** |
-| **总进度** | | | | **~42%** |
+| **总进度** | | | | **~47%** |
 
 ---
 
@@ -63,9 +63,15 @@
 
 ### 1.3 数据源类型
 
-- ✅ **PostGIS** — PostgreSQL/PostGIS 数据库
-- ✅ **Shapefile** — ESRI Shapefile 矢量格式
-- ✅ **GeoTIFF** — GeoTIFF 栅格格式
+| 类型 | 说明 | 状态 |
+|------|------|:----:|
+| **PostGIS** | PostgreSQL/PostGIS 数据库 | ✅ |
+| **Shapefile** | ESRI Shapefile 矢量格式 | ✅ |
+| **GeoTIFF** | GeoTIFF 栅格格式 | ✅ |
+| **GeoPackage** | OGC GeoPackage 矢量格式 (WKB) | ✅ **P2** |
+| **WorldImage** | 影像+世界文件 (.pgw/.jgw/.tfw) | ✅ **P2** |
+| **CascadedWms** | 级联外部 WMS 服务 | ✅ **P2** |
+| **ArcGrid** | ESRI ASCII Grid 栅格格式 | ✅ **P2** |
 
 ### 1.4 扩展 REST API
 
@@ -144,18 +150,16 @@
 - ✅ WCS 范围子集
 - ✅ ECQL/CQL 过滤器 |
 
-### P2 — 数据源扩展
+### P2 — 数据源扩展 ✅ 部分完成
 
-| # | 功能 | 说明 | 预估工作量 |
-|---|------|------|:---------:|
-| 13 | **GeoPackage 支持** | 矢量 + 栅格 GeoPackage 读写 | 2-3 周 |
-| 14 | **ImageMosaic** | 栅格时间序列/镶嵌数据集 | 3-4 周 |
-| 15 | **ImagePyramid** | 金字塔影像 | 1-2 周 |
-| 16 | **WorldImage** | 世界影像格式 (.tfw + .png/.jpg) | 1 周 |
-| 17 | **ArcGrid** | ESRI ASCII Grid 栅格格式 | 1 周 |
-| 18 | **Oracle / MySQL / SQL Server** | 更多数据库支持 | 各 1-2 周 |
-| 19 | **MongoDB** | MongoDB GeoJSON 数据源 | 2 周 |
-| 20 | **级联服务** | 级联外部 WMS/WFS/WMTS 作为数据源 | 2-3 周 |
+- ✅ **GeoPackage 支持** — 矢量 + WKB 几何解析
+- ✅ **WorldImage** — 世界影像格式 (.pgw/.jgw/.tfw)
+- ✅ **ArcGrid** — ESRI ASCII Grid 栅格格式
+- ✅ **级联 WMS 服务** — HTTP 代理 WMS 上游服务
+- ❌ ImageMosaic — 栅格时间序列/镶嵌数据集
+- ❌ ImagePyramid — 金字塔影像
+- ❌ Oracle / MySQL / SQL Server — 更多数据库支持
+- ❌ MongoDB — MongoDB GeoJSON 数据源
 
 ### P3 — 安全性
 
@@ -196,24 +200,27 @@
 📅 Week 7-8:  WFS 2.0 增强 + 多格式输出 + ECQL 过滤器
 ```
 
-### 阶段二：数据源扩展 (2-3 个月)
-**目标**：支持更多数据源格式，覆盖主流 GIS 数据
+### 阶段二：数据源扩展 ✅ 部分完成 (4/8)
 
 ```
-📅 Week 1-2:  GeoPackage 数据源
-📅 Week 3-4:  ImageMosaic 栅格镶嵌
-📅 Week 5-6:  ImagePyramid + WorldImage + ArcGrid
-📅 Week 7-8:  更多数据库 (Oracle/MySQL/SQL Server)
-📅 Week 9-12: MongoDB + 级联服务
+📅 GeoPackage    ✅ 已完成
+📅 WorldImage    ✅ 已完成
+📅 ArcGrid       ✅ 已完成
+📅 级联 WMS      ✅ 已完成
+📅 ImageMosaic   ⏳
+📅 ImagePyramid  ⏳
+📅 更多数据库     ⏳
+📅 MongoDB       ⏳
 ```
 
-### 阶段三：安全与权限 (1-2 个月)
+### 阶段三：安全与权限 (进行中)
 **目标**：构建完整的安全体系
 
 ```
-📅 Week 1-2:  用户/组/角色系统
-📅 Week 3-4:  图层级权限 + REST API 认证
-📅 Week 5-6:  CORS/CSRF + 安全配置界面
+📅 CORS/CSRF 保护         🔜 当前
+📅 用户/组/角色系统       ⏳
+📅 图层级权限             ⏳
+📅 REST API 认证          ⏳
 ```
 
 ### 阶段四：高级扩展 (3-6 个月)
@@ -265,11 +272,11 @@
 ```
 OGC 服务     █████████████░░░░  71%
 REST API     █████████████░░░░  69%
-数据源        ████░░░░░░░░░░░░  20%
+数据源        █████████░░░░░░░  47%
 样式系统      ██████░░░░░░░░░░  30%
 瓦片缓存      ██████░░░░░░░░░░  33%
 安全性        ░░░░░░░░░░░░░░░░   0%
 扩展功能      ░░░░░░░░░░░░░░░░   0%
 ──────────────────────────────
-总进度        ████████░░░░░░░░  42%
+总进度        █████████░░░░░░░  47%
 ```
