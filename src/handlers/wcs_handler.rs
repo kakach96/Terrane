@@ -21,8 +21,8 @@ pub async fn handle_wcs_request(
     }
 }
 
-/// 从数据源中查找 GeoTIFF 覆盖数据
-async fn find_geotiff_coverages(state: &AppState) -> Vec<(String, String, std::path::PathBuf)> {
+/// 从数据源中查找栅格覆盖数据 (GeoTIFF / WorldImage)
+async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::path::PathBuf)> {
     let mut coverages = Vec::new();
 
     if let Some(store) = &state.store {
@@ -49,8 +49,8 @@ async fn handle_get_capabilities(state: &AppState, _request: &WcsRequest) -> Res
     let base_url = format!("http://{}:{}", state.config.server.host, state.config.server.port);
     let mut capabilities = WcsCapabilities::new(&base_url);
 
-    // 动态添加 GeoTIFF 覆盖数据
-    let coverages = find_geotiff_coverages(state).await;
+    // 动态添加栅格覆盖数据 (GeoTIFF / WorldImage)
+    let coverages = find_raster_coverages(state).await;
     for (name, title, _path) in &coverages {
         capabilities.add_coverage(name, title);
     }
@@ -125,45 +125,75 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
 
     let output_format = request.output_format.as_deref().unwrap_or("image/tiff").to_string();
 
-    // 尝试从数据源读取真实 GeoTIFF
-    if let Some(store) = &state.store {
+    // 尝试从数据源读取真实栅格数据 (GeoTIFF / WorldImage)
+    let raster_result = if let Some(store) = &state.store {
         if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
-            if ds.data_source_type == DataSourceType::Geotiff {
+            let is_raster = ds.data_source_type == DataSourceType::Geotiff
+                         || ds.data_source_type == DataSourceType::WorldImage;
+            if is_raster {
                 if let Some(conn) = &ds.connection {
                     if let Some(file_path) = &conn.file_path {
-                        info!("[WCS] 从 GeoTIFF 读取覆盖: {:?}", file_path);
-
-                        match geotiff::read_geotiff(file_path) {
-                            Ok(coverage_data) => {
-                                // 1. 应用子集（空间裁剪 / 时间裁剪）
-                                let img = apply_coverage_subsets(&coverage_data, &request.subsets, &request.size);
-
-                                // 2. 按请求的宽度/高度缩放
-                                let (width, height) = calculate_output_size(
-                                    img.width(), img.height(), &request.size
-                                );
-
-                                let final_img = if width != img.width() || height != img.height() {
-                                    image::imageops::resize(&img, width, height, image::imageops::FilterType::Lanczos3)
-                                } else {
-                                    img
-                                };
-
-                                // 3. 编码输出
-                                return encode_coverage_output(final_img, &output_format, coverage_id);
+                        info!("[WCS] 从 {:?} 读取覆盖: {:?}", ds.data_source_type, file_path);
+                        match ds.data_source_type {
+                            DataSourceType::Geotiff => {
+                                match crate::utils::geotiff::read_geotiff(file_path) {
+                                    Ok(cov) => Some((cov.rgba_image, cov.bounds)),
+                                    Err(e) => {
+                                        info!("[WCS] GeoTIFF 读取失败: {}", e);
+                                        None
+                                    }
+                                }
                             }
-                            Err(e) => {
-                                info!("[WCS] GeoTIFF 读取失败: {}, 回退到生成图像", e);
+                            DataSourceType::WorldImage => {
+                                match crate::utils::worldimage::read_worldimage(file_path) {
+                                    Ok(wim) => Some((wim.rgba_image, Some(wim.bounds))),
+                                    Err(e) => {
+                                        info!("[WCS] WorldImage 读取失败: {}", e);
+                                        None
+                                    }
+                                }
                             }
+                            _ => None,
                         }
-                    }
-                }
-            }
-        }
+                    } else { None }
+                } else { None }
+            } else { None }
+        } else { None }
+    } else { None };
+
+    if let Some((rgba_image, cov_bounds)) = raster_result {
+        let coverage_data = crate::utils::geotiff::CoverageData {
+            name: coverage_id.to_string(),
+            width: rgba_image.width(),
+            height: rgba_image.height(),
+            band_count: 4,
+            color_type: "RGBA".to_string(),
+            rgba_image,
+            bounds: cov_bounds,
+            crs: Some("EPSG:4326".to_string()),
+            pixel_scale_x: None,
+            pixel_scale_y: None,
+            tie_point_x: None,
+            tie_point_y: None,
+        };
+
+        // 1. 应用子集（空间裁剪 / 时间裁剪）
+        let img = apply_coverage_subsets(&coverage_data, &request.subsets, &request.size);
+
+        // 2. 按请求的宽度/高度缩放
+        let (width, height) = calculate_output_size(img.width(), img.height(), &request.size);
+        let final_img = if width != img.width() || height != img.height() {
+            image::imageops::resize(&img, width, height, image::imageops::FilterType::Lanczos3)
+        } else {
+            img
+        };
+
+        // 3. 编码输出
+        return encode_coverage_output(final_img, &output_format, coverage_id);
     }
 
     // 回退：生成测试图像
-    info!("[WCS] 未找到 GeoTIFF 数据源，生成测试图像");
+    info!("[WCS] 未找到栅格数据源，生成测试图像");
     let mut width = 512u32;
     let mut height = 512u32;
     if let Some(ref size) = request.size {

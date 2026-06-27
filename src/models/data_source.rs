@@ -16,7 +16,9 @@ pub struct DataSource {
 impl DataSource {
     /// 判断数据源是否为基于文件的类型（shapefile / geotiff / geopackage）
     pub fn is_file_based(&self) -> bool {
-        matches!(self.data_source_type, DataSourceType::Shapefile | DataSourceType::Geotiff | DataSourceType::Geopackage)
+        matches!(self.data_source_type,
+            DataSourceType::Shapefile | DataSourceType::Geotiff |
+            DataSourceType::Geopackage | DataSourceType::WorldImage)
     }
 
     /// 判断数据源是否为 PostGIS 数据库类型
@@ -32,6 +34,7 @@ pub enum DataSourceType {
     Shapefile,
     Geotiff,
     Geopackage,
+    WorldImage,
 }
 
 impl std::fmt::Display for DataSourceType {
@@ -41,6 +44,7 @@ impl std::fmt::Display for DataSourceType {
             DataSourceType::Shapefile => write!(f, "shapefile"),
             DataSourceType::Geotiff => write!(f, "geotiff"),
             DataSourceType::Geopackage => write!(f, "geopackage"),
+            DataSourceType::WorldImage => write!(f, "worldimage"),
         }
     }
 }

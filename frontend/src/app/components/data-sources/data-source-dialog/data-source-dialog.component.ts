@@ -18,7 +18,9 @@ export class DataSourceDialogComponent implements OnInit {
   dataSourceTypes = [
     { value: 'postgis', label: 'PostGIS' },
     { value: 'shapefile', label: 'Shapefile' },
-    { value: 'geotiff', label: 'GeoTIFF' }
+    { value: 'geotiff', label: 'GeoTIFF' },
+    { value: 'geopackage', label: 'GeoPackage' },
+    { value: 'worldimage', label: 'WorldImage' }
   ];
   isTesting = false;
   selectedFile: File | null = null;

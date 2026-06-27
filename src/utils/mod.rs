@@ -6,6 +6,7 @@ pub mod wkb;
 pub mod shapefile;
 pub mod geotiff;
 pub mod geopackage;
+pub mod worldimage;
 pub mod bounds;
 pub mod tile_cache;
 pub mod cql_filter;

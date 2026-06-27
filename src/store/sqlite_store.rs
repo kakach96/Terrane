@@ -29,6 +29,7 @@ fn parse_ds_type(type_str: &str) -> DataSourceType {
         "shapefile" => DataSourceType::Shapefile,
         "geotiff" => DataSourceType::Geotiff,
         "geopackage" => DataSourceType::Geopackage,
+        "worldimage" => DataSourceType::WorldImage,
         _ => DataSourceType::Postgis,
     }
 }

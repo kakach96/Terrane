@@ -45,6 +45,10 @@ pub async fn query_layer_features(
             DataSourceType::Geopackage => {
                 return query_geopackage_features(ds, bbox, limit, offset);
             }
+            DataSourceType::WorldImage => {
+                info!("[Features] WorldImage 是栅格格式，通过 WCS 访问");
+                return Ok(Vec::new());
+            }
         }
     }
 

@@ -150,7 +150,7 @@ export interface ServerStatus {
 
 export interface DataSource {
   name: string;
-  type: 'postgis' | 'shapefile' | 'geotiff';
+  type: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage';
   workspace?: string;
   enabled: boolean;
   connection?: DataSourceConnection;
@@ -173,14 +173,14 @@ export interface DataSourceConnection {
 
 export interface CreateDataSourceRequest {
   name: string;
-  type: 'postgis' | 'shapefile' | 'geotiff';
+  type: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;
 }
 
 export interface UpdateDataSourceRequest {
-  type?: 'postgis' | 'shapefile' | 'geotiff';
+  type?: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;

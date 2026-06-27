@@ -26,7 +26,7 @@ impl std::fmt::Display for StoreType {
 fn ds_type_to_store_type(ds_type: &DataSourceType) -> &'static str {
     match ds_type {
         DataSourceType::Postgis | DataSourceType::Shapefile | DataSourceType::Geopackage => "DataStore",
-        DataSourceType::Geotiff => "CoverageStore",
+        DataSourceType::Geotiff | DataSourceType::WorldImage => "CoverageStore",
     }
 }
 
