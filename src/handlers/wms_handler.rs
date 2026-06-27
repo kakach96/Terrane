@@ -28,6 +28,10 @@ struct GetMapContext {
     cql_filter: Option<String>,
     /// FeatureId 过滤（逗号分隔）
     feature_id: Option<Vec<String>>,
+    /// 地图旋转角度（度）
+    angle: Option<f64>,
+    /// 环境变量 (SLD 替换)
+    env: Option<HashMap<String, String>>,
 }
 
 struct LayerMetadata {
@@ -140,7 +144,7 @@ async fn handle_get_map(state: &AppState, request: &WmsRequest) -> Result<HttpRe
     let mut layer_contexts = query_all_layer_features(state, &context, &layer_metadata_list).await?;
 
     info!("[GetMap] 开始解析样式");
-    resolve_feature_styles(&mut layer_contexts, context.scale_denominator);
+    resolve_feature_styles(&mut layer_contexts, context.scale_denominator, &context.env);
 
     info!("[GetMap] 开始渲染输出");
     render_map_image(&context, &layer_contexts)
@@ -183,6 +187,20 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
         fid.split(',').map(|s| s.trim().to_string()).collect()
     });
 
+    // 解析 env 参数: "key1:'val1';key2:'val2'"
+    let env = request.env.as_ref().map(|env_str| {
+        let mut map = HashMap::new();
+        for pair in env_str.split(';') {
+            let parts: Vec<&str> = pair.splitn(2, ':').collect();
+            if parts.len() == 2 {
+                let key = parts[0].trim().to_string();
+                let val = parts[1].trim().trim_matches('\'').to_string();
+                map.insert(key, val);
+            }
+        }
+        map
+    });
+
     Ok(GetMapContext {
         layers: layers_param.clone(),
         bounds,
@@ -196,6 +214,8 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
         options,
         cql_filter,
         feature_id,
+        angle: request.angle,
+        env,
     })
 }
 
@@ -516,6 +536,7 @@ async fn get_geometry_column(
 fn resolve_feature_styles(
     layer_contexts: &mut [LayerRenderContext],
     scale_denominator: f64,
+    env: &Option<HashMap<String, String>>,
 ) {
     info!("[resolve_feature_styles] 开始解析样式，比例尺分母: {}", scale_denominator);
     let mut total_items = 0;
@@ -525,10 +546,23 @@ fn resolve_feature_styles(
                layer_ctx.metadata.layer_name, layer_ctx.features.len());
         
         for feature in &layer_ctx.features {
-            let style = layer_ctx.metadata.rules.iter()
-                .find(|rule| sld_parser::match_rule(rule, &feature.properties, Some(scale_denominator)))
-                .map(|rule| rule.style.clone())
-                .unwrap_or_default();
+            let style = if let Some(env_map) = env {
+                if !env_map.is_empty() {
+                    sld_parser::resolve_style_with_env(
+                        &layer_ctx.metadata.rules, feature, Some(scale_denominator), env_map
+                    )
+                } else {
+                    layer_ctx.metadata.rules.iter()
+                        .find(|rule| sld_parser::match_rule(rule, &feature.properties, Some(scale_denominator)))
+                        .map(|rule| rule.style.clone())
+                        .unwrap_or_default()
+                }
+            } else {
+                layer_ctx.metadata.rules.iter()
+                    .find(|rule| sld_parser::match_rule(rule, &feature.properties, Some(scale_denominator)))
+                    .map(|rule| rule.style.clone())
+                    .unwrap_or_default()
+            };
 
             layer_ctx.render_items.push((feature.geometry.clone(), style));
             total_items += 1;

@@ -32,6 +32,8 @@ pub struct WmsRequest {
     pub env: Option<String>,
     /// GeoServer Vendor 参数: 要素 ID 过滤
     pub feature_id: Option<String>,
+    /// GeoServer Vendor 参数: 地图旋转角度
+    pub angle: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -409,6 +411,7 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
     let mut cql_filter = None;
     let mut env = None;
     let mut feature_id = None;
+    let mut angle = None;
 
     for (key, value) in params {
         match key.to_uppercase().as_str() {
@@ -464,6 +467,7 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
             "CQL_FILTER" => cql_filter = Some(value.clone()),
             "ENV" => env = Some(value.clone()),
             "FEATUREID" | "FEATURE_ID" => feature_id = Some(value.clone()),
+            "ANGLE" => angle = value.parse().ok(),
             _ => {}
         }
     }
@@ -502,6 +506,7 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
         cql_filter,
         env,
         feature_id,
+        angle,
     })
 }
 

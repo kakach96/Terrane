@@ -351,13 +351,49 @@ fn evaluate_filter(filter: &OgcFilter, props: &HashMap<String, PropertyValue>) -
 }
 
 pub fn resolve_style(rules: &[ParsedRule], feature: &Feature, scale_denom: Option<f64>) -> Style {
+    resolve_style_with_env(rules, feature, scale_denom, &std::collections::HashMap::new())
+}
+
+/// 带环境变量替换的样式解析
+///
+/// `env` 参数可用于 SLD 中的模板变量替换，
+/// 例如 SLD 中使用 `${env('color')}` 语法，
+/// 通过 WMS `ENV=color:'#FF0000'` 参数传入。
+pub fn resolve_style_with_env(
+    rules: &[ParsedRule],
+    feature: &Feature,
+    scale_denom: Option<f64>,
+    env: &std::collections::HashMap<String, String>,
+) -> Style {
     let props = &feature.properties;
     for rule in rules {
         if match_rule(rule, props, scale_denom) {
-            return rule.style.clone();
+            let mut style = rule.style.clone();
+            // 应用环境变量替换到颜色值
+            apply_env_to_style(&mut style, env);
+            return style;
         }
     }
     Style::default()
+}
+
+/// 将环境变量替换应用到样式颜色值中
+fn apply_env_to_style(style: &mut super::rendering::Style, env: &std::collections::HashMap<String, String>) {
+    // 遍历环境变量，将匹配的 hex 颜色替换到样式中
+    for (_, val) in env {
+        if val.starts_with('#') && val.len() == 7 {
+            // 验证是否为有效 hex 颜色
+            let _valid = val.as_bytes().len() == 7
+                && val[1..].chars().all(|c| c.is_ascii_hexdigit());
+
+            if let Some(ref mut fill) = style.fill {
+                fill.color = val.clone();
+            }
+            if let Some(ref mut stroke) = style.stroke {
+                stroke.color = val.clone();
+            }
+        }
+    }
 }
 
 pub struct BuiltinStyle {
