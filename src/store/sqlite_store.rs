@@ -4,6 +4,17 @@ use chrono::Utc;
 use crate::models::{DataSource, DataSourceType, DataSourceConnection};
 use crate::handlers::CreateWorkspaceRequest;
 
+/// 数据库层命名空间记录
+#[derive(Debug, Clone)]
+pub struct NamespaceRecord {
+    pub prefix: String,
+    pub uri: String,
+    pub isolated: bool,
+    pub workspace: Option<String>,
+    pub created: String,
+    pub modified: String,
+}
+
 fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
     conn.query_row(
         &format!("SELECT COUNT(*) FROM pragma_table_info('{}') WHERE name='{}'", table, column),
@@ -161,6 +172,37 @@ impl SqliteStore {
             [],
         )?;
 
+        // 命名空间表
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS namespaces (
+                prefix TEXT PRIMARY KEY,
+                uri TEXT NOT NULL,
+                isolated INTEGER DEFAULT 0,
+                workspace TEXT,
+                created TEXT,
+                modified TEXT
+            )",
+            [],
+        )?;
+
+        // SQL 视图表
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS sql_views (
+                name TEXT PRIMARY KEY,
+                sql TEXT NOT NULL,
+                workspace TEXT NOT NULL,
+                store TEXT NOT NULL,
+                geometry_column TEXT DEFAULT 'geom',
+                geometry_type TEXT DEFAULT 'Geometry',
+                crs TEXT DEFAULT 'EPSG:4326',
+                parameters TEXT DEFAULT '[]',
+                description TEXT,
+                created TEXT,
+                modified TEXT
+            )",
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -269,6 +311,101 @@ impl SqliteStore {
     pub async fn delete_workspace(&self, name: &str) -> SqlResult<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM workspaces WHERE name = ?", [name])?;
+        Ok(())
+    }
+
+    // ========================================================================
+    // 命名空间 (Namespaces)
+    // ========================================================================
+
+    pub async fn get_namespace(&self, prefix: &str) -> SqlResult<Option<NamespaceRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT prefix, uri, isolated, workspace, created, modified
+             FROM namespaces WHERE prefix = ?"
+        )?;
+        let mut rows = stmt.query([prefix])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(NamespaceRecord {
+                prefix: row.get(0)?,
+                uri: row.get(1)?,
+                isolated: row.get::<_, i32>(2)? == 1,
+                workspace: row.get(3)?,
+                created: row.get(4)?,
+                modified: row.get(5)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn get_all_namespaces(&self) -> SqlResult<Vec<NamespaceRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT prefix, uri, isolated, workspace, created, modified
+             FROM namespaces ORDER BY prefix"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(NamespaceRecord {
+                prefix: row.get(0)?,
+                uri: row.get(1)?,
+                isolated: row.get::<_, i32>(2)? == 1,
+                workspace: row.get(3)?,
+                created: row.get(4)?,
+                modified: row.get(5)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub async fn create_namespace(&self, prefix: &str, uri: &str, workspace: Option<&str>, isolated: bool) -> SqlResult<NamespaceRecord> {
+        let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO namespaces (prefix, uri, isolated, workspace, created, modified)
+             VALUES (?, ?, ?, ?, ?, ?)",
+            params![prefix, uri, isolated as i32, workspace, now, now],
+        )?;
+        Ok(NamespaceRecord {
+            prefix: prefix.to_string(),
+            uri: uri.to_string(),
+            isolated,
+            workspace: workspace.map(|s| s.to_string()),
+            created: now.clone(),
+            modified: now,
+        })
+    }
+
+    pub async fn update_namespace(&self, prefix: &str, uri: Option<String>, isolated: Option<bool>, workspace: Option<String>) -> SqlResult<()> {
+        let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let conn = self.conn.lock().unwrap();
+
+        let mut updates: Vec<String> = vec!["modified = ?".to_string()];
+        let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now.clone())];
+
+        if let Some(ref u) = uri {
+            updates.push("uri = ?".to_string());
+            values.push(Box::new(u.clone()));
+        }
+        if let Some(i) = isolated {
+            updates.push("isolated = ?".to_string());
+            values.push(Box::new(i as i32));
+        }
+        if let Some(ref w) = workspace {
+            updates.push("workspace = ?".to_string());
+            values.push(Box::new(w.clone()));
+        }
+
+        let query = format!("UPDATE namespaces SET {} WHERE prefix = ?", updates.join(", "));
+        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        params.push(&prefix);
+        conn.execute(&query, params.as_slice())?;
+        Ok(())
+    }
+
+    pub async fn delete_namespace(&self, prefix: &str) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM namespaces WHERE prefix = ?", [prefix])?;
         Ok(())
     }
 
@@ -777,5 +914,128 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         let count = conn.execute("DELETE FROM features WHERE layer_name = ?", [layer_name])?;
         Ok(count)
+    }
+
+    // ========================================================================
+    // SQL 视图 (SQL Views)
+    // ========================================================================
+
+    pub async fn get_sql_view(&self, name: &str) -> SqlResult<Option<crate::models::sql_view::SqlView>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name, sql, workspace, store, geometry_column, geometry_type, crs, parameters, description, created, modified
+             FROM sql_views WHERE name = ?"
+        )?;
+        let mut rows = stmt.query([name])?;
+        if let Some(row) = rows.next()? {
+            let params_str: String = row.get(7)?;
+            let parameters: Vec<crate::models::sql_view::SqlViewParameter> = serde_json::from_str(&params_str).unwrap_or_default();
+            Ok(Some(crate::models::sql_view::SqlView {
+                name: row.get(0)?,
+                sql: row.get(1)?,
+                workspace: row.get(2)?,
+                store: row.get(3)?,
+                geometry_column: row.get(4)?,
+                geometry_type: row.get(5)?,
+                crs: row.get(6)?,
+                parameters,
+                description: row.get(8)?,
+                created: row.get(9)?,
+                modified: row.get(10)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn get_all_sql_views(&self) -> SqlResult<Vec<crate::models::sql_view::SqlView>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name, sql, workspace, store, geometry_column, geometry_type, crs, parameters, description, created, modified
+             FROM sql_views ORDER BY name"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let params_str: String = row.get(7)?;
+            let parameters: Vec<crate::models::sql_view::SqlViewParameter> = serde_json::from_str(&params_str).unwrap_or_default();
+            Ok(crate::models::sql_view::SqlView {
+                name: row.get(0)?,
+                sql: row.get(1)?,
+                workspace: row.get(2)?,
+                store: row.get(3)?,
+                geometry_column: row.get(4)?,
+                geometry_type: row.get(5)?,
+                crs: row.get(6)?,
+                parameters,
+                description: row.get(8)?,
+                created: row.get(9)?,
+                modified: row.get(10)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub async fn create_sql_view(&self, view: &crate::models::sql_view::SqlView) -> SqlResult<()> {
+        let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let params_json = serde_json::to_string(&view.parameters).unwrap_or_else(|_| "[]".to_string());
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO sql_views (name, sql, workspace, store, geometry_column, geometry_type, crs, parameters, description, created, modified)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![
+                view.name, view.sql, view.workspace, view.store,
+                view.geometry_column, view.geometry_type, view.crs,
+                params_json, view.description, now, now
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub async fn update_sql_view(&self, name: &str, sql: Option<String>, geometry_column: Option<String>,
+                                  geometry_type: Option<String>, crs: Option<String>,
+                                  parameters: Option<Vec<crate::models::sql_view::SqlViewParameter>>,
+                                  description: Option<String>) -> SqlResult<()> {
+        let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let conn = self.conn.lock().unwrap();
+
+        let mut updates: Vec<String> = vec!["modified = ?".to_string()];
+        let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now.clone())];
+
+        if let Some(ref s) = sql {
+            updates.push("sql = ?".to_string());
+            values.push(Box::new(s.clone()));
+        }
+        if let Some(ref g) = geometry_column {
+            updates.push("geometry_column = ?".to_string());
+            values.push(Box::new(g.clone()));
+        }
+        if let Some(ref g) = geometry_type {
+            updates.push("geometry_type = ?".to_string());
+            values.push(Box::new(g.clone()));
+        }
+        if let Some(ref c) = crs {
+            updates.push("crs = ?".to_string());
+            values.push(Box::new(c.clone()));
+        }
+        if let Some(ref p) = parameters {
+            let params_json = serde_json::to_string(p).unwrap_or_else(|_| "[]".to_string());
+            updates.push("parameters = ?".to_string());
+            values.push(Box::new(params_json));
+        }
+        if let Some(ref d) = description {
+            updates.push("description = ?".to_string());
+            values.push(Box::new(d.clone()));
+        }
+
+        let query = format!("UPDATE sql_views SET {} WHERE name = ?", updates.join(", "));
+        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        params.push(&name);
+        conn.execute(&query, params.as_slice())?;
+        Ok(())
+    }
+
+    pub async fn delete_sql_view(&self, name: &str) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM sql_views WHERE name = ?", [name])?;
+        Ok(())
     }
 }

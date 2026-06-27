@@ -268,17 +268,36 @@ pub async fn get_tile(
     let x: u32 = req.match_info().get("x").and_then(|v| v.parse().ok()).unwrap_or(0);
     let y: u32 = req.match_info().get("y").and_then(|v| v.parse().ok()).unwrap_or(0);
 
+    // 获取 gridset 参数 (默认 EPSG:4326)
+    let gridset = req.query_string()
+        .split('&')
+        .find_map(|pair| {
+            let mut parts = pair.splitn(2, '=');
+            if parts.next()? == "gridset" { parts.next() } else { None }
+        })
+        .unwrap_or("EPSG:4326");
+
+    // 1. 尝试从缓存获取
+    if let Some(ref cache) = state.tile_cache {
+        if let Some(cached) = cache.get(layer_name, gridset, z, x, y).await {
+            return Ok(HttpResponse::Ok()
+                .insert_header(("X-Tile-Cache", "HIT"))
+                .content_type("image/png")
+                .body(cached));
+        }
+    }
+
+    // 2. 计算瓦片边界
     let tile_size = 256u32;
     let n = 2.0_f64.powi(z as i32);
     let minx = (x as f64 / n) * 360.0 - 180.0;
     let maxx = ((x + 1) as f64 / n) * 360.0 - 180.0;
-    let miny = (y as f64 / n * std::f64::consts::PI).tan().asin().to_degrees();
-    let minx = minx.min(maxx);
-    let maxx = minx.max(maxx);
-
-    let miny = if miny.is_finite() { miny } else { -85.0511 };
-    let maxy = ((y + 1) as f64 / n * std::f64::consts::PI).tan().asin().to_degrees();
-    let maxy = if maxy.is_finite() { maxy } else { 85.0511 };
+    let sin_lat = |y: f64| -> f64 {
+        let v = std::f64::consts::PI * (1.0 - 2.0 * y / n);
+        v.cos().recip().ln().atan().to_degrees()
+    };
+    let miny = sin_lat(y as f64 + 1.0).max(-85.0511);
+    let maxy = sin_lat(y as f64).min(85.0511);
 
     let bounds = Bounds::new(minx, miny, maxx, maxy);
 
@@ -315,6 +334,8 @@ pub async fn get_tile(
             render_items.push((geom, style));
         }
     }
+    drop(layers_lock);
+    drop(styles_lock);
 
     let img = renderer.render(render_items);
 
@@ -322,12 +343,65 @@ pub async fn get_tile(
     img.write_to(&mut buffer, image::ImageFormat::Png)
         .map_err(|e| GeoServerError::RenderingError(e.to_string()))?;
 
+    let tile_data = buffer.into_inner();
+
+    // 3. 写入缓存
+    if let Some(ref cache) = state.tile_cache {
+        cache.put(layer_name, gridset, z, x, y, &tile_data).await;
+    }
+
     Ok(HttpResponse::Ok()
+        .insert_header(("X-Tile-Cache", "MISS"))
         .content_type("image/png")
-        .body(buffer.into_inner()))
+        .body(tile_data))
 }
 
-fn get_style_rules(
+/// 清除指定图层的瓦片缓存
+pub async fn clear_tile_cache(
+    req: HttpRequest,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let layer_name = req.match_info().get("layer").unwrap_or("");
+    if let Some(ref cache) = state.tile_cache {
+        let count = cache.clear_layer(layer_name).await
+            .map_err(|e| GeoServerError::InternalError(format!("清除缓存失败: {}", e)))?;
+        Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "message": format!("已清除图层 '{}' 的 {} 个缓存瓦片", layer_name, count),
+            "cleared": count,
+        }))))
+    } else {
+        Err(GeoServerError::InternalError("瓦片缓存未启用".to_string()))
+    }
+}
+
+/// 获取缓存统计
+pub async fn get_tile_cache_stats(
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    if let Some(ref cache) = state.tile_cache {
+        let disk_stats = cache.calculate_disk_stats().await;
+        Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "enabled": true,
+            "hits": disk_stats.hits,
+            "misses": disk_stats.misses,
+            "hitRate": cache.hit_rate(),
+            "totalTiles": disk_stats.total_tiles,
+            "cacheSizeBytes": disk_stats.cache_size_bytes,
+            "cacheSizeMb": format!("{:.2} MB", disk_stats.cache_size_bytes as f64 / 1_048_576.0),
+        }))))
+    } else {
+        Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "enabled": false,
+            "hits": 0,
+            "misses": 0,
+            "hitRate": 0.0,
+            "totalTiles": 0,
+            "cacheSizeBytes": 0,
+        }))))
+    }
+}
+
+pub fn get_style_rules(
     styles: &std::collections::HashMap<String, String>,
     layer: &crate::models::Layer,
 ) -> Vec<crate::utils::sld_parser::ParsedRule> {
@@ -339,12 +413,12 @@ fn get_style_rules(
     }
 }
 
-fn calculate_tile_scale_denom(z: u32) -> f64 {
+pub fn calculate_tile_scale_denom(z: u32) -> f64 {
     let resolution = 156543.03 / 2.0_f64.powi(z as i32);
     resolution / 0.00028
 }
 
-fn reproject_geometry_helper(
+pub fn reproject_geometry_helper(
     geom: &GeoJsonGeometry,
     from_crs: &str,
     to_crs: &str,

@@ -199,6 +199,71 @@ export interface LayerGroup {
   styles?: (string | null)[];
 }
 
+/** 命名空间 */
+export interface Namespace {
+  prefix: string;
+  uri: string;
+  isolated: boolean;
+  workspace?: string;
+  created?: string;
+  modified?: string;
+}
+
+export interface CreateNamespaceRequest {
+  prefix: string;
+  uri: string;
+  workspace?: string;
+  isolated?: boolean;
+}
+
+export interface UpdateNamespaceRequest {
+  uri?: string;
+  isolated?: boolean;
+  workspace?: string;
+}
+
+/** SQL 视图 */
+export interface SqlView {
+  name: string;
+  sql: string;
+  workspace: string;
+  store: string;
+  geometryColumn: string;
+  geometryType: string;
+  crs: string;
+  parameters: SqlViewParameter[];
+  description?: string;
+  created?: string;
+  modified?: string;
+}
+
+export interface SqlViewParameter {
+  name: string;
+  defaultValue: string;
+  regexValidator?: string;
+}
+
+export interface CreateSqlViewRequest {
+  name: string;
+  sql: string;
+  workspace: string;
+  store: string;
+  geometryColumn?: string;
+  geometryType?: string;
+  crs?: string;
+  parameters?: SqlViewParameter[];
+  description?: string;
+}
+
+export interface UpdateSqlViewRequest {
+  sql?: string;
+  geometryColumn?: string;
+  geometryType?: string;
+  crs?: string;
+  parameters?: SqlViewParameter[];
+  description?: string;
+}
+
 /** 上传结果 */
 export interface UploadResult {
   name: string;

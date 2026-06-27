@@ -82,6 +82,10 @@ pub async fn create_workspace(
     if let Some(store) = &state.store {
         match store.create_workspace(&body).await {
             Ok(workspace) => {
+                // 自动创建对应的命名空间
+                let ns_uri = format!("http://geoserver.org/{}", workspace.name);
+                let _ = store.create_namespace(&workspace.name, &ns_uri, Some(&workspace.name), false).await;
+
                 Ok(HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
                     "name": workspace.name,
                     "title": workspace.title,

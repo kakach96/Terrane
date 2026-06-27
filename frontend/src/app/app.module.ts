@@ -46,12 +46,17 @@ import { StylesComponent } from './components/styles/styles.component';
 import { StyleEditorDialogComponent } from './components/styles/style-editor-dialog.component';
 import { LayerGroupsComponent } from './components/layer-groups/layer-groups.component';
 import { CreateLayerGroupDialogComponent } from './components/layer-groups/create-layer-group-dialog.component';
+import { NamespacesComponent } from './components/namespaces/namespaces.component';
+import { NamespaceDialogComponent } from './components/namespaces/namespace-dialog.component';
+import { StoresComponent } from './components/stores/stores.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
   { path: 'dashboard', component: DashboardComponent },
   { path: 'workspaces', component: WorkspacesComponent },
+  { path: 'namespaces', component: NamespacesComponent },
   { path: 'data-sources', component: DataSourcesComponent },
+  { path: 'stores', component: StoresComponent },
   { path: 'layers', component: LayersComponent },
   { path: 'layers/create', component: LayerCreateComponent },
   { path: 'layers/:name', component: LayerDetailComponent },
@@ -80,7 +85,10 @@ const routes: Routes = [
     StylesComponent,
     StyleEditorDialogComponent,
     LayerGroupsComponent,
-    CreateLayerGroupDialogComponent
+    CreateLayerGroupDialogComponent,
+    NamespacesComponent,
+    NamespaceDialogComponent,
+    StoresComponent
   ],
   imports: [
     BrowserModule,

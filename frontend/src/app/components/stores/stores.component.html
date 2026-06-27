@@ -1,0 +1,89 @@
+<div class="page-header">
+  <div>
+    <h1>存储管理</h1>
+    <p class="subtitle">管理工作空间下的矢量存储 (DataStore) 和栅格存储 (CoverageStore)</p>
+  </div>
+</div>
+
+<div class="page-content">
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>
+        <mat-chip-listbox [(ngModel)]="filterType" (ngModelChange)="filterType = $event">
+          <mat-chip-option value="all" selected>全部</mat-chip-option>
+          <mat-chip-option value="DataStore">
+            <mat-icon matChipAvatar>storage</mat-icon>
+            矢量存储
+          </mat-chip-option>
+          <mat-chip-option value="CoverageStore">
+            <mat-icon matChipAvatar>image</mat-icon>
+            栅格存储
+          </mat-chip-option>
+        </mat-chip-listbox>
+      </mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="table-container">
+        <table mat-table [dataSource]="filteredStores" class="data-table">
+
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>名称</th>
+            <td mat-cell *matCellDef="let store">{{ store.name }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef>类型</th>
+            <td mat-cell *matCellDef="let store">
+              <mat-chip [color]="getStoreTypeColor(store.type)" highlighted>
+                <mat-icon matChipAvatar>{{ getStoreTypeIcon(store.type) }}</mat-icon>
+                {{ store.type === 'DataStore' ? '矢量存储' : '栅格存储' }}
+              </mat-chip>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="workspace">
+            <th mat-header-cell *matHeaderCellDef>工作空间</th>
+            <td mat-cell *matCellDef="let store">
+              <span *ngIf="store.workspace; else noWs">{{ store.workspace }}</span>
+              <ng-template #noWs><span class="muted">全局</span></ng-template>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="enabled">
+            <th mat-header-cell *matHeaderCellDef>状态</th>
+            <td mat-cell *matCellDef="let store">
+              <mat-chip [color]="store.enabled ? 'primary' : ''" highlighted>
+                {{ store.enabled ? '已启用' : '已禁用' }}
+              </mat-chip>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>连接信息</th>
+            <td mat-cell *matCellDef="let store" class="conn-cell">
+              <span class="conn-text" [matTooltip]="getConnectionSummary(store)">
+                {{ getConnectionSummary(store) }}
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+
+          <tr class="mat-row" *matNoDataRow>
+            <td class="mat-cell no-data" [attr.colspan]="displayedColumns.length">
+              <div class="empty-state" *ngIf="!loading">
+                <mat-icon>storage</mat-icon>
+                <p>暂无存储</p>
+                <p class="hint">请先在数据源页面创建数据源</p>
+              </div>
+              <div class="loading-shimmer" *ngIf="loading">
+                <mat-spinner diameter="32"></mat-spinner>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

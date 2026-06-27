@@ -6,6 +6,10 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
             .route("", web::get().to(crate::handlers::handle_wms_request))
     )
     .service(
+        web::scope("/wmts")
+            .route("", web::get().to(crate::handlers::handle_wmts_request))
+    )
+    .service(
         web::scope("/wfs")
             .route("", web::get().to(crate::handlers::handle_wfs_request))
             .route("", web::post().to(crate::handlers::handle_wfs_post_request))
@@ -58,6 +62,17 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                     .route(web::put().to(crate::handlers::update_workspace))
                     .route(web::delete().to(crate::handlers::delete_workspace))
             )
+            .service(
+                web::resource("/namespaces")
+                    .route(web::get().to(crate::handlers::list_namespaces))
+                    .route(web::post().to(crate::handlers::create_namespace))
+            )
+            .service(
+                web::resource("/namespaces/{prefix}")
+                    .route(web::get().to(crate::handlers::get_namespace))
+                    .route(web::put().to(crate::handlers::update_namespace))
+                    .route(web::delete().to(crate::handlers::delete_namespace))
+            )
             .route("/server/status", web::get().to(crate::handlers::get_server_status))
             .route("/data/upload", web::post().to(crate::handlers::upload_geojson))
             .route("/data/upload/shapefile", web::post().to(crate::handlers::upload_handler::upload_shapefile))
@@ -76,6 +91,22 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                     .route(web::delete().to(crate::handlers::delete_data_source))
             )
             .route("/data-sources/{name}/test", web::post().to(crate::handlers::test_data_source_connection))
+            .service(
+                web::resource("/stores")
+                    .route(web::get().to(crate::handlers::list_stores))
+            )
+            .service(
+                web::resource("/stores/{name}")
+                    .route(web::get().to(crate::handlers::get_store))
+            )
+            .service(
+                web::resource("/workspaces/{workspace}/stores")
+                    .route(web::get().to(crate::handlers::list_workspace_stores))
+            )
+            .service(
+                web::resource("/workspaces/{workspace}/stores/{name}")
+                    .route(web::get().to(crate::handlers::get_workspace_store))
+            )
             .service(
                 web::resource("/layers/{layer}/style")
                     .route(web::get().to(crate::handlers::get_layer_style))
@@ -103,5 +134,21 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                     .route(web::delete().to(crate::handlers::delete_layer_group))
             )
             .route("/tiles/{layer}/{z}/{x}/{y}", web::get().to(crate::handlers::get_tile))
+            // WMTS RESTful 瓦片模板: /wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}
+            .route("/wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}", web::get().to(crate::handlers::handle_wmts_rest_tile))
+            .route("/tiles/cache/clear/{layer}", web::delete().to(crate::handlers::clear_tile_cache))
+            .route("/tiles/cache/stats", web::get().to(crate::handlers::get_tile_cache_stats))
+            .service(
+                web::resource("/sql-views")
+                    .route(web::get().to(crate::handlers::list_sql_views))
+                    .route(web::post().to(crate::handlers::create_sql_view))
+            )
+            .route("/sql-views/preview", web::post().to(crate::handlers::preview_sql_view))
+            .service(
+                web::resource("/sql-views/{name}")
+                    .route(web::get().to(crate::handlers::get_sql_view))
+                    .route(web::put().to(crate::handlers::update_sql_view))
+                    .route(web::delete().to(crate::handlers::delete_sql_view))
+            )
     );
 }

@@ -18,6 +18,12 @@ import {
   Workspace,
   CreateWorkspaceRequest,
   UpdateWorkspaceRequest,
+  Namespace,
+  CreateNamespaceRequest,
+  UpdateNamespaceRequest,
+  SqlView,
+  CreateSqlViewRequest,
+  UpdateSqlViewRequest,
   ServerStatus,
   DataSource,
   CreateDataSourceRequest,
@@ -199,6 +205,94 @@ export class GeoserverService {
 
   deleteWorkspace(name: string): Observable<void> {
     return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/workspaces/${name}`)
+      .pipe(map(() => void 0));
+  }
+
+  // ---- 存储 (Stores) ----
+
+  getStores(): Observable<any[]> {
+    return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/stores`)
+      .pipe(map(response => response.data || []));
+  }
+
+  getStore(name: string): Observable<any> {
+    return this.http.get<ApiResponse<any>>(`${this.apiUrl}/stores/${name}`)
+      .pipe(map(response => response.data));
+  }
+
+  getWorkspaceStores(workspace: string): Observable<any[]> {
+    return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/workspaces/${workspace}/stores`)
+      .pipe(map(response => response.data || []));
+  }
+
+  // ---- 瓦片缓存 (GeoWebCache) ----
+
+  getTileCacheStats(): Observable<any> {
+    return this.http.get<ApiResponse<any>>(`${this.apiUrl}/tiles/cache/stats`)
+      .pipe(map(response => response.data));
+  }
+
+  clearTileCache(layerName: string): Observable<any> {
+    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/tiles/cache/clear/${layerName}`)
+      .pipe(map(response => response.data));
+  }
+
+  // ---- SQL 视图 ----
+
+  getSqlViews(): Observable<SqlView[]> {
+    return this.http.get<ApiResponse<SqlView[]>>(`${this.apiUrl}/sql-views`)
+      .pipe(map(response => response.data || []));
+  }
+
+  getSqlView(name: string): Observable<SqlView> {
+    return this.http.get<ApiResponse<SqlView>>(`${this.apiUrl}/sql-views/${name}`)
+      .pipe(map(response => response.data as SqlView));
+  }
+
+  createSqlView(request: CreateSqlViewRequest): Observable<any> {
+    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/sql-views`, request)
+      .pipe(map(response => response.data));
+  }
+
+  updateSqlView(name: string, request: UpdateSqlViewRequest): Observable<void> {
+    return this.http.put<ApiResponse<void>>(`${this.apiUrl}/sql-views/${name}`, request)
+      .pipe(map(() => void 0));
+  }
+
+  deleteSqlView(name: string): Observable<void> {
+    return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/sql-views/${name}`)
+      .pipe(map(() => void 0));
+  }
+
+  previewSqlView(request: { sql: string; workspace: string; store: string; parameters?: any[] }): Observable<any> {
+    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/sql-views/preview`, request)
+      .pipe(map(response => response.data));
+  }
+
+  // ---- 命名空间 ----
+
+  getNamespaces(): Observable<Namespace[]> {
+    return this.http.get<ApiResponse<Namespace[]>>(`${this.apiUrl}/namespaces`)
+      .pipe(map(response => response.data || []));
+  }
+
+  getNamespace(prefix: string): Observable<Namespace> {
+    return this.http.get<ApiResponse<Namespace>>(`${this.apiUrl}/namespaces/${prefix}`)
+      .pipe(map(response => response.data as Namespace));
+  }
+
+  createNamespace(request: CreateNamespaceRequest): Observable<Namespace> {
+    return this.http.post<ApiResponse<Namespace>>(`${this.apiUrl}/namespaces`, request)
+      .pipe(map(response => response.data as Namespace));
+  }
+
+  updateNamespace(prefix: string, updates: UpdateNamespaceRequest): Observable<void> {
+    return this.http.put<ApiResponse<void>>(`${this.apiUrl}/namespaces/${prefix}`, updates)
+      .pipe(map(() => void 0));
+  }
+
+  deleteNamespace(prefix: string): Observable<void> {
+    return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/namespaces/${prefix}`)
       .pipe(map(() => void 0));
   }
 

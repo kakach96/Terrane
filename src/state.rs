@@ -8,6 +8,7 @@ use crate::config::GeoServerConfig;
 use crate::models::{Layer, Feature, layer::LayerGroup};
 use crate::store::SqliteStore;
 use crate::utils::sld_parser;
+use crate::utils::tile_cache::TileCache;
 
 #[derive(Debug, Clone)]
 pub struct StyleMeta {
@@ -29,6 +30,8 @@ pub struct AppState {
     pub start_time: Instant,
     pub request_count: AtomicU64,
     pub error_count: AtomicU64,
+    /// GeoWebCache 瓦片缓存引擎
+    pub tile_cache: Option<TileCache>,
 }
 
 impl AppState {
@@ -132,6 +135,18 @@ impl AppState {
             }
         }
 
+        // GeoWebCache 初始化
+        let tile_cache = config.gwc.as_ref().map(|gwc_config| {
+            let cache = TileCache::new(gwc_config.clone());
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                if let Err(e) = cache.init().await {
+                    eprintln!("[GWC] 瓦片缓存初始化失败: {}", e);
+                }
+            });
+            cache
+        });
+
         AppState {
             config,
             layers: Arc::new(RwLock::new(features_layers)),
@@ -144,6 +159,7 @@ impl AppState {
             start_time: Instant::now(),
             request_count: AtomicU64::new(0),
             error_count: AtomicU64::new(0),
+            tile_cache,
         }
     }
 

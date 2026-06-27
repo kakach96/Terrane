@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use config::{Config, File};
+use crate::utils::tile_cache::GwcConfig;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GeoServerConfig {
@@ -9,6 +10,9 @@ pub struct GeoServerConfig {
     pub logging: LoggingConfig,
     pub data_dir: PathBuf,
     pub workspaces: Vec<WorkspaceConfig>,
+    /// GeoWebCache 瓦片缓存配置
+    #[serde(default)]
+    pub gwc: Option<GwcConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -106,6 +110,11 @@ impl Default for GeoServerConfig {
             },
             data_dir: PathBuf::from("./data"),
             workspaces: vec![],
+            gwc: Some(GwcConfig {
+                cache_dir: PathBuf::from("./data/gwc"),
+                meta_dir: PathBuf::from("./data/gwc/meta"),
+                ..Default::default()
+            }),
         }
     }
 }

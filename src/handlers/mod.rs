@@ -1,12 +1,16 @@
 pub mod wms_handler;
 pub mod wfs_handler;
 pub mod wcs_handler;
+pub mod wmts_handler;
 pub mod rest_handler;
 pub mod layer_handler;
 pub mod feature_handler;
 pub mod workspace_handler;
 pub mod data_source_handler;
 pub mod style_handler;
+pub mod namespace_handler;
+pub mod store_handler;
+pub mod sql_view_handler;
 pub mod features;
 pub mod upload_handler;
 
@@ -19,3 +23,7 @@ pub use feature_handler::*;
 pub use workspace_handler::*;
 pub use data_source_handler::*;
 pub use style_handler::*;
+pub use namespace_handler::*;
+pub use store_handler::*;
+pub use wmts_handler::*;
+pub use sql_view_handler::*;

@@ -6,3 +6,4 @@ pub mod wkb;
 pub mod shapefile;
 pub mod geotiff;
 pub mod bounds;
+pub mod tile_cache;
