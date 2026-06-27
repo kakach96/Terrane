@@ -161,16 +161,21 @@
   flex: 1;
   padding: 32px;
   overflow-y: auto;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* 用户菜单信息 */
 :host ::ng-deep .user-info-menu {
-  padding: 8px 16px;
+  padding: 12px 16px 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   min-width: 140px;
+  border-bottom: 1px solid #f1f5f9;
 
   .menu-username {
     font-weight: 600;
@@ -179,8 +184,12 @@
   }
 
   .menu-role {
-    font-size: 12px;
+    font-size: 11px;
     color: #94a3b8;
     text-transform: capitalize;
+    background: #f1f5f9;
+    padding: 2px 10px;
+    border-radius: 10px;
+    letter-spacing: 0.3px;
   }
 }
