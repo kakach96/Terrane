@@ -18,7 +18,8 @@ impl DataSource {
     pub fn is_file_based(&self) -> bool {
         matches!(self.data_source_type,
             DataSourceType::Shapefile | DataSourceType::Geotiff |
-            DataSourceType::Geopackage | DataSourceType::WorldImage)
+            DataSourceType::Geopackage | DataSourceType::WorldImage |
+            DataSourceType::ArcGrid)
     }
 
     /// 判断数据源是否为 PostGIS 数据库类型
@@ -36,6 +37,7 @@ pub enum DataSourceType {
     Geopackage,
     WorldImage,
     CascadedWms,
+    ArcGrid,
 }
 
 impl std::fmt::Display for DataSourceType {
@@ -47,6 +49,7 @@ impl std::fmt::Display for DataSourceType {
             DataSourceType::Geopackage => write!(f, "geopackage"),
             DataSourceType::WorldImage => write!(f, "worldimage"),
             DataSourceType::CascadedWms => write!(f, "cascaded_wms"),
+            DataSourceType::ArcGrid => write!(f, "arcgrid"),
         }
     }
 }

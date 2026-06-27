@@ -21,7 +21,8 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'geotiff', label: 'GeoTIFF' },
     { value: 'geopackage', label: 'GeoPackage' },
     { value: 'worldimage', label: 'WorldImage' },
-    { value: 'cascaded_wms', label: '级联 WMS' }
+    { value: 'cascaded_wms', label: '级联 WMS' },
+    { value: 'arcgrid', label: 'ArcGrid' }
   ];
   isTesting = false;
   selectedFile: File | null = null;

@@ -37,6 +37,7 @@ pub async fn compute_layer_bounds(
         DataSourceType::Geopackage => compute_geopackage_bounds(ds),
         DataSourceType::WorldImage => compute_worldimage_bounds(ds),
         DataSourceType::CascadedWms => Ok(None),
+        DataSourceType::ArcGrid => compute_arcgrid_bounds(ds),
     }
 }
 
@@ -228,6 +229,27 @@ fn compute_worldimage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, 
         }
         Err(e) => {
             info!("[Bounds] WorldImage 读取失败: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// 从 ArcGrid 计算边界
+fn compute_arcgrid_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+    let file_path = ds.connection.as_ref()
+        .and_then(|c| c.file_path.as_ref())
+        .ok_or_else(|| GeoServerError::BadRequest("ArcGrid 数据源缺少文件路径".to_string()))?;
+
+    info!("[Bounds] 从 ArcGrid 计算边界: {}", file_path);
+
+    match crate::utils::arcgrid::read_arcgrid_meta(file_path) {
+        Ok((bounds, _width, _height)) => {
+            let crs = CoordinateReferenceSystem::EPSG4326;
+            info!("[Bounds] ArcGrid 边界: {:?}", bounds);
+            Ok(Some(ComputedBounds { bounds, crs }))
+        }
+        Err(e) => {
+            info!("[Bounds] ArcGrid 读取失败: {}", e);
             Ok(None)
         }
     }

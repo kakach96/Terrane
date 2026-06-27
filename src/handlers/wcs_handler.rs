@@ -28,7 +28,9 @@ async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::pa
     if let Some(store) = &state.store {
         if let Ok(ds_list) = store.get_all_data_sources().await {
             for ds in &ds_list {
-                if ds.data_source_type == DataSourceType::Geotiff {
+                if ds.data_source_type == DataSourceType::Geotiff
+                    || ds.data_source_type == DataSourceType::WorldImage
+                    || ds.data_source_type == DataSourceType::ArcGrid {
                     if let Some(conn) = &ds.connection {
                         if let Some(file_path) = &conn.file_path {
                             let path = std::path::PathBuf::from(file_path);
@@ -129,7 +131,8 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
     let raster_result = if let Some(store) = &state.store {
         if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
             let is_raster = ds.data_source_type == DataSourceType::Geotiff
-                         || ds.data_source_type == DataSourceType::WorldImage;
+                         || ds.data_source_type == DataSourceType::WorldImage
+                         || ds.data_source_type == DataSourceType::ArcGrid;
             if is_raster {
                 if let Some(conn) = &ds.connection {
                     if let Some(file_path) = &conn.file_path {
@@ -149,6 +152,15 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
                                     Ok(wim) => Some((wim.rgba_image, Some(wim.bounds))),
                                     Err(e) => {
                                         info!("[WCS] WorldImage 读取失败: {}", e);
+                                        None
+                                    }
+                                }
+                            }
+                            DataSourceType::ArcGrid => {
+                                match crate::utils::arcgrid::read_arcgrid(file_path) {
+                                    Ok(ag) => Some((ag.rgba_image, Some(ag.bounds))),
+                                    Err(e) => {
+                                        info!("[WCS] ArcGrid 读取失败: {}", e);
                                         None
                                     }
                                 }

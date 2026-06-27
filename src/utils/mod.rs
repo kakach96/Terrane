@@ -11,3 +11,4 @@ pub mod bounds;
 pub mod tile_cache;
 pub mod cql_filter;
 pub mod cascaded;
+pub mod arcgrid;

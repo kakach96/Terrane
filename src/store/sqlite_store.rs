@@ -31,6 +31,7 @@ fn parse_ds_type(type_str: &str) -> DataSourceType {
         "geopackage" => DataSourceType::Geopackage,
         "worldimage" => DataSourceType::WorldImage,
         "cascaded_wms" => DataSourceType::CascadedWms,
+        "arcgrid" => DataSourceType::ArcGrid,
         _ => DataSourceType::Postgis,
     }
 }
