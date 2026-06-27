@@ -281,20 +281,38 @@ async fn handle_get_feature(state: &AppState, request: &WfsRequest) -> Result<Ht
 
     let response = crate::models::FeatureCollection::new(all_features);
 
+    // GeoJSON 输出
     if output_format.contains("json") || output_format.contains("geojson") {
         let json = serde_json::to_string_pretty(&response)
             .map_err(|e| GeoServerError::ServiceError(e.to_string()))?;
 
-        Ok(HttpResponse::Ok()
+        return Ok(HttpResponse::Ok()
             .content_type("application/json")
-            .body(json))
-    } else {
-        let gml_response = generate_gml_response(&response, output_format);
-
-        Ok(HttpResponse::Ok()
-            .content_type("application/xml")
-            .body(gml_response))
+            .body(json));
     }
+
+    // CSV 输出
+    if output_format.contains("csv") {
+        let csv = generate_csv_response(&response);
+        return Ok(HttpResponse::Ok()
+            .content_type("text/csv; charset=utf-8")
+            .header("Content-Disposition", "attachment; filename=features.csv")
+            .body(csv));
+    }
+
+    // GML 输出
+    let (gml, content_type) = if output_format.contains("gml/2") {
+        (generate_gml2_response(&response), "application/gml+xml; version=2.1.2")
+    } else if output_format.contains("gml/3.2") {
+        (generate_gml32_response(&response), "application/gml+xml; version=3.2")
+    } else {
+        // 默认 GML 3.1.1
+        (generate_gml_response(&response, output_format), "application/gml+xml; version=3.1")
+    };
+
+    Ok(HttpResponse::Ok()
+        .content_type(content_type)
+        .body(gml))
 }
 
 async fn handle_get_feature_with_lock(state: &AppState, request: &WfsRequest) -> Result<HttpResponse, GeoServerError> {
@@ -398,9 +416,135 @@ fn properties_to_gml(properties: &std::collections::HashMap<String, crate::model
     for (key, value) in properties {
         xml.push_str(&format!("                <feature:{}>{}</feature:{}>\n",
             key,
-            value.to_string(),
+            escape_xml(&value.to_string()),
             key
         ));
     }
     xml
+}
+
+/// CSV 输出
+fn generate_csv_response(collection: &crate::models::FeatureCollection) -> String {
+    let mut csv = String::new();
+    // 收集所有属性名作为表头
+    let mut headers = vec!["id".to_string(), "geometry_type".to_string()];
+    for feature in &collection.features {
+        for key in feature.properties.keys() {
+            if !headers.contains(key) {
+                headers.push(key.clone());
+            }
+        }
+    }
+    csv.push_str(&headers.join(","));
+    csv.push('\n');
+
+    for feature in &collection.features {
+        let mut row = vec![
+            feature.id.clone(),
+            format!("\"{:?}\"", std::mem::discriminant(&feature.geometry)),
+        ];
+        for h in headers.iter().skip(2) {
+            let val = match feature.properties.get(h) {
+                Some(v) => {
+                    let s = v.to_string();
+                    if s.contains(',') || s.contains('"') {
+                        format!("\"{}\"", s.replace('"', "\"\""))
+                    } else {
+                        s
+                    }
+                }
+                None => String::new(),
+            };
+            row.push(val);
+        }
+        csv.push_str(&row.join(","));
+        csv.push('\n');
+    }
+    csv
+}
+
+/// GML 2.1.2 输出
+fn generate_gml2_response(collection: &crate::models::FeatureCollection) -> String {
+    let mut features_xml = String::new();
+    for feature in &collection.features {
+        features_xml.push_str(&format!(
+            r#"        <wfs:Feature>
+            <gml:boundedBy><gml:null>unknown</gml:null></gml:boundedBy>
+            <feature:Feature fid="{}">
+                <feature:geometry>
+                    {}
+                </feature:geometry>
+                {}
+            </feature:Feature>
+        </wfs:Feature>
+"#,
+            feature.id,
+            geometry_to_gml2(&feature.geometry),
+            properties_to_gml(&feature.properties)
+        ));
+    }
+
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs"
+                        xmlns:gml="http://www.opengis.net/gml"
+                        xmlns:feature="http://geoserver.org/feature"
+                        numberOfFeatures="{}">
+{}
+        </wfs:FeatureCollection>"#,
+        collection.features.len(),
+        features_xml
+    )
+}
+
+fn geometry_to_gml2(geometry: &crate::models::GeoJsonGeometry) -> String {
+    match geometry {
+        crate::models::GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
+            format!(r#"<gml:Point srsName="EPSG:4326"><gml:coordinates>{},{},0</gml:coordinates></gml:Point>"#,
+                coordinates[0], coordinates[1])
+        }
+        _ => String::new(),
+    }
+}
+
+/// GML 3.2.1 输出
+fn generate_gml32_response(collection: &crate::models::FeatureCollection) -> String {
+    let mut features_xml = String::new();
+    for feature in &collection.features {
+        features_xml.push_str(&format!(
+            r#"        <wfs:member>
+            <Feature gml:id="{}">
+                <feature:geometry>
+                    {}
+                </feature:geometry>
+                {}
+            </Feature>
+        </wfs:member>
+"#,
+            feature.id,
+            geometry_to_gml(&feature.geometry, "3.2"),
+            properties_to_gml(&feature.properties)
+        ));
+    }
+
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
+                        xmlns:gml="http://www.opengis.net/gml/3.2"
+                        xmlns:feature="http://geoserver.org/feature"
+                        numberMatched="{}" numberReturned="{}">
+{}
+        </wfs:FeatureCollection>"#,
+        collection.total_count,
+        collection.features.len(),
+        features_xml
+    )
+}
+
+fn escape_xml(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }

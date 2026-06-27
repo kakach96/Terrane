@@ -545,7 +545,7 @@ fn render_map_image(
     info!("[render_map_image] 开始渲染地图，尺寸: {}x{}, 透明背景: {}", 
           context.width, context.height, context.transparent);
     
-    let renderer = MapRenderer::new(context.options.clone(), context.bounds.clone());
+    let format_lower = context.format.to_lowercase();
 
     let all_render_items: Vec<(GeoJsonGeometry, Style)> = layer_contexts.iter()
         .flat_map(|ctx| ctx.render_items.clone())
@@ -553,9 +553,51 @@ fn render_map_image(
 
     info!("[render_map_image] 共 {} 个渲染项待渲染", all_render_items.len());
 
+    // 非图片格式: SVG
+    if format_lower.contains("svg") {
+        let svg = crate::utils::rendering::render_to_svg(
+            &all_render_items, &context.bounds, context.width, context.height
+        );
+        return Ok(HttpResponse::Ok()
+            .content_type("image/svg+xml")
+            .body(svg));
+    }
+
+    // 非图片格式: KML
+    if format_lower.contains("kml") {
+        let layer_name = context.layers.first().map(|s| s.as_str()).unwrap_or("map");
+        let kml = crate::utils::rendering::render_to_kml(&all_render_items, layer_name);
+        return Ok(HttpResponse::Ok()
+            .content_type("application/vnd.google-earth.kml+xml")
+            .body(kml));
+    }
+
+    // 非图片格式: GeoJSON (输出要素 GeoJSON)
+    if format_lower.contains("json") || format_lower.contains("geojson") {
+        let mut features: Vec<serde_json::Value> = Vec::new();
+        for ctx in layer_contexts {
+            for (geom, _style) in &ctx.render_items {
+                features.push(serde_json::json!({
+                    "type": "Feature",
+                    "geometry": geom,
+                    "properties": {},
+                }));
+            }
+        }
+        let geojson = serde_json::json!({
+            "type": "FeatureCollection",
+            "features": features,
+        });
+        return Ok(HttpResponse::Ok()
+            .content_type("application/geo+json")
+            .json(geojson));
+    }
+
+    // 图片格式: 使用 MapRenderer 渲染
+    let renderer = MapRenderer::new(context.options.clone(), context.bounds.clone());
     let img = renderer.render(all_render_items);
 
-    let image_format = match context.format.to_lowercase().as_str() {
+    let image_format = match format_lower.as_str() {
         s if s.contains("png") => ImageFormat::Png,
         s if s.contains("jpeg") || s.contains("jpg") => ImageFormat::Jpeg,
         s if s.contains("gif") => ImageFormat::Gif,

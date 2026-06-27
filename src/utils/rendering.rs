@@ -621,3 +621,137 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
     PngEncoder::new(&mut buf).write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8).unwrap();
     buf
 }
+
+// ---------------------------------------------------------------------------
+// SVG 渲染 — 将地图渲染为 SVG 矢量格式
+// ---------------------------------------------------------------------------
+
+/// 将要素渲染为 SVG 字符串
+pub fn render_to_svg(features: &[(GeoJsonGeometry, Style)], bounds: &Bounds, width: u32, height: u32) -> String {
+    let mut svg = String::new();
+    svg.push_str(&format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}" width="{}" height="{}">
+"#, width, height, width, height
+    ));
+
+    svg.push_str(r#"<defs><style type="text/css"><![CDATA[
+    .fp { fill: #1565c0; stroke: #0d47a1; stroke-width: 2; }
+    .fl { fill: none; stroke: #1565c0; stroke-width: 2; }
+    .fg { fill: #bbdefb; stroke: #1565c0; stroke-width: 1.5; fill-opacity: 0.6; }
+]]></style></defs>"#);
+
+    svg.push_str(&format!("<rect width=\"100%\" height=\"100%\" fill=\"#f8f8f8\"/>\n"));
+
+    for (geometry, _style) in features {
+        match geometry {
+            GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
+                let (sx, sy) = project_point(coordinates[0], coordinates[1], bounds, width, height);
+                svg.push_str(&format!(r#"<circle cx="{}" cy="{}" r="4" class="fp"/>"#, sx, sy));
+            }
+            GeoJsonGeometry::MultiPoint { coordinates } => {
+                for c in coordinates {
+                    if c.len() >= 2 {
+                        let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
+                        svg.push_str(&format!(r#"<circle cx="{}" cy="{}" r="3" class="fp"/>"#, sx, sy));
+                    }
+                }
+            }
+            GeoJsonGeometry::LineString { coordinates } => {
+                if coordinates.len() >= 2 {
+                    let pts: String = coordinates.iter()
+                        .filter(|c| c.len() >= 2)
+                        .map(|c| { let (sx, sy) = project_point(c[0], c[1], bounds, width, height); format!("{},{}", sx, sy) })
+                        .collect::<Vec<_>>().join(" ");
+                    svg.push_str(&format!(r#"<polyline points="{}" class="fl"/>"#, pts));
+                }
+            }
+            GeoJsonGeometry::Polygon { coordinates } => {
+                for ring in coordinates {
+                    if ring.len() >= 3 {
+                        let pts: String = ring.iter()
+                            .filter(|c| c.len() >= 2)
+                            .map(|c| { let (sx, sy) = project_point(c[0], c[1], bounds, width, height); format!("{},{}", sx, sy) })
+                            .collect::<Vec<_>>().join(" ");
+                        svg.push_str(&format!(r#"<polygon points="{}" class="fg"/>"#, pts));
+                    }
+                }
+            }
+            GeoJsonGeometry::MultiPolygon { coordinates } => {
+                for poly in coordinates {
+                    for ring in poly {
+                        if ring.len() >= 3 {
+                            let pts: String = ring.iter()
+                                .filter(|c| c.len() >= 2)
+                                .map(|c| { let (sx, sy) = project_point(c[0], c[1], bounds, width, height); format!("{},{}", sx, sy) })
+                                .collect::<Vec<_>>().join(" ");
+                            svg.push_str(&format!(r#"<polygon points="{}" class="fg"/>"#, pts));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        svg.push('\n');
+    }
+    svg.push_str("</svg>");
+    svg
+}
+
+/// 地理坐标 → 屏幕坐标
+fn project_point(lon: f64, lat: f64, bounds: &Bounds, width: u32, height: u32) -> (f64, f64) {
+    let sx = (lon - bounds.minx) / (bounds.maxx - bounds.minx) * width as f64;
+    let sy = (bounds.maxy - lat) / (bounds.maxy - bounds.miny) * height as f64;
+    (sx, sy)
+}
+
+// ---------------------------------------------------------------------------
+// KML 渲染 — 将要素输出为 KML 格式
+// ---------------------------------------------------------------------------
+
+/// 将要素渲染为 KML 字符串
+pub fn render_to_kml(features: &[(GeoJsonGeometry, Style)], layer_name: &str) -> String {
+    let mut kml = String::new();
+    kml.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
+    kml.push_str(&format!(
+        r#"<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document><name>{}</name><open>1</open>"#, layer_name
+    ));
+
+    for (i, (geometry, _style)) in features.iter().enumerate() {
+        kml.push_str(&format!(
+            r#"<Placemark><name>Feature {}</name>{}</Placemark>"#,
+            i, geometry_to_kml(geometry)
+        ));
+    }
+
+    kml.push_str(r#"<Style id="defaultStyle">
+<LineStyle><color>ff0000ff</color><width>2</width></LineStyle>
+<PolyStyle><color>400000ff</color></PolyStyle>
+</Style>"#);
+
+    kml.push_str("</Document></kml>");
+    kml
+}
+
+fn geometry_to_kml(g: &GeoJsonGeometry) -> String {
+    match g {
+        GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
+            format!("<Point><coordinates>{},{},0</coordinates></Point>", coordinates[0], coordinates[1])
+        }
+        GeoJsonGeometry::LineString { coordinates } => {
+            let c: Vec<String> = coordinates.iter().filter(|c| c.len() >= 2)
+                .map(|c| format!("{},{},0", c[0], c[1])).collect();
+            format!("<LineString><coordinates>{}</coordinates></LineString>", c.join(" "))
+        }
+        GeoJsonGeometry::Polygon { coordinates } => {
+            let rings: Vec<String> = coordinates.iter().map(|ring| {
+                let c: Vec<String> = ring.iter().filter(|c| c.len() >= 2)
+                    .map(|c| format!("{},{},0", c[0], c[1])).collect();
+                format!("<LinearRing><coordinates>{}</coordinates></LinearRing>", c.join(" "))
+            }).collect();
+            format!("<Polygon>{}</Polygon>", rings.join(""))
+        }
+        _ => String::new(),
+    }
+}
