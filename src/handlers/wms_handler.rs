@@ -11,7 +11,7 @@ use quick_xml::se::to_string;
 use std::io::Cursor;
 use std::collections::HashMap;
 use image::ImageFormat;
-use tracing::{info, debug};
+use tracing::{info, debug, warn};
 
 struct GetMapContext {
     layers: Vec<String>,
@@ -24,6 +24,10 @@ struct GetMapContext {
     bg_color: Option<[u8; 4]>,
     scale_denominator: f64,
     options: RenderOptions,
+    /// CQL 过滤器（以 ; 分隔，对应多个图层）
+    cql_filter: Option<String>,
+    /// FeatureId 过滤（逗号分隔）
+    feature_id: Option<Vec<String>>,
 }
 
 struct LayerMetadata {
@@ -171,6 +175,14 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
         format: RenderFormat::PNG,
     };
 
+    // 解析 cql_filter：多个图层的过滤条件用 ; 分隔
+    let cql_filter = request.cql_filter.clone();
+
+    // 解析 feature_id
+    let feature_id = request.feature_id.as_ref().map(|fid| {
+        fid.split(',').map(|s| s.trim().to_string()).collect()
+    });
+
     Ok(GetMapContext {
         layers: layers_param.clone(),
         bounds,
@@ -182,6 +194,8 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
         bg_color,
         scale_denominator,
         options,
+        cql_filter,
+        feature_id,
     })
 }
 
@@ -272,9 +286,14 @@ async fn query_all_layer_features(
           metadata_list.len(), context.bounds, context.output_crs);
     let mut contexts = Vec::with_capacity(metadata_list.len());
 
-    for metadata in metadata_list {
+    // 解析 cql_filter: 多个图层的过滤条件用 ; 分隔
+    let cql_filters: Vec<&str> = context.cql_filter.as_deref()
+        .map(|f| f.split(';').collect())
+        .unwrap_or_default();
+
+    for (idx, metadata) in metadata_list.iter().enumerate() {
         info!("[query_all_layer_features] 查询图层: {}", metadata.layer_name);
-        let features = query_layer_features_optimized(
+        let mut features = query_layer_features_optimized(
             state,
             metadata,
             &context.bounds,
@@ -282,7 +301,25 @@ async fn query_all_layer_features(
             context.scale_denominator,
         ).await?;
 
-        debug!("[query_all_layer_features] 图层 '{}' 查询到 {} 个要素", 
+        // 应用 CQL 过滤
+        if let Some(cql_str) = cql_filters.get(idx).filter(|s| !s.is_empty()) {
+            match crate::utils::cql_filter::parse_cql(cql_str) {
+                Ok(expr) => {
+                    debug!("[query_all_layer_features] 图层 '{}' 应用 CQL 过滤: '{}'", metadata.layer_name, cql_str);
+                    features.retain(|f| crate::utils::cql_filter::evaluate_cql(f, &expr));
+                }
+                Err(e) => {
+                    warn!("[query_all_layer_features] CQL 解析失败 (图层 '{}'): {}", metadata.layer_name, e);
+                }
+            }
+        }
+
+        // 应用 FeatureId 过滤
+        if let Some(ref fid_list) = context.feature_id {
+            features.retain(|f| fid_list.contains(&f.id));
+        }
+
+        debug!("[query_all_layer_features] 图层 '{}' 过滤后剩余 {} 个要素", 
                metadata.layer_name, features.len());
 
         contexts.push(LayerRenderContext {

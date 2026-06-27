@@ -7,3 +7,4 @@ pub mod shapefile;
 pub mod geotiff;
 pub mod bounds;
 pub mod tile_cache;
+pub mod cql_filter;

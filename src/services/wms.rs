@@ -26,6 +26,12 @@ pub struct WmsRequest {
     pub j: Option<f64>,
     pub sld: Option<String>,
     pub sld_body: Option<String>,
+    /// GeoServer Vendor 参数: CQL 过滤器
+    pub cql_filter: Option<String>,
+    /// GeoServer Vendor 参数: 环境变量替换
+    pub env: Option<String>,
+    /// GeoServer Vendor 参数: 要素 ID 过滤
+    pub feature_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -400,6 +406,9 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
     let mut j = None;
     let mut sld = None;
     let mut sld_body = None;
+    let mut cql_filter = None;
+    let mut env = None;
+    let mut feature_id = None;
 
     for (key, value) in params {
         match key.to_uppercase().as_str() {
@@ -451,6 +460,10 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
             "Y" => j = value.parse().ok(),
             "SLD" => sld = Some(value.clone()),
             "SLD_BODY" | "SLDBODY" => sld_body = Some(value.clone()),
+            // GeoServer Vendor 参数
+            "CQL_FILTER" => cql_filter = Some(value.clone()),
+            "ENV" => env = Some(value.clone()),
+            "FEATUREID" | "FEATURE_ID" => feature_id = Some(value.clone()),
             _ => {}
         }
     }
@@ -486,6 +499,9 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
         j,
         sld,
         sld_body,
+        cql_filter,
+        env,
+        feature_id,
     })
 }
 
