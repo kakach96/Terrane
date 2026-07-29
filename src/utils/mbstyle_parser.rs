@@ -135,7 +135,7 @@ fn apply_circle_paint(style: &mut Style, paint: Option<&Value>) {
     }
 }
 
-fn apply_layout(style: &mut Style, layout: Option<&Value>) {
+fn apply_layout(_style: &mut Style, layout: Option<&Value>) {
     if let Some(l) = layout {
         if let Some(visibility) = l.get("visibility").and_then(|v| v.as_str()) {
             if visibility == "none" {

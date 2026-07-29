@@ -4,7 +4,7 @@ use actix_web::{HttpRequest, HttpResponse, web};
 use serde::Deserialize;
 use crate::state::AppState;
 use crate::error::GeoServerError;
-use crate::auth::{self, UserRole, verify_password, hash_password, generate_salt, generate_token, verify_token};
+use crate::auth::{UserRole, verify_password, hash_password, generate_salt, generate_token, verify_token};
 use super::rest_handler::ApiResponse;
 use tracing::info;
 
@@ -78,7 +78,7 @@ pub async fn login(
 /// 验证 Token 并返回当前用户信息
 pub async fn verify(
     req: HttpRequest,
-    state: web::Data<AppState>,
+    _state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let auth_header = req.headers().get("Authorization")
         .and_then(|v| v.to_str().ok())

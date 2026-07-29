@@ -1,7 +1,6 @@
 //! 备份/恢复处理器
 
 use actix_web::{HttpRequest, HttpResponse, web};
-use serde::Deserialize;
 use crate::state::AppState;
 use crate::error::GeoServerError;
 use crate::backup::{export_backup, import_backup, GeoServerBackup};

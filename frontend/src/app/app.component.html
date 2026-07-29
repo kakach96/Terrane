@@ -9,78 +9,80 @@
       </div>
       
       <mat-nav-list class="nav-menu">
-        <a mat-list-item routerLink="/dashboard" routerLinkActive="active">
-          <mat-icon matListItemIcon>dashboard</mat-icon>
-          <span matListItemTitle>仪表盘</span>
-        </a>
-        
-        <a mat-list-item routerLink="/workspaces" routerLinkActive="active">
-          <mat-icon matListItemIcon>folder</mat-icon>
-          <span matListItemTitle>工作空间</span>
-        </a>
-        
-        <a mat-list-item routerLink="/namespaces" routerLinkActive="active">
-          <mat-icon matListItemIcon>font_download</mat-icon>
-          <span matListItemTitle>命名空间</span>
-        </a>
-        
-        <a mat-list-item routerLink="/data-sources" routerLinkActive="active">
-          <mat-icon matListItemIcon>storage</mat-icon>
-          <span matListItemTitle>数据源</span>
-        </a>
-
-        <a mat-list-item routerLink="/stores" routerLinkActive="active">
-          <mat-icon matListItemIcon>dns</mat-icon>
-          <span matListItemTitle>存储管理</span>
-        </a>
-        
-        <a mat-list-item routerLink="/layers" routerLinkActive="active">
-          <mat-icon matListItemIcon>layers</mat-icon>
-          <span matListItemTitle>图层</span>
-        </a>
-        
         <a mat-list-item routerLink="/layer-preview" routerLinkActive="active">
           <mat-icon matListItemIcon>visibility</mat-icon>
           <span matListItemTitle>图层预览</span>
         </a>
-        
-        <a mat-list-item routerLink="/tile-layers" routerLinkActive="active">
-          <mat-icon matListItemIcon>grid_view</mat-icon>
-          <span matListItemTitle>切片图层</span>
-        </a>
-        
-        <a mat-list-item routerLink="/layer-groups" routerLinkActive="active">
-          <mat-icon matListItemIcon>folder_special</mat-icon>
-          <span matListItemTitle>图层组</span>
-        </a>
 
-        <a mat-list-item routerLink="/styles" routerLinkActive="active">
-          <mat-icon matListItemIcon>brush</mat-icon>
-          <span matListItemTitle>样式管理</span>
-        </a>
+        <ng-container *ngIf="auth.isLoggedIn()">
+          <a mat-list-item routerLink="/dashboard" routerLinkActive="active">
+            <mat-icon matListItemIcon>dashboard</mat-icon>
+            <span matListItemTitle>仪表盘</span>
+          </a>
+          
+          <a mat-list-item routerLink="/workspaces" routerLinkActive="active">
+            <mat-icon matListItemIcon>folder</mat-icon>
+            <span matListItemTitle>工作空间</span>
+          </a>
+          
+          <a mat-list-item routerLink="/namespaces" routerLinkActive="active">
+            <mat-icon matListItemIcon>font_download</mat-icon>
+            <span matListItemTitle>命名空间</span>
+          </a>
+          
+          <a mat-list-item routerLink="/data-sources" routerLinkActive="active">
+            <mat-icon matListItemIcon>storage</mat-icon>
+            <span matListItemTitle>数据源</span>
+          </a>
 
-        <a mat-list-item routerLink="/server-status" routerLinkActive="active">
-          <mat-icon matListItemIcon>monitoring</mat-icon>
-          <span matListItemTitle>服务器状态</span>
-        </a>
+          <a mat-list-item routerLink="/stores" routerLinkActive="active">
+            <mat-icon matListItemIcon>dns</mat-icon>
+            <span matListItemTitle>存储管理</span>
+          </a>
+          
+          <a mat-list-item routerLink="/layers" routerLinkActive="active">
+            <mat-icon matListItemIcon>layers</mat-icon>
+            <span matListItemTitle>图层</span>
+          </a>
+          
+          <a mat-list-item routerLink="/tile-layers" routerLinkActive="active">
+            <mat-icon matListItemIcon>grid_view</mat-icon>
+            <span matListItemTitle>切片图层</span>
+          </a>
+          
+          <a mat-list-item routerLink="/layer-groups" routerLinkActive="active">
+            <mat-icon matListItemIcon>folder_special</mat-icon>
+            <span matListItemTitle>图层组</span>
+          </a>
 
-        <a mat-list-item routerLink="/monitor" routerLinkActive="active">
-          <mat-icon matListItemIcon>bar_chart</mat-icon>
-          <span matListItemTitle>监控面板</span>
-        </a>
+          <a mat-list-item routerLink="/styles" routerLinkActive="active">
+            <mat-icon matListItemIcon>brush</mat-icon>
+            <span matListItemTitle>样式管理</span>
+          </a>
 
-        <mat-divider></mat-divider>
-        <div class="nav-section-label">系统管理</div>
+          <a mat-list-item routerLink="/server-status" routerLinkActive="active">
+            <mat-icon matListItemIcon>monitoring</mat-icon>
+            <span matListItemTitle>服务器状态</span>
+          </a>
 
-        <a mat-list-item routerLink="/users" routerLinkActive="active" *ngIf="auth.isLoggedIn()">
-          <mat-icon matListItemIcon>people</mat-icon>
-          <span matListItemTitle>用户管理</span>
-        </a>
+          <a mat-list-item routerLink="/monitor" routerLinkActive="active">
+            <mat-icon matListItemIcon>bar_chart</mat-icon>
+            <span matListItemTitle>监控面板</span>
+          </a>
 
-        <a mat-list-item routerLink="/permissions" routerLinkActive="active" *ngIf="auth.isLoggedIn()">
-          <mat-icon matListItemIcon>security</mat-icon>
-          <span matListItemTitle>权限管理</span>
-        </a>
+          <mat-divider></mat-divider>
+          <div class="nav-section-label">系统管理</div>
+
+          <a mat-list-item routerLink="/users" routerLinkActive="active">
+            <mat-icon matListItemIcon>people</mat-icon>
+            <span matListItemTitle>用户管理</span>
+          </a>
+
+          <a mat-list-item routerLink="/permissions" routerLinkActive="active">
+            <mat-icon matListItemIcon>security</mat-icon>
+            <span matListItemTitle>权限管理</span>
+          </a>
+        </ng-container>
       </mat-nav-list>
     </mat-sidenav>
     
@@ -104,7 +106,7 @@
             <mat-icon>logout</mat-icon>
             <span>退出登录</span>
           </button>
-          <button mat-menu-item *ngIf="!auth.isLoggedIn()" routerLink="/login">
+          <button mat-menu-item *ngIf="!auth.isLoggedIn()" (click)="openLoginDialog()">
             <mat-icon>login</mat-icon>
             <span>登录</span>
           </button>

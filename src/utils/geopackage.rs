@@ -8,7 +8,7 @@
 use std::path::Path;
 use std::collections::HashMap;
 use rusqlite::Connection;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::models::{Feature, GeoJsonGeometry, PropertyValue, Bounds};
 

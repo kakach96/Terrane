@@ -1,0 +1,38 @@
+<div class="login-header">
+  <mat-icon class="logo-icon">public</mat-icon>
+  <span class="logo-text">RRGeoServer</span>
+</div>
+
+<div class="login-content">
+  <form (ngSubmit)="onSubmit()" #loginForm="ngForm">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>用户名</mat-label>
+      <input matInput [(ngModel)]="username" name="username" required
+             placeholder="admin" autocomplete="username">
+      <mat-icon matPrefix>person</mat-icon>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>密码</mat-label>
+      <input matInput [(ngModel)]="password" name="password"
+             [type]="showPassword ? 'text' : 'password'" required
+             autocomplete="current-password">
+      <mat-icon matPrefix>lock</mat-icon>
+      <button mat-icon-button matSuffix (click)="showPassword = !showPassword" type="button">
+        <mat-icon>{{ showPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
+      </button>
+    </mat-form-field>
+
+    <div class="error-message" *ngIf="errorMessage">
+      <mat-icon>error</mat-icon> {{ errorMessage }}
+    </div>
+
+    <div class="login-actions">
+      <button mat-raised-button color="primary" class="login-btn"
+              type="submit" [disabled]="loading">
+        <mat-spinner diameter="20" *ngIf="loading" class="spinner"></mat-spinner>
+        <span *ngIf="!loading">登 录</span>
+      </button>
+    </div>
+  </form>
+</div>

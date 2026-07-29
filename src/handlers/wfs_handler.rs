@@ -296,7 +296,7 @@ async fn handle_get_feature(state: &AppState, request: &WfsRequest) -> Result<Ht
         let csv = generate_csv_response(&response);
         return Ok(HttpResponse::Ok()
             .content_type("text/csv; charset=utf-8")
-            .header("Content-Disposition", "attachment; filename=features.csv")
+            .insert_header(("Content-Disposition", "attachment; filename=features.csv"))
             .body(csv));
     }
 

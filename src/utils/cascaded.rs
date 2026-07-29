@@ -4,7 +4,7 @@
 //! 请求会透传到上游服务器，响应直接返回给客户端。
 
 use std::collections::HashMap;
-use tracing::{info, warn};
+use tracing::info;
 
 /// 级联 WMS 配置
 #[derive(Debug, Clone)]

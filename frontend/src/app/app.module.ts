@@ -57,7 +57,6 @@ import { AuthInterceptor } from './services/auth.interceptor';
 
 const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
-  { path: 'login', component: LoginComponent },
   { path: 'dashboard', component: DashboardComponent },
   { path: 'workspaces', component: WorkspacesComponent },
   { path: 'namespaces', component: NamespacesComponent },

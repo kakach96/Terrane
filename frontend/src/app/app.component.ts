@@ -1,7 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from './services/auth.service';
+import { LoginComponent } from './components/login/login.component';
 
 @Component({
   selector: 'app-root',
@@ -28,12 +30,12 @@ export class AppComponent implements OnInit {
     '/monitor': '监控面板',
     '/users': '用户管理',
     '/permissions': '权限管理',
-    '/login': '登录',
   };
 
   constructor(
     private router: Router,
     public auth: AuthService,
+    private dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {
@@ -51,8 +53,14 @@ export class AppComponent implements OnInit {
     this.pageTitle = this.menuTitles[basePath] || 'RRGeoServer';
   }
 
+  openLoginDialog(): void {
+    this.dialog.open(LoginComponent, {
+      width: '420px',
+    });
+  }
+
   logout(): void {
     this.auth.logout();
-    this.router.navigate(['/login']);
+    this.openLoginDialog();
   }
 }

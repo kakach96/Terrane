@@ -13,8 +13,8 @@
 //! ```
 
 use std::path::{Path, PathBuf};
-use image::{RgbaImage, DynamicImage};
-use tracing::{info, warn};
+use image::RgbaImage;
+use tracing::info;
 
 use crate::models::Bounds;
 

@@ -71,7 +71,8 @@ pub struct WmtsCapabilities {
     pub service_provider: ServiceProvider,
     #[serde(rename = "ows:OperationsMetadata")]
     pub operations_metadata: OperationsMetadata,
-    pub Contents: Contents,
+    #[serde(rename = "Contents")]
+    pub contents: Contents,
 }
 
 #[derive(Debug, Serialize)]
@@ -454,7 +455,7 @@ pub fn build_capabilities(
                 },
             ],
         },
-        Contents: Contents {
+        contents: Contents {
             tile_matrix_sets: build_tile_matrix_sets(),
             layers: build_wmts_layers(layers, base_url, api_context),
         },

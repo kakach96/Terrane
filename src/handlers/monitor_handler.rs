@@ -124,8 +124,6 @@ pub async fn get_audit_logs(
     req: HttpRequest,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
-    use crate::store::sqlite_store::AuditLogRecord;
-
     if let Some(ref store) = state.store {
         let query = req.query_string();
         let limit: usize = query.split('&')
