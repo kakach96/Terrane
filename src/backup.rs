@@ -75,6 +75,7 @@ pub struct LayerBackup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StyleBackup {
     pub name: String, pub title: String, pub content: String,
+    pub format: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,7 +156,8 @@ pub async fn export_backup(
     let styles_meta = state.styles_meta.read().await;
     let style_list: Vec<StyleBackup> = styles_lock.iter().map(|(name, content)| {
         let title = styles_meta.get(name).map(|m| m.title.clone()).unwrap_or_default();
-        StyleBackup { name: name.clone(), title, content: content.clone() }
+        let format = styles_meta.get(name).map(|m| m.format.to_string());
+        StyleBackup { name: name.clone(), title, content: content.clone(), format }
     }).collect();
     let styles = style_list;
     drop(styles_lock);
@@ -280,9 +282,18 @@ pub async fn import_backup(
     // 3. 导入样式
     for st in &backup.styles {
         state.styles.write().await.insert(st.name.clone(), st.content.clone());
+        let format = st.format.as_deref()
+            .and_then(|f| match f {
+                "CSS" => Some(crate::models::style::StyleFormat::CSS),
+                "YSLD" => Some(crate::models::style::StyleFormat::YSLD),
+                "MBStyle" => Some(crate::models::style::StyleFormat::MBStyle),
+                _ => None,
+            })
+            .unwrap_or_else(|| crate::models::style::detect_style_format(&st.content));
         state.styles_meta.write().await.insert(st.name.clone(), crate::state::StyleMeta {
             title: st.title.clone(),
             is_builtin: false,
+            format,
         });
         report.styles_imported += 1;
     }

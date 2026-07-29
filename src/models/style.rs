@@ -14,6 +14,18 @@ pub enum StyleFormat {
     SLD,
     CSS,
     YSLD,
+    MBStyle,
+}
+
+impl std::fmt::Display for StyleFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StyleFormat::SLD => write!(f, "SLD"),
+            StyleFormat::CSS => write!(f, "CSS"),
+            StyleFormat::YSLD => write!(f, "YSLD"),
+            StyleFormat::MBStyle => write!(f, "MBStyle"),
+        }
+    }
 }
 
 impl Style {
@@ -25,6 +37,24 @@ impl Style {
             style_format: StyleFormat::SLD,
             content,
         }
+    }
+}
+
+/// Auto-detect style format from content
+pub fn detect_style_format(content: &str) -> StyleFormat {
+    let trimmed = content.trim();
+    if trimmed.starts_with("<?xml") || trimmed.starts_with("<StyledLayerDescriptor") {
+        StyleFormat::SLD
+    } else if trimmed.starts_with('{') {
+        if trimmed.contains("\"version\"") && trimmed.contains("\"layers\"") {
+            StyleFormat::MBStyle
+        } else {
+            StyleFormat::SLD
+        }
+    } else if trimmed.starts_with("name:") || trimmed.starts_with("title:") || trimmed.starts_with("feature-styles:") {
+        StyleFormat::YSLD
+    } else {
+        StyleFormat::CSS
     }
 }
 

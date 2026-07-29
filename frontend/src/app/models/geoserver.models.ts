@@ -22,6 +22,7 @@ export interface StyleInfo {
   title: string;
   is_builtin: boolean;
   content?: string;
+  format?: string;
 }
 
 export interface LayerBounds {

@@ -8,10 +8,22 @@ import { StyleInfo } from '../../models/geoserver.models';
   template: `
     <h2 mat-dialog-title>{{ data.mode === 'create' ? '新建样式' : '编辑样式' }}</h2>
     <mat-dialog-content>
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>样式名称</mat-label>
-        <input matInput [(ngModel)]="name" placeholder="my-style" [readonly]="data.mode === 'edit'">
-      </mat-form-field>
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="name-field">
+          <mat-label>样式名称</mat-label>
+          <input matInput [(ngModel)]="name" placeholder="my-style" [readonly]="data.mode === 'edit'">
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="format-field">
+          <mat-label>格式</mat-label>
+          <mat-select [(ngModel)]="format" (selectionChange)="onFormatChange()">
+            <mat-option value="SLD">SLD (XML)</mat-option>
+            <mat-option value="CSS">CSS</mat-option>
+            <mat-option value="YSLD">YSLD (YAML)</mat-option>
+            <mat-option value="MBStyle">Mapbox Style</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
 
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>标题</mat-label>
@@ -20,15 +32,36 @@ import { StyleInfo } from '../../models/geoserver.models';
 
       <div class="template-buttons" *ngIf="data.mode === 'create'">
         <span class="label">快速模板：</span>
-        <button mat-stroked-button (click)="applyTemplate('point')">点样式</button>
-        <button mat-stroked-button (click)="applyTemplate('line')">线样式</button>
-        <button mat-stroked-button (click)="applyTemplate('polygon')">面样式</button>
-        <button mat-stroked-button (click)="applyTemplate('raster')">栅格样式</button>
-        <button mat-stroked-button (click)="applyTemplate('labeled')">标注样式</button>
+        <ng-container [ngSwitch]="format">
+          <ng-container *ngSwitchCase="'SLD'">
+            <button mat-stroked-button (click)="applyTemplate('point')">点样式</button>
+            <button mat-stroked-button (click)="applyTemplate('line')">线样式</button>
+            <button mat-stroked-button (click)="applyTemplate('polygon')">面样式</button>
+            <button mat-stroked-button (click)="applyTemplate('raster')">栅格样式</button>
+            <button mat-stroked-button (click)="applyTemplate('labeled')">标注样式</button>
+          </ng-container>
+          <ng-container *ngSwitchCase="'CSS'">
+            <button mat-stroked-button (click)="applyTemplate('css-point')">点样式</button>
+            <button mat-stroked-button (click)="applyTemplate('css-line')">线样式</button>
+            <button mat-stroked-button (click)="applyTemplate('css-polygon')">面样式</button>
+            <button mat-stroked-button (click)="applyTemplate('css-scale')">比例尺过滤</button>
+          </ng-container>
+          <ng-container *ngSwitchCase="'YSLD'">
+            <button mat-stroked-button (click)="applyTemplate('ysld-point')">点样式</button>
+            <button mat-stroked-button (click)="applyTemplate('ysld-line')">线样式</button>
+            <button mat-stroked-button (click)="applyTemplate('ysld-polygon')">面样式</button>
+            <button mat-stroked-button (click)="applyTemplate('ysld-scale')">比例尺过滤</button>
+          </ng-container>
+          <ng-container *ngSwitchCase="'MBStyle'">
+            <button mat-stroked-button (click)="applyTemplate('mb-fill')">面样式</button>
+            <button mat-stroked-button (click)="applyTemplate('mb-line')">线样式</button>
+            <button mat-stroked-button (click)="applyTemplate('mb-circle')">点样式</button>
+          </ng-container>
+        </ng-container>
       </div>
 
       <mat-form-field appearance="outline" class="full-width code-editor">
-        <mat-label>SLD XML 内容</mat-label>
+        <mat-label>{{ formatLabel }} 内容</mat-label>
         <textarea matInput [(ngModel)]="content" rows="20" class="code-textarea"></textarea>
       </mat-form-field>
     </mat-dialog-content>
@@ -41,6 +74,9 @@ import { StyleInfo } from '../../models/geoserver.models';
   `,
   styles: [`
     .full-width { width: 100%; margin-bottom: 16px; }
+    .form-row { display: flex; gap: 16px; }
+    .name-field { flex: 1; margin-bottom: 16px; }
+    .format-field { width: 200px; margin-bottom: 16px; }
     .code-editor { margin-bottom: 0; }
     .code-textarea {
       font-family: 'JetBrains Mono', monospace;
@@ -71,6 +107,7 @@ export class StyleEditorDialogComponent implements OnInit {
   name = '';
   title = '';
   content = '';
+  format = 'SLD';
 
   constructor(
     public dialogRef: MatDialogRef<StyleEditorDialogComponent>,
@@ -79,17 +116,47 @@ export class StyleEditorDialogComponent implements OnInit {
     private notificationService: NotificationService
   ) {}
 
+  get formatLabel(): string {
+    switch (this.format) {
+      case 'CSS': return 'CSS';
+      case 'YSLD': return 'YSLD (YAML)';
+      case 'MBStyle': return 'Mapbox Style JSON';
+      default: return 'SLD XML';
+    }
+  }
+
   ngOnInit(): void {
     if (this.data.mode === 'edit' && this.data.style) {
       this.name = this.data.style.name;
       this.title = this.data.style.title;
       this.content = this.data.style.content || '';
+      this.format = this.data.style.format || 'SLD';
+    }
+  }
+
+  onFormatChange(): void {
+    if (!this.content || this.data.mode === 'create') {
+      this.applyDefaultForFormat();
+    }
+  }
+
+  applyDefaultForFormat(): void {
+    switch (this.format) {
+      case 'CSS': this.content = this.getTemplate('css-default'); break;
+      case 'YSLD': this.content = this.getTemplate('ysld-default'); break;
+      case 'MBStyle': this.content = this.getTemplate('mb-default'); break;
+      default: this.content = this.getTemplate('polygon'); break;
     }
   }
 
   save(): void {
     if (this.data.mode === 'create') {
-      this.geoserverService.createStyle({ name: this.name, title: this.title || this.name, content: this.content }).subscribe({
+      this.geoserverService.createStyle({
+        name: this.name,
+        title: this.title || this.name,
+        content: this.content,
+        format: this.format
+      }).subscribe({
         next: () => {
           this.notificationService.success('样式创建成功');
           this.dialogRef.close(true);
@@ -97,7 +164,7 @@ export class StyleEditorDialogComponent implements OnInit {
         error: (e) => this.notificationService.error('创建失败: ' + (e.error?.message || e.message))
       });
     } else {
-      this.geoserverService.updateStyle(this.name, { title: this.title || this.name, content: this.content }).subscribe({
+      this.geoserverService.updateStyle(this.name, { title: this.title || this.name, content: this.content, format: this.format }).subscribe({
         next: () => {
           this.notificationService.success('样式已保存');
           this.dialogRef.close(true);
@@ -113,6 +180,7 @@ export class StyleEditorDialogComponent implements OnInit {
 
   private getTemplate(type: string): string {
     switch (type) {
+      // ======== SLD ========
       case 'point':
         return `<?xml version="1.0" encoding="UTF-8"?>
 <StyledLayerDescriptor version="1.0.0"
@@ -284,6 +352,240 @@ export class StyleEditorDialogComponent implements OnInit {
     </UserStyle>
   </NamedLayer>
 </StyledLayerDescriptor>`;
+
+      // ======== CSS ========
+      case 'css-default':
+        return `/* 默认样式 */
+* {
+  fill: #6688aa;
+  fill-opacity: 0.6;
+  stroke: #334455;
+  stroke-width: 1;
+  mark: symbol(circle);
+  mark-size: 8;
+}`;
+
+      case 'css-point':
+        return `/* 点样式 */
+* {
+  mark: symbol(circle);
+  mark-size: 10;
+  fill: #FF0000;
+  fill-opacity: 0.8;
+  stroke: #000000;
+  stroke-width: 1;
+}`;
+
+      case 'css-line':
+        return `/* 线样式 */
+* {
+  stroke: #0000FF;
+  stroke-width: 2;
+  stroke-opacity: 0.8;
+}`;
+
+      case 'css-polygon':
+        return `/* 面样式 */
+* {
+  fill: #00CC00;
+  fill-opacity: 0.5;
+  stroke: #006600;
+  stroke-width: 1;
+}`;
+
+      case 'css-scale':
+        return `/* 基于比例尺的样式 */
+[@scale > 100000] {
+  fill: #6688aa;
+  fill-opacity: 0.4;
+  stroke: #334455;
+  stroke-width: 0.5;
+}
+
+[@scale between 50000 and 100000] {
+  fill: #6688aa;
+  fill-opacity: 0.6;
+  stroke: #334455;
+  stroke-width: 1;
+}
+
+[@scale < 50000] {
+  fill: #4466aa;
+  fill-opacity: 0.8;
+  stroke: #223366;
+  stroke-width: 2;
+  mark: symbol(circle);
+  mark-size: 10;
+}`;
+
+      // ======== YSLD ========
+      case 'ysld-default':
+        return `name: "my-style"
+title: "My Style"
+feature-styles:
+- name: default
+  rules:
+  - symbolizers:
+    - polygon:
+        fill-color: "#6688aa"
+        fill-opacity: 0.6
+        stroke-color: "#334455"
+        stroke-width: 1
+    - line:
+        stroke-color: "#334455"
+        stroke-width: 1
+    - point:
+        mark: circle
+        mark-size: 8
+        fill-color: "#6688aa"
+        stroke-color: "#334455"
+        stroke-width: 1`;
+
+      case 'ysld-point':
+        return `feature-styles:
+- name: points
+  rules:
+  - symbolizers:
+    - point:
+        mark: circle
+        mark-size: 10
+        fill-color: "#FF0000"
+        fill-opacity: 0.8
+        stroke-color: "#000000"
+        stroke-width: 1`;
+
+      case 'ysld-line':
+        return `feature-styles:
+- name: lines
+  rules:
+  - symbolizers:
+    - line:
+        stroke-color: "#0000FF"
+        stroke-width: 2
+        stroke-opacity: 0.8`;
+
+      case 'ysld-polygon':
+        return `feature-styles:
+- name: polygons
+  rules:
+  - symbolizers:
+    - polygon:
+        fill-color: "#00CC00"
+        fill-opacity: 0.5
+        stroke-color: "#006600"
+        stroke-width: 1`;
+
+      case 'ysld-scale':
+        return `feature-styles:
+- name: detailed
+  rules:
+  - scale: [0, 50000]
+    symbolizers:
+    - polygon:
+        fill-color: "#4466aa"
+        fill-opacity: 0.8
+        stroke-color: "#223366"
+        stroke-width: 2
+  - scale: [50000, 100000]
+    symbolizers:
+    - polygon:
+        fill-color: "#6688aa"
+        fill-opacity: 0.6
+        stroke-color: "#334455"
+        stroke-width: 1
+  - scale: [100000, Infinity]
+    symbolizers:
+    - polygon:
+        fill-color: "#8899aa"
+        fill-opacity: 0.4
+        stroke-color: "#556677"
+        stroke-width: 0.5`;
+
+      // ======== MBStyle ========
+      case 'mb-default':
+        return `{
+  "version": 8,
+  "name": "my-layer",
+  "layers": [
+    {
+      "id": "polygons",
+      "type": "fill",
+      "paint": {
+        "fill-color": "#6688aa",
+        "fill-opacity": 0.6,
+        "fill-outline-color": "#334455"
+      }
+    },
+    {
+      "id": "lines",
+      "type": "line",
+      "paint": {
+        "line-color": "#334455",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "points",
+      "type": "circle",
+      "paint": {
+        "circle-color": "#6688aa",
+        "circle-radius": 4,
+        "circle-stroke-color": "#334455",
+        "circle-stroke-width": 1
+      }
+    }
+  ]
+}`;
+
+      case 'mb-fill':
+        return `{
+  "version": 8,
+  "layers": [
+    {
+      "id": "fill-layer",
+      "type": "fill",
+      "paint": {
+        "fill-color": "#00CC00",
+        "fill-opacity": 0.5,
+        "fill-outline-color": "#006600"
+      }
+    }
+  ]
+}`;
+
+      case 'mb-line':
+        return `{
+  "version": 8,
+  "layers": [
+    {
+      "id": "line-layer",
+      "type": "line",
+      "paint": {
+        "line-color": "#0000FF",
+        "line-width": 2,
+        "line-opacity": 0.8
+      }
+    }
+  ]
+}`;
+
+      case 'mb-circle':
+        return `{
+  "version": 8,
+  "layers": [
+    {
+      "id": "circle-layer",
+      "type": "circle",
+      "paint": {
+        "circle-color": "#FF0000",
+        "circle-radius": 5,
+        "circle-opacity": 0.8,
+        "circle-stroke-color": "#000000",
+        "circle-stroke-width": 1
+      }
+    }
+  ]
+}`;
 
       default:
         return '';

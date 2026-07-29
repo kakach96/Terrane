@@ -125,6 +125,7 @@ async fn handle_get_tile(
     let renderer = MapRenderer::new(options, bounds);
     let layers_lock = state.layers.read().await;
     let styles_lock = state.styles.read().await;
+    let meta_lock = state.styles_meta.read().await;
     let mut render_items = Vec::new();
 
     if let Some(layer_obj) = layers_lock.iter().find(|l| l.name == layer) {
@@ -133,7 +134,7 @@ async fn handle_get_tile(
 
         let layer_crs = layer_obj.srs.to_epsg();
         let needs_reproject = layer_crs != "EPSG:4326";
-        let rules = get_style_rules(&styles_lock, layer_obj);
+        let rules = get_style_rules(&styles_lock, &meta_lock, layer_obj);
 
         let features = features::query_layer_features(
             state, layer, None, None, None,
@@ -151,6 +152,7 @@ async fn handle_get_tile(
     }
     drop(layers_lock);
     drop(styles_lock);
+    drop(meta_lock);
 
     let img = renderer.render(render_items);
     let mut buffer = std::io::Cursor::new(Vec::new());

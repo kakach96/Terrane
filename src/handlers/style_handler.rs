@@ -10,12 +10,14 @@ pub struct CreateStyleRequest {
     pub name: String,
     pub title: Option<String>,
     pub content: String,
+    pub format: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateStyleRequest {
     pub title: Option<String>,
     pub content: Option<String>,
+    pub format: Option<String>,
 }
 
 pub async fn get_layer_style(
@@ -33,11 +35,20 @@ pub async fn get_layer_style(
     };
 
     let styles = state.styles.read().await;
+    let meta = state.styles_meta.read().await;
     let content = styles.get(&style_name)
         .ok_or_else(|| GeoServerError::NotFound(format!("Style '{}' not found", style_name)))?;
 
+    let format = meta.get(&style_name).map(|m| &m.format).unwrap_or(&crate::models::style::StyleFormat::SLD);
+    let content_type = match format {
+        crate::models::style::StyleFormat::SLD => "application/vnd.ogc.sld+xml",
+        crate::models::style::StyleFormat::CSS => "text/css",
+        crate::models::style::StyleFormat::YSLD => "text/yaml",
+        crate::models::style::StyleFormat::MBStyle => "application/json",
+    };
+
     Ok(HttpResponse::Ok()
-        .content_type("application/vnd.ogc.sld+xml")
+        .content_type(content_type)
         .body(content.clone()))
 }
 
@@ -56,8 +67,13 @@ pub async fn put_layer_style(
             .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?
     };
 
+    let format = crate::models::style::detect_style_format(&body);
+
     let mut styles = state.styles.write().await;
     styles.insert(style_name.clone(), body);
+
+    let mut meta = state.styles_meta.write().await;
+    meta.entry(style_name.clone()).and_modify(|m| { m.format = format.clone(); });
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "message": format!("Style '{}' updated", style_name),
@@ -69,10 +85,12 @@ pub async fn list_styles(state: web::Data<AppState>) -> Result<HttpResponse, Geo
     let meta = state.styles_meta.read().await;
     let result: Vec<serde_json::Value> = styles.keys().map(|name| {
         let m = meta.get(name);
+        let format = m.map(|m| m.format.to_string()).unwrap_or_else(|| "SLD".to_string());
         serde_json::json!({
             "name": name,
             "title": m.map(|m| m.title.as_str()).unwrap_or(name),
             "is_builtin": m.map(|m| m.is_builtin).unwrap_or(false),
+            "format": format,
         })
     }).collect();
     Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
@@ -98,12 +116,26 @@ pub async fn create_style(
     };
     let title = body.title.clone().unwrap_or_else(|| body.name.clone());
 
+    let format = match body.format.as_deref() {
+        Some("CSS") => crate::models::style::StyleFormat::CSS,
+        Some("YSLD") => crate::models::style::StyleFormat::YSLD,
+        Some("MBStyle") => crate::models::style::StyleFormat::MBStyle,
+        _ => {
+            if body.content.trim().is_empty() {
+                crate::models::style::StyleFormat::SLD
+            } else {
+                crate::models::style::detect_style_format(&body.content)
+            }
+        }
+    };
+
     state.add_style(&body.name, content).await;
     {
         let mut meta = state.styles_meta.write().await;
         meta.insert(body.name.clone(), crate::state::StyleMeta {
             title,
             is_builtin: false,
+            format,
         });
     }
 
@@ -124,11 +156,14 @@ pub async fn get_style_by_name(
     let meta = state.styles_meta.read().await;
     let m = meta.get(name);
 
+    let format = m.map(|m| m.format.to_string()).unwrap_or_else(|| "SLD".to_string());
+
     Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "name": name,
         "title": m.map(|m| m.title.as_str()).unwrap_or(name),
         "content": content,
         "is_builtin": m.map(|m| m.is_builtin).unwrap_or(false),
+        "format": format,
     }))))
 }
 
@@ -148,6 +183,16 @@ pub async fn update_style_by_name(
 
     if let Some(content) = &body.content {
         state.add_style(name, content.clone()).await;
+        let detected = body.format.as_deref().map(|f| match f {
+            "CSS" => crate::models::style::StyleFormat::CSS,
+            "YSLD" => crate::models::style::StyleFormat::YSLD,
+            "MBStyle" => crate::models::style::StyleFormat::MBStyle,
+            _ => crate::models::style::detect_style_format(content),
+        });
+        if let Some(fmt) = detected {
+            let mut meta = state.styles_meta.write().await;
+            meta.entry(name.to_string()).and_modify(|m| { m.format = fmt; });
+        }
     }
     if let Some(title) = &body.title {
         let mut meta = state.styles_meta.write().await;
@@ -313,12 +358,13 @@ pub async fn get_tile(
 
     let layers_lock = state.layers.read().await;
     let styles_lock = state.styles.read().await;
+    let meta_lock = state.styles_meta.read().await;
     let mut render_items = Vec::new();
 
     if let Some(layer) = layers_lock.iter().find(|l| l.name == layer_name) {
         let layer_crs = layer.srs.to_epsg();
         let needs_reproject = layer_crs != "EPSG:4326";
-        let rules = get_style_rules(&styles_lock, layer);
+        let rules = get_style_rules(&styles_lock, &meta_lock, layer);
 
         let features = crate::handlers::features::query_layer_features(
             state.get_ref(), &layer.name, None, None, None,
@@ -336,6 +382,7 @@ pub async fn get_tile(
     }
     drop(layers_lock);
     drop(styles_lock);
+    drop(meta_lock);
 
     let img = renderer.render(render_items);
 
@@ -403,13 +450,32 @@ pub async fn get_tile_cache_stats(
 
 pub fn get_style_rules(
     styles: &std::collections::HashMap<String, String>,
+    meta: &std::collections::HashMap<String, crate::state::StyleMeta>,
     layer: &crate::models::Layer,
 ) -> Vec<crate::utils::sld_parser::ParsedRule> {
     let style_name = layer.styles.first().map(|s| &s.name).cloned().unwrap_or_default();
-    let sld_content = styles.get(&style_name).cloned();
-    match sld_content {
-        Some(xml) => crate::utils::sld_parser::parse_sld(&xml),
-        None => crate::utils::sld_parser::parse_sld(&crate::utils::sld_parser::default_sld(&layer.name)),
+    let content = styles.get(&style_name);
+    let format = meta.get(&style_name).map(|m| &m.format);
+
+    match (content, format) {
+        (Some(c), Some(fmt)) => parse_style_content(c.as_str(), fmt),
+        (Some(c), None) => {
+            let detected = crate::models::style::detect_style_format(c.as_str());
+            parse_style_content(c.as_str(), &detected)
+        }
+        _ => crate::utils::sld_parser::parse_sld(&crate::utils::sld_parser::default_sld(&layer.name)),
+    }
+}
+
+pub fn parse_style_content(
+    content: &str,
+    format: &crate::models::style::StyleFormat,
+) -> Vec<crate::utils::sld_parser::ParsedRule> {
+    match format {
+        crate::models::style::StyleFormat::CSS => crate::utils::css_parser::parse_css(content),
+        crate::models::style::StyleFormat::YSLD => crate::utils::ysld_parser::parse_ysld(content),
+        crate::models::style::StyleFormat::MBStyle => crate::utils::mbstyle_parser::parse_mbstyle(content),
+        crate::models::style::StyleFormat::SLD => crate::utils::sld_parser::parse_sld(content),
     }
 }
 

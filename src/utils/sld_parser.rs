@@ -21,6 +21,8 @@ pub enum OgcFilter {
     PropertyIsNotEqualTo(String, String),
     PropertyIsLessThan(String, String),
     PropertyIsGreaterThan(String, String),
+    PropertyIsLessThanOrEqualTo(String, String),
+    PropertyIsGreaterThanOrEqualTo(String, String),
     PropertyIsLike(String, String),
     PropertyIsNull(String),
     PropertyIsBetween(String, String, String),
@@ -329,6 +331,18 @@ fn evaluate_filter(filter: &OgcFilter, props: &HashMap<String, PropertyValue>) -
             props.get(prop).and_then(|v| v.to_string().parse::<f64>().ok())
                 .zip(val.parse::<f64>().ok())
                 .map(|(a, b)| a > b)
+                .unwrap_or(false)
+        }
+        OgcFilter::PropertyIsLessThanOrEqualTo(prop, val) => {
+            props.get(prop).and_then(|v| v.to_string().parse::<f64>().ok())
+                .zip(val.parse::<f64>().ok())
+                .map(|(a, b)| a <= b)
+                .unwrap_or(false)
+        }
+        OgcFilter::PropertyIsGreaterThanOrEqualTo(prop, val) => {
+            props.get(prop).and_then(|v| v.to_string().parse::<f64>().ok())
+                .zip(val.parse::<f64>().ok())
+                .map(|(a, b)| a >= b)
                 .unwrap_or(false)
         }
         OgcFilter::PropertyIsLike(prop, pattern) => {

@@ -377,12 +377,12 @@ export class GeoserverService {
       .pipe(map(response => response.data as StyleInfo));
   }
 
-  createStyle(style: { name: string; title?: string; content: string }): Observable<any> {
+  createStyle(style: { name: string; title?: string; content: string; format?: string }): Observable<any> {
     return this.http.post<ApiResponse<any>>(`${this.apiUrl}/styles`, style)
       .pipe(map(response => response.data));
   }
 
-  updateStyle(name: string, updates: { title?: string; content?: string }): Observable<any> {
+  updateStyle(name: string, updates: { title?: string; content?: string; format?: string }): Observable<any> {
     return this.http.put<ApiResponse<any>>(`${this.apiUrl}/styles/${name}`, updates)
       .pipe(map(response => response.data));
   }

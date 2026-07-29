@@ -15,6 +15,7 @@ use serde::Serialize;
 pub struct StyleMeta {
     pub title: String,
     pub is_builtin: bool,
+    pub format: crate::models::style::StyleFormat,
 }
 
 pub type StyleMap = HashMap<String, String>;
@@ -164,6 +165,7 @@ impl AppState {
             styles_meta_map.insert(builtin.name.to_string(), StyleMeta {
                 title: builtin.title.to_string(),
                 is_builtin: true,
+                format: crate::models::style::StyleFormat::SLD,
             });
         }
 
@@ -175,6 +177,7 @@ impl AppState {
                 styles_meta_map.entry(style_name).or_insert(StyleMeta {
                     title: layer.title.clone(),
                     is_builtin: false,
+                    format: crate::models::style::StyleFormat::SLD,
                 });
             }
         }
