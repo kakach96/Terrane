@@ -1,163 +1,163 @@
-# Rust GeoServer 前端项目
+# Rust GeoServer Frontend
 
-基于 Angular 17 和 Angular Material 的现代化 GeoServer 管理界面。
+A modern GeoServer admin interface built with Angular 17 and Angular Material.
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 1. 安装依赖
+### 1. Install Dependencies
 
 ```bash
 cd frontend
 npm install
 ```
 
-### 2. 启动开发服务器
+### 2. Start the Dev Server
 
 ```bash
 ng serve
 ```
 
-访问 **http://localhost:4200** （开发服务器会自动代理 `/api` 请求到后端）
+Visit **http://localhost:4200** (the dev server automatically proxies `/api` requests to the backend)
 
-### 3. 启动后端服务器
+### 3. Start the Backend Server
 
-在另一个终端：
+In another terminal:
 
 ```bash
-cd ..  # 返回项目根目录
+cd ..  # return to the project root
 cargo run
 ```
 
-后端运行在 **http://localhost:8080**
+The backend runs on **http://localhost:8080**
 
-## 📁 项目结构
+## 📁 Project Structure
 
 ```
 frontend/
 ├── src/
 │   ├── app/
-│   │   ├── components/           # 页面组件
-│   │   │   ├── dashboard/        # 📊 仪表盘
-│   │   │   ├── layers/           # 📚 图层列表
-│   │   │   ├── layer-detail/     # 🔍 图层详情
-│   │   │   ├── layer-create/     # ➕ 创建图层
-│   │   │   └── preview/          # 🖼️ 预览组件
-│   │   ├── services/             # 🔧 业务服务
+│   │   ├── components/           # Page components
+│   │   │   ├── dashboard/        # 📊 Dashboard
+│   │   │   ├── layers/           # 📚 Layer list
+│   │   │   ├── layer-detail/     # 🔍 Layer detail
+│   │   │   ├── layer-create/     # ➕ Create layer
+│   │   │   └── preview/          # 🖼️ Preview component
+│   │   ├── services/             # 🔧 Business services
 │   │   │   ├── geoserver.service.ts      # GeoServer API
-│   │   │   └── notification.service.ts   # 通知服务
-│   │   ├── models/               # 📦 数据模型
+│   │   │   └── notification.service.ts   # Notification service
+│   │   ├── models/               # 📦 Data models
 │   │   │   └── geoserver.models.ts
-│   │   ├── shared/               # 🔄 共享组件
+│   │   ├── shared/               # 🔄 Shared components
 │   │   │   └── components/
 │   │   │       └── confirm-dialog.component.ts
-│   │   ├── app.component.ts      # 根组件
-│   │   ├── app.module.ts          # 根模块
-│   │   └── app-routing.module.ts  # 路由配置
-│   ├── styles.scss                # 全局样式
-│   ├── index.html                 # HTML 入口
-│   └── main.ts                    # 应用入口
-├── angular.json                   # Angular 配置
-├── package.json                   # 依赖配置
-├── tsconfig.json                  # TypeScript 配置
-├── proxy.conf.json                # 开发代理配置
-└── README.md                      # 项目文档
+│   │   ├── app.component.ts      # Root component
+│   │   ├── app.module.ts          # Root module
+│   │   └── app-routing.module.ts  # Routing configuration
+│   ├── styles.scss                # Global styles
+│   ├── index.html                 # HTML entry
+│   └── main.ts                    # Application entry
+├── angular.json                   # Angular configuration
+├── package.json                   # Dependency configuration
+├── tsconfig.json                  # TypeScript configuration
+├── proxy.conf.json                # Dev proxy configuration
+└── README.md                      # Project documentation
 ```
 
-## 🎯 功能模块
+## 🎯 Feature Modules
 
-### 1. 仪表盘 (`/dashboard`)
-- 系统统计概览
-- 最近图层列表
-- 快捷操作入口
+### 1. Dashboard (`/dashboard`)
+- System statistics overview
+- Recent layer list
+- Quick action entries
 
-### 2. 图层管理 (`/layers`)
-- 图层列表展示
-- 搜索和筛选
-- 图层卡片视图
-- 删除图层
+### 2. Layer Management (`/layers`)
+- Layer list display
+- Search and filtering
+- Layer card view
+- Delete layer
 
-### 3. 创建图层 (`/layers/create`)
-- 表单验证
-- 工作空间选择
-- 坐标系统配置
-- 边界范围设置
+### 3. Create Layer (`/layers/create`)
+- Form validation
+- Workspace selection
+- Coordinate reference system configuration
+- Boundary configuration
 
-### 4. 图层详情 (`/layers/:name`)
-- 图层信息展示
-- 实时预览
-- 要素管理（列表、删除）
-- 预览尺寸调整
+### 4. Layer Detail (`/layers/:name`)
+- Layer info display
+- Live preview
+- Feature management (list, delete)
+- Preview size adjustment
 
-## 🎨 设计特点
+## 🎨 Design Features
 
 ### UI/UX
-- **Material Design 3** - 遵循 Material Design 规范
-- **响应式布局** - 支持桌面和移动设备
-- **动画效果** - 流畅的过渡动画
-- **深色侧边栏** - 专业的数据管理界面风格
+- **Material Design 3** - follows the Material Design spec
+- **Responsive layout** - supports desktop and mobile devices
+- **Animations** - smooth transition animations
+- **Dark sidebar** - professional data-management interface style
 
-### 技术亮点
-- **模块化架构** - 清晰的项目结构
-- **RxJS** - 响应式编程
-- **TypeScript** - 类型安全
-- **SCSS** - 现代化样式管理
+### Technical Highlights
+- **Modular architecture** - clear project structure
+- **RxJS** - reactive programming
+- **TypeScript** - type safety
+- **SCSS** - modern style management
 
-## 🔌 API 集成
+## 🔌 API Integration
 
-前端通过 Angular HttpClient 与后端通信，支持以下 API：
+The frontend communicates with the backend via Angular HttpClient, supporting the following APIs:
 
-| 方法 | 端点 | 描述 |
+| Method | Endpoint | Description |
 |------|------|------|
-| GET | `/api/layers` | 获取所有图层 |
-| POST | `/api/layers` | 创建新图层 |
-| GET | `/api/layers/:name` | 获取图层详情 |
-| PUT | `/api/layers/:name` | 更新图层 |
-| DELETE | `/api/layers/:name` | 删除图层 |
-| GET | `/api/layers/:name/preview` | 获取图层预览图片 |
-| GET | `/api/layers/:name/features` | 获取图层要素 |
-| POST | `/api/layers/:name/features` | 添加要素 |
-| DELETE | `/api/layers/:name/features/:id` | 删除要素 |
+| GET | `/api/layers` | Get all layers |
+| POST | `/api/layers` | Create a new layer |
+| GET | `/api/layers/:name` | Get layer details |
+| PUT | `/api/layers/:name` | Update a layer |
+| DELETE | `/api/layers/:name` | Delete a layer |
+| GET | `/api/layers/:name/preview` | Get layer preview image |
+| GET | `/api/layers/:name/features` | Get layer features |
+| POST | `/api/layers/:name/features` | Add a feature |
+| DELETE | `/api/layers/:name/features/:id` | Delete a feature |
 
-## 🛠️ 开发命令
+## 🛠️ Dev Commands
 
 ```bash
-# 开发服务器
+# Dev server
 ng serve
 
-# 构建生产版本
+# Build production version
 ng build
 
-# 运行测试
+# Run tests
 ng test
 
-# 懒人构建（监听模式）
+# Watch-mode build (lazy builds)
 ng build --watch --configuration development
 ```
 
-## 📦 扩展指南
+## 📦 Extension Guide
 
-### 添加新页面
+### Adding a New Page
 
-1. 在 `src/app/components/` 创建组件目录
-2. 创建 `.ts`, `.html`, `.scss` 文件
-3. 在 `app.module.ts` 中声明组件
-4. 在路由配置中添加路由
+1. Create a component directory under `src/app/components/`
+2. Create the `.ts`, `.html`, `.scss` files
+3. Declare the component in `app.module.ts`
+4. Add the route to the routing configuration
 
-### 添加新服务
+### Adding a New Service
 
-1. 在 `src/app/services/` 创建服务文件
-2. 使用 `@Injectable({ providedIn: 'root' })` 装饰器
-3. 在组件中通过构造函数注入使用
+1. Create a service file under `src/app/services/`
+2. Use the `@Injectable({ providedIn: 'root' })` decorator
+3. Inject and use it in components via the constructor
 
-### 添加新模型
+### Adding a New Model
 
-1. 在 `src/app/models/` 创建模型文件
-2. 导出 TypeScript 接口或类
-3. 在需要的地方导入使用
+1. Create a model file under `src/app/models/`
+2. Export a TypeScript interface or class
+3. Import and use it where needed
 
-## 🎨 自定义主题
+## 🎨 Custom Theme
 
-编辑 `src/styles.scss` 修改主题配置：
+Edit `src/styles.scss` to modify the theme configuration:
 
 ```scss
 @use '@angular/material' as mat;
@@ -173,34 +173,40 @@ $geoserver-theme: mat.m2-define-light-theme((
 ));
 ```
 
-## 📝 注意事项
+## 📝 Notes
 
-1. **Node.js 版本** - 需要 Node.js 16.x 或更高版本
-2. **Angular CLI** - 全局安装：`npm install -g @angular/cli`
-3. **代理配置** - 开发时自动代理 API 请求到后端
-4. **CORS** - 确保后端允许跨域请求
+1. **Node.js version** - requires Node.js 16.x or higher
+2. **Angular CLI** - install globally: `npm install -g @angular/cli`
+3. **Proxy configuration** - API requests are automatically proxied to the backend in development
+4. **CORS** - ensure the backend allows cross-origin requests
 
-## 🚀 部署
+## 🚀 Deployment
 
-### 开发环境
+### Development Environment
 ```bash
 ng serve
 ```
 
-### 生产构建
+### Production Build
 ```bash
 ng build --configuration production
 ```
 
-构建产物在 `dist/rust-geoserver-ui/`
+The build output is in `dist/rust-geoserver-ui/`
 
-### 集成到后端
+### Integrating with the Backend
 
-将 `dist/rust-geoserver-ui/` 目录复制到后端项目的静态文件目录，并配置服务器提供这些文件。
+Copy the `dist/rust-geoserver-ui/` directory to the backend project's static file directory, and configure the server to serve those files.
 
-## 📚 学习资源
+### Cloud-Native Deployment
 
-- [Angular 官方文档](https://angular.io/docs)
-- [Angular Material 组件库](https://material.angular.io/)
-- [TypeScript 手册](https://www.typescriptlang.org/docs/)
-- [RxJS 文档](https://rxjs.dev/guide/overview)
+- **Multi-stage container build (recommended)**: run `npm ci && ng build --configuration production` in the Docker `node` stage; the `dist/rust-geoserver-ui/` output is bundled into the runtime image alongside the Rust binary and served from the backend `static/` directory — **no separate frontend service needed** (see section 7 of the root `IMPLEMENTATION_PLAN.md`).
+- **Standalone NGINX container (optional)**: serve the static assets separately and reverse-proxy `/api`, `/geoserver`, `/wms`, `/wfs`, `/wcs`, `/tiles` to the backend service.
+- The build output defaults to `dist/rust-geoserver-ui/`.
+
+## 📚 Learning Resources
+
+- [Angular official docs](https://angular.io/docs)
+- [Angular Material component library](https://material.angular.io/)
+- [TypeScript handbook](https://www.typescriptlang.org/docs/)
+- [RxJS documentation](https://rxjs.dev/guide/overview)

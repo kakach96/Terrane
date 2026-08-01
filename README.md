@@ -1,154 +1,170 @@
 # 🌍 Rust GeoServer
 
-基于 Rust + Actix-web 的轻量级地理空间数据服务器，配备现代化 Angular + Material 管理界面。
+A lightweight geospatial data server built with Rust + Actix-web, featuring a modern Angular + Material admin interface.
 
-## ✨ 功能特性
+## ✨ Features
 
-### 后端服务 (Rust)
-- 🌐 **WMS** - Web Map Service (地图服务)
-- 📍 **WFS** - Web Feature Service (要素服务)
-- 🛰️ **WCS** - Web Coverage Service (栅格服务)
-- 🔌 **REST API** - 完整的数据管理接口
-- 🗺️ **地图渲染** - 支持点、线、多边形渲染
+### Backend (Rust)
+- 🌐 **WMS** - Web Map Service
+- 📍 **WFS** - Web Feature Service
+- 🛰️ **WCS** - Web Coverage Service
+- 🔌 **REST API** - Complete data management interface
+- 🗺️ **Map rendering** - Supports points, lines, and polygons
 
-### 前端界面 (Angular)
-- 📊 **仪表盘** - 系统概览和统计
-- 🗺️ **图层管理** - 可视化图层管理
-- ➕ **创建图层** - 表单向导
-- 🔍 **图层详情** - 信息和预览
-- 📍 **要素管理** - CRUD 操作
-- 🎨 **Material Design** - 现代化 UI
+### Frontend (Angular)
+- 📊 **Dashboard** - System overview and statistics
+- 🗺️ **Layer management** - Visual layer management
+- ➕ **Create layer** - Form wizard
+- 🔍 **Layer detail** - Info and preview
+- 📍 **Feature management** - CRUD operations
+- 🎨 **Material Design** - Modern UI
 
-## 🚀 快速开始
+## ☁️ Cloud-Native
 
-### 环境要求
+**Goal**: containerization + 12-Factor configuration + observability + horizontal scaling, suitable for Docker / Kubernetes deployment.
+
+**Current status**
+
+- ✅ Configuration supports environment variable overrides (`GEOSERVER__<section>__<key>`, double-underscore separator, see `src/config.rs`)
+- ✅ `/health` health check endpoint, stdout logs (tracing)
+- ⚠️ TODO: Dockerfile / docker-compose / CI pipeline (not yet created)
+- ⚠️ TODO: JWT secret hardcoded in `src/auth.rs`, needs env injection
+- ⚠️ TODO: metadata in SQLite + in-memory caches (`src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL
+- ⚠️ TODO: tile cache / uploaded data on local disk, needs PVC or object storage
+- ⚠️ TODO: no graceful shutdown (SIGTERM drain)
+
+**Cloud-native roadmap**: containerization → 12-Factor/observability → state convergence → CI/CD. See section 7 of [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+
+## 🚀 Quick Start
+
+### Requirements
 
 - Rust 1.95+
 - Node.js 18+
 - npm 9+
 
-### 方式一：一键启动（推荐）
+### Option 1: One-Click Start (recommended)
 
 ```bash
-# 自动构建前端 + 启动服务
+# Automatically builds the frontend and starts the server
 cargo run
 
-# 访问 http://127.0.0.1:8080
+# Visit http://127.0.0.1:8080
 ```
 
-### 方式二：开发模式（前后端分离）
+### Option 2: Development Mode (separated frontend/backend)
 
 ```bash
-# 终端 1 - 启动后端（跳过前端构建，更快）
+# Terminal 1 - start the backend (skips frontend build, faster)
 $env:SKIP_FRONTEND=1
 cargo run
 
-# 终端 2 - 启动前端开发服务器（支持热重载）
+# Terminal 2 - start the frontend dev server (hot reload)
 cd frontend
 npm install
 npm start
 
-# 访问 http://localhost:4200
+# Visit http://localhost:4200
 ```
 
-### 方式三：完整构建
+### Option 3: Full Build
 
 ```bash
-# 构建前端会自动构建前端
+# cargo build automatically builds the frontend
 cargo build
 
-# 运行
+# Run
 cargo run
 ```
 
-### 或使用启动脚本
+### Or use the start script
 
 ```bash
 cd frontend
 START.bat
 ```
 
-## 📁 项目结构
+## 📁 Project Structure
 
 ```
 rust-geoserver/
-├── src/                    # Rust 后端源代码
-│   ├── handlers/          # HTTP 请求处理器
-│   ├── services/          # OGC 服务实现
-│   ├── models/            # 数据模型
-│   ├── utils/             # 工具函数
-│   └── main.rs            # 应用入口
-├── frontend/              # Angular 前端
+├── src/                    # Rust backend source code
+│   ├── handlers/          # HTTP request handlers
+│   ├── services/          # OGC service implementations
+│   ├── models/            # Data models
+│   ├── utils/             # Utility functions
+│   └── main.rs            # Application entry point
+├── frontend/              # Angular frontend
 │   ├── src/
 │   │   └── app/
-│   │       ├── components/ # 页面组件
-│   │       ├── services/  # API 服务
-│   │       └── models/    # 数据模型
+│   │       ├── components/ # Page components
+│   │       ├── services/  # API services
+│   │       └── models/    # Data models
 │   └── ...
-├── static/                 # 后端静态文件（备用）
-└── Cargo.toml             # Rust 依赖
+├── static/                 # Backend static files (fallback)
+└── Cargo.toml             # Rust dependencies
 ```
 
-## 🌐 API 端点
+## 🌐 API Endpoints
 
 ### REST API
 
-| 方法 | 端点 | 描述 |
+| Method | Endpoint | Description |
 |------|------|------|
-| GET | `/api/layers` | 获取所有图层 |
-| POST | `/api/layers` | 创建图层 |
-| GET | `/api/layers/:name` | 获取图层详情 |
-| PUT | `/api/layers/:name` | 更新图层 |
-| DELETE | `/api/layers/:name` | 删除图层 |
-| GET | `/api/layers/:name/preview` | 获取预览图 |
-| GET | `/api/layers/:name/features` | 获取要素 |
-| POST | `/api/layers/:name/features` | 添加要素 |
+| GET | `/api/layers` | Get all layers |
+| POST | `/api/layers` | Create a layer |
+| GET | `/api/layers/:name` | Get layer details |
+| PUT | `/api/layers/:name` | Update a layer |
+| DELETE | `/api/layers/:name` | Delete a layer |
+| GET | `/api/layers/:name/preview` | Get layer preview image |
+| GET | `/api/layers/:name/features` | Get layer features |
+| POST | `/api/layers/:name/features` | Add a feature |
 
-### OGC 服务
+### OGC Services
 
-| 服务 | 端点 | 操作 |
+| Service | Endpoint | Operations |
 |------|------|------|
 | WMS | `/wms` | GetCapabilities, GetMap, GetFeatureInfo |
 | WFS | `/wfs` | GetCapabilities, DescribeFeatureType, GetFeature |
 | WCS | `/wcs` | GetCapabilities, DescribeCoverage, GetCoverage |
 
-## 🎨 界面预览
+## 🎨 UI Preview
 
-### 仪表盘
-- 系统统计卡片
-- 最近图层列表
-- 快捷操作
+### Dashboard
+- System statistics cards
+- Recent layer list
+- Quick actions
 
-### 图层管理
-- 卡片式图层展示
-- 搜索和筛选
-- 一键删除
+### Layer Management
+- Card-based layer display
+- Search and filtering
+- One-click delete
 
-### 图层详情
-- 详细信息展示
-- 实时地图预览
-- 要素表格管理
+### Layer Detail
+- Detailed information display
+- Live map preview
+- Feature table management
 
-## 🛠️ 技术栈
+## 🛠️ Tech Stack
 
-### 后端
-- **Rust** - 系统编程语言
-- **Actix-web** - Web 框架
-- **Tokio** - 异步运行时
-- **Geo** - 几何计算
-- **Image** - 图像处理
-- **Serde** - 序列化
+### Backend
+- **Rust** - System programming language
+- **Actix-web** - Web framework
+- **Tokio** - Async runtime
+- **Geo** - Geometry computation
+- **Image** - Image processing
+- **Serde** - Serialization
 
-### 前端
-- **Angular 17** - 前端框架
-- **Angular Material** - UI 组件库
-- **TypeScript** - 类型安全
-- **RxJS** - 响应式编程
-- **SCSS** - 样式预处理
+### Frontend
+- **Angular 17** - Frontend framework
+- **Angular Material** - UI component library
+- **TypeScript** - Type safety
+- **RxJS** - Reactive programming
+- **SCSS** - Style preprocessor
 
-## 📦 数据格式
+## 📦 Data Formats
 
-### 图层
+### Layer
 
 ```json
 {
@@ -166,7 +182,7 @@ rust-geoserver/
 }
 ```
 
-### 要素
+### Feature
 
 ```json
 {
@@ -181,9 +197,9 @@ rust-geoserver/
 }
 ```
 
-## 🔧 配置
+## 🔧 Configuration
 
-配置文件：`geoserver.toml`
+Configuration file: `geoserver.toml`
 
 ```toml
 [server]
@@ -198,26 +214,28 @@ title = "World"
 srs = "EPSG:4326"
 ```
 
-## 📚 文档
+> **Environment variable overrides**: all configuration options can be overridden via `GEOSERVER__<section>__<key>` (e.g. `GEOSERVER__SERVER__PORT=9090`). In container deployments, use K8s ConfigMap / Secret injection.
 
-- [集成构建说明](BUILD_INTEGRATION.md)
-- [前端文档](frontend/README.md)
-- [前端项目总结](frontend/PROJECT_SUMMARY.md)
+## 📚 Documentation
 
-## 🤝 贡献
+- [Integration build notes](BUILD_INTEGRATION.md)
+- [Frontend documentation](frontend/README.md)
+- [Frontend project summary](frontend/PROJECT_SUMMARY.md)
 
-欢迎提交 Issue 和 Pull Request！
+## 🤝 Contributing
 
-## 📄 许可证
+Issues and Pull Requests are welcome!
+
+## 📄 License
 
 MIT License
 
-## 🙏 致谢
+## 🙏 Acknowledgements
 
-- GeoServer 社区
-- OGC 标准组织
-- Rust 社区
-- Angular 团队
+- GeoServer community
+- OGC standards organizations
+- Rust community
+- Angular team
 
 ---
 
