@@ -18,6 +18,8 @@ export class LayerCreateComponent implements OnInit {
   tables: string[] = [];
   loadingDataSources = false;
   loadingTables = false;
+  /** metadata 内置数据源且无已有业务表时: 数据表自动用图层名 */
+  metadataNewTable = false;
 
   constructor(
     private fb: FormBuilder,
@@ -62,7 +64,16 @@ export class LayerCreateComponent implements OnInit {
         this.loadTablesForDataSource(dataSourceName);
       } else {
         this.tables = [];
+        this.metadataNewTable = false;
         this.layerForm.get('table')?.setValue('');
+      }
+    });
+
+    // metadata 内置数据源且无已有业务表时: 数据表自动用图层名
+    this.layerForm.get('name')?.valueChanges.subscribe((name: string) => {
+      if (this.metadataNewTable) {
+        this.tables = name ? [name] : [];
+        this.layerForm.get('table')?.setValue(name || '');
       }
     });
   }
@@ -79,7 +90,8 @@ export class LayerCreateComponent implements OnInit {
     this.loadingDataSources = true;
     this.geoserverService.getDataSources().subscribe({
       next: (dataSources) => {
-        this.dataSources = dataSources.filter(ds => ds.workspace === workspaceName);
+        // metadata 内置数据源不属任何工作空间, 对所有工作空间都可用
+        this.dataSources = dataSources.filter(ds => ds.workspace === workspaceName || ds.name === 'metadata');
         this.loadingDataSources = false;
         this.layerForm.get('dataSource')?.setValue('');
         this.tables = [];
@@ -95,6 +107,7 @@ export class LayerCreateComponent implements OnInit {
 
   loadTablesForDataSource(dataSourceName: string): void {
      const dataSource = this.dataSources.find(ds => ds.name === dataSourceName);
+     this.metadataNewTable = false;
      if (!dataSource || dataSource.type !== 'postgis') {
        this.tables = [];
        this.layerForm.get('table')?.setValue('');
@@ -106,12 +119,27 @@ export class LayerCreateComponent implements OnInit {
       next: (tables) => {
         this.tables = tables;
         this.loadingTables = false;
-        this.layerForm.get('table')?.setValue('');
+        // metadata 内置数据源: 与 postgis 相同逻辑走真实表列表;
+        // 若无已有业务表, 用图层名作为默认数据表 (新建)
+        if (dataSource.name === 'metadata') {
+          if (tables.length > 0) {
+            this.metadataNewTable = false;
+            this.layerForm.get('table')?.setValue('');
+          } else {
+            this.metadataNewTable = true;
+            const layerName = this.layerForm.get('name')?.value;
+            this.tables = layerName ? [layerName] : [];
+            this.layerForm.get('table')?.setValue(layerName || '');
+          }
+        } else {
+          this.layerForm.get('table')?.setValue('');
+        }
       },
       error: (err) => {
         console.error('Failed to load tables:', err);
         this.loadingTables = false;
         this.tables = [];
+        this.metadataNewTable = false;
       }
     });
   }

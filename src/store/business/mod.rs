@@ -29,6 +29,8 @@ pub trait BusinessStore: Send + Sync {
     async fn load_features(&self, layer_name: &str) -> Result<Vec<Feature>, StoreError>;
     /// 删除指定图层的全部要素
     async fn delete_features(&self, layer_name: &str) -> Result<usize, StoreError>;
+    /// 列出业务存储中已有的图层表 (数据源表列表使用, 如 metadata 数据源)
+    async fn list_tables(&self) -> Result<Vec<String>, StoreError>;
 }
 
 /// 复用 SQLite 元数据存储的要素能力 (kind = "metadata" 且元数据为 sqlite 时)。
@@ -48,6 +50,10 @@ impl BusinessStore for SqliteStore {
 
     async fn delete_features(&self, layer_name: &str) -> Result<usize, StoreError> {
         SqliteStore::delete_features(self, layer_name).await.map_err(StoreError::from)
+    }
+
+    async fn list_tables(&self) -> Result<Vec<String>, StoreError> {
+        SqliteStore::list_feature_layers(self).await.map_err(StoreError::from)
     }
 }
 

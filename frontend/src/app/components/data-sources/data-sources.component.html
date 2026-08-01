@@ -32,7 +32,10 @@
           <div class="cell-content">
             <mat-icon class="type-icon">{{ getTypeIcon(ds.type) }}</mat-icon>
             <div>
-              <div>{{ ds.name }}</div>
+              <div>
+                {{ ds.name }}
+                <span *ngIf="ds.builtin" class="builtin-badge">内置</span>
+              </div>
               <div class="cell-subtitle" *ngIf="ds.connection?.file_path">
                 {{ ds.connection?.file_path }}
               </div>
@@ -62,7 +65,7 @@
           <mat-slide-toggle
             [checked]="ds.enabled"
             (change)="toggleEnabled(ds)"
-            [disabled]="loading"
+            [disabled]="loading || ds.builtin"
           ></mat-slide-toggle>
         </mat-cell>
       </ng-container>
@@ -70,13 +73,13 @@
       <ng-container matColumnDef="actions">
         <mat-header-cell *matHeaderCellDef>操作</mat-header-cell>
         <mat-cell *matCellDef="let ds">
-          <button mat-icon-button color="primary" (click)="openEditDialog(ds)" title="编辑">
+          <button mat-icon-button color="primary" (click)="openEditDialog(ds)" title="编辑" [disabled]="ds.builtin">
             <mat-icon>edit</mat-icon>
           </button>
           <button mat-icon-button color="accent" (click)="testConnection(ds)" title="测试连接">
             <mat-icon>network_check</mat-icon>
           </button>
-          <button mat-icon-button color="warn" (click)="deleteDataSource(ds.name)" title="删除">
+          <button mat-icon-button color="warn" (click)="deleteDataSource(ds.name)" title="删除" [disabled]="ds.builtin">
             <mat-icon>delete</mat-icon>
           </button>
         </mat-cell>

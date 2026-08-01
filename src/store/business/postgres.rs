@@ -1,8 +1,9 @@
-//! PostgreSQL 业务数据存储 — 仅管理 `features` 表 (图层要素)。
+//! PostgreSQL 业务数据存储 — 每个图层一张物理表 (与 PostGIS 数据源一致的模型)。
 //!
 //! 用于独立 postgres 业务存储 (kind = "postgres"), 或复用 postgres 元数据存储
-//! (kind = "metadata" 且元数据为 postgres)。只创建/使用 `features` 表, 不会
-//! 在业务数据库中创建元数据表。
+//! (kind = "metadata" 且元数据为 postgres)。每个图层对应一张 `biz_<layer>` 表,
+//! 与 PostGIS 数据源"一图层一表"的逻辑保持一致, 便于 metadata 数据源复用
+//! 相同的表列表 / 要素读写路径。
 
 use async_trait::async_trait;
 use deadpool_postgres::{ManagerConfig, RecyclingMethod, Runtime, Pool};
@@ -12,6 +13,9 @@ use crate::config::PostgresConfig;
 use crate::models::Feature;
 use crate::store::StoreError;
 
+/// 业务表前缀 (避免与元数据表冲突)
+const BIZ_TABLE_PREFIX: &str = "biz_";
+
 /// PostgreSQL 业务数据存储
 pub struct PostgresBusinessStore {
     pool: Pool,
@@ -19,7 +23,7 @@ pub struct PostgresBusinessStore {
 }
 
 impl PostgresBusinessStore {
-    /// 根据连接配置构建连接池并确保 `features` 表存在。
+    /// 根据连接配置构建连接池并确保 schema 存在。
     pub async fn new(cfg: &PostgresConfig) -> Result<Self, StoreError> {
         let mut pg_cfg = deadpool_postgres::Config::new();
         let host = if cfg.host.eq_ignore_ascii_case("localhost") {
@@ -58,18 +62,37 @@ impl PostgresBusinessStore {
         client
             .batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {}", self.schema))
             .await?;
+        Ok(())
+    }
+
+    /// 图层名 → 物理表名 (加前缀 + 转义, 防注入)
+    fn table_name(&self, layer_name: &str) -> String {
+        let safe: String = layer_name
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+            .collect();
+        format!("\"{}{}\"", BIZ_TABLE_PREFIX, safe)
+    }
+
+    /// 物理表名 → 图层名 (去掉前缀)
+    fn layer_name_from_table(&self, table: &str) -> String {
+        table
+            .strip_prefix(BIZ_TABLE_PREFIX)
+            .unwrap_or(table)
+            .to_string()
+    }
+
+    async fn ensure_table(&self, client: &deadpool_postgres::Client, layer_name: &str) -> Result<(), StoreError> {
+        let table = self.table_name(layer_name);
         client
-            .batch_execute(
-                r#"
-                CREATE TABLE IF NOT EXISTS features (
-                    layer_name TEXT NOT NULL,
-                    feature_id TEXT NOT NULL,
+            .batch_execute(&format!(
+                "CREATE TABLE IF NOT EXISTS {} (
+                    feature_id TEXT NOT NULL PRIMARY KEY,
                     geometry TEXT NOT NULL,
-                    properties TEXT,
-                    PRIMARY KEY (layer_name, feature_id)
-                );
-                "#,
-            )
+                    properties TEXT
+                )",
+                table
+            ))
             .await?;
         Ok(())
     }
@@ -79,18 +102,31 @@ impl PostgresBusinessStore {
 impl super::BusinessStore for PostgresBusinessStore {
     async fn save_features(&self, layer_name: &str, features: &[Feature]) -> Result<usize, StoreError> {
         let mut client = self.pool.get().await?;
+        let table = self.table_name(layer_name);
         let tx = client.transaction().await?;
-        tx.execute("DELETE FROM features WHERE layer_name = $1", &[&layer_name]).await?;
+        tx.batch_execute(&format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+                feature_id TEXT NOT NULL PRIMARY KEY,
+                geometry TEXT NOT NULL,
+                properties TEXT
+            )",
+            table
+        ))
+        .await?;
+        tx.execute(&format!("DELETE FROM {}", table), &[]).await?;
         let mut count = 0;
         for feature in features {
             let geometry = serde_json::to_string(&feature.geometry)?;
             let properties = serde_json::to_string(&feature.properties)?;
             tx.execute(
-                "INSERT INTO features (layer_name, feature_id, geometry, properties)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (layer_name, feature_id) DO UPDATE
-                 SET geometry = EXCLUDED.geometry, properties = EXCLUDED.properties",
-                &[&layer_name, &feature.id, &geometry, &properties],
+                &format!(
+                    "INSERT INTO {} (feature_id, geometry, properties)
+                     VALUES ($1, $2, $3)
+                     ON CONFLICT (feature_id) DO UPDATE
+                     SET geometry = EXCLUDED.geometry, properties = EXCLUDED.properties",
+                    table
+                ),
+                &[&feature.id, &geometry, &properties],
             )
             .await?;
             count += 1;
@@ -101,11 +137,29 @@ impl super::BusinessStore for PostgresBusinessStore {
 
     async fn load_features(&self, layer_name: &str) -> Result<Vec<Feature>, StoreError> {
         let client = self.pool.get().await?;
+        let table = self.table_name(layer_name);
+        // 表不存在时返回空
+        let exists: bool = client
+            .query_one(
+                "SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = current_schema() AND table_name = $1
+                 )",
+                &[&format!("{}{}", BIZ_TABLE_PREFIX, layer_name)],
+            )
+            .await?
+            .get(0);
+        if !exists {
+            return Ok(Vec::new());
+        }
+
         let rows = client
             .query(
-                "SELECT feature_id, geometry, properties FROM features
-                 WHERE layer_name = $1 ORDER BY feature_id",
-                &[&layer_name],
+                &format!(
+                    "SELECT feature_id, geometry, properties FROM {} ORDER BY feature_id",
+                    table
+                ),
+                &[],
             )
             .await?;
         rows.iter()
@@ -125,9 +179,31 @@ impl super::BusinessStore for PostgresBusinessStore {
 
     async fn delete_features(&self, layer_name: &str) -> Result<usize, StoreError> {
         let client = self.pool.get().await?;
+        let table = self.table_name(layer_name);
         let res = client
-            .execute("DELETE FROM features WHERE layer_name = $1", &[&layer_name])
+            .execute(&format!("DROP TABLE IF EXISTS {}", table), &[])
             .await?;
         Ok(res as usize)
     }
+
+    async fn list_tables(&self) -> Result<Vec<String>, StoreError> {
+        let client = self.pool.get().await?;
+        let rows = client
+            .query(
+                "SELECT table_name FROM information_schema.tables
+                 WHERE table_schema = current_schema()
+                 AND table_name LIKE $1
+                 ORDER BY table_name",
+                &[&format!("{}%", BIZ_TABLE_PREFIX)],
+            )
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|row| {
+                let t: String = row.get(0);
+                self.layer_name_from_table(&t)
+            })
+            .collect())
+    }
 }
+

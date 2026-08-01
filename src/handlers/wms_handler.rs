@@ -270,9 +270,14 @@ async fn resolve_layer_metadata(
             None
         };
 
-        let (data_source_type, connection) = data_source
-            .map(|ds| (ds.data_source_type, ds.connection))
-            .unwrap_or((DataSourceType::Shapefile, None));
+        // 内置 metadata 数据源: 图层要素从业务存储读取
+        let (data_source_type, connection) = if layer.store == crate::models::METADATA_DATA_SOURCE {
+            (DataSourceType::Metadata, None)
+        } else {
+            data_source
+                .map(|ds| (ds.data_source_type, ds.connection))
+                .unwrap_or((DataSourceType::Shapefile, None))
+        };
 
         let native_name = if let Some(ref nn) = layer.native_name {
             nn.clone()

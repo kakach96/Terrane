@@ -1,43 +1,66 @@
 use actix_web::{HttpRequest, HttpResponse, web};
-use serde::Deserialize;
 use crate::state::AppState;
-use crate::models::{DataSource, DataSourceType, DataSourceConnection};
+use crate::models::{DataSource, DataSourceType, DataSourceConnection, METADATA_DATA_SOURCE,
+                    CreateDataSourceRequest, UpdateDataSourceRequest};
 use crate::error::GeoServerError;
 use std::time::Instant;
 use super::rest_handler::ApiResponse;
 
-#[derive(Debug, Deserialize)]
-pub struct CreateDataSourceRequest {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub data_source_type: DataSourceType,
-    pub workspace: Option<String>,
-    pub enabled: Option<bool>,
-    pub connection: DataSourceConnection,
+/// 当业务数据复用元数据存储 (business.kind = "metadata") 时,
+/// 构造内置 metadata 数据源的 JSON 表示（内置默认选项, 不可编辑/删除）。
+///
+/// 与 PostGIS 数据源保持一致: 元数据存储为 postgres 时 type 显示为 postgis,
+/// connection 展示元数据 postgres 连接配置。
+fn builtin_metadata_data_source(state: &AppState) -> Option<serde_json::Value> {
+    let eff = state.config.effective_business();
+    if eff.kind != "metadata" {
+        return None;
+    }
+
+    let mc = &state.config.metadata;
+    let (ds_type, connection) = if mc.kind == "postgres" {
+        let pg = &mc.postgres;
+        (
+            "postgis".to_string(),
+            serde_json::json!({
+                "host": pg.host,
+                "port": pg.port,
+                "database": pg.instance,
+                "schema": pg.schema,
+                "username": pg.user,
+            }),
+        )
+    } else {
+        (
+            "metadata".to_string(),
+            serde_json::json!({
+                "file_path": mc.sqlite_path.to_string_lossy(),
+            }),
+        )
+    };
+
+    Some(serde_json::json!({
+        "name": METADATA_DATA_SOURCE,
+        "type": ds_type,
+        "workspace": serde_json::Value::Null,
+        "enabled": true,
+        "builtin": true,
+        "connection": connection,
+        "created": serde_json::Value::Null,
+        "modified": serde_json::Value::Null,
+    }))
 }
 
-#[derive(Debug, Deserialize)]
-pub struct DataSourceConnectionRequest {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub data_source_type: DataSourceType,
-    pub connection: DataSourceConnection,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateDataSourceRequest {
-    #[serde(rename = "type")]
-    pub data_source_type: Option<DataSourceType>,
-    pub workspace: Option<String>,
-    pub enabled: Option<bool>,
-    pub connection: Option<DataSourceConnection>,
+/// 判断数据源名称是否为内置 metadata 数据源
+fn is_builtin_metadata(name: &str) -> bool {
+    name == METADATA_DATA_SOURCE
 }
 
 pub async fn list_data_sources(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
     if let Some(store) = &state.store {
         match store.get_all_data_sources().await {
             Ok(data_sources) => {
-                let result: Vec<_> = data_sources.iter()
+                let mut result: Vec<_> = data_sources.iter()
                     .map(|ds| serde_json::json!({
                         "name": ds.name,
                         "type": format!("{}", ds.data_source_type).to_lowercase(),
@@ -46,8 +69,15 @@ pub async fn list_data_sources(state: web::Data<AppState>) -> Result<HttpRespons
                         "connection": ds.connection,
                         "created": ds.created,
                         "modified": ds.modified,
+                        "builtin": false,
                     }))
                     .collect();
+
+                // 业务数据复用元数据存储时, 注入内置 metadata 数据源作为默认选项
+                if let Some(meta) = builtin_metadata_data_source(&state) {
+                    result.insert(0, meta);
+                }
+
                 Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
             }
             Err(e) => {
@@ -66,6 +96,13 @@ pub async fn get_data_source(
 ) -> Result<HttpResponse, GeoServerError> {
     let name = req.match_info().get("name").unwrap_or("");
 
+    // 内置 metadata 数据源
+    if is_builtin_metadata(name) {
+        if let Some(meta) = builtin_metadata_data_source(&state) {
+            return Ok(HttpResponse::Ok().json(ApiResponse::success(meta)));
+        }
+    }
+
     if let Some(store) = &state.store {
         match store.get_data_source(name).await {
             Ok(Some(ds)) => {
@@ -77,6 +114,7 @@ pub async fn get_data_source(
                     "connection": ds.connection,
                     "created": ds.created,
                     "modified": ds.modified,
+                    "builtin": false,
                 }))))
             }
             Ok(None) => Err(GeoServerError::NotFound(format!("Data source '{}' not found", name))),
@@ -94,6 +132,9 @@ pub async fn create_data_source(
     body: web::Json<CreateDataSourceRequest>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
+    if is_builtin_metadata(&body.name) {
+        return Err(GeoServerError::Conflict(format!("Data source '{}' is a built-in data source", body.name)));
+    }
     if let Some(store) = &state.store {
         match store.get_data_source(&body.name).await {
             Ok(Some(_)) => {
@@ -138,6 +179,10 @@ pub async fn update_data_source(
 ) -> Result<HttpResponse, GeoServerError> {
     let name = req.match_info().get("name").unwrap_or("");
 
+    if is_builtin_metadata(name) {
+        return Err(GeoServerError::BadRequest(format!("Data source '{}' is a built-in data source and cannot be modified", name)));
+    }
+
     if let Some(store) = &state.store {
         match store.update_data_source(
             name,
@@ -167,6 +212,10 @@ pub async fn delete_data_source(
 ) -> Result<HttpResponse, GeoServerError> {
     let name = req.match_info().get("name").unwrap_or("");
 
+    if is_builtin_metadata(name) {
+        return Err(GeoServerError::BadRequest(format!("Data source '{}' is a built-in data source and cannot be deleted", name)));
+    }
+
     if let Some(store) = &state.store {
         match store.delete_data_source(name).await {
             Ok(_) => {
@@ -189,6 +238,39 @@ pub async fn test_data_source_connection(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let name = req.match_info().get("name").unwrap_or("");
+
+    // 内置 metadata 数据源: 测试元数据存储连接
+    if is_builtin_metadata(name) {
+        let mc = &state.config.metadata;
+        if mc.kind == "postgres" {
+            let pg = &mc.postgres;
+            let ds = DataSource {
+                name: name.to_string(),
+                data_source_type: DataSourceType::Postgis,
+                workspace: None,
+                enabled: true,
+                connection: Some(DataSourceConnection {
+                    host: Some(pg.host.clone()),
+                    port: Some(pg.port),
+                    database: Some(pg.instance.clone()),
+                    schema: Some(pg.schema.clone()),
+                    username: Some(pg.user.clone()),
+                    password: Some(pg.password.clone()),
+                    file_path: None,
+                    file_storage_type: None,
+                }),
+                created: None,
+                modified: None,
+            };
+            let result = test_postgis_connection(&ds).await;
+            return Ok(HttpResponse::Ok().json(result));
+        } else {
+            eprintln!("[test_data_source_connection] metadata 数据源连接测试仅支持 postgres 元数据存储");
+            return Err(GeoServerError::BadRequest(
+                "Metadata data source connection test only supports postgres metadata store".to_string(),
+            ));
+        }
+    }
 
     if let Some(store) = &state.store {
         match store.get_data_source(name).await {
@@ -273,6 +355,24 @@ pub async fn get_data_source_tables(
     let start_total = Instant::now();
     let name = req.match_info().get("name").unwrap_or("");
     tracing::debug!("[get_data_source_tables] 开始处理, name={}", name);
+
+    // 内置 metadata 数据源: 与 PostGIS 相同逻辑, 列出业务存储中已有的图层表
+    if is_builtin_metadata(name) {
+        if builtin_metadata_data_source(&state).is_some() {
+            if let Some(bstore) = &state.business_store {
+                match bstore.list_tables().await {
+                    Ok(tables) => {
+                        tracing::debug!("[get_data_source_tables] 内置 metadata 数据源, 业务表: {:?}", tables);
+                        return Ok(HttpResponse::Ok().json(ApiResponse::success(tables)));
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to list business tables: {}", e);
+                    }
+                }
+            }
+            return Err(GeoServerError::InternalError("Business store not available".to_string()));
+        }
+    }
 
     if let Some(store) = &state.store {
         let t1 = Instant::now();

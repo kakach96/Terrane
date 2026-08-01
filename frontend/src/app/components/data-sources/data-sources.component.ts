@@ -117,6 +117,8 @@ export class DataSourcesComponent implements OnInit {
     switch (type) {
       case 'postgis':
         return 'database';
+      case 'metadata':
+        return 'storage';
       case 'shapefile':
         return 'folder_open';
       case 'geotiff':
@@ -130,6 +132,8 @@ export class DataSourcesComponent implements OnInit {
     switch (type) {
       case 'postgis':
         return 'PostGIS';
+      case 'metadata':
+        return '元数据存储';
       case 'shapefile':
         return 'Shapefile';
       case 'geotiff':
@@ -143,6 +147,8 @@ export class DataSourcesComponent implements OnInit {
     switch (type) {
       case 'postgis':
         return 'primary';
+      case 'metadata':
+        return 'accent';
       case 'shapefile':
         return 'accent';
       case 'geotiff':

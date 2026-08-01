@@ -151,9 +151,11 @@ export interface ServerStatus {
 
 export interface DataSource {
   name: string;
-  type: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage';
+  type: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage' | 'metadata' | string;
   workspace?: string;
   enabled: boolean;
+  /** 是否为内置数据源 (如复用元数据存储的 metadata), 不可编辑/删除 */
+  builtin?: boolean;
   connection?: DataSourceConnection;
   created?: string;
   modified?: string;

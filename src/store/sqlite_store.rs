@@ -978,6 +978,20 @@ impl SqliteStore {
         Ok(count)
     }
 
+    /// 列出 features 表中已有的图层名 (metadata 数据源表列表使用)
+    pub async fn list_feature_layers(&self) -> SqlResult<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT layer_name FROM features ORDER BY layer_name"
+        )?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
     // ========================================================================
     // SQL 视图 (SQL Views)
     // ========================================================================

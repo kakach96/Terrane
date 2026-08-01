@@ -60,6 +60,18 @@
     line-height: 1.3;
   }
 
+  .builtin-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    font-size: 11px;
+    line-height: 1.4;
+    border-radius: 4px;
+    color: var(--accent, #00796b);
+    background: rgba(0, 121, 107, 0.12);
+    vertical-align: middle;
+  }
+
   .type-icon {
     font-size: 20px;
     margin-right: 4px;

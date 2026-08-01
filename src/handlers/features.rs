@@ -1,5 +1,5 @@
 use crate::state::AppState;
-use crate::models::{Feature, GeoJsonGeometry, Bounds, DataSourceType};
+use crate::models::{Feature, GeoJsonGeometry, Bounds, DataSourceType, METADATA_DATA_SOURCE};
 use crate::error::GeoServerError;
 use crate::utils::wkb;
 use tracing::info;
@@ -16,6 +16,23 @@ pub async fn query_layer_features(
         layers.iter().find(|l| l.name == layer_name).cloned()
     };
     let layer = layer.ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+
+    // 内置 metadata 数据源: 业务数据从业务存储读取
+    if layer.store == METADATA_DATA_SOURCE {
+        if let Some(bstore) = &state.business_store {
+            info!("[Features] 图层 '{}' 使用内置 metadata 数据源, 从业务存储读取", layer_name);
+            let all = bstore.load_features(layer_name).await
+                .map_err(|e| GeoServerError::InternalError(format!("Failed to load features from business store: {}", e)))?;
+            let mut filtered = filter_features(all, bbox);
+            if let Some(o) = offset {
+                filtered = filtered.into_iter().skip(o as usize).collect();
+            }
+            if let Some(l) = limit {
+                filtered = filtered.into_iter().take(l as usize).collect();
+            }
+            return Ok(filtered);
+        }
+    }
 
     let data_source = if let Some(store) = &state.store {
         store.get_data_source(&layer.store).await
@@ -56,6 +73,21 @@ pub async fn query_layer_features(
             DataSourceType::ArcGrid => {
                 info!("[Features] ArcGrid 是栅格格式，通过 WCS 访问");
                 return Ok(Vec::new());
+            }
+            DataSourceType::Metadata => {
+                if let Some(bstore) = &state.business_store {
+                    info!("[Features] 图层 '{}' 使用 metadata 数据源, 从业务存储读取", layer_name);
+                    let all = bstore.load_features(layer_name).await
+                        .map_err(|e| GeoServerError::InternalError(format!("Failed to load features from business store: {}", e)))?;
+                    let mut filtered = filter_features(all, bbox);
+                    if let Some(o) = offset {
+                        filtered = filtered.into_iter().skip(o as usize).collect();
+                    }
+                    if let Some(l) = limit {
+                        filtered = filtered.into_iter().take(l as usize).collect();
+                    }
+                    return Ok(filtered);
+                }
             }
         }
     }

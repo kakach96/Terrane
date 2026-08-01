@@ -14,5 +14,8 @@ pub use data_source::{
     DataSource, 
     DataSourceType, 
     DataSourceConnection,
+    METADATA_DATA_SOURCE,
+    CreateDataSourceRequest,
+    UpdateDataSourceRequest,
 };
 // Namespace 可通过 crate::models::namespace::Namespace 访问

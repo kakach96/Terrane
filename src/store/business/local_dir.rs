@@ -86,4 +86,20 @@ impl super::BusinessStore for LocalDirBusinessStore {
             Ok(0)
         }
     }
+
+    async fn list_tables(&self) -> Result<Vec<String>, StoreError> {
+        if !self.dir.exists() {
+            return Ok(Vec::new());
+        }
+        let mut tables = Vec::new();
+        for entry in std::fs::read_dir(&self.dir)? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if let Some(base) = name.strip_suffix(".geojson") {
+                tables.push(base.to_string());
+            }
+        }
+        tables.sort();
+        Ok(tables)
+    }
 }

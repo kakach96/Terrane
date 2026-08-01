@@ -28,6 +28,9 @@ impl DataSource {
     }
 }
 
+/// 内置 metadata 数据源名称（业务数据复用元数据存储时的内置默认选项）
+pub const METADATA_DATA_SOURCE: &str = "metadata";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum DataSourceType {
@@ -38,6 +41,8 @@ pub enum DataSourceType {
     WorldImage,
     CascadedWms,
     ArcGrid,
+    /// 元数据存储复用（业务数据复用元数据存储时的内置默认数据源）
+    Metadata,
 }
 
 impl std::fmt::Display for DataSourceType {
@@ -50,6 +55,7 @@ impl std::fmt::Display for DataSourceType {
             DataSourceType::WorldImage => write!(f, "worldimage"),
             DataSourceType::CascadedWms => write!(f, "cascaded_wms"),
             DataSourceType::ArcGrid => write!(f, "arcgrid"),
+            DataSourceType::Metadata => write!(f, "metadata"),
         }
     }
 }
