@@ -171,6 +171,10 @@
         <mat-icon matCardAvatar>map</mat-icon>
         <mat-card-title>地图预览</mat-card-title>
         <div class="preview-actions">
+          <button mat-stroked-button (click)="openInPreviewPage()" matTooltip="在图层预览页打开">
+            <mat-icon>open_in_new</mat-icon>
+            在预览页打开
+          </button>
           <button mat-icon-button (click)="refreshPreview()" matTooltip="刷新预览">
             <mat-icon>refresh</mat-icon>
           </button>
@@ -187,13 +191,13 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="preview-control">
+          <mat-form-field appearance="outline" class="preview-control" *ngIf="isStaticPreview">
             <mat-label>宽度</mat-label>
             <input matInput type="number" [value]="previewOptions.width"
                    (change)="updatePreviewParam('width', $any($event.target).value)">
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="preview-control">
+          <mat-form-field appearance="outline" class="preview-control" *ngIf="isStaticPreview">
             <mat-label>高度</mat-label>
             <input matInput type="number" [value]="previewOptions.height"
                    (change)="updatePreviewParam('height', $any($event.target).value)">
@@ -208,13 +212,14 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-checkbox [checked]="previewOptions.transparent"
+          <mat-checkbox *ngIf="isStaticPreview" [checked]="previewOptions.transparent"
                         (change)="onTransparentChange($event)">
             透明背景
           </mat-checkbox>
         </div>
         <div class="preview-image-container">
-          <img [src]="previewUrl" alt="地图预览" class="preview-image" (error)="onPreviewError()">
+          <iframe *ngIf="!isStaticPreview" [src]="safePreviewUrl" class="preview-iframe" title="地图预览"></iframe>
+          <img *ngIf="isStaticPreview" [src]="previewUrl" alt="地图预览" class="preview-image" (error)="onPreviewError()">
         </div>
       </mat-card-content>
     </mat-card>

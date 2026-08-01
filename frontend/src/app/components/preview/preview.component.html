@@ -2,83 +2,124 @@
   <div class="page-header">
     <div>
       <h1>图层预览</h1>
-      <p class="subtitle">交互式地图预览 — 支持切片图层和 WMS 图层</p>
+      <p class="subtitle">交互式地图预览 — 支持 WMS 图层与图层组</p>
     </div>
   </div>
 
-  <div class="preview-controls">
-    <div class="control-row">
-      <mat-button-toggle-group [(ngModel)]="previewMode" (change)="refreshPreview()">
-        <mat-button-toggle value="layer">按图层</mat-button-toggle>
-        <mat-button-toggle value="group">按图层组</mat-button-toggle>
-      </mat-button-toggle-group>
+  <div class="preview-toolbar">
+    <mat-button-toggle-group [(ngModel)]="previewMode" (change)="onModeChange()" class="mode-toggle">
+      <mat-button-toggle value="layer">图层</mat-button-toggle>
+      <mat-button-toggle value="group">图层组</mat-button-toggle>
+    </mat-button-toggle-group>
 
-      <mat-form-field appearance="outline" *ngIf="previewMode === 'layer'">
-        <mat-label>选择图层</mat-label>
-        <mat-select [(ngModel)]="selectedLayer" (selectionChange)="refreshPreview()">
-          <mat-option *ngFor="let l of layers" [value]="l.name">
-            {{ l.title || l.name }}
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
+    <mat-form-field appearance="outline" class="format-field">
+      <mat-label>预览格式</mat-label>
+      <mat-select [(ngModel)]="previewOptions.format" (selectionChange)="refreshPreview()">
+        <mat-option *ngFor="let f of formatOptions" [value]="f.value">{{ f.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
 
-      <mat-form-field appearance="outline" *ngIf="previewMode === 'group'">
-        <mat-label>选择图层组</mat-label>
-        <mat-select [(ngModel)]="selectedGroup" (selectionChange)="refreshPreview()">
-          <mat-option *ngFor="let g of groups" [value]="g.name">
-            {{ g.title || g.name }} ({{ g.layers.length }} 图层)
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
+    <mat-form-field appearance="outline" class="search-field">
+      <mat-label>搜索</mat-label>
+      <mat-icon matPrefix>search</mat-icon>
+      <input matInput [(ngModel)]="searchQuery" placeholder="搜索图层 / 图层组">
+    </mat-form-field>
 
-      <mat-form-field appearance="outline">
-        <mat-label>格式</mat-label>
-        <mat-select [(ngModel)]="previewOptions.format" (selectionChange)="refreshPreview()">
-          <mat-option *ngFor="let f of formatOptions" [value]="f.value">
-            {{ f.label }}
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
+    <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat">
+      <mat-label>宽</mat-label>
+      <input matInput type="number" [(ngModel)]="previewOptions.width" (change)="refreshPreview()">
+    </mat-form-field>
 
-      <mat-form-field appearance="outline">
-        <mat-label>坐标系</mat-label>
-        <mat-select [(ngModel)]="previewOptions.crs" (selectionChange)="refreshPreview()">
-          <mat-option *ngFor="let crs of crsOptions" [value]="crs">{{ crs }}</mat-option>
-        </mat-select>
-      </mat-form-field>
-    </div>
+    <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat">
+      <mat-label>高</mat-label>
+      <input matInput type="number" [(ngModel)]="previewOptions.height" (change)="refreshPreview()">
+    </mat-form-field>
 
-    <div class="control-row secondary">
-      <mat-form-field appearance="outline" class="size-input">
-        <mat-label>宽度</mat-label>
-        <input matInput type="number" [(ngModel)]="previewOptions.width" (change)="refreshPreview()">
-      </mat-form-field>
-
-      <mat-form-field appearance="outline" class="size-input">
-        <mat-label>高度</mat-label>
-        <input matInput type="number" [(ngModel)]="previewOptions.height" (change)="refreshPreview()">
-      </mat-form-field>
-
-      <mat-checkbox [(ngModel)]="previewOptions.transparent" (change)="refreshPreview()" *ngIf="previewOptions.format !== 'application/openlayers'">
-        透明背景
-      </mat-checkbox>
-
-      <button mat-raised-button color="primary" (click)="refreshPreview()">
-        <mat-icon>refresh</mat-icon>
-        刷新预览
-      </button>
-    </div>
+    <mat-checkbox *ngIf="isStaticFormat" [(ngModel)]="previewOptions.transparent" (change)="refreshPreview()">
+      透明背景
+    </mat-checkbox>
   </div>
 
-  <div class="map-container" *ngIf="mapUrl">
-    <iframe *ngIf="previewOptions.format === 'application/openlayers'"
-      [src]="mapUrl" class="map-frame" title="地图预览"></iframe>
-    <img *ngIf="previewOptions.format !== 'application/openlayers'"
-      [src]="mapUrl" alt="地图预览" class="map-image">
-  </div>
+  <div class="preview-main">
+    <aside class="layer-panel">
+      <div class="panel-header">
+        <span class="panel-title">{{ previewMode === 'layer' ? '图层列表' : '图层组列表' }}</span>
+        <span class="panel-count">{{ previewMode === 'layer' ? filteredLayers.length : filteredGroups.length }}</span>
+      </div>
 
-  <div class="empty-state" *ngIf="!mapUrl">
-    <mat-icon>map</mat-icon>
-    <p>请选择一个图层或图层组开始预览</p>
+      <div class="panel-list" *ngIf="previewMode === 'layer'">
+        <div *ngFor="let layer of filteredLayers"
+             class="layer-item"
+             [class.active]="isActiveLayer(layer)"
+             (click)="selectLayer(layer.name)">
+          <mat-icon class="item-icon">map</mat-icon>
+          <div class="item-info">
+            <div class="item-title">{{ layer.title || layer.name }}</div>
+            <div class="item-sub">{{ layer.workspace }} · {{ layer.store }} · {{ layer.srs }}</div>
+          </div>
+          <mat-chip class="item-chip" [class.enabled]="layer.enabled">
+            {{ layer.enabled ? '启用' : '禁用' }}
+          </mat-chip>
+        </div>
+      </div>
+
+      <div class="panel-list" *ngIf="previewMode === 'group'">
+        <div *ngFor="let group of filteredGroups"
+             class="layer-item"
+             [class.active]="isActiveGroup(group)"
+             (click)="selectGroup(group.name)">
+          <mat-icon class="item-icon">folder</mat-icon>
+          <div class="item-info">
+            <div class="item-title">{{ group.title || group.name }}</div>
+            <div class="item-sub">{{ group.layers.length }} 个图层</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-empty" *ngIf="(previewMode === 'layer' ? filteredLayers.length : filteredGroups.length) === 0">
+        <mat-icon>search_off</mat-icon>
+        <p>未找到匹配的{{ previewMode === 'layer' ? '图层' : '图层组' }}</p>
+      </div>
+    </aside>
+
+    <section class="map-panel">
+      <div class="map-toolbar" *ngIf="displayBounds">
+        <div class="map-info">
+          <span class="map-name">
+            {{ previewMode === 'layer' ? (currentLayer?.title || currentLayer?.name) : (currentGroup?.title || currentGroup?.name) }}
+          </span>
+          <span class="map-crs">{{ previewOptions.crs }}</span>
+          <span class="geom-chips" *ngIf="previewMode === 'layer' && geometryTypes.length">
+            <mat-chip *ngFor="let t of geometryTypes" class="geom-chip">{{ t }}</mat-chip>
+          </span>
+          <span class="feature-count" *ngIf="previewMode === 'layer'">
+            <mat-icon>label</mat-icon>
+            {{ featureCount }} 个要素
+          </span>
+        </div>
+        <div class="map-actions">
+          <button mat-stroked-button (click)="refreshPreview()" matTooltip="刷新预览">
+            <mat-icon>refresh</mat-icon>
+            <span>刷新预览</span>
+          </button>
+          <button mat-stroked-button [disabled]="!previewUrl" (click)="openInNewWindow()" matTooltip="在新窗口打开预览">
+            <mat-icon>open_in_new</mat-icon>
+            <span>在新窗口打开</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="map-container" *ngIf="previewUrl">
+        <iframe *ngIf="!isStaticFormat"
+          [src]="safePreviewUrl" class="map-frame" title="地图预览"></iframe>
+        <img *ngIf="isStaticFormat"
+          [src]="previewUrl" alt="地图预览" class="map-image">
+      </div>
+
+      <div class="empty-state" *ngIf="!previewUrl">
+        <mat-icon>map</mat-icon>
+        <p>请从左侧选择一个{{ previewMode === 'layer' ? '图层' : '图层组' }}开始预览</p>
+      </div>
+    </section>
   </div>
 </div>

@@ -92,6 +92,10 @@
           <mat-icon>visibility</mat-icon>
           查看详情
         </button>
+        <button mat-button [routerLink]="['/layer-preview']" [queryParams]="{ layer: layer.name }">
+          <mat-icon>map</mat-icon>
+          预览
+        </button>
         <button mat-button color="warn" (click)="deleteLayer(layer)">
           <mat-icon>delete</mat-icon>
           删除

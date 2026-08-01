@@ -106,10 +106,19 @@ export class GeoserverService {
     return `${this.apiUrl}/layers/${layerName}/preview${queryString ? '?' + queryString : ''}`;
   }
 
-  getWmsPreviewUrl(layer: Layer, width = 600, height = 400): string {
+  getWmsPreviewUrl(
+    layer: Layer,
+    options?: {
+      width?: number;
+      height?: number;
+      crs?: string;
+      format?: string;
+      transparent?: boolean;
+    }
+  ): string {
     const bounds: LayerBounds = (layer as any).native_bounds?.bounds || layer.bounds;
     if (!bounds) return '';
-    const srs = (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
+    const srs = options?.crs || (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
     // 使用 WMS 1.1.1 避免 EPSG:4326 轴序问题
     const params = new URLSearchParams({
       service: 'WMS',
@@ -118,9 +127,10 @@ export class GeoserverService {
       layers: layer.name,
       srs: srs,
       bbox: `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`,
-      width: width.toString(),
-      height: height.toString(),
-      format: 'application/openlayers',
+      width: (options?.width || 600).toString(),
+      height: (options?.height || 400).toString(),
+      format: options?.format || 'application/openlayers',
+      transparent: (options?.transparent ?? true).toString(),
     });
     return `/wms?${params}`;
   }

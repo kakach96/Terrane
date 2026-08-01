@@ -111,17 +111,53 @@ pub fn transform_coordinates(
             let lon = x;
             let lat = y;
             let x_3857 = lon * 20037508.34 / 180.0;
-            let mut y_3857 = (lat * std::f64::consts::PI / 180.0).tan();
-            y_3857 = 0.5 * (1.0 - y_3857.ln() / std::f64::consts::PI);
-            let y_3857 = y_3857 * 20037508.34;
+            let y_3857 = 20037508.34 / std::f64::consts::PI
+                * (std::f64::consts::PI / 4.0 + lat.to_radians() / 2.0).tan().ln();
             Ok(vec![x_3857, y_3857])
         }
         ("EPSG:3857", "EPSG:4326") | ("3857", "4326") => {
             let x_4326 = x * 180.0 / 20037508.34;
-            let mut y_4326 = y / 20037508.34;
-            y_4326 = (std::f64::consts::PI / 2.0 - 2.0 * ((1.0 - y_4326.exp()) / (1.0 + y_4326.exp())).atan()) * 180.0 / std::f64::consts::PI;
+            let r = 20037508.34 / std::f64::consts::PI;
+            let y_4326 = (std::f64::consts::PI / 2.0 - 2.0 * (-y / r).exp().atan())
+                * 180.0 / std::f64::consts::PI;
             Ok(vec![x_4326, y_4326])
         }
         _ => Err(format!("Unsupported projection transformation: {} to {}", from_srs, to_srs)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_4326_to_3857_roundtrip() {
+        let (lon, lat) = (116.4, 39.9);
+        let merc = transform_coordinates(&[lon, lat], "EPSG:4326", "EPSG:3857").unwrap();
+        let wgs = transform_coordinates(&merc, "EPSG:3857", "EPSG:4326").unwrap();
+        assert!((wgs[0] - lon).abs() < 0.001, "lon mismatch: {}", wgs[0]);
+        assert!((wgs[1] - lat).abs() < 0.001, "lat mismatch: {}", wgs[1]);
+    }
+
+    #[test]
+    fn test_3857_to_4326_known_point() {
+        // Web Mercator 下的北京坐标
+        let merc = transform_coordinates(&[116.4, 39.9], "EPSG:4326", "EPSG:3857").unwrap();
+        let wgs = transform_coordinates(&merc, "EPSG:3857", "EPSG:4326").unwrap();
+        assert!((wgs[0] - 116.4).abs() < 0.001);
+        assert!((wgs[1] - 39.9).abs() < 0.001);
+        // 纬度必须在合理范围内（旧实现错误地返回 ~104°）
+        assert!(wgs[1] < 90.0 && wgs[1] > -90.0);
+    }
+
+    #[test]
+    fn test_4326_to_3857_known_values() {
+        // 赤道与经度 0 点
+        let merc = transform_coordinates(&[0.0, 0.0], "EPSG:4326", "EPSG:3857").unwrap();
+        assert!((merc[0]).abs() < 1e-6);
+        assert!((merc[1]).abs() < 1e-6);
+        // 经度 180 -> x 应为 20037508.34
+        let merc = transform_coordinates(&[180.0, 0.0], "EPSG:4326", "EPSG:3857").unwrap();
+        assert!((merc[0] - 20037508.34).abs() < 0.01);
     }
 }

@@ -45,17 +45,22 @@ export class LayerDetailComponent implements OnInit {
   previewOptions = {
     width: 800,
     height: 400,
-    format: 'image/png' as 'image/png' | 'image/jpeg',
+    format: 'application/openlayers' as string,
     transparent: true,
     crs: 'EPSG:4326'
   };
 
   previewFormats = [
+    { value: 'application/openlayers', label: 'OpenLayers 交互地图' },
     { value: 'image/png', label: 'PNG (透明)' },
     { value: 'image/jpeg', label: 'JPEG' }
   ];
 
   previewCrsOptions = ['EPSG:4326', 'EPSG:3857'];
+
+  get isStaticPreview(): boolean {
+    return this.previewOptions.format !== 'application/openlayers';
+  }
 
   constructor(
     private route: ActivatedRoute,
@@ -93,16 +98,31 @@ export class LayerDetailComponent implements OnInit {
 
   refreshPreview(): void {
     if (!this.layer) return;
-    const bbox = `${this.displayBounds.minx},${this.displayBounds.miny},${this.displayBounds.maxx},${this.displayBounds.maxy}`;
-    this.previewUrl = this.geoserverService.getMapImageUrl(this.layer, {
-      width: this.previewOptions.width,
-      height: this.previewOptions.height,
-      format: this.previewOptions.format,
-      transparent: this.previewOptions.transparent,
-      crs: this.previewOptions.crs,
-      bbox,
-    });
+    if (this.previewOptions.format === 'application/openlayers') {
+      this.previewUrl = this.geoserverService.getWmsPreviewUrl(this.layer, {
+        width: this.previewOptions.width,
+        height: this.previewOptions.height,
+        crs: this.previewOptions.crs,
+        format: 'application/openlayers',
+        transparent: true
+      });
+    } else {
+      const bbox = `${this.displayBounds.minx},${this.displayBounds.miny},${this.displayBounds.maxx},${this.displayBounds.maxy}`;
+      this.previewUrl = this.geoserverService.getMapImageUrl(this.layer, {
+        width: this.previewOptions.width,
+        height: this.previewOptions.height,
+        format: this.previewOptions.format as 'image/png' | 'image/jpeg',
+        transparent: this.previewOptions.transparent,
+        crs: this.previewOptions.crs,
+        bbox,
+      });
+    }
     this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
+  }
+
+  openInPreviewPage(): void {
+    if (!this.layer) return;
+    this.router.navigate(['/layer-preview'], { queryParams: { layer: this.layer.name } });
   }
 
   updatePreviewParam(param: string, value: number | boolean | string): void {

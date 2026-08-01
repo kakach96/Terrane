@@ -729,11 +729,58 @@ fn render_openlayers_preview(
     html, body, #map {{ height: 100%; width: 100%; margin: 0; padding: 0; }}
     .ol-zoom {{ top: 1em; left: 1em; }}
     .layer-info {{ position: absolute; bottom: 1em; left: 1em; background: rgba(255,255,255,0.85); padding: 6px 12px; border-radius: 4px; font: 13px sans-serif; }}
+    .map-hint {{
+      position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,255,255,0.92); border: 1px solid #e0e0e8;
+      padding: 6px 14px; border-radius: 20px; font: 12px sans-serif; color: #666680;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08); pointer-events: none; z-index: 5;
+      transition: opacity 0.25s ease;
+    }}
+    .map-hint.hidden {{ opacity: 0; }}
+    #feature-info {{
+      position: absolute; top: 0; right: 0; bottom: 0; width: 340px; max-width: 60%;
+      background: #fff; border-left: 1px solid #ddd; box-shadow: -2px 0 12px rgba(0,0,0,0.15);
+      display: none; flex-direction: column; z-index: 10;
+      font: 13px/1.5 sans-serif;
+    }}
+    #feature-info.open {{ display: flex; }}
+    #feature-info .popup-header {{
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; border-bottom: 1px solid #eee; font-weight: 600;
+    }}
+    #feature-info .popup-close {{
+      cursor: pointer; border: none; background: none; font-size: 18px; color: #666;
+      line-height: 1; padding: 2px 6px; border-radius: 4px;
+    }}
+    #feature-info .popup-close:hover {{ background: #f0f0f0; }}
+    #feature-info-content {{ overflow-y: auto; padding: 12px 14px; }}
+    .feature-group {{ margin-bottom: 14px; }}
+    .feature-header {{
+      font-weight: 600; color: #1565c0; margin-bottom: 4px;
+    }}
+    .feature-header .fid {{ color: #888; font-weight: 400; font-size: 12px; }}
+    .feature-table {{ width: 100%; border-collapse: collapse; }}
+    .feature-table td {{
+      padding: 4px 8px; border: 1px solid #e6e6e6; font-size: 12px; vertical-align: top;
+      word-break: break-all;
+    }}
+    .feature-table td.pkey {{ background: #f8f9fb; color: #555; width: 38%; font-weight: 500; }}
+    .feature-table td.pval {{ color: #222; }}
+    .popup-empty {{ color: #999; padding: 8px 0; }}
+    #feature-info .loading {{ color: #999; }}
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <div class="map-hint" id="map-hint">点击地图要素可查看属性</div>
   <div class="layer-info">图层: {layer_name}</div>
+  <div id="feature-info">
+    <div class="popup-header">
+      <span>要素属性</span>
+      <button class="popup-close" onclick="closeFeatureInfo()">&times;</button>
+    </div>
+    <div id="feature-info-content"></div>
+  </div>
   <script>
     var layers = {layers_json};
     var extent = ol.proj.transformExtent([{extent}], 'EPSG:4326', '{view_crs}');
@@ -766,11 +813,173 @@ fn render_openlayers_preview(
       }})
     }});
 
+    // ============ 矢量要素层（用于点击查询与要素显示） ============
+    var vectorSource = new ol.source.Vector();
+    var vectorLayer = new ol.layer.Vector({{
+      source: vectorSource,
+      style: new ol.style.Style({{
+        image: new ol.style.Circle({{
+          radius: 5,
+          fill: new ol.style.Fill({{ color: 'rgba(21,101,192,0.75)' }}),
+          stroke: new ol.style.Stroke({{ color: '#ffffff', width: 1.5 }})
+        }}),
+        fill: new ol.style.Fill({{ color: 'rgba(21,101,192,0.15)' }}),
+        stroke: new ol.style.Stroke({{ color: 'rgba(21,101,192,0.85)', width: 1.5 }})
+      }})
+    }});
+    map.addLayer(vectorLayer);
+
+    var featureFormat = new ol.format.GeoJSON();
+    var featureProjection = map.getView().getProjection().getCode();
+
+    function loadLayerFeatures(layerName) {{
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', '/geoserver/layers/' + encodeURIComponent(layerName) + '/features?limit=5000', true);
+      xhr.onreadystatechange = function() {{
+        if (xhr.readyState === 4 && xhr.status === 200) {{
+          try {{
+            var fc = JSON.parse(xhr.responseText);
+            var feats = fc.features || [];
+            for (var i = 0; i < feats.length; i++) {{
+              try {{
+                var olFeature = featureFormat.readFeature({{
+                  type: 'Feature',
+                  geometry: feats[i].geometry,
+                  properties: {{}}
+                }}, {{ dataProjection: 'EPSG:4326', featureProjection: featureProjection }});
+                olFeature.set('_layer', layerName);
+                olFeature.set('_fid', feats[i].id);
+                olFeature.set('_props', feats[i].properties || {{}});
+                vectorSource.addFeature(olFeature);
+              }} catch (e2) {{}}
+            }}
+          }} catch (e) {{}}
+        }}
+      }};
+      xhr.send();
+    }}
+
+    layers.forEach(function(layerName) {{
+      loadLayerFeatures(layerName);
+    }});
+
     // 视图变化时更新 WMS 请求
     map.getView().on('change:resolution', function() {{
       wmsSource.updateParams({{
         'TIME': new Date().getTime().toString()
       }});
+    }});
+
+    // ============ 点击要素查询属性 ============
+    var popup = document.getElementById('feature-info');
+    var popupContent = document.getElementById('feature-info-content');
+    var loadingFeature = false;
+
+    function escapeHtml(str) {{
+      if (str === null || str === undefined) return '';
+      var div = document.createElement('div');
+      div.textContent = String(str);
+      return div.innerHTML;
+    }}
+
+    function openFeatureInfo(html) {{
+      popupContent.innerHTML = html;
+      popup.classList.add('open');
+    }}
+
+    function closeFeatureInfo() {{
+      popup.classList.remove('open');
+      popupContent.innerHTML = '';
+    }}
+
+    function renderFeatureInfo(data) {{
+      if (!data || data.length === 0) {{
+        closeFeatureInfo();
+        return;
+      }}
+      var html = '';
+      for (var i = 0; i < data.length; i++) {{
+        var item = data[i];
+        html += '<div class="feature-group">';
+        html += '<div class="feature-header">' + escapeHtml(item.layer)
+              + (item.feature_id ? ' <span class="fid">#' + escapeHtml(item.feature_id) + '</span>' : '')
+              + '</div>';
+        html += '<table class="feature-table"><tbody>';
+        var props = item.properties || {{}};
+        var keys = Object.keys(props);
+        if (keys.length === 0) {{
+          html += '<tr><td class="popup-empty" colspan="2">无属性</td></tr>';
+        }}
+        for (var k = 0; k < keys.length; k++) {{
+          html += '<tr><td class="pkey">' + escapeHtml(keys[k]) + '</td>'
+                + '<td class="pval">' + escapeHtml(props[keys[k]]) + '</td></tr>';
+        }}
+        html += '</tbody></table></div>';
+      }}
+      openFeatureInfo(html);
+    }}
+
+    map.on('singleclick', function(evt) {{
+      if (loadingFeature) return;
+      // 点击后隐藏"点击查看属性"提示
+      var hintEl = document.getElementById('map-hint');
+      if (hintEl) {{ hintEl.classList.add('hidden'); }}
+      // 1. 优先做矢量要素像素命中检测（容差 8px，缩放较小时也能轻松点中）
+      var hitItems = [];
+      map.forEachFeatureAtPixel(evt.pixel, function(feature) {{
+        hitItems.push({{
+          layer: feature.get('_layer'),
+          feature_id: feature.get('_fid'),
+          properties: feature.get('_props') || {{}}
+        }});
+        return hitItems.length >= 10;
+      }}, {{ hitTolerance: 8 }});
+
+      if (hitItems.length > 0) {{
+        renderFeatureInfo(hitItems);
+        return;
+      }}
+
+      // 2. 矢量要素未能加载时，回退到 WMS GetFeatureInfo
+      if (vectorSource.getFeatures().length === 0) {{
+        var view = map.getView();
+        var resolution = view.getResolution();
+        if (!resolution) return;
+        var projection = view.getProjection();
+        var url = wmsSource.getFeatureInfoUrl(
+          evt.coordinate, resolution, projection,
+          {{
+            'INFO_FORMAT': 'application/json',
+            'QUERY_LAYERS': layers.join(','),
+            'FEATURE_COUNT': '10'
+          }}
+        );
+        if (!url) return;
+        loadingFeature = true;
+        popupContent.innerHTML = '<p class="loading">正在查询要素...</p>';
+        popup.classList.add('open');
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.onreadystatechange = function() {{
+          if (xhr.readyState === 4) {{
+            loadingFeature = false;
+            if (xhr.status === 200) {{
+              try {{
+                var data = JSON.parse(xhr.responseText);
+                renderFeatureInfo(data);
+              }} catch (e) {{
+                openFeatureInfo('<p class="popup-empty">解析属性数据失败</p>');
+              }}
+            }} else {{
+              openFeatureInfo('<p class="popup-empty">查询要素属性失败 (HTTP ' + xhr.status + ')</p>');
+            }}
+          }}
+        }};
+        xhr.send();
+        return;
+      }}
+
+      closeFeatureInfo();
     }});
   </script>
 </body>
@@ -805,29 +1014,65 @@ async fn handle_get_feature_info(state: &AppState, request: &WmsRequest) -> Resu
         (wx, wy)
     });
 
-    let layers_lock = state.layers.read().await;
+    // 将点击点与视图范围统一转换到 EPSG:4326，与要素坐标系保持一致
+    let request_crs = request.crs.as_deref().unwrap_or("EPSG:4326");
+    let transformer = ProjectionTransformer::new(
+        CoordinateReferenceSystem::from_epsg(request_crs),
+        CoordinateReferenceSystem::EPSG4326,
+    );
+
+    let click_point = click_point.map(|(cx, cy)| {
+        transformer.transform_point(cx, cy).unwrap_or((cx, cy))
+    });
+
+    let view_bounds = bbox_to_bounds(request);
+    let view_bounds = if transformer.needs_reprojection() {
+        transformer.transform_bounds(
+            view_bounds.minx, view_bounds.miny, view_bounds.maxx, view_bounds.maxy,
+        )
+        .map(|(a, b, c, d)| Bounds::new(a, b, c, d))
+        .unwrap_or(view_bounds)
+    } else {
+        view_bounds
+    };
+
+    let range = (view_bounds.maxx - view_bounds.minx).max(view_bounds.maxy - view_bounds.miny);
+    let tolerance = (range / 200.0).max(0.0001);
+
     let mut found_features: Vec<(String, String, HashMap<String, String>)> = Vec::new();
 
     if let Some(query_layers) = &request.query_layers {
         for layer_name in query_layers {
-            if let Some(layer) = layers_lock.iter().find(|l| l.name == *layer_name) {
-                if let Some(features) = state.get_layer_features(&layer.name).await {
-                    for feature in &features {
-                        let hit = if let Some((cx, cy)) = click_point {
-                            feature_hit_test(&feature.geometry, cx, cy, &bbox_to_bounds(request))
-                        } else {
-                            true
-                        };
-                        if hit {
-                            let mut props = HashMap::new();
-                            for (k, v) in &feature.properties {
-                                props.insert(k.clone(), v.to_string());
-                            }
-                            found_features.push((layer.name.clone(), feature.id.clone(), props));
-                            if found_features.len() >= feature_count {
-                                break;
-                            }
-                        }
+            // 以点击点为中心的小范围 bbox 查询，再精确定位命中的要素
+            let query_bbox = click_point.map(|(cx, cy)| {
+                Bounds::new(cx - tolerance, cy - tolerance, cx + tolerance, cy + tolerance)
+            });
+
+            let features = match crate::handlers::features::query_layer_features(
+                state,
+                layer_name,
+                query_bbox.as_ref(),
+                Some(feature_count as u64 * 2),
+                None,
+            ).await {
+                Ok(f) => f,
+                Err(_) => Vec::new(),
+            };
+
+            for feature in &features {
+                let hit = if let Some((cx, cy)) = click_point {
+                    feature_hit_test(&feature.geometry, cx, cy, &view_bounds)
+                } else {
+                    true
+                };
+                if hit {
+                    let mut props = HashMap::new();
+                    for (k, v) in &feature.properties {
+                        props.insert(k.clone(), v.to_string());
+                    }
+                    found_features.push((layer_name.clone(), feature.id.clone(), props));
+                    if found_features.len() >= feature_count {
+                        break;
                     }
                 }
             }
@@ -889,13 +1134,13 @@ fn feature_hit_test(geom: &GeoJsonGeometry, cx: f64, cy: f64, bounds: &Bounds) -
 
     match geom {
         GeoJsonGeometry::Point { coordinates } => {
-            if coordinates.len() >= 2 {
-                let dx = coordinates[0] - cx;
-                let dy = coordinates[1] - cy;
-                (dx * dx + dy * dy).sqrt() <= tolerance
-            } else {
-                false
-            }
+            coordinates.len() >= 2
+                && point_distance(coordinates[0], coordinates[1], cx, cy) <= tolerance
+        }
+        GeoJsonGeometry::MultiPoint { coordinates } => {
+            coordinates.iter().any(|c| {
+                c.len() >= 2 && point_distance(c[0], c[1], cx, cy) <= tolerance
+            })
         }
         GeoJsonGeometry::LineString { coordinates } => {
             coordinates.windows(2).any(|seg| {
@@ -905,11 +1150,34 @@ fn feature_hit_test(geom: &GeoJsonGeometry, cx: f64, cy: f64, bounds: &Bounds) -
                 point_to_segment_distance(cx, cy, seg[0][0], seg[0][1], seg[1][0], seg[1][1]) <= tolerance
             })
         }
+        GeoJsonGeometry::MultiLineString { coordinates } => {
+            coordinates.iter().any(|line| {
+                line.windows(2).any(|seg| {
+                    if seg.len() < 2 || seg[0].len() < 2 || seg[1].len() < 2 {
+                        return false;
+                    }
+                    point_to_segment_distance(cx, cy, seg[0][0], seg[0][1], seg[1][0], seg[1][1]) <= tolerance
+                })
+            })
+        }
         GeoJsonGeometry::Polygon { coordinates } => {
             coordinates.first().map(|ring| point_in_ring(cx, cy, ring)).unwrap_or(false)
         }
-        _ => false,
+        GeoJsonGeometry::MultiPolygon { coordinates } => {
+            coordinates.iter().any(|poly| {
+                poly.first().map(|ring| point_in_ring(cx, cy, ring)).unwrap_or(false)
+            })
+        }
+        GeoJsonGeometry::GeometryCollection { geometries } => {
+            geometries.iter().any(|g| feature_hit_test(g, cx, cy, bounds))
+        }
     }
+}
+
+fn point_distance(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
+    let dx = x1 - x2;
+    let dy = y1 - y2;
+    (dx * dx + dy * dy).sqrt()
 }
 
 fn point_to_segment_distance(px: f64, py: f64, ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
