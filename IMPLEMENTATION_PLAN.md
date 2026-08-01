@@ -295,7 +295,7 @@ Overall progress ███████████░░░░░░  54%
 |------|------|------|:-----:|
 | **Containerization** | No Dockerfile / docker-compose; only local packaging via `build.bat` / `build.sh` | Missing image build, `.dockerignore`, image `HEALTHCHECK` | **P0** |
 | **12-Factor config** | `geoserver.toml` + `GEOSERVER__` env var prefix (double-underscore separator) | `main.rs` uses `load_from_file()` which **does not mount the env source** (`config::Environment` only takes effect in `load()`); default `host=127.0.0.1`; JWT secret hardcoded in `src/auth.rs:96` | **P0** |
-| **Statelessness / scalability** | Metadata in SQLite (`geoserver.sqlite`); layers/features/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); tile cache and uploads on local disk `./data` | In-memory state diverges across replicas; SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1** |
+| **Statelessness / scalability** | Metadata (`[metadata]`, default SQLite) and business data (`[business]`: local dir / reuse metadata / PostgreSQL) are split (`src/config.rs`, `src/store/business/`); layers/features/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); tile cache and uploads on local disk `./data` | In-memory state diverges across replicas; SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1** |
 | **Observability** | stdout logs (tracing); `/health` endpoint; in-memory monitoring JSON (`/server/status`, `/monitor`) | No structured JSON logs, no OpenTelemetry tracing; no Prometheus `/metrics`; single probe does not distinguish liveness/readiness | **P1** |
 | **Lifecycle** | No SIGTERM/SIGINT graceful shutdown, no `shutdown_timeout()` drain | In-flight requests hard-interrupted during pod rollouts/termination | **P1** |
 | **CI/CD & security** | No CI pipeline, no image registry push | Missing GitHub Actions/GitLab CI, image vulnerability scanning, dependency update automation | **P2** |
@@ -321,7 +321,7 @@ Overall progress ███████████░░░░░░  54%
 
 #### Phase 2: State Convergence & Scalability
 
-- Metadata store abstraction: SQLite → optional PostgreSQL (HA scenarios); or explicitly document the SQLite single-replica constraint
+- Metadata store abstraction: SQLite → optional PostgreSQL (HA scenarios); business data store (`BusinessStore` trait in `src/store/business/`) already supports local dir / reuse metadata / standalone PostgreSQL, extend to S3 / MinIO / object storage later
 - In-memory catalog refresh mechanism: periodic/event-triggered reload from the metadata store to avoid stale data across replicas
 - Tile cache backend abstraction: local disk → S3 / MinIO / Redis (`TileCache` is currently disk-only, `src/utils/tile_cache.rs`)
 - `data_dir` / upload file storage abstraction: shared PVC / object storage

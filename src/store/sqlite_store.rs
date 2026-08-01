@@ -1452,18 +1452,6 @@ impl super::Store for SqliteStore {
         SqliteStore::delete_layer(self, name).await.map_err(super::StoreError::from)
     }
 
-    async fn save_features(&self, layer_name: &str, features: &[crate::models::Feature]) -> Result<usize, super::StoreError> {
-        SqliteStore::save_features(self, layer_name, features).await.map_err(super::StoreError::from)
-    }
-
-    async fn load_features(&self, layer_name: &str) -> Result<Vec<crate::models::Feature>, super::StoreError> {
-        SqliteStore::load_features(self, layer_name).await.map_err(super::StoreError::from)
-    }
-
-    async fn delete_features(&self, layer_name: &str) -> Result<usize, super::StoreError> {
-        SqliteStore::delete_features(self, layer_name).await.map_err(super::StoreError::from)
-    }
-
     async fn get_sql_view(&self, name: &str) -> Result<Option<SqlView>, super::StoreError> {
         SqliteStore::get_sql_view(self, name).await.map_err(super::StoreError::from)
     }

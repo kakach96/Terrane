@@ -10,14 +10,22 @@
 #
 # Env var naming: prefix "GEOSERVER", sections and fields joined with "__".
 #   GEOSERVER__SERVER__HOST                 -> [server] host
-#   GEOSERVER__DATABASE__POSTGRES__HOST     -> [database.postgres] host
+#   GEOSERVER__METADATA__POSTGRES__HOST     -> [metadata.postgres] host
+#   GEOSERVER__BUSINESS__KIND               -> [business] kind
 # The special var RUST_LOG overrides [logging] level (see below).
 #
 # NOTE: if any REQUIRED key is missing (host / port / api_context /
 # [[workspaces]] / gwc.cache_dir / gwc.meta_dir when [gwc] is present), the
 # whole config fails to load and the server silently falls back to built-in
-# defaults (database kind reverts to "sqlite"). Keep required sections complete.
+# defaults (metadata kind reverts to "sqlite"). Keep required sections complete.
 # =============================================================================
+
+# ---------------------------------------------------------------------------
+# Data directory (top-level key — must stay before any [section] header)
+# Root directory for vector/raster data files (default: "./data")
+# Env: GEOSERVER__DATA_DIR
+# ---------------------------------------------------------------------------
+data_dir = "./data"
 
 # ---------------------------------------------------------------------------
 # Server basics
@@ -44,28 +52,65 @@ static_dir = "./static"
 connect_timeout_secs = 10
 
 # ---------------------------------------------------------------------------
-# Database
+# Metadata storage (REQUIRED; default: sqlite)
+# Stores workspaces, data sources, layer definitions, styles, permissions, etc.
+# Backward compatible: the legacy section name [database] is accepted as an alias.
 # ---------------------------------------------------------------------------
-[database]
+[metadata]
 # Storage backend: "sqlite" (default, local dev) | "postgres" (cluster deploy)
-# Env: GEOSERVER__DATABASE__KIND
+# Env: GEOSERVER__METADATA__KIND   (legacy: GEOSERVER__DATABASE__KIND)
 kind = "sqlite"
 # SQLite database file path (default: "geoserver.sqlite"; used only when kind = "sqlite")
-# Env: GEOSERVER__DATABASE__SQLITE_PATH
+# Env: GEOSERVER__METADATA__SQLITE_PATH
 sqlite_path = "geoserver.sqlite"
 
 # PostgreSQL connection config (used only when kind = "postgres").
 # The whole section is optional; every field below has a default.
-# Env overrides: GEOSERVER__DATABASE__POSTGRES__HOST / __PORT / __NAME
-#                / __USER / __PASSWORD / __POOL_SIZE
-[database.postgres]
+# Env overrides: GEOSERVER__METADATA__POSTGRES__HOST / __PORT / __INSTANCE
+#                / __SCHEMA / __USER / __PASSWORD / __POOL_SIZE
+[metadata.postgres]
 host = "127.0.0.1"
 port = 5432
-name = "geoserver"
+instance = "geoserver"
+schema = "public"
 user = "postgres"
 # Built-in default is an empty string ""; the value here is just an example.
 password = "postgres"
 # Connection pool size (default: 10)
+pool_size = 10
+
+# ---------------------------------------------------------------------------
+# Business data storage (OPTIONAL)
+# Stores layer feature data, decoupled from metadata so each can scale/extend
+# independently (e.g. metadata in PostgreSQL, business data in another
+# database / NFS / object storage).
+#
+# Defaults when [business] is omitted:
+#   - metadata kind = sqlite   -> "local" (local directory, default <data_dir>/business)
+#   - metadata kind = postgres -> "metadata" (reuse the metadata store, the
+#                                 built-in default data source option)
+# ---------------------------------------------------------------------------
+[business]
+# Storage backend: "local" (local dir / NFS / object storage mount) |
+#                  "metadata" (reuse metadata store) |
+#                  "postgres" (standalone PostgreSQL)
+# Env: GEOSERVER__BUSINESS__KIND
+kind = "local"
+# Local directory for business data (kind = "local"; default: "<data_dir>/business")
+# Each layer is stored as one GeoJSON FeatureCollection file (<dir>/<layer>.geojson).
+# Env: GEOSERVER__BUSINESS__DIR
+# dir = "./data/business"
+
+# Standalone PostgreSQL config (used only when kind = "postgres").
+# Env overrides: GEOSERVER__BUSINESS__POSTGRES__HOST / __PORT / __INSTANCE
+#                / __SCHEMA / __USER / __PASSWORD / __POOL_SIZE
+[business.postgres]
+host = "127.0.0.1"
+port = 5432
+instance = "geoserver_business"
+schema = "public"
+user = "postgres"
+password = "postgres"
 pool_size = 10
 
 # ---------------------------------------------------------------------------
@@ -111,13 +156,6 @@ enabled = true
 # Default Gridset (default: "EPSG:4326")
 # Env: GEOSERVER__GWC__DEFAULT_GRIDSET
 default_gridset = "EPSG:4326"
-
-# ---------------------------------------------------------------------------
-# Data directory
-# Root directory for vector/raster data files (default: "./data")
-# Env: GEOSERVER__DATA_DIR
-# ---------------------------------------------------------------------------
-data_dir = "./data"
 
 # ---------------------------------------------------------------------------
 # CORS config (optional)

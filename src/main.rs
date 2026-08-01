@@ -120,7 +120,7 @@ async fn main() -> std::io::Result<()> {
     auth::init_secret(&config.security.jwt_secret);
 
     print_startup_info(&host, port, &api_context);
-    tracing::info!("Metadata store backend: {}", config.database.kind);
+    tracing::info!("Metadata store backend: {}", config.metadata.kind);
 
     let app_state = web::Data::new(AppState::new(config).await);
 

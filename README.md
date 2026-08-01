@@ -29,7 +29,8 @@ A lightweight geospatial data server built with Rust + Actix-web, featuring a mo
 - ✅ `/health` health check endpoint, stdout logs (tracing)
 - ⚠️ TODO: Dockerfile / docker-compose / CI pipeline (not yet created)
 - ⚠️ TODO: JWT secret hardcoded in `src/auth.rs`, needs env injection
-- ⚠️ TODO: metadata in SQLite + in-memory caches (`src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL
+- ✅ Storage split: `[metadata]` (workspaces / data sources / layers / styles, default SQLite) + `[business]` (layer features; local dir / reuse metadata / PostgreSQL), see `src/config.rs`
+- ⚠️ TODO: in-memory caches (`src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL / object storage
 - ⚠️ TODO: tile cache / uploaded data on local disk, needs PVC or object storage
 - ⚠️ TODO: no graceful shutdown (SIGTERM drain)
 

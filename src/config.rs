@@ -6,7 +6,12 @@ use crate::utils::tile_cache::GwcConfig;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GeoServerConfig {
     pub server: ServerConfig,
-    pub database: DatabaseConfig,
+    /// 元数据存储配置 (必填; 默认 sqlite) — 兼容旧节名 `[database]` (serde alias)
+    #[serde(alias = "database")]
+    pub metadata: MetadataConfig,
+    /// 业务数据存储配置 (可选; 图层要素数据)
+    #[serde(default)]
+    pub business: Option<BusinessConfig>,
     pub security: SecurityConfig,
     pub logging: LoggingConfig,
     /// 数据目录 (默认: "./data")
@@ -34,8 +39,9 @@ pub struct ServerConfig {
     pub connect_timeout_secs: u64,
 }
 
+/// 元数据存储配置 — 保存工作空间、数据源、图层、样式、权限、会话等配置元数据。
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct DatabaseConfig {
+pub struct MetadataConfig {
     /// 存储后端类型: "sqlite" | "postgres" (默认: "sqlite")
     #[serde(default = "default_db_kind")]
     pub kind: String,
@@ -43,6 +49,24 @@ pub struct DatabaseConfig {
     #[serde(default = "default_sqlite_path")]
     pub sqlite_path: PathBuf,
     /// PostgreSQL 配置 (kind = "postgres" 时生效)
+    #[serde(default)]
+    pub postgres: PostgresConfig,
+}
+
+/// 业务数据存储配置 — 保存图层要素 (业务数据)。
+///
+/// 未配置 `[business]` 节时的默认规则 (见 [`GeoServerConfig::effective_business`]):
+/// - 元数据存储为 sqlite → `local` (本地目录, 默认 `<data_dir>/business`)
+/// - 元数据存储为其他外部存储 (如 postgres) → `metadata` (复用元数据存储, 内置默认选项)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BusinessConfig {
+    /// 业务存储后端类型: "local" | "metadata" | "postgres" (默认: "local")
+    #[serde(default = "default_business_kind")]
+    pub kind: String,
+    /// 本地目录 (kind = "local" 时生效; 默认: `<data_dir>/business`, 支持 NFS/对象存储挂载)
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+    /// PostgreSQL 配置 (kind = "postgres", 或复用 postgres 元数据存储时生效)
     #[serde(default)]
     pub postgres: PostgresConfig,
 }
@@ -56,9 +80,12 @@ pub struct PostgresConfig {
     /// PostgreSQL 端口
     #[serde(default = "default_db_port")]
     pub port: u16,
-    /// PostgreSQL 数据库名
-    #[serde(default = "default_db_name")]
-    pub name: String,
+    /// PostgreSQL 实例 (数据库名)
+    #[serde(default = "default_db_instance")]
+    pub instance: String,
+    /// PostgreSQL 模式 (表所在 schema; 默认: "public")
+    #[serde(default = "default_pg_schema")]
+    pub schema: String,
     /// PostgreSQL 用户名
     #[serde(default = "default_db_user")]
     pub user: String,
@@ -82,6 +109,10 @@ fn default_db_kind() -> String {
     "sqlite".to_string()
 }
 
+fn default_business_kind() -> String {
+    "local".to_string()
+}
+
 fn default_data_dir() -> PathBuf {
     PathBuf::from("./data")
 }
@@ -94,8 +125,12 @@ fn default_db_port() -> u16 {
     5432
 }
 
-fn default_db_name() -> String {
+fn default_db_instance() -> String {
     "geoserver".to_string()
+}
+
+fn default_pg_schema() -> String {
+    "public".to_string()
 }
 
 fn default_db_user() -> String {
@@ -119,7 +154,8 @@ impl Default for PostgresConfig {
         PostgresConfig {
             host: default_db_host(),
             port: default_db_port(),
-            name: default_db_name(),
+            instance: default_db_instance(),
+            schema: default_pg_schema(),
             user: default_db_user(),
             password: default_db_password(),
             pool_size: default_db_pool_size(),
@@ -240,11 +276,12 @@ impl Default for GeoServerConfig {
                 static_dir: default_static_dir(),
                 connect_timeout_secs: default_connect_timeout(),
             },
-            database: DatabaseConfig {
+            metadata: MetadataConfig {
                 kind: default_db_kind(),
                 sqlite_path: default_sqlite_path(),
                 postgres: PostgresConfig::default(),
             },
+            business: None,
             security: SecurityConfig {
                 jwt_secret: default_jwt_secret(),
             },
@@ -264,6 +301,34 @@ impl Default for GeoServerConfig {
 }
 
 impl GeoServerConfig {
+    /// 解析生效的业务数据存储配置 (应用默认规则)。
+    ///
+    /// - 显式配置了 `[business]` → 直接使用 (dir 为空时回退 `<data_dir>/business`)
+    /// - 未配置:
+    ///   - 元数据存储非 sqlite (外部存储) → 复用元数据存储 (kind = "metadata", 内置默认选项)
+    ///   - 元数据存储为 sqlite → 本地目录 (kind = "local", 默认 `<data_dir>/business`)
+    pub fn effective_business(&self) -> BusinessConfig {
+        let mut bc = self.business.clone().unwrap_or_else(|| {
+            if self.metadata.kind != "sqlite" {
+                BusinessConfig {
+                    kind: "metadata".to_string(),
+                    dir: None,
+                    postgres: PostgresConfig::default(),
+                }
+            } else {
+                BusinessConfig {
+                    kind: "local".to_string(),
+                    dir: None,
+                    postgres: PostgresConfig::default(),
+                }
+            }
+        });
+        if bc.dir.is_none() {
+            bc.dir = Some(self.data_dir.join("business"));
+        }
+        bc
+    }
+
     pub fn load() -> Result<Self, config::ConfigError> {
         let config = Config::builder()
             .add_source(File::with_name("geoserver").required(false))

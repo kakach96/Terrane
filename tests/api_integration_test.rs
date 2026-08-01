@@ -16,7 +16,7 @@ fn create_test_config() -> rust_geoserver::config::GeoServerConfig {
     config.server.host = "127.0.0.1".to_string();
     config.server.port = 0;
     // 集成测试使用内存 SQLite 数据库
-    config.database.sqlite_path = ":memory:".into();
+    config.metadata.sqlite_path = ":memory:".into();
     // 添加一个默认工作空间和图层，确保测试数据可用
     config.workspaces = vec![
         rust_geoserver::config::WorkspaceConfig {

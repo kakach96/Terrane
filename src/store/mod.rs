@@ -1,8 +1,10 @@
+pub mod business;
 pub mod error;
 pub mod postgres_store;
 pub mod sqlite_store;
 pub mod types;
 
+pub use business::{BusinessStore, build_business_store};
 pub use error::StoreError;
 pub use sqlite_store::SqliteStore;
 pub use postgres_store::PostgresStore;
@@ -16,7 +18,6 @@ use crate::handlers::CreateWorkspaceRequest;
 use crate::models::permission::Permission;
 use crate::models::{DataSource, DataSourceConnection, DataSourceType};
 use crate::models::sql_view::SqlView;
-use crate::models::Feature;
 
 /// 存储抽象层 — SqliteStore 与 PostgresStore 共同实现。
 ///
@@ -89,11 +90,6 @@ pub trait Store: Send + Sync {
         enabled: Option<bool>,
     ) -> Result<(), StoreError>;
     async fn delete_layer(&self, name: &str) -> Result<(), StoreError>;
-
-    // ---- 要素 ----
-    async fn save_features(&self, layer_name: &str, features: &[Feature]) -> Result<usize, StoreError>;
-    async fn load_features(&self, layer_name: &str) -> Result<Vec<Feature>, StoreError>;
-    async fn delete_features(&self, layer_name: &str) -> Result<usize, StoreError>;
 
     // ---- SQL 视图 ----
     async fn get_sql_view(&self, name: &str) -> Result<Option<SqlView>, StoreError>;

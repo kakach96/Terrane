@@ -1,18 +1,18 @@
 //! PostgreSQL 存储后端 — 集群部署时使用。
 //!
 //! 保存全部配置元数据 + 空间要素(GeoJSON) + 会话信息。
-//! 连接信息来自 `config.database` (kind = "postgres")。
+//! 连接信息来自 `config.metadata` (kind = "postgres")。
 
 use async_trait::async_trait;
 use chrono::Utc;
 use deadpool_postgres::{ManagerConfig, RecyclingMethod, Runtime, Pool};
 use tokio_postgres::NoTls;
 
-use crate::config::DatabaseConfig;
+use crate::config::MetadataConfig;
 use crate::handlers::CreateWorkspaceRequest;
 use crate::models::permission::Permission;
 use crate::models::sql_view::SqlView;
-use crate::models::{DataSource, DataSourceConnection, DataSourceType, Feature};
+use crate::models::{DataSource, DataSourceConnection, DataSourceType};
 
 use super::types::{
     AuditLogRecord, Layer, LayerGroupRecord, NamespaceRecord, SessionRecord, StyleRecord, Workspace,
@@ -38,11 +38,12 @@ fn parse_ds_type(type_str: &str) -> DataSourceType {
 
 pub struct PostgresStore {
     pool: Pool,
+    schema: String,
 }
 
 impl PostgresStore {
     /// 根据配置构建连接池并初始化表结构。
-    pub async fn new(cfg: &DatabaseConfig) -> Result<Self, StoreError> {
+    pub async fn new(cfg: &MetadataConfig) -> Result<Self, StoreError> {
         let mut pg_cfg = deadpool_postgres::Config::new();
         let pg = &cfg.postgres;
         let host = if pg.host.eq_ignore_ascii_case("localhost") {
@@ -52,7 +53,9 @@ impl PostgresStore {
         };
         pg_cfg.host = Some(host);
         pg_cfg.port = Some(pg.port);
-        pg_cfg.dbname = Some(pg.name.clone());
+        pg_cfg.dbname = Some(pg.instance.clone());
+        // 通过 search_path 将表建到指定 schema
+        pg_cfg.options = Some(format!("-csearch_path={}", pg.schema));
         pg_cfg.user = Some(pg.user.clone());
         pg_cfg.password = Some(pg.password.clone());
         pg_cfg.connect_timeout = Some(std::time::Duration::from_secs(10));
@@ -66,13 +69,20 @@ impl PostgresStore {
 
         let pool = pg_cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
 
-        let store = PostgresStore { pool };
+        let store = PostgresStore {
+            pool,
+            schema: pg.schema.clone(),
+        };
         store.init_db().await?;
         Ok(store)
     }
 
     async fn init_db(&self) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
+        // 确保目标 schema 存在 (search_path 指向它, 未存在时建表会失败)
+        client
+            .batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {}", self.schema))
+            .await?;
         client.batch_execute(
             r#"
             CREATE TABLE IF NOT EXISTS workspaces (
@@ -761,62 +771,6 @@ impl Store for PostgresStore {
         let client = self.pool.get().await?;
         client.execute("DELETE FROM layers WHERE name = $1", &[&name]).await?;
         Ok(())
-    }
-
-    // ---- 要素 ----
-
-    async fn save_features(&self, layer_name: &str, features: &[Feature]) -> Result<usize, StoreError> {
-        let mut client = self.pool.get().await?;
-        let tx = client.transaction().await?;
-        tx.execute("DELETE FROM features WHERE layer_name = $1", &[&layer_name]).await?;
-        let mut count = 0;
-        for feature in features {
-            let geometry = serde_json::to_string(&feature.geometry)?;
-            let properties = serde_json::to_string(&feature.properties)?;
-            tx.execute(
-                "INSERT INTO features (layer_name, feature_id, geometry, properties)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (layer_name, feature_id) DO UPDATE
-                 SET geometry = EXCLUDED.geometry, properties = EXCLUDED.properties",
-                &[&layer_name, &feature.id, &geometry, &properties],
-            )
-            .await?;
-            count += 1;
-        }
-        tx.commit().await?;
-        Ok(count)
-    }
-
-    async fn load_features(&self, layer_name: &str) -> Result<Vec<Feature>, StoreError> {
-        let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                "SELECT feature_id, geometry, properties FROM features
-                 WHERE layer_name = $1 ORDER BY feature_id",
-                &[&layer_name],
-            )
-            .await?;
-        rows.iter()
-            .map(|row| {
-                let id: String = row.try_get(0)?;
-                let geometry_str: String = row.try_get(1)?;
-                let properties_str: Option<String> = row.try_get(2)?;
-                let geometry = serde_json::from_str(&geometry_str)
-                    .unwrap_or(crate::models::GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] });
-                let properties = properties_str
-                    .and_then(|s| serde_json::from_str(&s).ok())
-                    .unwrap_or_default();
-                Ok(Feature::with_id(id, geometry, properties))
-            })
-            .collect()
-    }
-
-    async fn delete_features(&self, layer_name: &str) -> Result<usize, StoreError> {
-        let client = self.pool.get().await?;
-        let res = client
-            .execute("DELETE FROM features WHERE layer_name = $1", &[&layer_name])
-            .await?;
-        Ok(res as usize)
     }
 
     // ---- SQL 视图 ----

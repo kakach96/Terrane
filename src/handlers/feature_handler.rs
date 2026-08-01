@@ -105,10 +105,10 @@ pub async fn create_feature(
 
     state.add_feature(layer_name, feature.clone()).await;
 
-    // 持久化到存储 (集群一致性)
-    if let Some(store) = &state.store {
+    // 持久化到业务数据存储 (集群一致性)
+    if let Some(bstore) = &state.business_store {
         let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
-        let _ = store.save_features(layer_name, &all).await;
+        let _ = bstore.save_features(layer_name, &all).await;
     }
 
     Ok(HttpResponse::Created().json(serde_json::json!({
@@ -164,10 +164,10 @@ pub async fn delete_feature(
     };
 
     if removed {
-        // 持久化到存储 (集群一致性)
-        if let Some(store) = &state.store {
+        // 持久化到业务数据存储 (集群一致性)
+        if let Some(bstore) = &state.business_store {
             let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
-            let _ = store.save_features(layer_name, &all).await;
+            let _ = bstore.save_features(layer_name, &all).await;
         }
         return Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
             "deleted": true,
@@ -224,10 +224,10 @@ pub async fn update_feature(
     };
 
     if let Some(updated_feature) = updated {
-        // 持久化到存储 (集群一致性)
-        if let Some(store) = &state.store {
+        // 持久化到业务数据存储 (集群一致性)
+        if let Some(bstore) = &state.business_store {
             let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
-            let _ = store.save_features(layer_name, &all).await;
+            let _ = bstore.save_features(layer_name, &all).await;
         }
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "type": "Feature",

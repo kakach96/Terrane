@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 use std::time::Instant;
 use crate::config::GeoServerConfig;
 use crate::models::{Layer, Feature, layer::LayerGroup};
-use crate::store::{Store, SqliteStore, PostgresStore};
+use crate::store::{Store, SqliteStore, PostgresStore, BusinessStore, build_business_store};
 use crate::utils::sld_parser;
 use crate::utils::tile_cache::TileCache;
 use serde::Serialize;
@@ -60,6 +60,8 @@ pub struct AppState {
     pub styles: Arc<RwLock<HashMap<String, String>>>,
     pub styles_meta: Arc<RwLock<HashMap<String, StyleMeta>>>,
     pub store: Option<Arc<dyn Store>>,
+    /// 业务数据存储 (图层要素; 与元数据存储分离, 见 config::BusinessConfig)
+    pub business_store: Option<Arc<dyn BusinessStore>>,
     pub pg_pools: Arc<Mutex<HashMap<String, deadpool_postgres::Pool>>>,
     pub layer_groups: Arc<RwLock<Vec<LayerGroup>>>,
     pub start_time: Instant,
@@ -81,11 +83,11 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(config: GeoServerConfig) -> Self {
-        // 根据配置选择存储后端: "postgres" (集群) / "sqlite" (默认, 本地开发)
-        let store: Option<Arc<dyn Store>> = match config.database.kind.as_str() {
-            "postgres" => match PostgresStore::new(&config.database).await {
+        // 根据配置选择元数据存储后端: "postgres" (集群) / "sqlite" (默认, 本地开发)
+        let store: Option<Arc<dyn Store>> = match config.metadata.kind.as_str() {
+            "postgres" => match PostgresStore::new(&config.metadata).await {
                 Ok(s) => {
-                    tracing::info!("Metadata store backend: PostgreSQL ({})", config.database.postgres.name);
+                    tracing::info!("Metadata store backend: PostgreSQL ({})", config.metadata.postgres.instance);
                     Some(Arc::new(s))
                 }
                 Err(e) => {
@@ -94,7 +96,7 @@ impl AppState {
                 }
             },
             _ => {
-                let sqlite_path = config.database.sqlite_path.to_str().unwrap_or("geoserver.sqlite");
+                let sqlite_path = config.metadata.sqlite_path.to_str().unwrap_or("geoserver.sqlite");
                 match SqliteStore::new(sqlite_path).await {
                     Ok(s) => {
                         tracing::info!("Metadata store backend: SQLite ({})", sqlite_path);
@@ -107,6 +109,27 @@ impl AppState {
                 }
             }
         };
+
+        // 构建业务数据存储 (元数据与业务数据分离; 见 config::BusinessConfig)
+        let business_store = build_business_store(&config).await;
+        match &business_store {
+            Some(_) => {
+                let eff = config.effective_business();
+                let detail = match eff.kind.as_str() {
+                    "metadata" => "reuse metadata store".to_string(),
+                    "postgres" => format!("PostgreSQL ({})", eff.postgres.instance),
+                    _ => eff
+                        .dir
+                        .as_ref()
+                        .map(|d| d.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                };
+                tracing::info!("Business data store backend: {} ({})", eff.kind, detail);
+            }
+            None => {
+                tracing::warn!("Business data store backend: none");
+            }
+        }
 
         let config_layers: Vec<Layer> = config.workspaces.iter()
             .flat_map(|workspace| {
@@ -252,6 +275,7 @@ impl AppState {
             styles_meta: Arc::new(RwLock::new(styles_meta_map)),
             layer_groups: Arc::new(RwLock::new(layer_groups_init)),
             store,
+            business_store,
             pg_pools: Arc::new(Mutex::new(HashMap::new())),
             start_time: Instant::now(),
             request_count: AtomicU64::new(0),
