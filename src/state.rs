@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 use std::time::Instant;
 use crate::config::GeoServerConfig;
 use crate::models::{Layer, Feature, layer::LayerGroup};
-use crate::store::SqliteStore;
+use crate::store::{Store, SqliteStore, PostgresStore};
 use crate::utils::sld_parser;
 use crate::utils::tile_cache::TileCache;
 use serde::Serialize;
@@ -59,7 +59,7 @@ pub struct AppState {
     pub features: Arc<RwLock<HashMap<String, Vec<Feature>>>>,
     pub styles: Arc<RwLock<HashMap<String, String>>>,
     pub styles_meta: Arc<RwLock<HashMap<String, StyleMeta>>>,
-    pub store: Option<Arc<SqliteStore>>,
+    pub store: Option<Arc<dyn Store>>,
     pub pg_pools: Arc<Mutex<HashMap<String, deadpool_postgres::Pool>>>,
     pub layer_groups: Arc<RwLock<Vec<LayerGroup>>>,
     pub start_time: Instant,
@@ -81,12 +81,30 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(config: GeoServerConfig) -> Self {
-        let sqlite_path = config.database.sqlite_path.to_str().unwrap_or("geoserver.sqlite");
-        let store = match SqliteStore::new(sqlite_path).await {
-            Ok(s) => Some(Arc::new(s)),
-            Err(e) => {
-                eprintln!("Failed to initialize SQLite store: {}", e);
-                None
+        // 根据配置选择存储后端: "postgres" (集群) / "sqlite" (默认, 本地开发)
+        let store: Option<Arc<dyn Store>> = match config.database.kind.as_str() {
+            "postgres" => match PostgresStore::new(&config.database).await {
+                Ok(s) => {
+                    tracing::info!("Metadata store backend: PostgreSQL ({})", config.database.name);
+                    Some(Arc::new(s))
+                }
+                Err(e) => {
+                    eprintln!("Failed to initialize PostgreSQL store: {}", e);
+                    None
+                }
+            },
+            _ => {
+                let sqlite_path = config.database.sqlite_path.to_str().unwrap_or("geoserver.sqlite");
+                match SqliteStore::new(sqlite_path).await {
+                    Ok(s) => {
+                        tracing::info!("Metadata store backend: SQLite ({})", sqlite_path);
+                        Some(Arc::new(s))
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to initialize SQLite store: {}", e);
+                        None
+                    }
+                }
             }
         };
 
@@ -182,9 +200,36 @@ impl AppState {
             }
         }
 
+        // 从存储加载持久化样式 / 图层组 (与内置样式合并)
+        let mut layer_groups_init: Vec<LayerGroup> = Vec::new();
+        if let Some(ref store) = store {
+            if let Ok(style_records) = store.get_all_styles().await {
+                for rec in style_records {
+                    if !default_styles.contains_key(&rec.name) {
+                        default_styles.insert(rec.name.clone(), rec.content.clone());
+                        styles_meta_map.entry(rec.name.clone()).or_insert(StyleMeta {
+                            title: rec.title.clone(),
+                            is_builtin: rec.is_builtin,
+                            format: parse_style_format(&rec.format),
+                        });
+                    }
+                }
+            }
+            if let Ok(group_records) = store.get_all_layer_groups().await {
+                for g in group_records {
+                    layer_groups_init.push(LayerGroup {
+                        name: g.name,
+                        title: g.title,
+                        layers: g.layers,
+                        styles: g.styles,
+                    });
+                }
+            }
+        }
+
         // 初始化默认管理员
         if let Some(ref store) = store {
-            crate::auth::ensure_default_admin(store).await;
+            crate::auth::ensure_default_admin(store.as_ref()).await;
         }
 
         // GeoWebCache 初始化
@@ -205,7 +250,7 @@ impl AppState {
             features: Arc::new(RwLock::new(HashMap::new())),
             styles: Arc::new(RwLock::new(default_styles)),
             styles_meta: Arc::new(RwLock::new(styles_meta_map)),
-            layer_groups: Arc::new(RwLock::new(Vec::new())),
+            layer_groups: Arc::new(RwLock::new(layer_groups_init)),
             store,
             pg_pools: Arc::new(Mutex::new(HashMap::new())),
             start_time: Instant::now(),
@@ -365,4 +410,14 @@ pub struct LayerUpdates {
     pub title: Option<String>,
     pub abstract_text: Option<String>,
     pub enabled: Option<bool>,
+}
+
+/// 将存储中的格式字符串解析为 StyleFormat
+fn parse_style_format(format: &str) -> crate::models::style::StyleFormat {
+    match format {
+        "CSS" => crate::models::style::StyleFormat::CSS,
+        "YSLD" => crate::models::style::StyleFormat::YSLD,
+        "MBStyle" => crate::models::style::StyleFormat::MBStyle,
+        _ => crate::models::style::StyleFormat::SLD,
+    }
 }

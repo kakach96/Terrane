@@ -277,7 +277,28 @@ pub async fn import_backup(
         }
     }
 
-    // 3. 导入样式
+    // 3. 导入图层
+    for l in &backup.layers {
+        let layer = crate::store::Layer {
+            name: l.name.clone(), title: l.title.clone(), workspace: l.workspace.clone(),
+            store: l.store.clone(), srs: l.srs.clone(), abstract_text: l.abstract_text.clone(),
+            native_name: l.native_name.clone(), enabled: l.enabled,
+            minx: l.minx, miny: l.miny, maxx: l.maxx, maxy: l.maxy,
+            created: String::new(), modified: String::new(),
+        };
+        match store.create_layer(&layer).await {
+            Ok(_) => {
+                report.layers_imported += 1;
+                state.layers.write().await.push(crate::models::Layer::new(
+                    l.name.clone(), l.title.clone(), l.workspace.clone(), l.store.clone(),
+                    crate::models::CoordinateReferenceSystem::from_epsg(&l.srs),
+                ));
+            }
+            Err(e) => report.errors.push(format!("图层 '{}': {}", l.name, e)),
+        }
+    }
+
+    // 4. 导入样式
     for st in &backup.styles {
         state.styles.write().await.insert(st.name.clone(), st.content.clone());
         let format = st.format.as_deref()
@@ -291,12 +312,20 @@ pub async fn import_backup(
         state.styles_meta.write().await.insert(st.name.clone(), crate::state::StyleMeta {
             title: st.title.clone(),
             is_builtin: false,
-            format,
+            format: format.clone(),
         });
+        if let Some(s) = state.store.as_ref() {
+            let ts = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+            let _ = s.create_style(&crate::store::StyleRecord {
+                name: st.name.clone(), title: st.title.clone(),
+                format: format.to_string(), is_builtin: false,
+                content: st.content.clone(), created: ts.clone(), modified: ts,
+            }).await;
+        }
         report.styles_imported += 1;
     }
 
-    // 4. 导入命名空间
+    // 5. 导入命名空间
     for ns in &backup.namespaces {
         match store.create_namespace(&ns.prefix, &ns.uri, ns.workspace.as_deref(), ns.isolated).await {
             Ok(_) => report.namespaces_imported += 1,
@@ -304,7 +333,7 @@ pub async fn import_backup(
         }
     }
 
-    // 5. 导入图层组
+    // 6. 导入图层组
     for lg in &backup.layer_groups {
         state.layer_groups.write().await.push(crate::models::layer::LayerGroup {
             name: lg.name.clone(),
@@ -312,10 +341,18 @@ pub async fn import_backup(
             layers: lg.layers.clone(),
             styles: vec![],
         });
+        if let Some(s) = state.store.as_ref() {
+            let ts = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+            let _ = s.create_layer_group(&crate::store::LayerGroupRecord {
+                name: lg.name.clone(), title: lg.title.clone(),
+                layers: lg.layers.clone(), styles: vec![],
+                created: ts.clone(), modified: ts,
+            }).await;
+        }
         report.layer_groups_imported += 1;
     }
 
-    // 6. 导入 SQL 视图
+    // 7. 导入 SQL 视图
     for sv in &backup.sql_views {
         let params: Vec<crate::models::sql_view::SqlViewParameter> =
             serde_json::from_str(&sv.parameters).unwrap_or_default();
@@ -333,7 +370,7 @@ pub async fn import_backup(
         }
     }
 
-    // 7. 导入权限
+    // 8. 导入权限
     for p in &backup.permissions {
         let perm = Permission {
             id: None,
@@ -352,7 +389,7 @@ pub async fn import_backup(
         }
     }
 
-    // 8. 导入用户
+    // 9. 导入用户
     for u in &backup.users {
         let role = match u.role.as_str() {
             "admin" => UserRole::Admin, "manager" => UserRole::Manager,
@@ -395,9 +432,9 @@ impl ImportReport {
     }
     pub fn summary(&self) -> String {
         format!(
-            "工作空间={}, 数据源={}, 样式={}, 图层组={}, 命名空间={}, SQL视图={}, 权限={}, 用户={} (错误={})",
+            "工作空间={}, 数据源={}, 图层={}, 样式={}, 图层组={}, 命名空间={}, SQL视图={}, 权限={}, 用户={} (错误={})",
             self.workspaces_imported, self.data_sources_imported,
-            self.styles_imported, self.layer_groups_imported,
+            self.layers_imported, self.styles_imported, self.layer_groups_imported,
             self.namespaces_imported, self.sql_views_imported,
             self.permissions_imported, self.users_imported,
             self.errors.len(),

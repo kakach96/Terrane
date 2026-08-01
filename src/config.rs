@@ -7,6 +7,7 @@ use crate::utils::tile_cache::GwcConfig;
 pub struct GeoServerConfig {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
+    pub security: SecurityConfig,
     pub logging: LoggingConfig,
     pub data_dir: PathBuf,
     pub workspaces: Vec<WorkspaceConfig>,
@@ -33,9 +34,70 @@ pub struct ServerConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DatabaseConfig {
+    /// 存储后端类型: "sqlite" | "postgres" (默认: "sqlite")
+    #[serde(default = "default_db_kind")]
+    pub kind: String,
     /// SQLite 数据库文件路径
     #[serde(default = "default_sqlite_path")]
     pub sqlite_path: PathBuf,
+    /// PostgreSQL 主机 (kind = "postgres" 时生效)
+    #[serde(default = "default_db_host")]
+    pub host: String,
+    /// PostgreSQL 端口
+    #[serde(default = "default_db_port")]
+    pub port: u16,
+    /// PostgreSQL 数据库名
+    #[serde(default = "default_db_name")]
+    pub name: String,
+    /// PostgreSQL 用户名
+    #[serde(default = "default_db_user")]
+    pub user: String,
+    /// PostgreSQL 密码
+    #[serde(default = "default_db_password")]
+    pub password: String,
+    /// PostgreSQL 连接池大小
+    #[serde(default = "default_db_pool_size")]
+    pub pool_size: u32,
+}
+
+/// 安全配置 (集群部署时各副本必须共享相同密钥)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SecurityConfig {
+    /// JWT 签名密钥 (建议通过 GEOSERVER__SECURITY__JWT_SECRET 环境变量注入)
+    #[serde(default = "default_jwt_secret")]
+    pub jwt_secret: String,
+}
+
+fn default_db_kind() -> String {
+    "sqlite".to_string()
+}
+
+fn default_db_host() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_db_port() -> u16 {
+    5432
+}
+
+fn default_db_name() -> String {
+    "geoserver".to_string()
+}
+
+fn default_db_user() -> String {
+    "postgres".to_string()
+}
+
+fn default_db_password() -> String {
+    "".to_string()
+}
+
+fn default_db_pool_size() -> u32 {
+    10
+}
+
+fn default_jwt_secret() -> String {
+    "rust-geoserver-jwt-secret-2026".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -152,7 +214,17 @@ impl Default for GeoServerConfig {
                 connect_timeout_secs: default_connect_timeout(),
             },
             database: DatabaseConfig {
+                kind: default_db_kind(),
                 sqlite_path: default_sqlite_path(),
+                host: default_db_host(),
+                port: default_db_port(),
+                name: default_db_name(),
+                user: default_db_user(),
+                password: default_db_password(),
+                pool_size: default_db_pool_size(),
+            },
+            security: SecurityConfig {
+                jwt_secret: default_jwt_secret(),
             },
             logging: LoggingConfig {
                 level: default_log_level(),
@@ -181,7 +253,8 @@ impl GeoServerConfig {
 
     pub fn load_from_file(path: &str) -> Result<Self, config::ConfigError> {
         let config = Config::builder()
-            .add_source(File::with_name(path))
+            .add_source(File::with_name(path).required(false))
+            .add_source(config::Environment::with_prefix("GEOSERVER").separator("__"))
             .build()?;
 
         config.try_deserialize()

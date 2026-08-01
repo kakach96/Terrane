@@ -42,6 +42,14 @@ export class AuthService {
   }
 
   logout(): void {
+    // 调用后端吊销会话 (携带 token)
+    const token = this.getToken();
+    if (token) {
+      this.http.post(`${this.apiUrl}/logout`, {}).subscribe({
+        next: () => {},
+        error: () => {}
+      });
+    }
     localStorage.removeItem('geoserver_user');
     localStorage.removeItem('geoserver_token');
     this.currentUserSubject.next(null);

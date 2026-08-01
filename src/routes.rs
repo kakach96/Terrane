@@ -140,6 +140,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
             .route("/tiles/cache/stats", web::get().to(crate::handlers::get_tile_cache_stats))
             // 认证
             .route("/auth/login", web::post().to(crate::handlers::login))
+            .route("/auth/logout", web::post().to(crate::handlers::logout))
             .route("/auth/verify", web::get().to(crate::handlers::verify))
             .route("/auth/change-password", web::post().to(crate::handlers::change_password))
             .route("/auth/users", web::get().to(crate::handlers::list_users))

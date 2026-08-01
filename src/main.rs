@@ -6,7 +6,6 @@ use actix_cors::Cors;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::fmt::format::Writer;
-use std::path::PathBuf;
 use clap::Parser;
 use tokio::fs;
 use chrono::{Local, Datelike, Timelike};
@@ -76,16 +75,11 @@ fn init_tracing(default_level: &str) {
 }
 
 fn load_config(config_path: &str) -> GeoServerConfig {
-    if PathBuf::from(config_path).exists() {
-        GeoServerConfig::load_from_file(config_path)
-            .unwrap_or_else(|e| {
-                tracing::warn!("Failed to load config from {}: {}. Using defaults.", config_path, e);
-                GeoServerConfig::default()
-            })
-    } else {
-        tracing::info!("Config file not found, using defaults");
+    // geoserver.toml (可选) + GEOSERVER__ 环境变量双源加载，env 覆盖文件
+    GeoServerConfig::load_from_file(config_path).unwrap_or_else(|e| {
+        tracing::warn!("Failed to load config: {}. Using defaults.", e);
         GeoServerConfig::default()
-    }
+    })
 }
 
 fn print_startup_info(host: &str, port: u16, api_context: &str) {
@@ -118,7 +112,11 @@ async fn main() -> std::io::Result<()> {
     let static_dir = config.server.static_dir.clone();
     let static_dir_str = static_dir.to_string_lossy().to_string();
 
+    // 初始化 JWT 密钥 (集群各副本必须共享相同密钥)
+    auth::init_secret(&config.security.jwt_secret);
+
     print_startup_info(&host, port, &api_context);
+    tracing::info!("Metadata store backend: {}", config.database.kind);
 
     let app_state = web::Data::new(AppState::new(config).await);
 

@@ -27,13 +27,21 @@ pub struct CreateUserRequest {
     pub role: Option<String>,
 }
 
-/// 登录 — 返回 JWT Token
+fn req_ip(req: &HttpRequest) -> Option<String> {
+    req.peer_addr().map(|a| a.to_string())
+}
+
+fn req_user_agent(req: &HttpRequest) -> Option<String> {
+    req.headers().get("User-Agent").and_then(|v| v.to_str().ok()).map(|s| s.to_string())
+}
+
+/// 登录 — 返回 JWT Token 并在数据库中记录会话
 pub async fn login(
     body: web::Json<LoginRequest>,
     state: web::Data<AppState>,
     req: HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
-    let ip = req.peer_addr().map(|a| a.to_string());
+    let ip = req_ip(&req);
 
     if let Some(store) = &state.store {
         match store.get_user(&body.username).await {
@@ -47,6 +55,26 @@ pub async fn login(
                 if verify_password(&body.password, &user.salt, &user.password_hash) {
                     let token = generate_token(&user.username, &user.role, 24)
                         .map_err(|e| GeoServerError::InternalError(e))?;
+
+                    // 记录会话到数据库 (支持登出/吊销)
+                    if let Ok(claims) = verify_token(&token) {
+                        let now = chrono::Utc::now();
+                        let now_str = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                        let expires_at = (now + chrono::Duration::hours(24))
+                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                        let _ = store.create_session(&crate::store::SessionRecord {
+                            jti: claims.jti.clone(),
+                            username: user.username.clone(),
+                            role: user.role.to_string(),
+                            issued_at: now_str.clone(),
+                            expires_at,
+                            last_seen_at: now_str,
+                            revoked: false,
+                            user_agent: req_user_agent(&req),
+                            ip_address: ip.clone(),
+                        }).await;
+                        let _ = store.cleanup_expired_sessions().await;
+                    }
 
                     let _ = store.audit_log(&body.username, "LOGIN", None,
                         Some("登录成功"), ip.as_deref()).await;
@@ -75,10 +103,30 @@ pub async fn login(
     }
 }
 
-/// 验证 Token 并返回当前用户信息
+/// 登出 — 吊销数据库中的会话
+pub async fn logout(
+    req: HttpRequest,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let auth_header = req.headers().get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| GeoServerError::BadRequest("未登录".to_string()))?;
+    let claims = verify_token(auth_header).map_err(|_| GeoServerError::BadRequest("Token 无效".to_string()))?;
+
+    if let Some(store) = &state.store {
+        let _ = store.delete_session(&claims.jti).await;
+        let _ = store.audit_log(&claims.sub, "LOGOUT", None, Some("登出"), req_ip(&req).as_deref()).await;
+    }
+
+    Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+        "message": "已退出登录",
+    }))))
+}
+
+/// 验证 Token 并返回当前用户信息 (校验数据库会话有效性)
 pub async fn verify(
     req: HttpRequest,
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let auth_header = req.headers().get("Authorization")
         .and_then(|v| v.to_str().ok())
@@ -86,6 +134,19 @@ pub async fn verify(
 
     let claims = verify_token(auth_header)
         .map_err(|e| GeoServerError::BadRequest(format!("Token 验证失败: {}", e)))?;
+
+    // 校验数据库会话 (未记录 = 已过期/已登出)
+    if let Some(store) = &state.store {
+        match store.get_session(&claims.jti).await {
+            Ok(Some(session)) => {
+                if session.revoked {
+                    return Err(GeoServerError::BadRequest("会话已失效".to_string()));
+                }
+            }
+            Ok(None) => return Err(GeoServerError::BadRequest("会话不存在或已过期".to_string())),
+            Err(_) => {}
+        }
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "username": claims.sub,

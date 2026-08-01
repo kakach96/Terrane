@@ -70,10 +70,24 @@ pub async fn put_layer_style(
     let format = crate::models::style::detect_style_format(&body);
 
     let mut styles = state.styles.write().await;
-    styles.insert(style_name.clone(), body);
+    styles.insert(style_name.clone(), body.clone());
 
     let mut meta = state.styles_meta.write().await;
     meta.entry(style_name.clone()).and_modify(|m| { m.format = format.clone(); });
+
+    // 持久化到存储
+    if let Some(store) = &state.store {
+        let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let _ = store.create_style(&crate::store::StyleRecord {
+            name: style_name.clone(),
+            title: style_name.clone(),
+            format: format.to_string(),
+            is_builtin: meta.get(&style_name).map(|m| m.is_builtin).unwrap_or(false),
+            content: body,
+            created: ts.clone(),
+            modified: ts,
+        }).await;
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "message": format!("Style '{}' updated", style_name),
@@ -129,14 +143,29 @@ pub async fn create_style(
         }
     };
 
-    state.add_style(&body.name, content).await;
+    state.add_style(&body.name, content.clone()).await;
+    let meta_insert = crate::state::StyleMeta {
+        title: title.clone(),
+        is_builtin: false,
+        format: format.clone(),
+    };
     {
         let mut meta = state.styles_meta.write().await;
-        meta.insert(body.name.clone(), crate::state::StyleMeta {
+        meta.insert(body.name.clone(), meta_insert);
+    }
+
+    // 持久化到存储
+    if let Some(store) = &state.store {
+        let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let _ = store.create_style(&crate::store::StyleRecord {
+            name: body.name.clone(),
             title,
+            format: format.to_string(),
             is_builtin: false,
-            format,
-        });
+            content,
+            created: ts.clone(),
+            modified: ts,
+        }).await;
     }
 
     Ok(HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
@@ -199,6 +228,17 @@ pub async fn update_style_by_name(
         meta.entry(name.to_string()).and_modify(|m| { m.title = title.clone(); });
     }
 
+    // 持久化到存储
+    if let Some(store) = &state.store {
+        let _ = store.update_style(
+            name,
+            body.title.clone(),
+            body.format.clone(),
+            body.content.clone(),
+            None,
+        ).await;
+    }
+
     Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "message": format!("Style '{}' updated", name),
     }))))
@@ -224,6 +264,11 @@ pub async fn delete_style_by_name(
     {
         let mut meta = state.styles_meta.write().await;
         meta.remove(name);
+    }
+
+    // 从存储删除
+    if let Some(store) = &state.store {
+        let _ = store.delete_style(name).await;
     }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
@@ -275,13 +320,28 @@ pub async fn create_layer_group(
 
     let group = crate::models::layer::LayerGroup {
         name: name.clone(),
-        title,
-        layers,
+        title: title.clone(),
+        layers: layers.clone(),
         styles: vec![],
     };
 
-    let mut groups = state.layer_groups.write().await;
-    groups.push(group);
+    {
+        let mut groups = state.layer_groups.write().await;
+        groups.push(group);
+    }
+
+    // 持久化到存储
+    if let Some(store) = &state.store {
+        let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let _ = store.create_layer_group(&crate::store::LayerGroupRecord {
+            name: name.clone(),
+            title,
+            layers,
+            styles: vec![],
+            created: ts.clone(),
+            modified: ts,
+        }).await;
+    }
 
     Ok(HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
         "name": name,
@@ -298,6 +358,11 @@ pub async fn delete_layer_group(
     let pos = groups.iter().position(|g| g.name == name)
         .ok_or_else(|| GeoServerError::NotFound(format!("Layer group '{}' not found", name)))?;
     groups.remove(pos);
+
+    // 从存储删除
+    if let Some(store) = &state.store {
+        let _ = store.delete_layer_group(name).await;
+    }
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "message": format!("Layer group '{}' deleted", name),

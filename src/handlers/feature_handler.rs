@@ -105,6 +105,12 @@ pub async fn create_feature(
 
     state.add_feature(layer_name, feature.clone()).await;
 
+    // 持久化到存储 (集群一致性)
+    if let Some(store) = &state.store {
+        let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
+        let _ = store.save_features(layer_name, &all).await;
+    }
+
     Ok(HttpResponse::Created().json(serde_json::json!({
         "type": "Feature",
         "id": feature.id,
@@ -143,15 +149,30 @@ pub async fn delete_feature(
     let layer_name = req.match_info().get("layer").unwrap_or("");
     let feature_id = req.match_info().get("feature").unwrap_or("");
 
-    let mut features_map = state.features.write().await;
-    if let Some(features) = features_map.get_mut(layer_name) {
-        if let Some(pos) = features.iter().position(|f| f.id == feature_id) {
-            features.remove(pos);
-            return Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                "deleted": true,
-                "feature_id": feature_id,
-            }))));
+    let removed = {
+        let mut features_map = state.features.write().await;
+        if let Some(features) = features_map.get_mut(layer_name) {
+            if let Some(pos) = features.iter().position(|f| f.id == feature_id) {
+                features.remove(pos);
+                true
+            } else {
+                false
+            }
+        } else {
+            false
         }
+    };
+
+    if removed {
+        // 持久化到存储 (集群一致性)
+        if let Some(store) = &state.store {
+            let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
+            let _ = store.save_features(layer_name, &all).await;
+        }
+        return Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "deleted": true,
+            "feature_id": feature_id,
+        }))));
     }
 
     Err(GeoServerError::NotFound(format!("Feature '{}' not found", feature_id)))
@@ -165,41 +186,55 @@ pub async fn update_feature(
     let layer_name = req.match_info().get("layer").unwrap_or("");
     let feature_id = req.match_info().get("feature").unwrap_or("");
 
-    let mut features_map = state.features.write().await;
-    if let Some(features) = features_map.get_mut(layer_name) {
-        if let Some(feature) = features.iter_mut().find(|f| f.id == feature_id) {
-            if let Some(new_geometry) = &body.geometry {
-                feature.geometry = new_geometry.clone();
-            }
-
-            if let Some(new_properties) = &body.properties {
-                for (key, value) in new_properties {
-                    let prop_value = match value {
-                        serde_json::Value::String(s) => crate::models::PropertyValue::String(s.clone()),
-                        serde_json::Value::Number(n) => {
-                            if let Some(i) = n.as_i64() {
-                                crate::models::PropertyValue::Integer(i)
-                            } else if let Some(f) = n.as_f64() {
-                                crate::models::PropertyValue::Number(f)
-                            } else {
-                                crate::models::PropertyValue::String(n.to_string())
-                            }
-                        }
-                        serde_json::Value::Bool(b) => crate::models::PropertyValue::Boolean(*b),
-                        serde_json::Value::Null => crate::models::PropertyValue::Null,
-                        _ => crate::models::PropertyValue::String(value.to_string()),
-                    };
-                    feature.properties.insert(key.clone(), prop_value);
+    let updated = {
+        let mut features_map = state.features.write().await;
+        if let Some(features) = features_map.get_mut(layer_name) {
+            if let Some(feature) = features.iter_mut().find(|f| f.id == feature_id) {
+                if let Some(new_geometry) = &body.geometry {
+                    feature.geometry = new_geometry.clone();
                 }
-            }
 
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
-                "type": "Feature",
-                "id": feature.id,
-                "geometry": feature.geometry,
-                "properties": feature.properties,
-            })));
+                if let Some(new_properties) = &body.properties {
+                    for (key, value) in new_properties {
+                        let prop_value = match value {
+                            serde_json::Value::String(s) => crate::models::PropertyValue::String(s.clone()),
+                            serde_json::Value::Number(n) => {
+                                if let Some(i) = n.as_i64() {
+                                    crate::models::PropertyValue::Integer(i)
+                                } else if let Some(f) = n.as_f64() {
+                                    crate::models::PropertyValue::Number(f)
+                                } else {
+                                    crate::models::PropertyValue::String(n.to_string())
+                                }
+                            }
+                            serde_json::Value::Bool(b) => crate::models::PropertyValue::Boolean(*b),
+                            serde_json::Value::Null => crate::models::PropertyValue::Null,
+                            _ => crate::models::PropertyValue::String(value.to_string()),
+                        };
+                        feature.properties.insert(key.clone(), prop_value);
+                    }
+                }
+                Some(feature.clone())
+            } else {
+                None
+            }
+        } else {
+            None
         }
+    };
+
+    if let Some(updated_feature) = updated {
+        // 持久化到存储 (集群一致性)
+        if let Some(store) = &state.store {
+            let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
+            let _ = store.save_features(layer_name, &all).await;
+        }
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "type": "Feature",
+            "id": updated_feature.id,
+            "geometry": updated_feature.geometry,
+            "properties": updated_feature.properties,
+        })));
     }
 
     Err(GeoServerError::NotFound(format!("Feature '{}' not found", feature_id)))

@@ -52,6 +52,8 @@ hex = "0.4"
 jsonwebtoken = "9"
 rand = "0.8"
 serde_yaml = "0.9"
+# 异步 trait (Store 抽象层)
+async-trait = "0.1"
 
 [dev-dependencies]
 actix-rt = "2"

@@ -58,6 +58,8 @@ pub struct Claims {
     pub sub: String,
     /// 角色
     pub role: String,
+    /// JWT ID (对应数据库会话记录主键)
+    pub jti: String,
     /// 过期时间 (Unix timestamp)
     pub exp: usize,
     /// 签发时间
@@ -92,10 +94,22 @@ pub fn verify_password(password: &str, salt: &str, hash: &str) -> bool {
 // JWT Token 管理
 // ---------------------------------------------------------------------------
 
-/// JWT 密钥（从配置读取或使用默认）
-const JWT_SECRET: &str = "rust-geoserver-jwt-secret-2026";
+/// JWT 密钥（从配置读取，集群各副本共享）
+static JWT_SECRET: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
-/// 生成 JWT Token
+/// 默认密钥（仅在未通过 `init_secret` 配置时用于测试/降级）
+const DEFAULT_JWT_SECRET: &str = "rust-geoserver-jwt-secret-2026";
+
+/// 初始化 JWT 密钥（应在进程启动时从配置调用一次）
+pub fn init_secret(secret: &str) {
+    let _ = JWT_SECRET.set(secret.to_string());
+}
+
+fn jwt_secret() -> &'static str {
+    JWT_SECRET.get().map(|s| s.as_str()).unwrap_or(DEFAULT_JWT_SECRET)
+}
+
+/// 生成 JWT Token (含 jti，用于数据库会话关联)
 pub fn generate_token(username: &str, role: &UserRole, hours: i64) -> Result<String, String> {
     let now = Utc::now();
     let exp = now + Duration::hours(hours);
@@ -103,6 +117,7 @@ pub fn generate_token(username: &str, role: &UserRole, hours: i64) -> Result<Str
     let claims = Claims {
         sub: username.to_string(),
         role: role.to_string(),
+        jti: uuid::Uuid::new_v4().to_string(),
         exp: exp.timestamp() as usize,
         iat: now.timestamp() as usize,
     };
@@ -110,7 +125,7 @@ pub fn generate_token(username: &str, role: &UserRole, hours: i64) -> Result<Str
     encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(JWT_SECRET.as_ref()),
+        &EncodingKey::from_secret(jwt_secret().as_ref()),
     )
     .map_err(|e| format!("JWT 生成失败: {}", e))
 }
@@ -120,7 +135,7 @@ pub fn verify_token(token: &str) -> Result<Claims, String> {
     let token = token.trim_start_matches("Bearer ");
     decode::<Claims>(
         token,
-        &DecodingKey::from_secret(JWT_SECRET.as_ref()),
+        &DecodingKey::from_secret(jwt_secret().as_ref()),
         &Validation::default(),
     )
     .map(|data| data.claims)
@@ -213,7 +228,7 @@ mod tests {
 }
 
 /// 创建默认管理员用户（如果不存在）
-pub async fn ensure_default_admin(store: &crate::store::SqliteStore) {
+pub async fn ensure_default_admin(store: &dyn crate::store::Store) {
     match store.get_user("admin").await {
         Ok(Some(_)) => {
             info!("[Auth] 默认管理员用户已存在");
