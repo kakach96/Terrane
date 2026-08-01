@@ -1,106 +1,151 @@
 # =============================================================================
-# Rust GeoServer 配置模板
-# 复制此文件为 geoserver.toml 并根据实际环境修改
-# 所有配置项均有合理的默认值，可按需覆盖
+# Rust GeoServer configuration template
+# Copy this file to geoserver.toml and adjust it for your environment.
+# Every option has a sensible default and can be overridden as needed.
+#
+# Configuration sources & precedence (highest first):
+#   1. CLI flags:         --host, --port   (override [server] host/port)
+#   2. Environment vars:  GEOSERVER__<SECTION>__<FIELD>  (double underscore)
+#   3. Config file:       geoserver.toml   (path via --config, default "geoserver")
+#
+# Env var naming: prefix "GEOSERVER", sections and fields joined with "__".
+#   GEOSERVER__SERVER__HOST                 -> [server] host
+#   GEOSERVER__DATABASE__POSTGRES__HOST     -> [database.postgres] host
+# The special var RUST_LOG overrides [logging] level (see below).
+#
+# NOTE: if any REQUIRED key is missing (host / port / api_context /
+# [[workspaces]] / gwc.cache_dir / gwc.meta_dir when [gwc] is present), the
+# whole config fails to load and the server silently falls back to built-in
+# defaults (database kind reverts to "sqlite"). Keep required sections complete.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# 服务器基础配置
+# Server basics
 # ---------------------------------------------------------------------------
 [server]
-# 监听地址 (默认: "127.0.0.1")
+# Bind address (REQUIRED; built-in default: "127.0.0.1")
+# Env: GEOSERVER__SERVER__HOST | CLI: --host
 host = "127.0.0.1"
 
-# 监听端口 (默认: 8080)
+# Listen port (REQUIRED; built-in default: 8080)
+# Env: GEOSERVER__SERVER__PORT | CLI: --port
 port = 8080
 
-# REST API 上下文路径 (默认: "/geoserver")
+# REST API context path (REQUIRED; built-in default: "/geoserver")
+# Env: GEOSERVER__SERVER__API_CONTEXT
 api_context = "/geoserver"
 
-# 静态文件目录，存放前端 Angular 构建产物 (默认: "./static")
+# Static file directory holding the built Angular frontend (default: "./static")
+# Env: GEOSERVER__SERVER__STATIC_DIR
 static_dir = "./static"
 
-# PostgreSQL 连接超时秒数 (默认: 10)
+# PostgreSQL connection timeout in seconds (default: 10)
+# Env: GEOSERVER__SERVER__CONNECT_TIMEOUT_SECS
 connect_timeout_secs = 10
 
 # ---------------------------------------------------------------------------
-# 数据库配置
+# Database
 # ---------------------------------------------------------------------------
 [database]
-# 存储后端类型: "sqlite" (默认, 本地开发) | "postgres" (集群部署)
+# Storage backend: "sqlite" (default, local dev) | "postgres" (cluster deploy)
+# Env: GEOSERVER__DATABASE__KIND
 kind = "sqlite"
-# SQLite 数据库文件路径 (默认: "geoserver.sqlite", 仅 kind = "sqlite" 时生效)
+# SQLite database file path (default: "geoserver.sqlite"; used only when kind = "sqlite")
+# Env: GEOSERVER__DATABASE__SQLITE_PATH
 sqlite_path = "geoserver.sqlite"
 
-# PostgreSQL 连接配置 (仅 kind = "postgres" 时生效)
-# 可通过环境变量 GEOSERVER__DATABASE__POSTGRES__HOST 等覆盖
+# PostgreSQL connection config (used only when kind = "postgres").
+# The whole section is optional; every field below has a default.
+# Env overrides: GEOSERVER__DATABASE__POSTGRES__HOST / __PORT / __NAME
+#                / __USER / __PASSWORD / __POOL_SIZE
 [database.postgres]
 host = "127.0.0.1"
 port = 5432
 name = "geoserver"
 user = "postgres"
+# Built-in default is an empty string ""; the value here is just an example.
 password = "postgres"
-# 连接池大小
+# Connection pool size (default: 10)
 pool_size = 10
 
 # ---------------------------------------------------------------------------
-# 安全配置
+# Security
 # ---------------------------------------------------------------------------
 [security]
-# JWT 签名密钥。集群多副本部署时必须配置为相同值。
-# 生产环境建议通过环境变量 GEOSERVER__SECURITY__JWT_SECRET 注入。
+# JWT signing secret. In a multi-replica cluster every replica MUST share the
+# same value. For production, inject it via the GEOSERVER__SECURITY__JWT_SECRET
+# environment variable instead of committing it to a file.
+# Built-in default: "rust-geoserver-jwt-secret-2026"
 jwt_secret = "rust-geoserver-jwt-secret-2026"
 
 # ---------------------------------------------------------------------------
-# 日志配置
+# Logging
 # ---------------------------------------------------------------------------
 [logging]
-# 日志级别: trace / debug / info / warn / error (默认: "info")
-# 可通过环境变量 RUST_LOG 覆盖此设置
+# Log level: trace / debug / info / warn / error (default: "info")
+# Env: GEOSERVER__LOGGING__LEVEL, or RUST_LOG (RUST_LOG takes precedence)
 level = "info"
 
 # ---------------------------------------------------------------------------
-# GeoWebCache 瓦片缓存配置 (可选)
+# GeoWebCache tile cache config (optional)
 # ---------------------------------------------------------------------------
 [gwc]
-# 瓦片缓存根目录 (默认: "<data_dir>/gwc")
+# Tile cache root directory (REQUIRED when this section is present;
+# built-in default: "<data_dir>/gwc")
+# Env: GEOSERVER__GWC__CACHE_DIR
 cache_dir = "./data/gwc"
-# 缓存元数据目录
+# Cache metadata directory (REQUIRED when this section is present;
+# built-in default: "<data_dir>/gwc/meta")
+# Env: GEOSERVER__GWC__META_DIR
 meta_dir = "./data/gwc/meta"
-# 瓦片过期时间 (秒, 0=永不过期, 默认: 86400=24h)
+# Tile expiration time in seconds (0 = never expire; default: 86400 = 24h)
+# Env: GEOSERVER__GWC__EXPIRE_AFTER_SECS
 expire_after_secs = 86400
-# 最大缓存瓦片数 (0=无限制, 默认: 100000)
+# Max cached tiles (0 = unlimited). When omitted in the file the default is 0;
+# the built-in fallback default is 100000.
+# Env: GEOSERVER__GWC__MAX_TILES
 max_tiles = 100000
-# 是否启用磁盘缓存 (默认: true)
+# Enable disk cache (default: true)
+# Env: GEOSERVER__GWC__ENABLED
 enabled = true
-# 默认 Gridset (默认: "EPSG:4326")
+# Default Gridset (default: "EPSG:4326")
+# Env: GEOSERVER__GWC__DEFAULT_GRIDSET
 default_gridset = "EPSG:4326"
 
 # ---------------------------------------------------------------------------
-# 数据目录
-# 矢量/栅格数据文件的存放目录 (默认: "./data")
+# Data directory
+# Root directory for vector/raster data files (default: "./data")
+# Env: GEOSERVER__DATA_DIR
 # ---------------------------------------------------------------------------
 data_dir = "./data"
 
 # ---------------------------------------------------------------------------
-# CORS 跨域配置 (可选)
+# CORS config (optional)
 # ---------------------------------------------------------------------------
 [cors]
-# 是否启用 CORS (默认: true)
+# Enable CORS (default: true)
+# Env: GEOSERVER__CORS__ENABLED
 enabled = true
-# 允许的来源 ("*" = 允许所有, 默认: ["*"])
+# Allowed origins ("*" = allow all; default: ["*"])
+# Env: GEOSERVER__CORS__ALLOWED_ORIGINS
 allowed_origins = ["*"]
-# 允许的 HTTP 方法 (默认: GET, POST, PUT, DELETE, OPTIONS, PATCH)
+# Allowed HTTP methods (default: GET, POST, PUT, DELETE, OPTIONS, PATCH)
+# Env: GEOSERVER__CORS__ALLOWED_METHODS
 allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
-# 允许的请求头 (默认: ["*"])
+# Allowed request headers (default: ["*"])
+# Env: GEOSERVER__CORS__ALLOWED_HEADERS
 allowed_headers = ["*"]
-# 是否允许携带凭据 (默认: true)
+# Allow credentials (default: true)
+# Env: GEOSERVER__CORS__ALLOW_CREDENTIALS
 allow_credentials = true
-# 预检请求缓存时间 (秒, 默认: 3600)
+# Preflight request cache time in seconds (default: 3600)
+# Env: GEOSERVER__CORS__MAX_AGE
 max_age = 3600
 
 # ---------------------------------------------------------------------------
-# 工作空间配置 (可配置多个 [[workspaces]])
+# Workspace config (multiple [[workspaces]] entries are allowed)
+# NOTE: this is a REQUIRED top-level section; arrays are not meant to be
+# overridden via environment variables.
 # ---------------------------------------------------------------------------
 [[workspaces]]
 name = "default"
@@ -116,7 +161,7 @@ name = "countries"
 title = "World Countries"
 abstract = "World countries boundaries"
 srs = "EPSG:4326"
-# 可选: 默认样式名称
+# Optional: default style name
 # style = "population"
 
 [workspaces.stores.layers.bounds]
