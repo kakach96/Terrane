@@ -9,6 +9,8 @@ pub struct GeoServerConfig {
     pub database: DatabaseConfig,
     pub security: SecurityConfig,
     pub logging: LoggingConfig,
+    /// 数据目录 (默认: "./data")
+    #[serde(default = "default_data_dir")]
     pub data_dir: PathBuf,
     pub workspaces: Vec<WorkspaceConfig>,
     /// GeoWebCache 瓦片缓存配置
@@ -40,7 +42,15 @@ pub struct DatabaseConfig {
     /// SQLite 数据库文件路径
     #[serde(default = "default_sqlite_path")]
     pub sqlite_path: PathBuf,
-    /// PostgreSQL 主机 (kind = "postgres" 时生效)
+    /// PostgreSQL 配置 (kind = "postgres" 时生效)
+    #[serde(default)]
+    pub postgres: PostgresConfig,
+}
+
+/// PostgreSQL 连接配置 (仅 kind = "postgres" 时生效)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PostgresConfig {
+    /// PostgreSQL 主机
     #[serde(default = "default_db_host")]
     pub host: String,
     /// PostgreSQL 端口
@@ -72,6 +82,10 @@ fn default_db_kind() -> String {
     "sqlite".to_string()
 }
 
+fn default_data_dir() -> PathBuf {
+    PathBuf::from("./data")
+}
+
 fn default_db_host() -> String {
     "127.0.0.1".to_string()
 }
@@ -98,6 +112,19 @@ fn default_db_pool_size() -> u32 {
 
 fn default_jwt_secret() -> String {
     "rust-geoserver-jwt-secret-2026".to_string()
+}
+
+impl Default for PostgresConfig {
+    fn default() -> Self {
+        PostgresConfig {
+            host: default_db_host(),
+            port: default_db_port(),
+            name: default_db_name(),
+            user: default_db_user(),
+            password: default_db_password(),
+            pool_size: default_db_pool_size(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -216,12 +243,7 @@ impl Default for GeoServerConfig {
             database: DatabaseConfig {
                 kind: default_db_kind(),
                 sqlite_path: default_sqlite_path(),
-                host: default_db_host(),
-                port: default_db_port(),
-                name: default_db_name(),
-                user: default_db_user(),
-                password: default_db_password(),
-                pool_size: default_db_pool_size(),
+                postgres: PostgresConfig::default(),
             },
             security: SecurityConfig {
                 jwt_secret: default_jwt_secret(),
@@ -252,11 +274,48 @@ impl GeoServerConfig {
     }
 
     pub fn load_from_file(path: &str) -> Result<Self, config::ConfigError> {
-        let config = Config::builder()
-            .add_source(File::with_name(path).required(false))
-            .add_source(config::Environment::with_prefix("GEOSERVER").separator("__"))
-            .build()?;
+        let mut builder = Config::builder();
 
-        config.try_deserialize()
+        // 候选配置文件: 先 CWD 下的 geoserver.toml, 再回退到可执行文件所在目录
+        let mut loaded = false;
+        for file in config_file_candidates(path) {
+            if file.exists() {
+                builder = builder.add_source(File::with_name(&file.to_string_lossy()));
+                loaded = true;
+                break;
+            }
+        }
+        if !loaded {
+            builder = builder.add_source(File::with_name(path).required(false));
+        }
+
+        builder
+            .add_source(config::Environment::with_prefix("GEOSERVER").separator("__"))
+            .build()?
+            .try_deserialize()
     }
+}
+
+/// 生成配置文件的候选路径 (含 .toml 扩展名):
+/// 依次为 CWD 下的 path 及可执行文件目录下的同名文件。
+fn config_file_candidates(path: &str) -> Vec<PathBuf> {
+    let with_toml = |p: &PathBuf| -> PathBuf {
+        let mut f = p.clone();
+        if f.extension().is_none() {
+            f.set_extension("toml");
+        }
+        f
+    };
+
+    let mut candidates = Vec::new();
+    candidates.push(with_toml(&PathBuf::from(path)));
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            if let Some(name) = PathBuf::from(path).file_name() {
+                candidates.push(with_toml(&exe_dir.join(name)));
+            }
+        }
+    }
+    candidates
 }

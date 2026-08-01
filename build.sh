@@ -84,8 +84,24 @@ fi
 echo "Rust build OK"
 echo ""
 
+echo "[Step 4/4] Copying config file to artifact directory..."
 if [ "$BUILD_MODE" = "release" ]; then
-    echo "[Step 4/4] Preparing release package..."
+    ARTIFACT_DIR="target/release"
+else
+    ARTIFACT_DIR="target/debug"
+fi
+mkdir -p "$ARTIFACT_DIR"
+if [ -f "geoserver.toml" ]; then
+    cp -f "geoserver.toml" "$ARTIFACT_DIR/geoserver.toml"
+    echo "Config copied: $ARTIFACT_DIR/geoserver.toml"
+else
+    cp -f "geoserver.toml.example" "$ARTIFACT_DIR/geoserver.toml"
+    echo "Config template copied as: $ARTIFACT_DIR/geoserver.toml"
+fi
+echo ""
+
+if [ "$BUILD_MODE" = "release" ]; then
+    echo "[Step 5/5] Preparing release package..."
     
     RELEASE_DIR="target/release/release-package"
     rm -rf "$RELEASE_DIR"

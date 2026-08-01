@@ -99,8 +99,26 @@ if errorlevel 1 (
 echo Rust build OK
 echo.
 
+echo [Step 4/4] Copying config file to artifact directory...
 if %BUILD_MODE%==release (
-    echo [Step 4/4] Preparing release package...
+    set ARTIFACT_DIR=target\release
+) else (
+    set ARTIFACT_DIR=target\debug
+)
+if not exist "!ARTIFACT_DIR!" (
+    mkdir "!ARTIFACT_DIR!"
+)
+if exist "geoserver.toml" (
+    copy /y "geoserver.toml" "!ARTIFACT_DIR!\geoserver.toml" >nul
+    echo Config copied: !ARTIFACT_DIR!\geoserver.toml
+) else (
+    copy /y "geoserver.toml.example" "!ARTIFACT_DIR!\geoserver.toml" >nul
+    echo Config template copied as: !ARTIFACT_DIR!\geoserver.toml
+)
+echo.
+
+if %BUILD_MODE%==release (
+    echo [Step 5/5] Preparing release package...
     
     set RELEASE_DIR=target\release\release-package
     if exist "!RELEASE_DIR!" (

@@ -77,7 +77,11 @@ fn init_tracing(default_level: &str) {
 fn load_config(config_path: &str) -> GeoServerConfig {
     // geoserver.toml (可选) + GEOSERVER__ 环境变量双源加载，env 覆盖文件
     GeoServerConfig::load_from_file(config_path).unwrap_or_else(|e| {
-        tracing::warn!("Failed to load config: {}. Using defaults.", e);
+        // 注意: load_config 在 init_tracing 之前调用, tracing::warn! 不生效,
+        // 因此必须同时输出到 stderr, 否则配置错误会被静默吞掉
+        let msg = format!("Failed to load config '{}': {}. Using defaults.", config_path, e);
+        eprintln!("[config] WARNING: {}", msg);
+        tracing::warn!("{}", msg);
         GeoServerConfig::default()
     })
 }

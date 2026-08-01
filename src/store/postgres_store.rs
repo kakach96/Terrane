@@ -44,19 +44,20 @@ impl PostgresStore {
     /// 根据配置构建连接池并初始化表结构。
     pub async fn new(cfg: &DatabaseConfig) -> Result<Self, StoreError> {
         let mut pg_cfg = deadpool_postgres::Config::new();
-        let host = if cfg.host.eq_ignore_ascii_case("localhost") {
+        let pg = &cfg.postgres;
+        let host = if pg.host.eq_ignore_ascii_case("localhost") {
             "127.0.0.1".to_string()
         } else {
-            cfg.host.clone()
+            pg.host.clone()
         };
         pg_cfg.host = Some(host);
-        pg_cfg.port = Some(cfg.port);
-        pg_cfg.dbname = Some(cfg.name.clone());
-        pg_cfg.user = Some(cfg.user.clone());
-        pg_cfg.password = Some(cfg.password.clone());
+        pg_cfg.port = Some(pg.port);
+        pg_cfg.dbname = Some(pg.name.clone());
+        pg_cfg.user = Some(pg.user.clone());
+        pg_cfg.password = Some(pg.password.clone());
         pg_cfg.connect_timeout = Some(std::time::Duration::from_secs(10));
         pg_cfg.pool = Some(deadpool_postgres::PoolConfig {
-            max_size: cfg.pool_size as usize,
+            max_size: pg.pool_size as usize,
             ..Default::default()
         });
         pg_cfg.manager = Some(ManagerConfig {

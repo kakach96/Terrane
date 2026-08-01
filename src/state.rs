@@ -85,7 +85,7 @@ impl AppState {
         let store: Option<Arc<dyn Store>> = match config.database.kind.as_str() {
             "postgres" => match PostgresStore::new(&config.database).await {
                 Ok(s) => {
-                    tracing::info!("Metadata store backend: PostgreSQL ({})", config.database.name);
+                    tracing::info!("Metadata store backend: PostgreSQL ({})", config.database.postgres.name);
                     Some(Arc::new(s))
                 }
                 Err(e) => {
