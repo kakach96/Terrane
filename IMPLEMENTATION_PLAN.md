@@ -1,4 +1,4 @@
-# Rust GeoServer — Feature Gap Analysis & Implementation Plan
+# GeoFerris — Feature Gap Analysis & Implementation Plan
 
 > Comparison analysis based on the GeoServer official documentation (https://docs.geoserver.org/latest/en/user/)
 
@@ -294,7 +294,7 @@ Overall progress ███████████░░░░░░  54%
 | Dimension | Current State | Gap | Priority |
 |------|------|------|:-----:|
 | **Containerization** | Multi-stage `Dockerfile` + `.dockerignore` + `docker-compose.yml` (SQLite 单机 / PostgreSQL HA); image `HEALTHCHECK` 基于 `/health/ready` | 未接入 CI 镜像构建/推送/扫描 | **P0 ✅** |
-| **12-Factor config** | `geoserver.toml` + `GEOSERVER__` env var prefix; `load_from_file()` 已挂载 `config::Environment` | 默认 `host=127.0.0.1` (容器内通过 Dockerfile env 设 0.0.0.0); JWT secret 默认值硬编码于 `src/auth.rs` | **P0 ✅** |
+| **12-Factor config** | `geoferris.toml` + `GEOSERVER__` env var prefix; `load_from_file()` 已挂载 `config::Environment` | 默认 `host=127.0.0.1` (容器内通过 Dockerfile env 设 0.0.0.0); JWT secret 默认值硬编码于 `src/auth.rs` | **P0 ✅** |
 | **Statelessness / scalability** | Metadata (`[metadata]`, default SQLite) and business data (`[business]`: local dir / reuse metadata / PostgreSQL) are split (`src/config.rs`, `src/store/business/`); layers/features/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); tile cache and uploads on local disk `./data` | In-memory state diverges across replicas; SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1** |
 | **Observability** | stdout logs (tracing); `/health` + 拆分 `/health/live` & `/health/ready`; Prometheus `/metrics` (请求/错误、方法/状态码/端点、瓦片命中率、PG 池水位、系统资源) | 无 structured JSON logs, 无 OpenTelemetry tracing | **P1 ✅** |
 | **Lifecycle** | SIGTERM/SIGINT 优雅关闭 + `shutdown_timeout_secs` 在途请求排空 (`main.rs`) | — | **P1 ✅** |
@@ -342,7 +342,7 @@ Overall progress ███████████░░░░░░  54%
 ```
                     ┌──────────────────────────────────┐
    Ingress / TLS ─▶ │  K8s Deployment (N stateless     │
-                    │      replicas) — rust-geoserver  │
+                    │      replicas) — geoferris         │
                     │      API service                 │
                     └──────────┬───────────────────────┘
                                │

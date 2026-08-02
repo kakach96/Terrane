@@ -1,6 +1,6 @@
 //! # API 集成测试
 //!
-//! 测试 Rust GeoServer 的 HTTP API 端点。
+//! 测试 GeoFerris 的 HTTP API 端点。
 //! 使用 actix_rt 作为异步测试运行时。
 
 use actix_web::{web, App, middleware};
@@ -9,29 +9,29 @@ use actix_web::{web, App, middleware};
 // 辅助: 创建测试用 AppState
 // ---------------------------------------------------------------------------
 
-fn create_test_config() -> rust_geoserver::config::GeoServerConfig {
-    let mut config = rust_geoserver::config::GeoServerConfig::default();
+fn create_test_config() -> geoferris::config::GeoServerConfig {
+    let mut config = geoferris::config::GeoServerConfig::default();
     config.server.host = "127.0.0.1".to_string();
     config.server.port = 0;
     // 集成测试使用内存 SQLite 数据库
     config.metadata.sqlite_path = ":memory:".into();
     // 添加一个默认工作空间和图层，确保测试数据可用
     config.workspaces = vec![
-        rust_geoserver::config::WorkspaceConfig {
+        geoferris::config::WorkspaceConfig {
             name: "default".to_string(),
             uri: "http://geoserver.org/default".to_string(),
             stores: vec![
-                rust_geoserver::config::StoreConfig {
+                geoferris::config::StoreConfig {
                     name: "shapes".to_string(),
                     store_type: "DataStore".to_string(),
                     path: "./data".to_string(),
                     layers: vec![
-                        rust_geoserver::config::LayerConfig {
+                        geoferris::config::LayerConfig {
                             name: "world".to_string(),
                             title: "World".to_string(),
                             abstract_text: "World layer".to_string(),
                             srs: "EPSG:4326".to_string(),
-                            bounds: rust_geoserver::config::BoundsConfig {
+                            bounds: geoferris::config::BoundsConfig {
                                 minx: -180.0, miny: -90.0,
                                 maxx: 180.0, maxy: 90.0,
                             },
@@ -52,13 +52,13 @@ fn create_test_config() -> rust_geoserver::config::GeoServerConfig {
 #[actix_rt::test]
 async fn test_health_endpoint() {
     let config = create_test_config();
-    let state = web::Data::new(rust_geoserver::state::AppState::new(config).await);
+    let state = web::Data::new(geoferris::state::AppState::new(config).await);
 
     let app = actix_web::test::init_service(
         App::new()
             .app_data(state.clone())
             .wrap(middleware::Logger::default())
-            .configure(|svc| rust_geoserver::routes::configure_routes(
+            .configure(|svc| geoferris::routes::configure_routes(
                 svc, "/geoserver"
             ))
     ).await;
@@ -82,13 +82,13 @@ async fn test_health_endpoint() {
 #[actix_rt::test]
 async fn test_wms_get_capabilities() {
     let config = create_test_config();
-    let state = web::Data::new(rust_geoserver::state::AppState::new(config).await);
+    let state = web::Data::new(geoferris::state::AppState::new(config).await);
 
     let app = actix_web::test::init_service(
         App::new()
             .app_data(state.clone())
             .wrap(middleware::Logger::default())
-            .configure(|svc| rust_geoserver::routes::configure_routes(
+            .configure(|svc| geoferris::routes::configure_routes(
                 svc, "/geoserver"
             ))
     ).await;
@@ -114,13 +114,13 @@ async fn test_wms_get_capabilities() {
 #[actix_rt::test]
 async fn test_wms_get_map() {
     let config = create_test_config();
-    let state = web::Data::new(rust_geoserver::state::AppState::new(config).await);
+    let state = web::Data::new(geoferris::state::AppState::new(config).await);
 
     let app = actix_web::test::init_service(
         App::new()
             .app_data(state.clone())
             .wrap(middleware::Logger::default())
-            .configure(|svc| rust_geoserver::routes::configure_routes(
+            .configure(|svc| geoferris::routes::configure_routes(
                 svc, "/geoserver"
             ))
     ).await;
@@ -155,13 +155,13 @@ async fn test_wms_get_map() {
 #[actix_rt::test]
 async fn test_wfs_get_capabilities() {
     let config = create_test_config();
-    let state = web::Data::new(rust_geoserver::state::AppState::new(config).await);
+    let state = web::Data::new(geoferris::state::AppState::new(config).await);
 
     let app = actix_web::test::init_service(
         App::new()
             .app_data(state.clone())
             .wrap(middleware::Logger::default())
-            .configure(|svc| rust_geoserver::routes::configure_routes(
+            .configure(|svc| geoferris::routes::configure_routes(
                 svc, "/geoserver"
             ))
     ).await;
@@ -180,13 +180,13 @@ async fn test_wfs_get_capabilities() {
 #[actix_rt::test]
 async fn test_wcs_get_capabilities() {
     let config = create_test_config();
-    let state = web::Data::new(rust_geoserver::state::AppState::new(config).await);
+    let state = web::Data::new(geoferris::state::AppState::new(config).await);
 
     let app = actix_web::test::init_service(
         App::new()
             .app_data(state.clone())
             .wrap(middleware::Logger::default())
-            .configure(|svc| rust_geoserver::routes::configure_routes(
+            .configure(|svc| geoferris::routes::configure_routes(
                 svc, "/geoserver"
             ))
     ).await;
@@ -205,13 +205,13 @@ async fn test_wcs_get_capabilities() {
 #[actix_rt::test]
 async fn test_rest_layers() {
     let config = create_test_config();
-    let state = web::Data::new(rust_geoserver::state::AppState::new(config).await);
+    let state = web::Data::new(geoferris::state::AppState::new(config).await);
 
     let app = actix_web::test::init_service(
         App::new()
             .app_data(state.clone())
             .wrap(middleware::Logger::default())
-            .configure(|svc| rust_geoserver::routes::configure_routes(
+            .configure(|svc| geoferris::routes::configure_routes(
                 svc, "/geoserver"
             ))
     ).await;
@@ -241,13 +241,13 @@ async fn test_rest_layers() {
 #[actix_rt::test]
 async fn test_server_status() {
     let config = create_test_config();
-    let state = web::Data::new(rust_geoserver::state::AppState::new(config).await);
+    let state = web::Data::new(geoferris::state::AppState::new(config).await);
 
     let app = actix_web::test::init_service(
         App::new()
             .app_data(state.clone())
             .wrap(middleware::Logger::default())
-            .configure(|svc| rust_geoserver::routes::configure_routes(
+            .configure(|svc| geoferris::routes::configure_routes(
                 svc, "/geoserver"
             ))
     ).await;

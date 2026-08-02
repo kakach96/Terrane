@@ -1,6 +1,10 @@
-# 🌍 Rust GeoServer
+<p align="center">
+  <img src="docs/logo/geoferris.svg" alt="GeoFerris" width="160">
+</p>
 
-A lightweight geospatial data server built with Rust + Actix-web, featuring a modern Angular + Material admin interface.
+# 🦀 GeoFerris
+
+> **Cloud-native, high-performance spatial data server with a modern UI — powered by Rust and Angular.**
 
 ## ✨ Features
 
@@ -88,14 +92,14 @@ docker compose up -d
 
 # Build the image manually (BuildKit is used by default; cache mounts keep
 # npm/cargo dependency downloads across builds)
-#   docker build -t rust-geoserver:latest .
+#   docker build -t geoferris:latest .
 
 # Build with domestic base-image mirrors (China):
 #   docker build \
 #     --build-arg NODE_IMAGE=docker.1ms.run/library/node:20-alpine \
 #     --build-arg RUST_IMAGE=docker.1ms.run/library/rust:1.85-bookworm \
 #     --build-arg RUNTIME_IMAGE=docker.1ms.run/library/debian:bookworm-slim \
-#     -t rust-geoserver:latest .
+#     -t geoferris:latest .
 #   (npm/cargo dependency registries default to npmmirror.com / rsproxy.cn;
 #    override via --build-arg NPM_REGISTRY / CARGO_MIRROR if needed)
 
@@ -126,7 +130,7 @@ START.bat
 ## 📁 Project Structure
 
 ```
-rust-geoserver/
+geoferris/
 ├── src/                    # Rust backend source code
 │   ├── handlers/          # HTTP request handlers
 │   ├── services/          # OGC service implementations
@@ -238,7 +242,7 @@ rust-geoserver/
 
 ## 🔧 Configuration
 
-Configuration file: `geoserver.toml`
+Configuration file: `geoferris.toml`
 
 ```toml
 [server]
@@ -279,4 +283,4 @@ MIT License
 
 ---
 
-**Made with ❤️ using Rust + Angular**
+**Made with ❤️ — GeoFerris, powered by Rust + Angular**

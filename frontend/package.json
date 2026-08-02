@@ -1,7 +1,7 @@
 {
-  "name": "rust-geoserver-ui",
+  "name": "geoferris-ui",
   "version": "1.0.0",
-  "description": "GeoServer Management UI built with Angular and Material",
+  "description": "GeoFerris Management UI built with Angular and Material",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",

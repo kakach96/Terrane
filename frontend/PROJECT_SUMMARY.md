@@ -187,7 +187,7 @@ cargo run
 ng build --configuration production
 ```
 
-构建产物在 `dist/rust-geoserver-ui/`
+构建产物在 `dist/geoferris-ui/`
 
 ## 🔄 与后端集成
 
@@ -321,4 +321,4 @@ backend/
 
 **项目已完成！** 🚀
 
-现在您拥有了一个完整的、生产级的 Angular + Material 前端应用，可以与 Rust GeoServer 后端无缝集成。
+现在您拥有了一个完整的、生产级的 Angular + Material 前端应用，可以与 GeoFerris 后端无缝集成。

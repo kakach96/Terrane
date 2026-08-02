@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ==================== RRGeoServer Build Script (Linux) ====================
+# ==================== GeoFerris Build Script (Linux) ====================
 
 set -e
 
@@ -19,7 +19,7 @@ for arg in "$@"; do
     esac
 done
 
-echo "==================== RRGeoServer Build Script ===================="
+echo "==================== GeoFerris Build Script ===================="
 echo ""
 
 if [ $SKIP_FRONTEND -eq 0 ]; then
@@ -62,7 +62,7 @@ if [ $SKIP_FRONTEND -eq 0 ]; then
     
     echo "[Step 3/4] Copying frontend to static..."
     rm -rf static
-    cp -r frontend/dist/rust-geoserver-ui static
+    cp -r frontend/dist/geoferris-ui static
     echo "Copy OK"
     echo ""
 else
@@ -91,12 +91,12 @@ else
     ARTIFACT_DIR="target/debug"
 fi
 mkdir -p "$ARTIFACT_DIR"
-if [ -f "geoserver.toml" ]; then
-    cp -f "geoserver.toml" "$ARTIFACT_DIR/geoserver.toml"
-    echo "Config copied: $ARTIFACT_DIR/geoserver.toml"
+if [ -f "geoferris.toml" ]; then
+    cp -f "geoferris.toml" "$ARTIFACT_DIR/geoferris.toml"
+    echo "Config copied: $ARTIFACT_DIR/geoferris.toml"
 else
-    cp -f "geoserver.toml.example" "$ARTIFACT_DIR/geoserver.toml"
-    echo "Config template copied as: $ARTIFACT_DIR/geoserver.toml"
+    cp -f "geoferris.toml.example" "$ARTIFACT_DIR/geoferris.toml"
+    echo "Config template copied as: $ARTIFACT_DIR/geoferris.toml"
 fi
 echo ""
 
@@ -108,34 +108,34 @@ if [ "$BUILD_MODE" = "release" ]; then
     mkdir -p "$RELEASE_DIR"
     
     echo "Copying executable..."
-    cp "target/release/rust-geoserver" "$RELEASE_DIR/"
+    cp "target/release/geoferris" "$RELEASE_DIR/"
     
     echo "Copying static files..."
     cp -r static "$RELEASE_DIR/"
     
     echo "Copying config file..."
-    if [ -f "geoserver.toml" ]; then
-        cp "geoserver.toml" "$RELEASE_DIR/"
+    if [ -f "geoferris.toml" ]; then
+        cp "geoferris.toml" "$RELEASE_DIR/"
         echo "Config file copied"
     else
         echo "No config file found, skipping"
     fi
 
     echo "Copying config template..."
-    if [ -f "geoserver.toml.example" ]; then
-        cp "geoserver.toml.example" "$RELEASE_DIR/"
+    if [ -f "geoferris.toml.example" ]; then
+        cp "geoferris.toml.example" "$RELEASE_DIR/"
         echo "Config template copied"
     fi
 
     echo "Creating README..."
     cat > "$RELEASE_DIR/README.txt" << EOF
-RRGeoServer v1.0.0
+GeoFerris v0.1.0
 
 Usage:
-  ./rust-geoserver
+  ./geoferris
 
 Configuration:
-  Edit geoserver.toml to configure server settings.
+  Edit geoferris.toml to configure server settings.
 
 API: http://localhost:8080/geoserver
 Web: http://localhost:8080
@@ -149,9 +149,9 @@ echo "==================== Build Complete ===================="
 echo ""
 if [ "$BUILD_MODE" = "release" ]; then
     echo "Release package: target/release/release-package/"
-    echo "Executable: target/release/release-package/rust-geoserver"
+    echo "Executable: target/release/release-package/geoferris"
 else
-    echo "Executable: target/debug/rust-geoserver"
+    echo "Executable: target/debug/geoferris"
 fi
 echo "Frontend: static/"
 echo ""

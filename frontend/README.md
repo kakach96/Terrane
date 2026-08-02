@@ -1,6 +1,6 @@
-# Rust GeoServer Frontend
+# GeoFerris Frontend
 
-A modern GeoServer admin interface built with Angular 17 and Angular Material.
+A modern GeoFerris admin interface built with Angular 17 and Angular Material.
 
 ## 🚀 Quick Start
 
@@ -192,17 +192,17 @@ ng serve
 ng build --configuration production
 ```
 
-The build output is in `dist/rust-geoserver-ui/`
+The build output is in `dist/geoferris-ui/`
 
 ### Integrating with the Backend
 
-Copy the `dist/rust-geoserver-ui/` directory to the backend project's static file directory, and configure the server to serve those files.
+Copy the `dist/geoferris-ui/` directory to the backend project's static file directory, and configure the server to serve those files.
 
 ### Cloud-Native Deployment
 
-- **Multi-stage container build (recommended)**: run `npm ci && ng build --configuration production` in the Docker `node` stage; the `dist/rust-geoserver-ui/` output is bundled into the runtime image alongside the Rust binary and served from the backend `static/` directory — **no separate frontend service needed** (see section 7 of the root `IMPLEMENTATION_PLAN.md`).
+- **Multi-stage container build (recommended)**: run `npm ci && ng build --configuration production` in the Docker `node` stage; the `dist/geoferris-ui/` output is bundled into the runtime image alongside the Rust binary and served from the backend `static/` directory — **no separate frontend service needed** (see section 7 of the root `IMPLEMENTATION_PLAN.md`).
 - **Standalone NGINX container (optional)**: serve the static assets separately and reverse-proxy `/api`, `/geoserver`, `/wms`, `/wfs`, `/wcs`, `/tiles` to the backend service.
-- The build output defaults to `dist/rust-geoserver-ui/`.
+- The build output defaults to `dist/geoferris-ui/`.
 
 ## 📚 Learning Resources
 

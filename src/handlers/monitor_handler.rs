@@ -233,51 +233,51 @@ pub async fn get_metrics(state: web::Data<AppState>) -> Result<HttpResponse, Geo
     let rps = state.recent_request_count.load(Ordering::Relaxed) as f64 / 300.0;
 
     // ---- 基础计数 ----
-    push_metric(&mut out, "rust_geoserver_uptime_seconds", "Server uptime in seconds", "gauge", uptime);
-    push_metric(&mut out, "rust_geoserver_requests_total", "Total number of HTTP requests handled", "counter", total_reqs);
-    push_metric(&mut out, "rust_geoserver_errors_total", "Total number of HTTP requests that ended in error", "counter", total_errs);
-    push_metric(&mut out, "rust_geoserver_error_rate_percent", "Percentage of requests that ended in error", "gauge", format!("{:.4}", error_rate));
-    push_metric(&mut out, "rust_geoserver_requests_per_second", "Requests per second averaged over the last 5 minutes", "gauge", format!("{:.4}", rps));
+    push_metric(&mut out, "geoferris_uptime_seconds", "Server uptime in seconds", "gauge", uptime);
+    push_metric(&mut out, "geoferris_requests_total", "Total number of HTTP requests handled", "counter", total_reqs);
+    push_metric(&mut out, "geoferris_errors_total", "Total number of HTTP requests that ended in error", "counter", total_errs);
+    push_metric(&mut out, "geoferris_error_rate_percent", "Percentage of requests that ended in error", "gauge", format!("{:.4}", error_rate));
+    push_metric(&mut out, "geoferris_requests_per_second", "Requests per second averaged over the last 5 minutes", "gauge", format!("{:.4}", rps));
 
     // ---- 方法 / 状态码 / 端点分布 ----
     {
         let methods = state.method_stats.read().await;
         for (m, c) in methods.iter() {
-            push_metric_labeled(&mut out, "rust_geoserver_method_requests_total", &[("method", m)], *c);
+            push_metric_labeled(&mut out, "geoferris_method_requests_total", &[("method", m)], *c);
         }
     }
     {
         let status_codes = state.status_code_stats.read().await;
         for (s, c) in status_codes.iter() {
-            push_metric_labeled(&mut out, "rust_geoserver_http_status_total", &[("status", &s.to_string())], *c);
+            push_metric_labeled(&mut out, "geoferris_http_status_total", &[("status", &s.to_string())], *c);
         }
     }
     {
         let endpoints = state.endpoint_stats.read().await;
         for (ep, stats) in endpoints.iter() {
-            push_metric_labeled(&mut out, "rust_geoserver_endpoint_requests_total", &[("endpoint", ep)], stats.count);
-            push_metric_labeled(&mut out, "rust_geoserver_endpoint_errors_total", &[("endpoint", ep)], stats.error_count);
-            push_metric_labeled(&mut out, "rust_geoserver_endpoint_duration_avg_ms", &[("endpoint", ep)], format!("{:.4}", stats.avg_duration_ms));
+            push_metric_labeled(&mut out, "geoferris_endpoint_requests_total", &[("endpoint", ep)], stats.count);
+            push_metric_labeled(&mut out, "geoferris_endpoint_errors_total", &[("endpoint", ep)], stats.error_count);
+            push_metric_labeled(&mut out, "geoferris_endpoint_duration_avg_ms", &[("endpoint", ep)], format!("{:.4}", stats.avg_duration_ms));
         }
     }
 
     // ---- 瓦片缓存 (GeoWebCache) ----
     if let Some(ref cache) = state.tile_cache {
         let st = cache.stats();
-        push_metric(&mut out, "rust_geoserver_tile_cache_hits_total", "Number of tile cache hits", "counter", st.hits);
-        push_metric(&mut out, "rust_geoserver_tile_cache_misses_total", "Number of tile cache misses", "counter", st.misses);
-        push_metric(&mut out, "rust_geoserver_tile_cache_hit_rate", "Tile cache hit rate (0..1)", "gauge", format!("{:.4}", cache.hit_rate()));
+        push_metric(&mut out, "geoferris_tile_cache_hits_total", "Number of tile cache hits", "counter", st.hits);
+        push_metric(&mut out, "geoferris_tile_cache_misses_total", "Number of tile cache misses", "counter", st.misses);
+        push_metric(&mut out, "geoferris_tile_cache_hit_rate", "Tile cache hit rate (0..1)", "gauge", format!("{:.4}", cache.hit_rate()));
     }
 
     // ---- PostgreSQL 连接池水位 (deadpool) ----
     {
         let pools = state.pg_pools.lock().unwrap();
-        push_metric(&mut out, "rust_geoserver_pg_pool_count", "Number of cached PostgreSQL connection pools", "gauge", pools.len());
+        push_metric(&mut out, "geoferris_pg_pool_count", "Number of cached PostgreSQL connection pools", "gauge", pools.len());
         for (name, pool) in pools.iter() {
             let st = pool.status();
-            push_metric_labeled(&mut out, "rust_geoserver_pg_pool_size", &[("pool", name)], st.size);
-            push_metric_labeled(&mut out, "rust_geoserver_pg_pool_available", &[("pool", name)], st.available);
-            push_metric_labeled(&mut out, "rust_geoserver_pg_pool_max", &[("pool", name)], st.max_size);
+            push_metric_labeled(&mut out, "geoferris_pg_pool_size", &[("pool", name)], st.size);
+            push_metric_labeled(&mut out, "geoferris_pg_pool_available", &[("pool", name)], st.available);
+            push_metric_labeled(&mut out, "geoferris_pg_pool_max", &[("pool", name)], st.max_size);
         }
     }
 
@@ -285,15 +285,15 @@ pub async fn get_metrics(state: web::Data<AppState>) -> Result<HttpResponse, Geo
     {
         let mut sys = sysinfo::System::new();
         sys.refresh_memory();
-        push_metric(&mut out, "rust_geoserver_system_cpu_cores", "Number of logical CPU cores", "gauge", num_cpus());
-        push_metric(&mut out, "rust_geoserver_system_memory_total_bytes", "Total system memory in bytes", "gauge", sys.total_memory());
-        push_metric(&mut out, "rust_geoserver_system_memory_used_bytes", "Used system memory in bytes", "gauge", sys.used_memory());
+        push_metric(&mut out, "geoferris_system_cpu_cores", "Number of logical CPU cores", "gauge", num_cpus());
+        push_metric(&mut out, "geoferris_system_memory_total_bytes", "Total system memory in bytes", "gauge", sys.total_memory());
+        push_metric(&mut out, "geoferris_system_memory_used_bytes", "Used system memory in bytes", "gauge", sys.used_memory());
         let used_percent = if sys.total_memory() > 0 {
             format!("{:.2}", (sys.used_memory() as f64 / sys.total_memory() as f64) * 100.0)
         } else {
             "0".to_string()
         };
-        push_metric(&mut out, "rust_geoserver_system_memory_used_percent", "Used system memory percent", "gauge", used_percent);
+        push_metric(&mut out, "geoferris_system_memory_used_percent", "Used system memory percent", "gauge", used_percent);
     }
 
     Ok(HttpResponse::Ok()

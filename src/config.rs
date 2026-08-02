@@ -157,7 +157,7 @@ fn default_db_pool_size() -> u32 {
 }
 
 fn default_jwt_secret() -> String {
-    "rust-geoserver-jwt-secret-2026".to_string()
+    "geoferris-jwt-secret-2026".to_string()
 }
 
 impl Default for ServerConfig {
@@ -386,7 +386,7 @@ impl GeoServerConfig {
 
     pub fn load() -> Result<Self, config::ConfigError> {
         let config = Config::builder()
-            .add_source(File::with_name("geoserver").required(false))
+            .add_source(File::with_name("geoferris").required(false))
             .add_source(config::Environment::with_prefix("GEOSERVER").separator("__"))
             .build()?;
 
@@ -396,7 +396,7 @@ impl GeoServerConfig {
     pub fn load_from_file(path: &str) -> Result<Self, config::ConfigError> {
         let mut builder = Config::builder();
 
-        // 候选配置文件: 先 CWD 下的 geoserver.toml, 再回退到可执行文件所在目录
+        // 候选配置文件: 先 CWD 下的 geoferris.toml, 再回退到可执行文件所在目录
         let mut loaded = false;
         for file in config_file_candidates(path) {
             if file.exists() {

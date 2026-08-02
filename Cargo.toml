@@ -1,9 +1,9 @@
 [package]
-name = "rust-geoserver"
+name = "geoferris"
 version = "0.1.0"
 edition = "2021"
-authors = ["Rust GeoServer Team"]
-description = "A Rust implementation of GeoServer - Open Source GeoSpatial Data Server"
+authors = ["GeoFerris Team"]
+description = "GeoFerris - Cloud-native, high-performance spatial data server with a modern UI, powered by Rust and Angular"
 
 [dependencies]
 actix-web = "4"

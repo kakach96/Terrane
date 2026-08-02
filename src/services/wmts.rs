@@ -399,14 +399,14 @@ pub fn build_capabilities(
         xmlns_xsi: "http://www.w3.org/2001/XMLSchema-instance".to_string(),
         schema_location: "http://www.opengis.net/wmts/1.0 http://schemas.opengis.net/wmts/1.0/wmtsGetCapabilities_response.xsd".to_string(),
         service_identification: ServiceIdentification {
-            title: "Rust GeoServer WMTS".to_string(),
-            abstract_text: "Web Map Tile Service powered by Rust GeoServer".to_string(),
+            title: "GeoFerris WMTS".to_string(),
+            abstract_text: "Web Map Tile Service powered by GeoFerris".to_string(),
             keywords: Keywords {
                 keyword: vec![
                     "WMTS".to_string(),
                     "Tile".to_string(),
                     "Map".to_string(),
-                    "Rust GeoServer".to_string(),
+                    "GeoFerris".to_string(),
                 ],
             },
             service_type: "OGC WMTS".to_string(),
@@ -415,12 +415,12 @@ pub fn build_capabilities(
             access_constraints: "NONE".to_string(),
         },
         service_provider: ServiceProvider {
-            provider_name: "Rust GeoServer".to_string(),
+            provider_name: "GeoFerris".to_string(),
             provider_site: ProviderSite {
                 href: base_url.to_string(),
             },
             service_contact: ServiceContact {
-                individual_name: "Rust GeoServer Team".to_string(),
+                individual_name: "GeoFerris Team".to_string(),
                 position_name: "System Administrator".to_string(),
                 contact_info: ContactInfo {
                     phone: Phone { voice: "N/A".to_string() },

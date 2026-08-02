@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-echo ==================== RRGeoServer Build Script ====================
+echo ==================== GeoFerris Build Script ====================
 echo.
 
 set BUILD_MODE=debug
@@ -66,7 +66,7 @@ echo [Step 3/4] Copying frontend to static...
 if exist "static" (
     rmdir /s /q static
 )
-xcopy /s /e /i "frontend\dist\rust-geoserver-ui" "static" >nul
+xcopy /s /e /i "frontend\dist\geoferris-ui" "static" >nul
 if errorlevel 1 (
     echo ERROR: Copy to static failed
     exit /b 1
@@ -108,12 +108,12 @@ if %BUILD_MODE%==release (
 if not exist "!ARTIFACT_DIR!" (
     mkdir "!ARTIFACT_DIR!"
 )
-if exist "geoserver.toml" (
-    copy /y "geoserver.toml" "!ARTIFACT_DIR!\geoserver.toml" >nul
-    echo Config copied: !ARTIFACT_DIR!\geoserver.toml
+if exist "geoferris.toml" (
+    copy /y "geoferris.toml" "!ARTIFACT_DIR!\geoferris.toml" >nul
+    echo Config copied: !ARTIFACT_DIR!\geoferris.toml
 ) else (
-    copy /y "geoserver.toml.example" "!ARTIFACT_DIR!\geoserver.toml" >nul
-    echo Config template copied as: !ARTIFACT_DIR!\geoserver.toml
+    copy /y "geoferris.toml.example" "!ARTIFACT_DIR!\geoferris.toml" >nul
+    echo Config template copied as: !ARTIFACT_DIR!\geoferris.toml
 )
 echo.
 
@@ -127,34 +127,34 @@ if %BUILD_MODE%==release (
     mkdir "!RELEASE_DIR!"
     
     echo Copying executable...
-    copy "target\release\rust-geoserver.exe" "!RELEASE_DIR!\" >nul
+    copy "target\release\geoferris.exe" "!RELEASE_DIR!\" >nul
     
     echo Copying static files...
     xcopy /s /e /i "static" "!RELEASE_DIR!\static" >nul
     
     echo Copying config file...
-    if exist "geoserver.toml" (
-        copy "geoserver.toml" "!RELEASE_DIR!\" >nul
+    if exist "geoferris.toml" (
+        copy "geoferris.toml" "!RELEASE_DIR!\" >nul
         echo Config file copied
     ) else (
         echo No config file found, skipping
     )
 
     echo Copying config template...
-    if exist "geoserver.toml.example" (
-        copy "geoserver.toml.example" "!RELEASE_DIR!\" >nul
+    if exist "geoferris.toml.example" (
+        copy "geoferris.toml.example" "!RELEASE_DIR!\" >nul
         echo Config template copied
     )
 
     echo Creating README...
     (
-        echo RRGeoServer v1.0.0
+        echo GeoFerris v0.1.0
         echo.
         echo Usage:
-        echo   rust-geoserver.exe
+        echo   geoferris.exe
         echo.
         echo Configuration:
-        echo   Edit geoserver.toml to configure server settings.
+        echo   Edit geoferris.toml to configure server settings.
         echo.
         echo API: http://localhost:8080/geoserver
         echo Web: http://localhost:8080
@@ -168,9 +168,9 @@ echo ==================== Build Complete ====================
 echo.
 if %BUILD_MODE%==release (
     echo Release package: target\release\release-package\
-    echo Executable: target\release\release-package\rust-geoserver.exe
+    echo Executable: target\release\release-package\geoferris.exe
 ) else (
-    echo Executable: target\debug\rust-geoserver.exe
+    echo Executable: target\debug\geoferris.exe
 )
 echo Frontend: static\
 echo.

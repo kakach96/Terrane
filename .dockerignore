@@ -1,5 +1,5 @@
 # =============================================================================
-# Rust GeoServer - Docker build context exclusions
+# GeoFerris - Docker build context exclusions
 # The image build does NOT need: local data, build artifacts, VCS, docs or scripts
 # =============================================================================
 
@@ -17,7 +17,7 @@ static/
 *.db
 
 # ---- Local config (container config is injected entirely via env vars) ----
-geoserver.toml
+geoferris.toml
 
 # ---- Version control / CI ----
 .git/

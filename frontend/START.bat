@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 > nul
 echo ========================================
-echo   Rust GeoServer + Angular UI 启动器
+echo   GeoFerris + Angular UI 启动器
 echo ========================================
 echo.
 

@@ -1,9 +1,9 @@
 # =============================================================================
-# Rust GeoServer - Docker Compose orchestration
+# GeoFerris - Docker Compose orchestration
 #
 # Usage:
 #   docker compose up -d                                   # SQLite standalone mode (default)
-#   docker compose --profile postgres up -d                # geoserver + PostgreSQL
+#   docker compose --profile postgres up -d                # geoferris + PostgreSQL
 #   docker compose logs -f geoserver
 #   docker compose down
 #
@@ -19,8 +19,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: rust-geoserver:latest
-    container_name: rust-geoserver
+    image: geoferris:latest
+    container_name: geoferris
     ports:
       - "8080:8080"
     environment:
@@ -28,7 +28,7 @@ services:
       GEOSERVER__SERVER__PORT: 8080
       # All replicas must share the same JWT secret; inject a strong random
       # value via .env in production
-      GEOSERVER__SECURITY__JWT_SECRET: ${GEOSERVER_JWT_SECRET:-rust-geoserver-dev-secret}
+      GEOSERVER__SECURITY__JWT_SECRET: ${GEOSERVER_JWT_SECRET:-geoferris-dev-secret}
       # ---- Default: SQLite standalone mode (data lives on geoserver-data volume) ----
       GEOSERVER__METADATA__KIND: sqlite
       GEOSERVER__METADATA__SQLITE_PATH: /data/geoserver.sqlite
@@ -56,7 +56,7 @@ services:
   postgres:
     image: postgis/postgis:16-3.4
     profiles: ["postgres"]
-    container_name: rust-geoserver-postgres
+    container_name: geoferris-postgres
     environment:
       POSTGRES_DB: geoserver
       POSTGRES_USER: geoserver
