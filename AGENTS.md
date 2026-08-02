@@ -64,19 +64,29 @@ cargo build
 - **Boundary representation**: GET `/layers/{name}` returns `native_bounds.bounds.{minx,miny,maxx,maxy}`; the list endpoint returns `bounds` at top level
 - **No test suite** configured (no test dependencies in Cargo.toml, Angular `ng test` untested)
 - **Windows-native** (build.bat, PowerShell). `cargo run` expects `./static/` with built frontend
-- **Config**: `geoserver.toml` optional; defaults work without it. Environment variables: `RUST_LOG`, `GEOSERVER__SERVER__HOST` etc. (double-underscore separator)
-  - ⚠️ Cloud-native gap: the `GEOSERVER__` env source exists in `config::GeoServerConfig::load()` but `main.rs` uses `load_from_file()` (no env source). Unify before containerizing.
+- **Config**: `geoserver.toml` optional; defaults work without it. Environment variables: `RUST_LOG`, `GEOSERVER__SERVER__HOST` etc. (double-underscore separator). `load_from_file()` already mounts the `GEOSERVER__` env source, so env overrides also work with `--config`.
 - **Frontend proxy**: `proxy.conf.json` routes `/api`, `/wms`, `/wfs`, `/wcs` to `http://localhost:8080`
 - **AGENTS.md** is the single instruction file (no .cursorrules, no copilot-instructions.md)
 
 ## Cloud-native status (see IMPLEMENTATION_PLAN.md §7)
 
-- **Not yet containerized**: no Dockerfile / docker-compose / CI pipeline (planned, not created)
-- **JWT secret is hardcoded** in `src/auth.rs` (`rust-geoserver-jwt-secret-2026`); must become env-injected (`GEOSERVER__SECURITY__JWT_SECRET`) before multi-replica prod
-- **Default host `127.0.0.1`** — containers must bind `0.0.0.0`
+- **Containerized**: multi-stage `Dockerfile` (node → rust → debian-slim, non-root) + `.dockerignore` + `docker-compose.yml`; no CI pipeline yet
+  ```bash
+  docker build -t rust-geoserver:latest .
+  docker compose up -d                    # SQLite standalone mode (default)
+  docker compose --profile postgres up -d # app + PostgreSQL
+  ```
+- **JWT secret has a hardcoded default** in `src/auth.rs` (`rust-geoserver-jwt-secret-2026`); inject via env `GEOSERVER__SECURITY__JWT_SECRET` in multi-replica prod (docker-compose passes `GEOSERVER_JWT_SECRET`)
+- **Runtime host**: default `127.0.0.1`; Docker image sets `GEOSERVER__SERVER__HOST=0.0.0.0`
 - **State**: metadata in SQLite (`geoserver.sqlite`) + business data (default local dir `<data_dir>/business`, or PostgreSQL) + in-memory caches (`Arc<RwLock<...>>` in `src/state.rs`) + local disk tile cache (`./data/gwc`) + uploads (`./data`) → multi-replica needs shared storage or PostgreSQL / object-storage backends
-- **Observability**: stdout logs (human-readable, not JSON), single `/health` probe (no liveness/readiness split), no Prometheus `/metrics` (monitoring is in-memory JSON via `/server/status`)
-- **Lifecycle**: no SIGTERM graceful shutdown / `shutdown_timeout()`
+- **Observability**: stdout logs (human-readable, not JSON); split probes `/health/live` + `/health/ready` (registered on root path, decoupled from `api_context`); Prometheus `/metrics` (root path; requests/errors, tile cache hit rate, PG pool watermarks, system). Legacy `/health` & `/monitor/*` retained
+- **Lifecycle**: SIGTERM/SIGINT graceful shutdown + `shutdown_timeout_secs` (default 30s, `[server].shutdown_timeout_secs`)
+
+## Code conventions
+
+- **Comments & descriptions in English**: all comments, docstrings, file headers
+  and descriptions in newly added files MUST be written in English (applies to
+  Docker files, config templates, scripts, and code comments alike)
 
 ## Commit Messages Stype
 

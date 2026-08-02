@@ -1,0 +1,32 @@
+# =============================================================================
+# Rust GeoServer - Docker build context exclusions
+# The image build does NOT need: local data, build artifacts, VCS, docs or scripts
+# =============================================================================
+
+# ---- Rust / build artifacts ----
+target/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# ---- Local data (mounted at runtime via volumes; not baked into the image) ----
+data/
+static/
+*.sqlite
+*.sqlite3
+*.db
+
+# ---- Local config (container config is injected entirely via env vars) ----
+geoserver.toml
+
+# ---- Version control / CI ----
+.git/
+.gitignore
+.github/
+
+# ---- Docs and local scripts (not needed in the image) ----
+*.md
+build.bat
+build.sh
+START.bat
+.vscode/

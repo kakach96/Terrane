@@ -26,13 +26,15 @@ A lightweight geospatial data server built with Rust + Actix-web, featuring a mo
 **Current status**
 
 - ✅ Configuration supports environment variable overrides (`GEOSERVER__<section>__<key>`, double-underscore separator, see `src/config.rs`)
-- ✅ `/health` health check endpoint, stdout logs (tracing)
-- ⚠️ TODO: Dockerfile / docker-compose / CI pipeline (not yet created)
-- ⚠️ TODO: JWT secret hardcoded in `src/auth.rs`, needs env injection
+- ✅ Multi-stage container image: `Dockerfile` + `.dockerignore` + `docker-compose.yml` (SQLite standalone / PostgreSQL HA)
+- ✅ Built-in image `HEALTHCHECK` + split probes: `/health/live` (liveness) & `/health/ready` (readiness)
+- ✅ Prometheus `/metrics` endpoint (requests/errors, tile cache hit rate, PG pool watermarks, system resources)
+- ✅ Graceful shutdown on SIGTERM/SIGINT with `shutdown_timeout_secs` in-flight drain
+- ⚠️ TODO: JWT secret default is hardcoded in `src/auth.rs`; use `GEOSERVER__SECURITY__JWT_SECRET` env injection in prod
 - ✅ Storage split: `[metadata]` (workspaces / data sources / layers / styles, default SQLite) + `[business]` (layer features; local dir / reuse metadata / PostgreSQL), see `src/config.rs`
 - ⚠️ TODO: in-memory caches (`src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL / object storage
 - ⚠️ TODO: tile cache / uploaded data on local disk, needs PVC or object storage
-- ⚠️ TODO: no graceful shutdown (SIGTERM drain)
+- ⚠️ TODO: CI pipeline + image registry push (GitHub Actions / GitLab CI)
 
 **Cloud-native roadmap**: containerization → 12-Factor/observability → state convergence → CI/CD. See section 7 of [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
@@ -77,6 +79,42 @@ cargo build
 # Run
 cargo run
 ```
+
+### Option 4: Docker (containerized)
+
+```bash
+# Build the image and start the stack (default: SQLite standalone mode)
+docker compose up -d
+
+# Build the image manually (BuildKit is used by default; cache mounts keep
+# npm/cargo dependency downloads across builds)
+#   docker build -t rust-geoserver:latest .
+
+# Build with domestic base-image mirrors (China):
+#   docker build \
+#     --build-arg NODE_IMAGE=docker.1ms.run/library/node:20-alpine \
+#     --build-arg RUST_IMAGE=docker.1ms.run/library/rust:1.85-bookworm \
+#     --build-arg RUNTIME_IMAGE=docker.1ms.run/library/debian:bookworm-slim \
+#     -t rust-geoserver:latest .
+#   (npm/cargo dependency registries default to npmmirror.com / rsproxy.cn;
+#    override via --build-arg NPM_REGISTRY / CARGO_MIRROR if needed)
+
+# Use PostgreSQL (metadata + business data reuse):
+#   uncomment the postgres config in the geoserver service in docker-compose.yml, then:
+#   docker compose --profile postgres up -d
+
+# Visit: http://127.0.0.1:8080  (frontend is baked into the image; no separate frontend service)
+```
+
+**Cloud-native monitoring endpoints** (all registered on the root path, decoupled from `api_context`):
+
+| Endpoint | Purpose |
+|------|------|
+| `/health/live` | Liveness probe - 200 when the process is alive |
+| `/health/ready` | Readiness probe - 200 when metadata/business stores are ready, otherwise 503 |
+| `/metrics` | Prometheus metrics (text format) for scraping / K8s HPA |
+
+> The image ships a built-in `HEALTHCHECK` and SIGTERM graceful shutdown (`shutdown_timeout_secs`, default 30s).
 
 ### Or use the start script
 
@@ -207,6 +245,7 @@ Configuration file: `geoserver.toml`
 host = "127.0.0.1"
 port = 8080
 workers = 12
+shutdown_timeout_secs = 30   # Graceful shutdown drain timeout for in-flight requests (container rolling updates)
 
 [workspaces]
 [[workspaces.stores.layers]]
