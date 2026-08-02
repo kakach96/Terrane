@@ -1,7 +1,12 @@
 use actix_web::web;
 
 pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
-    cfg.service(
+    cfg
+    // ---- 云原生探针 / 监控 (固定根路径, 与 api_context 解耦, 便于容器/K8s 探针配置) ----
+    .route("/health/live", web::get().to(crate::handlers::health_live))
+    .route("/health/ready", web::get().to(crate::handlers::health_ready))
+    .route("/metrics", web::get().to(crate::handlers::get_metrics))
+    .service(
         web::scope("/wms")
             .route("", web::get().to(crate::handlers::handle_wms_request))
     )

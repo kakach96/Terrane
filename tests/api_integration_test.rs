@@ -3,9 +3,7 @@
 //! 测试 Rust GeoServer 的 HTTP API 端点。
 //! 使用 actix_rt 作为异步测试运行时。
 
-use actix_web::{web, App, HttpResponse, middleware};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use actix_web::{web, App, middleware};
 
 // ---------------------------------------------------------------------------
 // 辅助: 创建测试用 AppState

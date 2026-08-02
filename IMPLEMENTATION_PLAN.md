@@ -293,11 +293,11 @@ Overall progress ███████████░░░░░░  54%
 
 | Dimension | Current State | Gap | Priority |
 |------|------|------|:-----:|
-| **Containerization** | No Dockerfile / docker-compose; only local packaging via `build.bat` / `build.sh` | Missing image build, `.dockerignore`, image `HEALTHCHECK` | **P0** |
-| **12-Factor config** | `geoserver.toml` + `GEOSERVER__` env var prefix (double-underscore separator) | `main.rs` uses `load_from_file()` which **does not mount the env source** (`config::Environment` only takes effect in `load()`); default `host=127.0.0.1`; JWT secret hardcoded in `src/auth.rs:96` | **P0** |
+| **Containerization** | Multi-stage `Dockerfile` + `.dockerignore` + `docker-compose.yml` (SQLite 单机 / PostgreSQL HA); image `HEALTHCHECK` 基于 `/health/ready` | 未接入 CI 镜像构建/推送/扫描 | **P0 ✅** |
+| **12-Factor config** | `geoserver.toml` + `GEOSERVER__` env var prefix; `load_from_file()` 已挂载 `config::Environment` | 默认 `host=127.0.0.1` (容器内通过 Dockerfile env 设 0.0.0.0); JWT secret 默认值硬编码于 `src/auth.rs` | **P0 ✅** |
 | **Statelessness / scalability** | Metadata (`[metadata]`, default SQLite) and business data (`[business]`: local dir / reuse metadata / PostgreSQL) are split (`src/config.rs`, `src/store/business/`); layers/features/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); tile cache and uploads on local disk `./data` | In-memory state diverges across replicas; SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1** |
-| **Observability** | stdout logs (tracing); `/health` endpoint; in-memory monitoring JSON (`/server/status`, `/monitor`) | No structured JSON logs, no OpenTelemetry tracing; no Prometheus `/metrics`; single probe does not distinguish liveness/readiness | **P1** |
-| **Lifecycle** | No SIGTERM/SIGINT graceful shutdown, no `shutdown_timeout()` drain | In-flight requests hard-interrupted during pod rollouts/termination | **P1** |
+| **Observability** | stdout logs (tracing); `/health` + 拆分 `/health/live` & `/health/ready`; Prometheus `/metrics` (请求/错误、方法/状态码/端点、瓦片命中率、PG 池水位、系统资源) | 无 structured JSON logs, 无 OpenTelemetry tracing | **P1 ✅** |
+| **Lifecycle** | SIGTERM/SIGINT 优雅关闭 + `shutdown_timeout_secs` 在途请求排空 (`main.rs`) | — | **P1 ✅** |
 | **CI/CD & security** | No CI pipeline, no image registry push | Missing GitHub Actions/GitLab CI, image vulnerability scanning, dependency update automation | **P2** |
 | **Resilience** | CORS defaults to `["*"]`; no rate-limiting/request-timeout middleware; no backoff-retry for cascaded WMS upstreams | No circuit breaking or protection under high concurrency | **P2** |
 
@@ -305,19 +305,22 @@ Overall progress ███████████░░░░░░  54%
 
 #### Phase 0: Containerization Foundations (~1 week)
 
-- Multi-stage `Dockerfile`: `node` stage builds the frontend → `rust` stage runs `cargo build --release` → slim runtime image (debian-slim / distroless) containing only the binary + `static/`
-- `.dockerignore` (exclude `target/`, `frontend/node_modules/`, `static/`, etc.)
-- Built-in image `HEALTHCHECK` (based on `/health`)
-- `docker-compose.yml`: app + PostgreSQL (+ optional MinIO) for local development
-- Runtime defaults to `host=0.0.0.0`; `static_dir` / `data_dir` / `sqlite_path` overridable via environment variables
+- ✅ 多阶段 `Dockerfile`: `node` stage 构建前端 → `rust` stage `cargo build --release` → debian-slim 运行镜像 (仅二进制 + `static/`, 非 root 运行)
+- ✅ `.dockerignore` (排除 `target/`, `frontend/node_modules/`, `static/`, `data/`, 等)
+- ✅ 镜像内置 `HEALTHCHECK` (基于 `/health/ready`)
+- ✅ `docker-compose.yml`: app + PostgreSQL (profile 可选; 本地开发)
+- ✅ 运行时默认 `host=0.0.0.0`; `static_dir` / `data_dir` / `sqlite_path` / `gwc` 经环境变量覆盖 (Dockerfile `ENV`)
 
 #### Phase 1: 12-Factor Configuration & Observability
 
-- Unify config loading: wire `config::Environment` (the `GEOSERVER__` prefix) into the actual `main.rs` path so env overrides also work with `--config`
-- JWT secret injected via environment variable (e.g. `GEOSERVER__SECURITY__JWT_SECRET`); forbid hardcoded defaults in production
-- Split health probes: `/health/live` (liveness) + `/health/ready` (depends on PostgreSQL / SQLite / storage readiness)
-- Structured logging (tracing JSON layer, optional), request-level `trace_id`
-- Prometheus `/metrics` endpoint: request counts, error rates, tile cache hit rates, PG pool watermarks (`opentelemetry` / `prometheus` crates)
+- ✅ 统一配置加载: `load_from_file()` 已挂载 `config::Environment` (`GEOSERVER__` 前缀), env 覆盖文件配置
+- ⚠️ JWT secret: 支持 `GEOSERVER__SECURITY__JWT_SECRET` 注入; 默认值仍硬编码于 `src/auth.rs`, 生产必须显式注入
+- ✅ 拆分健康探针: `/health/live` (liveness) + `/health/ready` (依赖元数据/业务存储就绪, 200/503)
+- ⚠️ 结构化日志 (tracing JSON layer) 与 request-level `trace_id` 未做
+- ✅ Prometheus `/metrics`: 请求/错误计数、方法/状态码/端点分布、瓦片缓存命中率、PG 连接池水位、系统资源 (纯 Rust 手工生成文本格式, 零外部依赖)
+- ✅ 优雅关闭: 捕获 SIGTERM/SIGINT + `shutdown_timeout_secs` 排空在途请求 (`main.rs::shutdown_signal` + `HttpServer::shutdown_signal`/`shutdown_timeout`)
+
+> 注: 当前阶段已并入第 9 轮实现 (监控检查 + 容器构建支持)。
 
 #### Phase 2: State Convergence & Scalability
 

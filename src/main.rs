@@ -8,6 +8,7 @@ use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::fmt::format::Writer;
 use clap::Parser;
 use tokio::fs;
+use tokio::signal;
 use chrono::{Local, Datelike, Timelike};
 
 mod config;
@@ -103,6 +104,30 @@ async fn serve_index() -> HttpResponse {
     }
 }
 
+/// 监听 Ctrl+C (SIGINT) 与 SIGTERM, 触发优雅关闭以排空在途请求。
+/// 容器平台 (K8s/Docker) 向进程发送 SIGTERM 进行滚动更新/缩容, 需要优雅排空。
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => { tracing::info!("Received Ctrl+C / SIGINT, draining in-flight requests..."); }
+        _ = terminate => { tracing::info!("Received SIGTERM, draining in-flight requests..."); }
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
@@ -125,6 +150,7 @@ async fn main() -> std::io::Result<()> {
     let app_state = web::Data::new(AppState::new(config).await);
 
     let cors_config = app_state.config.cors.clone();
+    let shutdown_timeout = app_state.config.server.shutdown_timeout_secs;
 
     HttpServer::new(move || {
         // CORS 中间件
@@ -169,6 +195,8 @@ async fn main() -> std::io::Result<()> {
             .default_service(web::route().to(serve_index))
     })
     .bind((host.as_str(), port))?
+    .shutdown_signal(shutdown_signal())
+    .shutdown_timeout(shutdown_timeout)
     .run()
     .await
 }

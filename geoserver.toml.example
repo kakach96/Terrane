@@ -51,6 +51,11 @@ static_dir = "./static"
 # Env: GEOSERVER__SERVER__CONNECT_TIMEOUT_SECS
 connect_timeout_secs = 10
 
+# Graceful shutdown: seconds to wait for in-flight requests on SIGTERM/SIGINT
+# before force-drop (default: 30; container/K8s rolling updates rely on this)
+# Env: GEOSERVER__SERVER__SHUTDOWN_TIMEOUT_SECS
+shutdown_timeout_secs = 30
+
 # ---------------------------------------------------------------------------
 # Metadata storage (REQUIRED; default: sqlite)
 # Stores workspaces, data sources, layer definitions, styles, permissions, etc.

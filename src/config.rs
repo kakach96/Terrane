@@ -5,18 +5,26 @@ use crate::utils::tile_cache::GwcConfig;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GeoServerConfig {
+    /// 服务端配置 (无配置文件/env-only 时使用默认值)
+    #[serde(default)]
     pub server: ServerConfig,
-    /// 元数据存储配置 (必填; 默认 sqlite) — 兼容旧节名 `[database]` (serde alias)
-    #[serde(alias = "database")]
+    /// 元数据存储配置 (默认 sqlite) — 兼容旧节名 `[database]` (serde alias)
+    #[serde(alias = "database", default)]
     pub metadata: MetadataConfig,
     /// 业务数据存储配置 (可选; 图层要素数据)
     #[serde(default)]
     pub business: Option<BusinessConfig>,
+    /// 安全配置 (无配置时使用内置默认 JWT 密钥, 生产必须注入)
+    #[serde(default)]
     pub security: SecurityConfig,
+    /// 日志配置
+    #[serde(default)]
     pub logging: LoggingConfig,
     /// 数据目录 (默认: "./data")
     #[serde(default = "default_data_dir")]
     pub data_dir: PathBuf,
+    /// 内置工作空间配置
+    #[serde(default)]
     pub workspaces: Vec<WorkspaceConfig>,
     /// GeoWebCache 瓦片缓存配置
     #[serde(default)]
@@ -37,6 +45,9 @@ pub struct ServerConfig {
     /// PostgreSQL 连接超时秒数
     #[serde(default = "default_connect_timeout")]
     pub connect_timeout_secs: u64,
+    /// 优雅关闭时等待在途请求完成的最大秒数 (默认: 30; 容器滚动更新/缩容时生效)
+    #[serde(default = "default_shutdown_timeout")]
+    pub shutdown_timeout_secs: u64,
 }
 
 /// 元数据存储配置 — 保存工作空间、数据源、图层、样式、权限、会话等配置元数据。
@@ -149,6 +160,45 @@ fn default_jwt_secret() -> String {
     "rust-geoserver-jwt-secret-2026".to_string()
 }
 
+impl Default for ServerConfig {
+    fn default() -> Self {
+        ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+            api_context: "/geoserver".to_string(),
+            static_dir: default_static_dir(),
+            connect_timeout_secs: default_connect_timeout(),
+            shutdown_timeout_secs: default_shutdown_timeout(),
+        }
+    }
+}
+
+impl Default for MetadataConfig {
+    fn default() -> Self {
+        MetadataConfig {
+            kind: default_db_kind(),
+            sqlite_path: default_sqlite_path(),
+            postgres: PostgresConfig::default(),
+        }
+    }
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        SecurityConfig {
+            jwt_secret: default_jwt_secret(),
+        }
+    }
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        LoggingConfig {
+            level: default_log_level(),
+        }
+    }
+}
+
 impl Default for PostgresConfig {
     fn default() -> Self {
         PostgresConfig {
@@ -176,6 +226,10 @@ fn default_static_dir() -> PathBuf {
 
 fn default_connect_timeout() -> u64 {
     10
+}
+
+fn default_shutdown_timeout() -> u64 {
+    30
 }
 
 fn default_sqlite_path() -> PathBuf {
@@ -275,6 +329,7 @@ impl Default for GeoServerConfig {
                 api_context: "/geoserver".to_string(),
                 static_dir: default_static_dir(),
                 connect_timeout_secs: default_connect_timeout(),
+                shutdown_timeout_secs: default_shutdown_timeout(),
             },
             metadata: MetadataConfig {
                 kind: default_db_kind(),

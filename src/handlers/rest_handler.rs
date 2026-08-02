@@ -34,6 +34,86 @@ pub async fn health_check() -> HttpResponse {
     })))
 }
 
+/// Liveness 探针 — 进程存活即返回 200, 不依赖任何外部资源。
+/// 用于 K8s livenessProbe / 容器 HEALTHCHECK 判断是否需要重启实例。
+pub async fn health_live() -> HttpResponse {
+    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+        "status": "alive",
+        "service": "rust-geoserver",
+    })))
+}
+
+/// Readiness 探针 — 检查元数据存储 / 业务存储等关键依赖是否就绪。
+/// 就绪返回 200, 未就绪返回 503。用于 K8s readinessProbe 与滚动发布流量摘除。
+pub async fn health_ready(state: web::Data<AppState>) -> HttpResponse {
+    let mut checks: Vec<serde_json::Value> = Vec::new();
+    let mut ready = true;
+
+    // 1. 元数据存储 (SQLite / PostgreSQL) — 必须初始化且可查询
+    if let Some(ref store) = state.store {
+        match store.get_all_workspaces().await {
+            Ok(_) => checks.push(serde_json::json!({"name": "metadata_store", "status": "ok"})),
+            Err(e) => {
+                ready = false;
+                checks.push(serde_json::json!({
+                    "name": "metadata_store",
+                    "status": "error",
+                    "detail": format!("query failed: {}", e)
+                }));
+            }
+        }
+    } else {
+        ready = false;
+        checks.push(serde_json::json!({
+            "name": "metadata_store",
+            "status": "error",
+            "detail": "store not initialized"
+        }));
+    }
+
+    // 2. 业务数据存储 (local / metadata / postgres) — 未配置时视为就绪
+    if let Some(ref bs) = state.business_store {
+        match bs.list_tables().await {
+            Ok(_) => checks.push(serde_json::json!({"name": "business_store", "status": "ok"})),
+            Err(e) => {
+                ready = false;
+                checks.push(serde_json::json!({
+                    "name": "business_store",
+                    "status": "error",
+                    "detail": format!("query failed: {}", e)
+                }));
+            }
+        }
+    } else {
+        checks.push(serde_json::json!({"name": "business_store", "status": "ok", "detail": "not configured"}));
+    }
+
+    // 3. 瓦片缓存目录 (可选) — 已配置但不可用时不阻塞就绪, 仅记录
+    if let Some(ref cache) = state.tile_cache {
+        checks.push(serde_json::json!({
+            "name": "tile_cache",
+            "status": "ok",
+            "cache_dir": cache.config.cache_dir.to_string_lossy(),
+            "hits": cache.stats().hits,
+            "misses": cache.stats().misses,
+        }));
+    }
+
+    if ready {
+        HttpResponse::Ok().json(serde_json::json!({
+            "status": "ready",
+            "service": "rust-geoserver",
+            "checks": checks,
+        }))
+    } else {
+        HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "status": "not_ready",
+            "service": "rust-geoserver",
+            "checks": checks,
+        }))
+    }
+}
+
 pub async fn get_server_status(state: web::Data<AppState>) -> Result<HttpResponse, crate::error::GeoServerError> {
     let uptime = state.get_uptime();
     let request_count = state.request_count.load(std::sync::atomic::Ordering::Relaxed);
