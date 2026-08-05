@@ -1,4 +1,9 @@
-# GeoServer Angular 前端重构 - 项目总结
+# GeoFerris 前端 - 项目总结
+
+> 前端基于 **Angular 17 + Angular Material** 构建。本文档最初记录重构初期的实现情况，
+> 现随项目演进持续更新（最新更新：2026-08）。
+> 整体架构 / 开发指南 / 路线图见 [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)、
+> [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)、[docs/ROADMAP.md](../docs/ROADMAP.md)。
 
 ## ✅ 已完成的工作
 
@@ -21,7 +26,29 @@
 - ✅ `app.module.ts` - 根模块（含所有 Material 组件导入）
 - ✅ `app.component.*` - 根组件（含侧边栏布局）
 
-### 2. 实现四大核心模块
+### 2. 页面组件（Modules）
+
+当前包含以下页面组件模块（`src/app/components/`）：
+
+- `dashboard/` — 📊 仪表盘
+- `layers/` — 📚 图层列表
+- `layer-create/` — ➕ 创建图层
+- `layer-detail/` — 🔍 图层详情
+- `preview/` — 🖼️ 预览
+- `workspaces/` — 🗂️ 工作空间
+- `namespaces/` — 🏷️ 命名空间
+- `stores/` — 🗄️ 存储管理
+- `data-sources/` — 🔌 数据源
+- `styles/` — 🎨 样式（SLD / CSS / YSLD / MBStyle）
+- `layer-groups/` — 📚 图层组
+- `tile-layers/` — 🧩 瓦片图层 + GeoWebCache 统计
+- `monitor/` — 📈 监控
+- `server-status/` — 🖥️ 服务器状态
+- `login/` — 🔐 登录
+- `users/` — 👥 用户管理
+- `permissions/` — 🛡️ 权限管理
+
+以下为部分核心模块的详细说明。
 
 #### 📊 Dashboard (仪表盘)
 - **组件**：`dashboard.component.*`
@@ -124,12 +151,8 @@ Material Snackbar 通知服务：
 
 ## 📊 项目统计
 
-- **总文件数**：32 个
-- **TypeScript 文件**：10 个
-- **HTML 模板**：5 个
-- **SCSS 样式**：5 个
-- **配置文件**：6 个
-- **代码行数**：约 2000+ 行
+> 随功能持续扩展，代码规模已远超初期基线（早期约 32 个文件 / 2000+ 行）。
+> 当前共 **17 个页面组件模块**，详见 `src/app/components/`。
 
 ## 🎨 设计亮点
 

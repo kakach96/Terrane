@@ -1,6 +1,9 @@
 # GeoFerris — Feature Gap Analysis & Implementation Plan
 
 > Comparison analysis based on the GeoServer official documentation (https://docs.geoserver.org/latest/en/user/)
+>
+> For the product roadmap, milestones and known technical debt, see [docs/ROADMAP.md](docs/ROADMAP.md).
+> For design rationale and architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -288,6 +291,8 @@ Overall progress ███████████░░░░░░  54%
 ## 七、☁️ Cloud-Native Evolution Roadmap
 
 > **Goal**: equip the application with **containerization, 12-Factor configuration, observability, horizontal scalability, and automated delivery** so it can run on modern infrastructure such as Docker / Kubernetes.
+>
+> See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the target architecture and [docs/ROADMAP.md](docs/ROADMAP.md) for the milestone timeline.
 
 ### 7.1 Cloud-Native Readiness Assessment
 

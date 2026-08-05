@@ -27,7 +27,9 @@
 
 **Goal**: containerization + 12-Factor configuration + observability + horizontal scaling, suitable for Docker / Kubernetes deployment.
 
-**Current status**
+**Dual-mode**: one codebase, two deployment profiles — standalone (SQLite metadata, local/raster files, in-memory session & cache) and cloud-native (PostgreSQL/PostGIS metadata + vector, object-storage raster, Redis session & cache, stateless replicas). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
+
+**Current status
 
 - ✅ Configuration supports environment variable overrides (`GEOSERVER__<section>__<key>`, double-underscore separator, see `src/config.rs`)
 - ✅ Multi-stage container image: `Dockerfile` + `.dockerignore` + `docker-compose.yml` (SQLite standalone / PostgreSQL HA)
@@ -145,6 +147,7 @@ geoferris/
 │   │       └── models/    # Data models
 │   └── ...
 ├── static/                 # Backend static files (fallback)
+├── docs/                   # Architecture / Roadmap / Development guides
 └── Cargo.toml             # Rust dependencies
 ```
 
@@ -152,16 +155,18 @@ geoferris/
 
 ### REST API
 
+All REST endpoints live under the configurable context path (default `/geoserver`, see `[server] api_context` in `geoferris.toml`):
+
 | Method | Endpoint | Description |
 |------|------|------|
-| GET | `/api/layers` | Get all layers |
-| POST | `/api/layers` | Create a layer |
-| GET | `/api/layers/:name` | Get layer details |
-| PUT | `/api/layers/:name` | Update a layer |
-| DELETE | `/api/layers/:name` | Delete a layer |
-| GET | `/api/layers/:name/preview` | Get layer preview image |
-| GET | `/api/layers/:name/features` | Get layer features |
-| POST | `/api/layers/:name/features` | Add a feature |
+| GET | `/geoserver/layers` | Get all layers |
+| POST | `/geoserver/layers` | Create a layer |
+| GET | `/geoserver/layers/:name` | Get layer details |
+| PUT | `/geoserver/layers/:name` | Update a layer |
+| DELETE | `/geoserver/layers/:name` | Delete a layer |
+| GET | `/geoserver/layers/:name/preview` | Get layer preview image |
+| GET | `/geoserver/layers/:name/features` | Get layer features |
+| POST | `/geoserver/layers/:name/features` | Add a feature |
 
 ### OGC Services
 
@@ -262,7 +267,10 @@ srs = "EPSG:4326"
 
 ## 📚 Documentation
 
-- [Integration build notes](BUILD_INTEGRATION.md)
+- [Architecture](docs/ARCHITECTURE.md) — design rationale, module dependency graph, data flows, API contracts
+- [Roadmap](docs/ROADMAP.md) — milestones, quarterly plan, known technical debt, future vision
+- [Development guide](docs/DEVELOPMENT.md) — local setup, environment variables, git conventions
+- [Feature gap analysis & implementation plan](IMPLEMENTATION_PLAN.md)
 - [Frontend documentation](frontend/README.md)
 - [Frontend project summary](frontend/PROJECT_SUMMARY.md)
 

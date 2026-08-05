@@ -5,6 +5,12 @@
 - **Goal**: GeoFerris — cloud-native spatial data server powered by Rust and Angular (a modern re-implementation of GeoServer)
 - **Cloud-native**: target is containerized deployment (Docker / Kubernetes); see the cloud-native roadmap in `IMPLEMENTATION_PLAN.md` §7
 
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design rationale, module dependency graph, data flow, API contracts
+- [docs/ROADMAP.md](docs/ROADMAP.md) — milestones, quarterly plan, known technical debt, future vision
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — local setup, environment variables, git commit conventions
+
 ## Project structure
 
 ```

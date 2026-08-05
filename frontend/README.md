@@ -41,7 +41,19 @@ frontend/
 │   │   │   ├── layers/           # 📚 Layer list
 │   │   │   ├── layer-detail/     # 🔍 Layer detail
 │   │   │   ├── layer-create/     # ➕ Create layer
-│   │   │   └── preview/          # 🖼️ Preview component
+│   │   │   ├── preview/          # 🖼️ Preview component
+│   │   │   ├── workspaces/       # 🗂️ Workspace management
+│   │   │   ├── namespaces/       # 🏷️ Namespace management
+│   │   │   ├── stores/           # 🗄️ Store management
+│   │   │   ├── data-sources/     # 🔌 Data source management
+│   │   │   ├── styles/           # 🎨 Style management (SLD/CSS/YSLD/MBStyle)
+│   │   │   ├── layer-groups/     # 📚 Layer group management
+│   │   │   ├── tile-layers/      # 🧩 Tile layers + GeoWebCache stats
+│   │   │   ├── monitor/          # 📈 Monitoring
+│   │   │   ├── server-status/    # 🖥️ Server status
+│   │   │   ├── login/            # 🔐 Login
+│   │   │   ├── users/            # 👥 User management
+│   │   │   └── permissions/      # 🛡️ Permissions
 │   │   ├── services/             # 🔧 Business services
 │   │   │   ├── geoserver.service.ts      # GeoServer API
 │   │   │   └── notification.service.ts   # Notification service
@@ -104,19 +116,20 @@ frontend/
 
 ## 🔌 API Integration
 
-The frontend communicates with the backend via Angular HttpClient, supporting the following APIs:
+The frontend communicates with the backend via Angular HttpClient. The API base path is
+`/geoserver` (matching the backend `api_context`, see [DEVELOPMENT.md](../docs/DEVELOPMENT.md)), e.g.:
 
 | Method | Endpoint | Description |
 |------|------|------|
-| GET | `/api/layers` | Get all layers |
-| POST | `/api/layers` | Create a new layer |
-| GET | `/api/layers/:name` | Get layer details |
-| PUT | `/api/layers/:name` | Update a layer |
-| DELETE | `/api/layers/:name` | Delete a layer |
-| GET | `/api/layers/:name/preview` | Get layer preview image |
-| GET | `/api/layers/:name/features` | Get layer features |
-| POST | `/api/layers/:name/features` | Add a feature |
-| DELETE | `/api/layers/:name/features/:id` | Delete a feature |
+| GET | `/geoserver/layers` | Get all layers |
+| POST | `/geoserver/layers` | Create a new layer |
+| GET | `/geoserver/layers/:name` | Get layer details |
+| PUT | `/geoserver/layers/:name` | Update a layer |
+| DELETE | `/geoserver/layers/:name` | Delete a layer |
+| GET | `/geoserver/layers/:name/preview` | Get layer preview image |
+| GET | `/geoserver/layers/:name/features` | Get layer features |
+| POST | `/geoserver/layers/:name/features` | Add a feature |
+| DELETE | `/geoserver/layers/:name/features/:id` | Delete a feature |
 
 ## 🛠️ Dev Commands
 
@@ -175,7 +188,7 @@ $geoserver-theme: mat.m2-define-light-theme((
 
 ## 📝 Notes
 
-1. **Node.js version** - requires Node.js 16.x or higher
+1. **Node.js version** - requires Node.js 18.x or higher
 2. **Angular CLI** - install globally: `npm install -g @angular/cli`
 3. **Proxy configuration** - API requests are automatically proxied to the backend in development
 4. **CORS** - ensure the backend allows cross-origin requests
@@ -197,6 +210,12 @@ The build output is in `dist/geoferris-ui/`
 ### Integrating with the Backend
 
 Copy the `dist/geoferris-ui/` directory to the backend project's static file directory, and configure the server to serve those files.
+
+## 📚 Related Documentation
+
+- [Development guide (backend + full setup)](../docs/DEVELOPMENT.md)
+- [Architecture](../docs/ARCHITECTURE.md)
+- [Roadmap](../docs/ROADMAP.md)
 
 ### Cloud-Native Deployment
 

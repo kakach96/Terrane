@@ -1,0 +1,259 @@
+# GeoFerris — Architecture
+
+> Design rationale, module dependency graph, data flow, and API contract design.
+> This document explains **why** the code is structured the way it is.
+
+## 1. Design Goals
+
+1. **Cloud-native** — containerized, 12-Factor configuration, observable, horizontally scalable.
+2. **High performance** — Rust + Actix-web async runtime, low-latency OGC responses, tile caching.
+3. **Modern UI** — Angular 17 + Material management console.
+4. **Stateless service** — the server is a pure protocol adapter; state lives in external stores.
+5. **Dual-mode** — standalone (SQLite + local files + in-memory) and cloud-native (PostgreSQL + Redis + object storage).
+
+## 2. Tech Stack & Selection Rationale
+
+| Layer           | Choice                    | Why                                                                                               |
+|-----------------|---------------------------|---------------------------------------------------------------------------------------------------|
+| Language        | Rust                      | Memory safety without GC, near-C performance, single static binary, strong typing for geometry/parsers |
+| Web framework   | Actix-web                 | High-throughput async HTTP, mature middleware (CORS, multipart), clean route/scope model          |
+| Async runtime   | Tokio                     | Industry-standard async runtime (`full` features: signals, timers, filesystem, IO)                |
+| Metadata store  | SQLite / PostgreSQL       | SQLite: zero-config standalone; PostgreSQL: HA + PostGIS spatial types for cluster deployments    |
+| Business store  | Local dir / PostgreSQL / metadata reuse | Decoupled from metadata so each scales independently; local dir supports NFS/object-storage mounts |
+| Geometry        | geo / geo-types           | Pure-Rust geometry model and spatial predicates                                                   |
+| Raster rendering| image                     | Pure-Rust image encode/decode (PNG/JPEG map output, GeoTIFF read)                                 |
+| DB pools        | deadpool-postgres         | Async connection pooling; pools cached per data source in `AppState.pg_pools`                     |
+| Frontend        | Angular 17 + Material     | Componentized SPA, RxJS reactive data flow, Material design consistency                            |
+| Serialization   | serde / serde_json / quick-xml | Fast JSON + XML (OGC capabilities documents)                                                  |
+| Auth            | jsonwebtoken + sha2       | Stateless JWT auth; SHA-256 + salt password hashing                                               |
+
+### Why the storage split?
+
+Metadata (workspaces, data sources, layer definitions, styles, permissions) and business
+data (layer features) have different access patterns and scaling needs. Splitting them
+(`[metadata]` vs `[business]` in `geoferris.toml`) lets a cluster keep metadata in
+PostgreSQL while business/vector data lives in a dedicated database and raster data in
+object storage — matching the "structured data → database, raster → file storage" vision.
+
+## 3. Module Dependency Graph
+
+```mermaid
+graph TD
+    subgraph Binary
+        main[main.rs]
+        config[config.rs]
+        state[state.rs]
+        routes[routes.rs]
+        auth[auth.rs]
+        backup[backup.rs]
+    end
+
+    subgraph HTTP Layer
+        handlers[handlers/*]
+    end
+
+    subgraph Service Layer
+        services[services/* - wms, wfs, wcs, wmts]
+    end
+
+    subgraph Storage Layer
+        store[store/mod.rs - Store trait]
+        business[store/business - BusinessStore trait]
+        sqlite[store/sqlite_store.rs]
+        postgres[store/postgres_store.rs]
+        biz_local[store/business/local_dir.rs]
+        biz_pg[store/business/postgres.rs]
+    end
+
+    subgraph Utility Layer
+        utils[utils/*]
+        tile_cache[utils/tile_cache.rs]
+        rendering[utils/rendering.rs]
+        parsers[utils/*_parser.rs]
+    end
+
+    main --> config
+    main --> state
+    main --> auth
+    main --> routes
+    routes --> handlers
+    handlers --> services
+    handlers --> store
+    handlers --> state
+    handlers --> auth
+    services --> store
+    services --> utils
+    store --> sqlite
+    store --> postgres
+    business --> biz_local
+    business --> biz_pg
+    state --> store
+    state --> business
+    state --> tile_cache
+    utils --> tile_cache
+    utils --> rendering
+    utils --> parsers
+```
+
+## 4. Dual-Mode Deployment
+
+### Standalone (default, local dev)
+
+```mermaid
+graph LR
+    Browser[Browser - Angular UI]
+    App[geoferris process]
+    SQLite[(SQLite - metadata)]
+    LocalDir[(data_dir/business - vector GeoJSON)]
+    LocalRaster[(data_dir - raster files)]
+    DiskCache[(data_dir/gwc - tile cache)]
+    Mem[(in-memory session/cache)]
+
+    Browser --> App
+    App --> SQLite
+    App --> LocalDir
+    App --> LocalRaster
+    App --> DiskCache
+    App --> Mem
+```
+
+### Cloud-Native (production, stateless replicas)
+
+```mermaid
+graph LR
+    LB[Load Balancer / Ingress]
+    R1[geoferris replica 1]
+    R2[geoferris replica N]
+    PG[(PostgreSQL / PostGIS - metadata + vector)]
+    Redis[(Redis - session + cache)]
+    MinIO[(MinIO / S3 - raster + uploads)]
+
+    LB --> R1
+    LB --> R2
+    R1 --> PG
+    R2 --> PG
+    R1 --> Redis
+    R2 --> Redis
+    R1 --> MinIO
+    R2 --> MinIO
+```
+
+> **Status**: PostgreSQL metadata / business backends exist today. Redis and object-storage
+> backends are on the roadmap — see [ROADMAP.md](ROADMAP.md).
+
+## 5. Data Flow
+
+### 5.1 REST CRUD (e.g. create layer)
+
+```mermaid
+sequenceDiagram
+    participant UI as Angular UI
+    participant H as layer_handler
+    participant S as Store (SQLite/Postgres)
+    participant C as AppState cache
+
+    UI->>H: POST /geoserver/layers
+    H->>S: create_layer(request)
+    S-->>H: Layer
+    H->>C: refresh in-memory layers
+    H-->>UI: 201 + Layer JSON
+```
+
+### 5.2 WMS GetMap
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant W as WMS service
+    participant R as Rendering utils
+    participant TC as TileCache
+    participant S as Store
+
+    C->>W: GET /wms?SERVICE=WMS&REQUEST=GetMap...
+    W->>TC: lookup tile (cache hit?)
+    alt cache hit
+        TC-->>W: cached PNG
+    else cache miss
+        W->>S: load layer + features
+        W->>R: render features -> PNG
+        W->>TC: store tile
+    end
+    W-->>C: PNG image
+```
+
+### 5.3 Authentication & Authorization
+
+```mermaid
+sequenceDiagram
+    participant UI as Angular UI
+    participant H as auth_handler
+    participant S as Store
+    participant A as auth.rs (JWT)
+
+    UI->>H: POST /geoserver/auth/login
+    H->>S: validate user (sha256 + salt)
+    H->>A: sign JWT (jti, role)
+    H->>S: create_session (persist jti)
+    H-->>UI: token
+    UI->>H: GET ... (Authorization: Bearer)
+    H->>A: verify JWT
+    H->>S: check session not revoked
+    H->>S: check layer permission
+    H-->>UI: resource
+```
+
+### 5.4 WFS Transaction
+
+```mermaid
+flowchart LR
+    C[Client] -->|POST /wfs Transaction| W[WFS service]
+    W -->|parse XML| P[models / parsers]
+    P -->|save_features| B[BusinessStore]
+    B -->|local_dir / postgres / metadata| F[(features)]
+```
+
+## 6. API Contract Design
+
+### 6.1 Base paths
+
+- **OGC services** on the root path: `/wms`, `/wfs`, `/wcs`, `/wmts`
+- **REST API** under the configurable context path (default `/geoserver`)
+- **Probes & metrics** on the root path, decoupled from the context: `/health/live`, `/health/ready`, `/metrics`
+
+### 6.2 REST endpoint groups
+
+All endpoints below live under `/geoserver` (the configurable `api_context`).
+
+| Group         | Endpoints                                                                                          |
+|---------------|----------------------------------------------------------------------------------------------------|
+| Layers        | `/layers`, `/layers/{name}`, `/layers/{name}/preview`, `/layers/{name}/feature-type`, `/layers/{name}/features[/{id}]`, `/layers/{name}/style` |
+| Workspaces    | `/workspaces`, `/workspaces/{name}`                                                                |
+| Namespaces    | `/namespaces`, `/namespaces/{prefix}`                                                              |
+| Data sources  | `/data-sources`, `/data-sources/test`, `/data-sources/{name}`, `/data-sources/{name}/tables`, `/data-sources/{name}/test` |
+| Stores        | `/stores`, `/stores/{name}`, `/workspaces/{ws}/stores`, `/workspaces/{ws}/stores/{name}`           |
+| Styles        | `/styles`, `/styles/{name}` (SLD / CSS / YSLD / MBStyle)                                           |
+| Layer groups  | `/layer-groups`, `/layer-groups/{name}`                                                            |
+| SQL views     | `/sql-views`, `/sql-views/preview`, `/sql-views/{name}`                                            |
+| Tiles         | `/tiles/{layer}/{z}/{x}/{y}`, `/tiles/{layer}/{z}/{x}/{y}.pbf`, `/mvt/{layer}/{z}/{x}/{y}`, `/wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}`, `/tiles/cache/clear/{layer}`, `/tiles/cache/stats` |
+| Auth          | `/auth/login`, `/auth/logout`, `/auth/verify`, `/auth/change-password`, `/auth/users`, `/auth/users/{username}` |
+| Permissions   | `/permissions`, `/permissions/{id}`, `/permissions/check/{type}/{name}`                            |
+| Monitoring    | `/server/status`, `/monitor/stats`, `/monitor/requests`, `/monitor/logs`, `/monitor/reset`         |
+| Backup        | `/backup/export`, `/backup/import`                                                                 |
+| Uploads       | `/data/upload`, `/data/upload/shapefile`, `/data/upload/geotiff`                                   |
+
+### 6.3 Layer ↔ database mapping
+
+- `layer.store` = the data source (store) name
+- `layer.native_name` = the database table name
+- Boundaries: GET `/layers/{name}` returns `native_bounds.bounds.{minx,miny,maxx,maxy}`; the list endpoint returns `bounds` at the top level.
+
+### 6.4 Error format
+
+Errors are returned as JSON with an HTTP status code; error mapping is centralized in
+`src/error.rs` and `src/store/error.rs`.
+
+### 6.5 Configuration contract
+
+All options are externalized via `geoferris.toml` + `GEOSERVER__<SECTION>__<KEY>` env
+overrides (precedence: CLI > env > file > defaults). See
+[DEVELOPMENT.md](DEVELOPMENT.md) for the full variable reference.
