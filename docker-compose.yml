@@ -40,7 +40,7 @@ services:
       # GEOSERVER__METADATA__POSTGRES__INSTANCE: geoserver
       # GEOSERVER__METADATA__POSTGRES__USER: geoserver
       # GEOSERVER__METADATA__POSTGRES__PASSWORD: ${POSTGRES_PASSWORD:-geoserver}
-      # GEOSERVER__BUSINESS__KIND: metadata
+      # GEOSERVER__VECTOR__KIND: metadata
     volumes:
       - geoserver-data:/data
     restart: unless-stopped

@@ -84,8 +84,8 @@ async fn handle_transaction_xml(state: &AppState, xml: &str) -> Result<HttpRespo
 
             state.add_feature(layer_name, new_feature.clone()).await;
 
-            // 持久化到业务数据存储（如可用）
-            if let Some(bstore) = &state.business_store {
+            // 持久化到矢量数据存储（如可用）
+            if let Some(bstore) = &state.vector_store {
                 let _ = bstore.save_features(layer_name, &[new_feature.clone()]).await;
             }
 
@@ -120,7 +120,7 @@ async fn handle_transaction_xml(state: &AppState, xml: &str) -> Result<HttpRespo
 
         // 持久化
         if !updated.is_empty() {
-            if let Some(bstore) = &state.business_store {
+            if let Some(bstore) = &state.vector_store {
                 let _ = bstore.save_features(layer_name, &updated).await;
             }
         }
@@ -138,7 +138,7 @@ async fn handle_transaction_xml(state: &AppState, xml: &str) -> Result<HttpRespo
         }
         drop(features_lock);
 
-        if let Some(bstore) = &state.business_store {
+        if let Some(bstore) = &state.vector_store {
             let _ = bstore.delete_features(layer_name).await;
             if let Some(features) = state.get_layer_features(layer_name).await {
                 let _ = bstore.save_features(layer_name, &features).await;

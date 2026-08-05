@@ -19,7 +19,9 @@
 | Web framework   | Actix-web                 | High-throughput async HTTP, mature middleware (CORS, multipart), clean route/scope model          |
 | Async runtime   | Tokio                     | Industry-standard async runtime (`full` features: signals, timers, filesystem, IO)                |
 | Metadata store  | SQLite / PostgreSQL       | SQLite: zero-config standalone; PostgreSQL: HA + PostGIS spatial types for cluster deployments    |
-| Business store  | Local dir / PostgreSQL / metadata reuse | Decoupled from metadata so each scales independently; local dir supports NFS/object-storage mounts |
+| Vector store    | Local dir / PostgreSQL / metadata reuse | Decoupled from metadata so each scales independently; local dir supports NFS/object-storage mounts |
+| Raster store    | Local dir (GeoTIFF / WorldImage / ArcGrid) | Raster files kept separate from metadata; local dir supports NFS/object-storage mounts, future S3/MinIO |
+| Cache store     | Local disk (tile) + in-memory (session)  | Tile cache on disk with TTL; session fast-path in memory; future Redis backend                 |
 | Geometry        | geo / geo-types           | Pure-Rust geometry model and spatial predicates                                                   |
 | Raster rendering| image                     | Pure-Rust image encode/decode (PNG/JPEG map output, GeoTIFF read)                                 |
 | DB pools        | deadpool-postgres         | Async connection pooling; pools cached per data source in `AppState.pg_pools`                     |
@@ -29,11 +31,13 @@
 
 ### Why the storage split?
 
-Metadata (workspaces, data sources, layer definitions, styles, permissions) and business
-data (layer features) have different access patterns and scaling needs. Splitting them
-(`[metadata]` vs `[business]` in `geoferris.toml`) lets a cluster keep metadata in
-PostgreSQL while business/vector data lives in a dedicated database and raster data in
-object storage — matching the "structured data → database, raster → file storage" vision.
+Metadata (workspaces, data sources, layer definitions, styles, permissions), vector data
+(layer features), raster data (GeoTIFF / WorldImage / ArcGrid) and cache data (tiles +
+sessions) have different access patterns and scaling needs. Splitting them into separate
+sections (`[metadata]`, `[vector]`, `[raster]`, `[cache]` in `geoferris.toml`) lets a
+cluster keep metadata in PostgreSQL, vector data in a dedicated database, raster data in
+object storage and cache in Redis — matching the
+"structured data → database, raster → file storage, session/cache → Redis" vision.
 
 ## 3. Module Dependency Graph
 
@@ -58,11 +62,16 @@ graph TD
 
     subgraph Storage Layer
         store[store/mod.rs - Store trait]
-        business[store/business - BusinessStore trait]
+        vector[store/vector - VectorStore trait]
+        raster[store/raster - RasterStore trait]
+        cache[store/cache - TileCacheBackend + SessionCache]
         sqlite[store/sqlite_store.rs]
         postgres[store/postgres_store.rs]
-        biz_local[store/business/local_dir.rs]
-        biz_pg[store/business/postgres.rs]
+        vec_local[store/vector/local_dir.rs]
+        vec_pg[store/vector/postgres.rs]
+        ras_local[store/raster/local.rs]
+        cac_tile[store/cache/tile.rs]
+        cac_session[store/cache/session.rs]
     end
 
     subgraph Utility Layer
@@ -85,12 +94,18 @@ graph TD
     services --> utils
     store --> sqlite
     store --> postgres
-    business --> biz_local
-    business --> biz_pg
+    vector --> vec_local
+    vector --> vec_pg
+    raster --> ras_local
+    cache --> cac_tile
+    cache --> cac_session
     state --> store
-    state --> business
+    state --> vector
+    state --> raster
+    state --> cache
     state --> tile_cache
     utils --> tile_cache
+    tile_cache --> cache
     utils --> rendering
     utils --> parsers
 ```
@@ -105,9 +120,9 @@ graph LR
     App[geoferris process]
     SQLite[(SQLite - metadata)]
     LocalDir[(data_dir/business - vector GeoJSON)]
-    LocalRaster[(data_dir - raster files)]
+    LocalRaster[(data_dir/rasters - raster files)]
     DiskCache[(data_dir/gwc - tile cache)]
-    Mem[(in-memory session/cache)]
+    Mem[(in-memory session cache)]
 
     Browser --> App
     App --> SQLite
@@ -138,8 +153,9 @@ graph LR
     R2 --> MinIO
 ```
 
-> **Status**: PostgreSQL metadata / business backends exist today. Redis and object-storage
-> backends are on the roadmap — see [ROADMAP.md](ROADMAP.md).
+> **Status**: PostgreSQL metadata / vector backends exist today; local (disk / in-memory)
+> raster and cache backends exist too. Redis and object-storage backends are on the roadmap
+> — see [ROADMAP.md](ROADMAP.md).
 
 ## 5. Data Flow
 
@@ -188,16 +204,22 @@ sequenceDiagram
     participant UI as Angular UI
     participant H as auth_handler
     participant S as Store
+    participant SC as SessionCache
     participant A as auth.rs (JWT)
 
     UI->>H: POST /geoserver/auth/login
     H->>S: validate user (sha256 + salt)
     H->>A: sign JWT (jti, role)
     H->>S: create_session (persist jti)
+    H->>SC: set(session) (write-through fast path)
     H-->>UI: token
     UI->>H: GET ... (Authorization: Bearer)
     H->>A: verify JWT
-    H->>S: check session not revoked
+    H->>SC: get(jti) (cache hit -> skip store)
+    alt cache miss
+        H->>S: get_session(jti)
+        H->>SC: set(session) (backfill)
+    end
     H->>S: check layer permission
     H-->>UI: resource
 ```
@@ -208,7 +230,7 @@ sequenceDiagram
 flowchart LR
     C[Client] -->|POST /wfs Transaction| W[WFS service]
     W -->|parse XML| P[models / parsers]
-    P -->|save_features| B[BusinessStore]
+    P -->|save_features| B[VectorStore]
     B -->|local_dir / postgres / metadata| F[(features)]
 ```
 

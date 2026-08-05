@@ -131,8 +131,8 @@ ENV GEOSERVER__SERVER__HOST=0.0.0.0 \
     GEOSERVER__SERVER__STATIC_DIR=/app/static \
     GEOSERVER__DATA_DIR=/data \
     GEOSERVER__METADATA__SQLITE_PATH=/data/geoserver.sqlite \
-    GEOSERVER__GWC__CACHE_DIR=/data/gwc \
-    GEOSERVER__GWC__META_DIR=/data/gwc/meta \
+    GEOSERVER__CACHE__CACHE_DIR=/data/gwc \
+    GEOSERVER__CACHE__META_DIR=/data/gwc/meta \
     GEOSERVER__SECURITY__JWT_SECRET=geoferris-dev-secret \
     RUST_LOG=info
 

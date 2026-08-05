@@ -37,7 +37,7 @@
 - ✅ Prometheus `/metrics` endpoint (requests/errors, tile cache hit rate, PG pool watermarks, system resources)
 - ✅ Graceful shutdown on SIGTERM/SIGINT with `shutdown_timeout_secs` in-flight drain
 - ⚠️ TODO: JWT secret default is hardcoded in `src/auth.rs`; use `GEOSERVER__SECURITY__JWT_SECRET` env injection in prod
-- ✅ Storage split: `[metadata]` (workspaces / data sources / layers / styles, default SQLite) + `[business]` (layer features; local dir / reuse metadata / PostgreSQL), see `src/config.rs`
+- ✅ Storage split: `[metadata]` (workspaces / data sources / layers / styles, default SQLite) + `[vector]` (layer features; local dir / reuse metadata / PostgreSQL, alias `[business]`) + `[raster]` (GeoTIFF files; local dir) + `[cache]` (tile + session cache; local disk / in-memory, alias `[gwc]`), see `src/config.rs`
 - ⚠️ TODO: in-memory caches (`src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL / object storage
 - ⚠️ TODO: tile cache / uploaded data on local disk, needs PVC or object storage
 - ⚠️ TODO: CI pipeline + image registry push (GitHub Actions / GitLab CI)

@@ -16,7 +16,7 @@ src/               Rust backend (Actix-web)
   handlers/        REST + OGC handlers
   models/          Shared data structs
   services/        OGC service implementations (wms/wfs/wcs/wmts)
-  store/           Store (metadata) + BusinessStore (vector) abstractions
+  store/           Store (metadata) + Vector/Raster/Cache store abstractions
   utils/           Rendering, tile cache, format parsers, projection
   routes.rs        Single-file route registration
 frontend/          Angular 17 + Material admin UI
@@ -103,17 +103,21 @@ docker compose --profile postgres up -d     # app + PostgreSQL (PostGIS)
 | `GEOSERVER__METADATA__POSTGRES__USER`     | `[metadata.postgres] user`                   | `postgres`                 |
 | `GEOSERVER__METADATA__POSTGRES__PASSWORD` | `[metadata.postgres] password`               | `` (empty)                 |
 | `GEOSERVER__METADATA__POSTGRES__POOL_SIZE`| `[metadata.postgres] pool_size`              | `10`                       |
-| `GEOSERVER__BUSINESS__KIND`               | `[business] kind` (`local`\|`metadata`\|`postgres`) | `local`             |
-| `GEOSERVER__BUSINESS__DIR`                | `[business] dir`                             | `<data_dir>/business`      |
-| `GEOSERVER__BUSINESS__POSTGRES__*`        | `[business.postgres] *`                      | (mirrors metadata.postgres)|
+| `GEOSERVER__VECTOR__KIND`                 | `[vector] kind` (`local`\|`metadata`\|`postgres`) | `local`             |
+| `GEOSERVER__VECTOR__DIR`                  | `[vector] dir`                               | `<data_dir>/business`      |
+| `GEOSERVER__VECTOR__POSTGRES__*`          | `[vector.postgres] *`                        | (mirrors metadata.postgres)|
+| `GEOSERVER__RASTER__KIND`                 | `[raster] kind` (`local`)                    | `local`                    |
+| `GEOSERVER__RASTER__DIR`                  | `[raster] dir`                               | `<data_dir>/rasters`       |
 | `GEOSERVER__SECURITY__JWT_SECRET`         | `[security] jwt_secret`                      | `geoferris-jwt-secret-2026`|
 | `GEOSERVER__LOGGING__LEVEL`               | `[logging] level`                            | `info`                     |
-| `GEOSERVER__GWC__CACHE_DIR`               | `[gwc] cache_dir`                            | `<data_dir>/gwc`           |
-| `GEOSERVER__GWC__META_DIR`                | `[gwc] meta_dir`                             | `<data_dir>/gwc/meta`      |
-| `GEOSERVER__GWC__EXPIRE_AFTER_SECS`       | `[gwc] expire_after_secs`                    | `86400`                    |
-| `GEOSERVER__GWC__MAX_TILES`               | `[gwc] max_tiles`                            | `100000`                   |
-| `GEOSERVER__GWC__ENABLED`                 | `[gwc] enabled`                              | `true`                     |
-| `GEOSERVER__GWC__DEFAULT_GRIDSET`         | `[gwc] default_gridset`                      | `EPSG:4326`                |
+| `GEOSERVER__CACHE__KIND`                  | `[cache] kind` (`local`)                     | `local`                    |
+| `GEOSERVER__CACHE__CACHE_DIR`             | `[cache] cache_dir`                          | `<data_dir>/gwc`           |
+| `GEOSERVER__CACHE__META_DIR`              | `[cache] meta_dir`                           | `<data_dir>/gwc/meta`      |
+| `GEOSERVER__CACHE__EXPIRE_AFTER_SECS`     | `[cache] expire_after_secs`                  | `86400`                    |
+| `GEOSERVER__CACHE__MAX_TILES`             | `[cache] max_tiles`                          | `100000`                   |
+| `GEOSERVER__CACHE__ENABLED`               | `[cache] enabled`                            | `true`                     |
+| `GEOSERVER__CACHE__DEFAULT_GRIDSET`       | `[cache] default_gridset`                    | `EPSG:4326`                |
+| `GEOSERVER__CACHE__SESSION_TTL_SECS`      | `[cache] session_ttl_secs`                   | `86400`                    |
 | `GEOSERVER__CORS__ENABLED`                | `[cors] enabled`                             | `true`                     |
 | `GEOSERVER__CORS__ALLOWED_ORIGINS`        | `[cors] allowed_origins`                     | `["*"]`                    |
 | `GEOSERVER__CORS__ALLOWED_METHODS`        | `[cors] allowed_methods`                     | GET/POST/PUT/DELETE/OPTIONS/PATCH |
@@ -158,7 +162,7 @@ Examples:
 ```
 feat: add Redis session store for cloud-native mode
 fix: correct WMS GetCapabilities XML escaping
-refactor: extract BusinessStore trait from local_dir store
+refactor: extract VectorStore trait from local_dir store
 chore: bump actix-web to 4.x
 ```
 
@@ -176,6 +180,6 @@ chore: bump actix-web to 4.x
 ## 8. Troubleshooting
 
 - **Backend can't find the UI** → ensure `./static/` contains a built frontend, or run `SKIP_FRONTEND=1 cargo run` together with `npm start` on :4200.
-- **Config error falls back silently** → a `[config] WARNING` is printed to stderr; keep required keys complete (`[server] host/port/api_context`, `[[workspaces]]`, `[gwc]` when present).
+- **Config error falls back silently** → a `[config] WARNING` is printed to stderr; keep required keys complete (`[server] host/port/api_context`, `[[workspaces]]`, `[cache] cache_dir/meta_dir` when present).
 - **Port 5432 conflict** → docker-compose maps PostgreSQL to host port `5433`.
 - **Frontend proxy not working** → verify `proxy.conf.json` routes and that the backend runs on `:8080`.

@@ -6,13 +6,13 @@ use crate::error::GeoServerError;
 use std::time::Instant;
 use super::rest_handler::ApiResponse;
 
-/// 当业务数据复用元数据存储 (business.kind = "metadata") 时,
+/// 当矢量数据复用元数据存储 (vector.kind = "metadata") 时,
 /// 构造内置 metadata 数据源的 JSON 表示（内置默认选项, 不可编辑/删除）。
 ///
 /// 与 PostGIS 数据源保持一致: 元数据存储为 postgres 时 type 显示为 postgis,
 /// connection 展示元数据 postgres 连接配置。
 fn builtin_metadata_data_source(state: &AppState) -> Option<serde_json::Value> {
-    let eff = state.config.effective_business();
+    let eff = state.config.effective_vector();
     if eff.kind != "metadata" {
         return None;
     }
@@ -359,18 +359,18 @@ pub async fn get_data_source_tables(
     // 内置 metadata 数据源: 与 PostGIS 相同逻辑, 列出业务存储中已有的图层表
     if is_builtin_metadata(name) {
         if builtin_metadata_data_source(&state).is_some() {
-            if let Some(bstore) = &state.business_store {
+            if let Some(bstore) = &state.vector_store {
                 match bstore.list_tables().await {
                     Ok(tables) => {
-                        tracing::debug!("[get_data_source_tables] 内置 metadata 数据源, 业务表: {:?}", tables);
+                        tracing::debug!("[get_data_source_tables] 内置 metadata 数据源, 矢量表: {:?}", tables);
                         return Ok(HttpResponse::Ok().json(ApiResponse::success(tables)));
                     }
                     Err(e) => {
-                        eprintln!("Failed to list business tables: {}", e);
+                        eprintln!("Failed to list vector tables: {}", e);
                     }
                 }
             }
-            return Err(GeoServerError::InternalError("Business store not available".to_string()));
+            return Err(GeoServerError::InternalError("Vector store not available".to_string()));
         }
     }
 

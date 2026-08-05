@@ -1,4 +1,4 @@
-//! 本地目录业务数据存储 — 每图层一个 GeoJSON 文件。
+//! 本地目录矢量数据存储 — 每图层一个 GeoJSON 文件。
 //!
 //! 目录可挂载 NFS / 对象存储 (如通过 FUSE 或 CSI 驱动), 便于扩展。
 //! 文件格式: `<dir>/<layer>.geojson`, 内容为标准 GeoJSON FeatureCollection。
@@ -8,12 +8,12 @@ use std::path::PathBuf;
 use crate::models::Feature;
 use crate::store::StoreError;
 
-/// 本地目录业务数据存储
-pub struct LocalDirBusinessStore {
+/// 本地目录矢量数据存储
+pub struct LocalVectorStore {
     dir: PathBuf,
 }
 
-impl LocalDirBusinessStore {
+impl LocalVectorStore {
     /// 创建本地目录业务存储 (目录按需懒创建)
     pub fn new(dir: PathBuf) -> Self {
         Self { dir }
@@ -33,7 +33,7 @@ impl LocalDirBusinessStore {
 }
 
 #[async_trait::async_trait]
-impl super::BusinessStore for LocalDirBusinessStore {
+impl super::VectorStore for LocalVectorStore {
     async fn save_features(&self, layer_name: &str, features: &[Feature]) -> Result<usize, StoreError> {
         std::fs::create_dir_all(&self.dir)?;
 

@@ -106,15 +106,28 @@ pub async fn upload_shapefile(
 }
 
 /// 上传 GeoTIFF（接收 .tif/.tiff 文件）
+///
+/// 保存到栅格存储 (默认本地后端 `<data_dir>/rasters/`); 未配置栅格存储时
+/// 回退到旧的 `data_dir/uploads/geotiffs` 目录。
 pub async fn upload_geotiff(
     req: HttpRequest,
     payload: Multipart,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
-    let data_dir = state.config.data_dir.clone();
-    let upload_dir = data_dir.join("uploads").join("geotiffs");
-    tokio::fs::create_dir_all(&upload_dir).await
-        .map_err(|e| GeoServerError::InternalError(format!("无法创建上传目录: {}", e)))?;
+    // 从 multipart 读取全部字节与原始文件名
+    let (data, filename) = read_multipart_bytes(payload).await?;
+
+    // 验证文件扩展名
+    let ext = Path::new(&filename)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+    if ext != "tif" && ext != "tiff" {
+        return Err(GeoServerError::BadRequest(
+            format!("不支持的文件格式: .{}, 仅支持 .tif/.tiff", ext)
+        ));
+    }
 
     let layer_name = req.query_string()
         .split('&')
@@ -124,42 +137,48 @@ pub async fn upload_geotiff(
         })
         .map(|s| s.to_string());
 
-    let saved_path = save_multipart_file(payload, &upload_dir).await?;
-    info!("[Upload] GeoTIFF 已保存: {:?}", saved_path);
-
-    // 验证文件扩展名
-    let ext = saved_path.extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_lowercase())
-        .unwrap_or_default();
-
-    if ext != "tif" && ext != "tiff" {
-        let _ = tokio::fs::remove_file(&saved_path).await;
-        return Err(GeoServerError::BadRequest(
-            format!("不支持的文件格式: .{}, 仅支持 .tif/.tiff", ext)
-        ));
-    }
-
-    // 自动创建 DataSource
     let ds_name = layer_name.unwrap_or_else(|| {
-        saved_path.file_stem()
+        Path::new(&filename)
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("uploaded_geotiff")
             .to_string()
     });
 
-    let connection = DataSourceConnection::file(saved_path.to_string_lossy().to_string());
+    // 提前检查重名, 避免已写入栅格存储后才发现冲突
+    if let Some(store) = &state.store {
+        if let Ok(Some(_)) = store.get_data_source(&ds_name).await {
+            return Err(GeoServerError::Conflict(
+                format!("Data source '{}' already exists", ds_name)
+            ));
+        }
+    }
+
+    // 保存到栅格存储 (本地后端写入 <raster_dir>/<key>.tif)
+    let raster_path = if let Some(rstore) = &state.raster_store {
+        rstore.put(&ds_name, &data).await
+            .map_err(|e| GeoServerError::InternalError(format!("栅格存储保存失败: {}", e)))?;
+        rstore.local_path(&ds_name).unwrap_or_else(|| {
+            // 非本地后端无法给出文件路径, 使用逻辑键记录到 DataSource
+            PathBuf::from(format!("raster://{}", ds_name))
+        })
+    } else {
+        // 未配置栅格存储: 回退到旧行为 (写入 data_dir/uploads/geotiffs)
+        let data_dir = state.config.data_dir.clone();
+        let upload_dir = data_dir.join("uploads").join("geotiffs");
+        tokio::fs::create_dir_all(&upload_dir).await
+            .map_err(|e| GeoServerError::InternalError(format!("无法创建上传目录: {}", e)))?;
+        let saved_path = upload_dir.join(&filename);
+        tokio::fs::write(&saved_path, &data).await
+            .map_err(|e| GeoServerError::InternalError(format!("保存文件失败: {}", e)))?;
+        saved_path
+    };
+
+    info!("[Upload] GeoTIFF 已保存: {:?}", raster_path);
+
+    let connection = DataSourceConnection::file(raster_path.to_string_lossy().to_string());
 
     if let Some(store) = &state.store {
-        match store.get_data_source(&ds_name).await {
-            Ok(Some(_)) => {
-                return Err(GeoServerError::Conflict(
-                    format!("Data source '{}' already exists", ds_name)
-                ));
-            }
-            _ => {}
-        }
-
         match store.create_data_source(
             &ds_name,
             &DataSourceType::Geotiff,
@@ -184,6 +203,25 @@ pub async fn upload_geotiff(
     } else {
         Err(GeoServerError::InternalError("数据库不可用".to_string()))
     }
+}
+
+/// 从 multipart 读取单个文件的全部字节与原始文件名 (供栅格存储直接落盘)。
+async fn read_multipart_bytes(mut payload: Multipart) -> Result<(Vec<u8>, String), GeoServerError> {
+    let mut data: Vec<u8> = Vec::new();
+    let mut filename = "upload".to_string();
+    while let Some(Ok(mut field)) = payload.next().await {
+        let content_disposition = field.content_disposition().clone();
+        if let Some(f) = content_disposition.get_filename() {
+            filename = sanitize_filename(f);
+        }
+        while let Some(Ok(chunk)) = field.next().await {
+            data.extend_from_slice(&chunk);
+        }
+    }
+    if data.is_empty() {
+        return Err(GeoServerError::BadRequest("未接收到上传文件".to_string()));
+    }
+    Ok((data, filename))
 }
 
 /// 保存 multipart 文件到磁盘

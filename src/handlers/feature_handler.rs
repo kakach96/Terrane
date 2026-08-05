@@ -105,8 +105,8 @@ pub async fn create_feature(
 
     state.add_feature(layer_name, feature.clone()).await;
 
-    // 持久化到业务数据存储 (集群一致性)
-    if let Some(bstore) = &state.business_store {
+    // 持久化到矢量数据存储 (集群一致性)
+    if let Some(bstore) = &state.vector_store {
         let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
         let _ = bstore.save_features(layer_name, &all).await;
     }
@@ -164,8 +164,8 @@ pub async fn delete_feature(
     };
 
     if removed {
-        // 持久化到业务数据存储 (集群一致性)
-        if let Some(bstore) = &state.business_store {
+        // 持久化到矢量数据存储 (集群一致性)
+        if let Some(bstore) = &state.vector_store {
             let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
             let _ = bstore.save_features(layer_name, &all).await;
         }
@@ -224,8 +224,8 @@ pub async fn update_feature(
     };
 
     if let Some(updated_feature) = updated {
-        // 持久化到业务数据存储 (集群一致性)
-        if let Some(bstore) = &state.business_store {
+        // 持久化到矢量数据存储 (集群一致性)
+        if let Some(bstore) = &state.vector_store {
             let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
             let _ = bstore.save_features(layer_name, &all).await;
         }

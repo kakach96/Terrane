@@ -1,6 +1,6 @@
-//! PostgreSQL 业务数据存储 — 每个图层一张物理表 (与 PostGIS 数据源一致的模型)。
+//! PostgreSQL 矢量数据存储 — 每个图层一张物理表 (与 PostGIS 数据源一致的模型)。
 //!
-//! 用于独立 postgres 业务存储 (kind = "postgres"), 或复用 postgres 元数据存储
+//! 用于独立 postgres 矢量存储 (kind = "postgres"), 或复用 postgres 元数据存储
 //! (kind = "metadata" 且元数据为 postgres)。每个图层对应一张 `biz_<layer>` 表,
 //! 与 PostGIS 数据源"一图层一表"的逻辑保持一致, 便于 metadata 数据源复用
 //! 相同的表列表 / 要素读写路径。
@@ -16,13 +16,13 @@ use crate::store::StoreError;
 /// 业务表前缀 (避免与元数据表冲突)
 const BIZ_TABLE_PREFIX: &str = "biz_";
 
-/// PostgreSQL 业务数据存储
-pub struct PostgresBusinessStore {
+/// PostgreSQL 矢量数据存储
+pub struct PostgresVectorStore {
     pool: Pool,
     schema: String,
 }
 
-impl PostgresBusinessStore {
+impl PostgresVectorStore {
     /// 根据连接配置构建连接池并确保 schema 存在。
     pub async fn new(cfg: &PostgresConfig) -> Result<Self, StoreError> {
         let mut pg_cfg = deadpool_postgres::Config::new();
@@ -48,7 +48,7 @@ impl PostgresBusinessStore {
         });
 
         let pool = pg_cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
-        let store = PostgresBusinessStore {
+        let store = PostgresVectorStore {
             pool,
             schema: cfg.schema.clone(),
         };
@@ -99,7 +99,7 @@ impl PostgresBusinessStore {
 }
 
 #[async_trait]
-impl super::BusinessStore for PostgresBusinessStore {
+impl super::VectorStore for PostgresVectorStore {
     async fn save_features(&self, layer_name: &str, features: &[Feature]) -> Result<usize, StoreError> {
         let mut client = self.pool.get().await?;
         let table = self.table_name(layer_name);

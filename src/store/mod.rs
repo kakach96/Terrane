@@ -1,13 +1,17 @@
-pub mod business;
+pub mod cache;
 pub mod error;
 pub mod postgres_store;
+pub mod raster;
 pub mod sqlite_store;
 pub mod types;
+pub mod vector;
 
-pub use business::{BusinessStore, build_business_store};
+pub use cache::{build_session_cache, SessionCache};
 pub use error::StoreError;
+pub use raster::{build_raster_store, RasterStore};
 pub use sqlite_store::SqliteStore;
 pub use postgres_store::PostgresStore;
+pub use vector::{build_vector_store, VectorStore};
 pub use types::{
     AuditLogRecord, Layer, LayerGroupRecord, NamespaceRecord, SessionRecord, StyleRecord, Workspace,
 };

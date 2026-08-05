@@ -38,10 +38,12 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 ### v1.1 — State Convergence (target: 2026 Q3–Q4)
 
-- Metadata + business (vector) data on PostgreSQL (PostGIS) for HA / multi-replica
+- Metadata + vector data on PostgreSQL (PostGIS) for HA / multi-replica
 - Session storage: Redis (cloud) / in-memory (standalone)
-- Tile cache backend abstraction: disk → Redis / object storage
-- Raster data backend abstraction: local files → MinIO / S3 object storage
+- Storage config split done: `[vector]` / `[raster]` / `[cache]` sections with local backends + abstraction traits (`VectorStore`, `RasterStore`, `TileCacheBackend`, `SessionCache`)
+- Tile cache backend abstraction: local disk backend done; Redis / object storage pending
+- Raster data backend abstraction: local files backend done; MinIO / S3 pending
+- Session cache: local in-memory backend done; Redis pending
 - Catalog refresh mechanism to converge in-memory caches across replicas
 - Structured JSON logs + optional OpenTelemetry tracing
 - CI/CD pipeline (GitHub Actions / GitLab CI): fmt + clippy + test + frontend build + image push
@@ -67,9 +69,9 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 - **JWT secret hardcoded default** in `src/auth.rs` (`geoferris-jwt-secret-2026`) — must be injected via `GEOSERVER__SECURITY__JWT_SECRET` in production.
 - **In-memory caches** (`Arc<RwLock<...>>` in `src/state.rs`) diverge across replicas; no refresh mechanism yet.
-- **Tile cache is disk-only** (`./data/gwc`, `src/utils/tile_cache.rs`) — no Redis / S3 backend.
+- **Tile cache backend is disk-only** (`./data/gwc`, `src/store/cache/tile.rs`) — the `TileCacheBackend` trait exists but no Redis / S3 backend yet.
 - **Uploads on local disk** (`./data`) — no shared volume / object storage.
-- **Sessions persisted in the metadata DB** (SQLite / PostgreSQL) — not Redis, not in-memory.
+- **Sessions persisted in the metadata DB** (SQLite / PostgreSQL) with a local in-memory `SessionCache` fast-path — Redis backend pending.
 - **No CI pipeline / image registry push** (`.github/` missing).
 - **Human-readable stdout logs only** — no structured JSON, no OpenTelemetry.
 - **Resilience gaps**: no rate limiting / request-timeout / circuit breaking; no retry/backoff for cascaded WMS upstreams.

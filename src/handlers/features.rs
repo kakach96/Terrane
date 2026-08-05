@@ -19,10 +19,10 @@ pub async fn query_layer_features(
 
     // 内置 metadata 数据源: 业务数据从业务存储读取
     if layer.store == METADATA_DATA_SOURCE {
-        if let Some(bstore) = &state.business_store {
-            info!("[Features] 图层 '{}' 使用内置 metadata 数据源, 从业务存储读取", layer_name);
+        if let Some(bstore) = &state.vector_store {
+            info!("[Features] 图层 '{}' 使用内置 metadata 数据源, 从矢量存储读取", layer_name);
             let all = bstore.load_features(layer_name).await
-                .map_err(|e| GeoServerError::InternalError(format!("Failed to load features from business store: {}", e)))?;
+                .map_err(|e| GeoServerError::InternalError(format!("Failed to load features from vector store: {}", e)))?;
             let mut filtered = filter_features(all, bbox);
             if let Some(o) = offset {
                 filtered = filtered.into_iter().skip(o as usize).collect();
@@ -75,10 +75,10 @@ pub async fn query_layer_features(
                 return Ok(Vec::new());
             }
             DataSourceType::Metadata => {
-                if let Some(bstore) = &state.business_store {
-                    info!("[Features] 图层 '{}' 使用 metadata 数据源, 从业务存储读取", layer_name);
+                if let Some(bstore) = &state.vector_store {
+                    info!("[Features] 图层 '{}' 使用 metadata 数据源, 从矢量存储读取", layer_name);
                     let all = bstore.load_features(layer_name).await
-                        .map_err(|e| GeoServerError::InternalError(format!("Failed to load features from business store: {}", e)))?;
+                        .map_err(|e| GeoServerError::InternalError(format!("Failed to load features from vector store: {}", e)))?;
                     let mut filtered = filter_features(all, bbox);
                     if let Some(o) = offset {
                         filtered = filtered.into_iter().skip(o as usize).collect();

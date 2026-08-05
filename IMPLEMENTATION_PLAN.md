@@ -300,7 +300,7 @@ Overall progress ███████████░░░░░░  54%
 |------|------|------|:-----:|
 | **Containerization** | Multi-stage `Dockerfile` + `.dockerignore` + `docker-compose.yml` (SQLite 单机 / PostgreSQL HA); image `HEALTHCHECK` 基于 `/health/ready` | 未接入 CI 镜像构建/推送/扫描 | **P0 ✅** |
 | **12-Factor config** | `geoferris.toml` + `GEOSERVER__` env var prefix; `load_from_file()` 已挂载 `config::Environment` | 默认 `host=127.0.0.1` (容器内通过 Dockerfile env 设 0.0.0.0); JWT secret 默认值硬编码于 `src/auth.rs` | **P0 ✅** |
-| **Statelessness / scalability** | Metadata (`[metadata]`, default SQLite) and business data (`[business]`: local dir / reuse metadata / PostgreSQL) are split (`src/config.rs`, `src/store/business/`); layers/features/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); tile cache and uploads on local disk `./data` | In-memory state diverges across replicas; SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1** |
+| **Statelessness / scalability** | Storage split into `[metadata]` (SQLite/PostgreSQL), `[vector]` (local dir / reuse metadata / PostgreSQL, `src/store/vector/`), `[raster]` (local dir, `src/store/raster/`) and `[cache]` (local disk tile + in-memory session, `src/store/cache/`); layers/features/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); uploads on local disk `./data` | In-memory state diverges across replicas; SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1** |
 | **Observability** | stdout logs (tracing); `/health` + 拆分 `/health/live` & `/health/ready`; Prometheus `/metrics` (请求/错误、方法/状态码/端点、瓦片命中率、PG 池水位、系统资源) | 无 structured JSON logs, 无 OpenTelemetry tracing | **P1 ✅** |
 | **Lifecycle** | SIGTERM/SIGINT 优雅关闭 + `shutdown_timeout_secs` 在途请求排空 (`main.rs`) | — | **P1 ✅** |
 | **CI/CD & security** | No CI pipeline, no image registry push | Missing GitHub Actions/GitLab CI, image vulnerability scanning, dependency update automation | **P2** |
@@ -329,10 +329,11 @@ Overall progress ███████████░░░░░░  54%
 
 #### Phase 2: State Convergence & Scalability
 
-- Metadata store abstraction: SQLite → optional PostgreSQL (HA scenarios); business data store (`BusinessStore` trait in `src/store/business/`) already supports local dir / reuse metadata / standalone PostgreSQL, extend to S3 / MinIO / object storage later
+- ✅ Storage split: `[metadata]` (SQLite/PostgreSQL) + `[vector]` (local dir / reuse metadata / PostgreSQL, `VectorStore` trait in `src/store/vector/`) + `[raster]` (local dir, `RasterStore` trait in `src/store/raster/`) + `[cache]` (local disk tile + in-memory session, `TileCacheBackend` + `SessionCache` traits in `src/store/cache/`) — local backends in place
+- Extend vector store to S3 / MinIO / object storage later; raster to MinIO / S3; cache to Redis / S3
 - In-memory catalog refresh mechanism: periodic/event-triggered reload from the metadata store to avoid stale data across replicas
-- Tile cache backend abstraction: local disk → S3 / MinIO / Redis (`TileCache` is currently disk-only, `src/utils/tile_cache.rs`)
-- `data_dir` / upload file storage abstraction: shared PVC / object storage
+- Tile cache backend: local disk done → S3 / MinIO / Redis pending
+- `data_dir` / upload file storage abstraction: shared PVC / object storage (pending)
 - Graceful shutdown: catch SIGTERM + `.shutdown_timeout()` to drain in-flight requests
 
 #### Phase 3: CI/CD & Security Hardening

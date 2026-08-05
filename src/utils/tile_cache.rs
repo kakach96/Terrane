@@ -1,13 +1,17 @@
 //! # GeoWebCache — 瓦片缓存引擎
 //!
-//! 提供瓦片磁盘缓存、Gridset 定义、缓存统计等功能。
-//! 缓存路径: `<data_dir>/gwc/<layer>/<gridset>/<zoom>/<x>/<y>.png`
+//! 提供瓦片缓存引擎 (启用开关 / 过期策略 / 命中率统计) 与 Gridset 定义。
+//! 瓦片字节的持久化委托给 [`crate::store::cache::TileCacheBackend`]
+//! (本地磁盘, 未来可扩展 Redis/S3)。
+//! 缓存路径: `<cache_dir>/<layer>/<gridset>/<zoom>/<x>/<y>.png`
 
-use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tokio::fs;
 use serde::{Deserialize, Serialize};
-use tracing::{info, debug, warn};
+
+use crate::config::CacheConfig;
+use crate::store::StoreError;
+use crate::store::cache::{TileCacheBackend, TileCacheKey, TileCacheStats, build_tile_cache_backend};
 
 // ---------------------------------------------------------------------------
 // Gridset 定义
@@ -84,73 +88,6 @@ impl Gridset {
 }
 
 // ---------------------------------------------------------------------------
-// 缓存配置
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GwcConfig {
-    /// 瓦片缓存根目录 (默认: "<data_dir>/gwc")
-    pub cache_dir: PathBuf,
-    /// 缓存元数据目录
-    pub meta_dir: PathBuf,
-    /// 瓦片过期时间 (秒, 0=永不过期)
-    #[serde(default = "default_expire")]
-    pub expire_after_secs: u64,
-    /// 最大缓存瓦片数 (0=无限制)
-    #[serde(default)]
-    pub max_tiles: u64,
-    /// 是否启用磁盘缓存
-    #[serde(default = "default_enabled")]
-    pub enabled: bool,
-    /// 默认 gridset
-    #[serde(default = "default_gridset")]
-    pub default_gridset: String,
-}
-
-fn default_expire() -> u64 { 86400 }  // 24 小时
-fn default_enabled() -> bool { true }
-fn default_gridset() -> String { "EPSG:4326".to_string() }
-
-impl Default for GwcConfig {
-    fn default() -> Self {
-        GwcConfig {
-            cache_dir: PathBuf::from("./data/gwc"),
-            meta_dir: PathBuf::from("./data/gwc/meta"),
-            expire_after_secs: 86400,
-            max_tiles: 100_000,
-            enabled: true,
-            default_gridset: "EPSG:4326".to_string(),
-        }
-    }
-}
-
-impl GwcConfig {
-    /// 瓦片缓存文件路径: <cache_dir>/<layer>/<gridset>/<z>/<x>/<y>.png
-    pub fn tile_path(&self, layer: &str, gridset: &str, z: u32, x: u32, y: u32) -> PathBuf {
-        self.cache_dir.join(layer).join(gridset)
-            .join(z.to_string()).join(x.to_string())
-            .join(format!("{}.png", y))
-    }
-
-    /// 元数据文件路径
-    pub fn meta_path(&self, layer: &str) -> PathBuf {
-        self.meta_dir.join(format!("{}.json", layer))
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 缓存统计
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Default, Clone, Serialize)]
-pub struct TileCacheStats {
-    pub hits: u64,
-    pub misses: u64,
-    pub total_tiles: u64,
-    pub cache_size_bytes: u64,
-}
-
-// ---------------------------------------------------------------------------
 // 缓存条目元数据
 // ---------------------------------------------------------------------------
 
@@ -179,30 +116,31 @@ pub struct LayerTileMeta {
 // ---------------------------------------------------------------------------
 
 pub struct TileCache {
-    pub config: GwcConfig,
+    pub config: CacheConfig,
+    backend: Arc<dyn TileCacheBackend>,
     hits: AtomicU64,
     misses: AtomicU64,
 }
 
 impl TileCache {
-    pub fn new(config: GwcConfig) -> Self {
+    /// 使用默认 (本地磁盘) 后端创建瓦片缓存引擎。
+    pub fn new(config: CacheConfig) -> Self {
+        Self::with_backend(config.clone(), build_tile_cache_backend(&config))
+    }
+
+    /// 使用指定后端创建瓦片缓存引擎 (供未来 Redis/S3 等后端使用)。
+    pub fn with_backend(config: CacheConfig, backend: Arc<dyn TileCacheBackend>) -> Self {
         Self {
             config,
+            backend,
             hits: AtomicU64::new(0),
             misses: AtomicU64::new(0),
         }
     }
 
-    /// 初始化缓存目录
-    pub async fn init(&self) -> Result<(), std::io::Error> {
-        if !self.config.enabled {
-            info!("[GWC] 瓦片缓存已禁用");
-            return Ok(());
-        }
-        fs::create_dir_all(&self.config.cache_dir).await?;
-        fs::create_dir_all(&self.config.meta_dir).await?;
-        info!("[GWC] 瓦片缓存初始化完成: {:?}", self.config.cache_dir);
-        Ok(())
+    /// 初始化缓存后端
+    pub async fn init(&self) -> Result<(), StoreError> {
+        self.backend.init().await
     }
 
     /// 检查瓦片是否在缓存中
@@ -210,42 +148,19 @@ impl TileCache {
         if !self.config.enabled {
             return None;
         }
-
-        let path = self.config.tile_path(layer, gridset, z, x, y);
-        if !path.exists() {
-            self.misses.fetch_add(1, Ordering::Relaxed);
-            debug!("[GWC] MISS  layer={} z={} x={} y={}", layer, z, x, y);
-            return None;
-        }
-
-        // 检查是否过期
-        if self.config.expire_after_secs > 0 {
-            if let Ok(metadata) = fs::metadata(&path).await {
-                if let Ok(modified) = metadata.modified() {
-                    if let Ok(elapsed) = std::time::SystemTime::now().duration_since(modified) {
-                        if elapsed.as_secs() > self.config.expire_after_secs {
-                            debug!("[GWC] EXPIRED layer={} z={} x={} y={}", layer, z, x, y);
-                            // 异步删除过期瓦片
-                            let path_clone = path.clone();
-                            tokio::spawn(async move {
-                                let _ = fs::remove_file(&path_clone).await;
-                            });
-                            self.misses.fetch_add(1, Ordering::Relaxed);
-                            return None;
-                        }
-                    }
-                }
-            }
-        }
-
-        match fs::read(&path).await {
-            Ok(data) => {
+        let key = TileCacheKey {
+            layer: layer.to_string(),
+            gridset: gridset.to_string(),
+            z,
+            x,
+            y,
+        };
+        match self.backend.get(&key).await {
+            Some(data) => {
                 self.hits.fetch_add(1, Ordering::Relaxed);
-                debug!("[GWC] HIT  layer={} z={} x={} y={} ({} bytes)", layer, z, x, y, data.len());
                 Some(data)
             }
-            Err(e) => {
-                warn!("[GWC] READ_ERROR layer={} z={} x={} y={}: {}", layer, z, x, y, e);
+            None => {
                 self.misses.fetch_add(1, Ordering::Relaxed);
                 None
             }
@@ -257,85 +172,42 @@ impl TileCache {
         if !self.config.enabled {
             return;
         }
-
-        let path = self.config.tile_path(layer, gridset, z, x, y);
-
-        // 创建目录
-        if let Some(parent) = path.parent() {
-            if let Err(e) = fs::create_dir_all(parent).await {
-                warn!("[GWC] 无法创建缓存目录 {:?}: {}", parent, e);
-                return;
-            }
-        }
-
-        match fs::write(&path, data).await {
-            Ok(_) => {
-                debug!("[GWC] PUT  layer={} z={} x={} y={} ({} bytes)", layer, z, x, y, data.len());
-            }
-            Err(e) => {
-                warn!("[GWC] WRITE_ERROR layer={} z={} x={} y={}: {}", layer, z, x, y, e);
-            }
-        }
+        let key = TileCacheKey {
+            layer: layer.to_string(),
+            gridset: gridset.to_string(),
+            z,
+            x,
+            y,
+        };
+        self.backend.put(&key, data).await;
     }
 
     /// 清除指定图层的所有缓存
-    pub async fn clear_layer(&self, layer: &str) -> Result<u64, std::io::Error> {
-        let layer_dir = self.config.cache_dir.join(layer);
-        if !layer_dir.exists() {
-            return Ok(0);
-        }
-        let count = count_files(&layer_dir).await;
-        fs::remove_dir_all(&layer_dir).await?;
-        info!("[GWC] 已清除图层 '{}' 的 {} 个缓存瓦片", layer, count);
-        Ok(count)
+    pub async fn clear_layer(&self, layer: &str) -> Result<u64, StoreError> {
+        self.backend.clear_layer(layer).await
     }
 
     /// 清除所有缓存
-    pub async fn clear_all(&self) -> Result<u64, std::io::Error> {
-        let mut total = 0u64;
-        let mut entries = fs::read_dir(&self.config.cache_dir).await?;
-        while let Some(entry) = entries.next_entry().await? {
-            if entry.file_type().await?.is_dir() {
-                let count = count_files(&entry.path()).await;
-                fs::remove_dir_all(&entry.path()).await?;
-                total += count;
-            }
-        }
-        info!("[GWC] 已清除全部 {} 个缓存瓦片", total);
-        Ok(total)
+    pub async fn clear_all(&self) -> Result<u64, StoreError> {
+        self.backend.clear_all().await
     }
 
-    /// 获取缓存统计
+    /// 获取缓存统计 (命中/未命中)
     pub fn stats(&self) -> TileCacheStats {
         TileCacheStats {
             hits: self.hits.load(Ordering::Relaxed),
             misses: self.misses.load(Ordering::Relaxed),
-            total_tiles: 0, // 运行时计算开销大，按需从文件系统统计
+            total_tiles: 0,
             cache_size_bytes: 0,
         }
     }
 
     /// 遍历缓存目录统计瓦片数量和大小 (异步，可能较慢)
     pub async fn calculate_disk_stats(&self) -> TileCacheStats {
-        let mut total = 0u64;
-        let mut size = 0u64;
-
-        if let Ok(mut entries) = fs::read_dir(&self.config.cache_dir).await {
-            while let Some(entry) = entries.next_entry().await.unwrap_or(None) {
-                if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
-                    let (c, s) = count_files_and_size(&entry.path()).await;
-                    total += c;
-                    size += s;
-                }
-            }
-        }
-
-        TileCacheStats {
-            hits: self.hits.load(Ordering::Relaxed),
-            misses: self.misses.load(Ordering::Relaxed),
-            total_tiles: total,
-            cache_size_bytes: size,
-        }
+        let mut st = self.backend.disk_stats().await;
+        st.hits = self.hits.load(Ordering::Relaxed);
+        st.misses = self.misses.load(Ordering::Relaxed);
+        st
     }
 
     /// 缓存命中率
@@ -348,34 +220,13 @@ impl TileCache {
 }
 
 // ---------------------------------------------------------------------------
-// 辅助函数
-// ---------------------------------------------------------------------------
-
-/// 递归统计目录下的文件数 (使用 Box::pin 避免递归 async fn 大小问题)
-async fn count_files(dir: &Path) -> u64 {
-    let mut stack = vec![dir.to_path_buf()];
-    let mut count = 0u64;
-    while let Some(current) = stack.pop() {
-        if let Ok(mut entries) = fs::read_dir(&current).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
-                    stack.push(entry.path());
-                } else {
-                    count += 1;
-                }
-            }
-        }
-    }
-    count
-}
-
-// ---------------------------------------------------------------------------
 // 测试
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::CacheConfig;
 
     #[test]
     fn test_gridset_epsg4326_name() {
@@ -425,29 +276,41 @@ mod tests {
     }
 
     #[test]
-    fn test_gwc_config_default() {
-        let config = GwcConfig::default();
+    fn test_cache_config_default() {
+        let config = CacheConfig::default();
+        assert_eq!(config.kind, "local");
         assert!(config.enabled);
         assert_eq!(config.expire_after_secs, 86400);
         assert_eq!(config.max_tiles, 100_000);
         assert_eq!(config.default_gridset, "EPSG:4326");
+        assert_eq!(config.session_ttl_secs, 86400);
     }
 
-    #[test]
-    fn test_tile_path_format() {
-        let config = GwcConfig::default();
-        let path = config.tile_path("test_layer", "EPSG:4326", 5, 10, 15);
-        let path_str = path.to_string_lossy();
-        assert!(path_str.contains("test_layer"));
-        assert!(path_str.contains("EPSG:4326"));
-        assert!(path_str.contains("5"));
-        assert!(path_str.contains("10"));
-        assert!(path_str.ends_with("15.png"));
+    #[tokio::test]
+    async fn test_tile_put_get_disk_layout() {
+        let mut config = CacheConfig::default();
+        let dir = std::env::temp_dir().join(format!("geoferris-gwc-test-{}", std::process::id()));
+        config.cache_dir = dir.clone();
+        config.meta_dir = dir.join("meta");
+        let cache = TileCache::new(config);
+        let _ = cache.init().await;
+
+        // put 一个瓦片, 验证落在 <dir>/test_layer/EPSG_4326/5/10/15.png
+        // (gridset 中的 ':' 在文件系统路径中被消毒为 '_', 兼容 Windows)
+        cache.put("test_layer", "EPSG:4326", 5, 10, 15, b"tile-bytes").await;
+        let expected = dir.join("test_layer").join("EPSG_4326").join("5").join("10").join("15.png");
+        assert!(expected.exists(), "tile file should exist at {:?}", expected);
+
+        let got = cache.get("test_layer", "EPSG:4326", 5, 10, 15).await;
+        assert_eq!(got.as_deref(), Some(&b"tile-bytes"[..]));
+
+        // 清理
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_tile_cache_new() {
-        let config = GwcConfig::default();
+        let config = CacheConfig::default();
         let cache = TileCache::new(config);
         assert_eq!(cache.stats().hits, 0);
         assert_eq!(cache.stats().misses, 0);
@@ -456,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_hit_rate_calculation() {
-        let config = GwcConfig::default();
+        let config = CacheConfig::default();
         let cache = TileCache::new(config);
         // 初始状态
         assert_eq!(cache.hit_rate(), 0.0);
@@ -466,24 +329,4 @@ mod tests {
         let rate = cache.hit_rate();
         assert!((rate - 0.4).abs() < 0.001);
     }
-}
-
-/// 递归统计目录下的文件数和总大小 (使用迭代，避免递归 async fn)
-async fn count_files_and_size(dir: &Path) -> (u64, u64) {
-    let mut stack = vec![dir.to_path_buf()];
-    let mut count = 0u64;
-    let mut size = 0u64;
-    while let Some(current) = stack.pop() {
-        if let Ok(mut entries) = fs::read_dir(&current).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
-                    stack.push(entry.path());
-                } else if let Ok(meta) = entry.metadata().await {
-                    count += 1;
-                    size += meta.len();
-                }
-            }
-        }
-    }
-    (count, size)
 }

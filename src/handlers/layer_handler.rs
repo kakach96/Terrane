@@ -447,10 +447,10 @@ pub async fn upload_geojson(
         }
     }
 
-    // 持久化要素到业务数据存储（如可用）
-    if let Some(bstore) = &state.business_store {
+    // 持久化要素到矢量数据存储（如可用）
+    if let Some(bstore) = &state.vector_store {
         if let Err(e) = bstore.save_features(&layer_name, &fc.features).await {
-            tracing::warn!("[Upload] 保存要素到业务存储失败: {}", e);
+            tracing::warn!("[Upload] 保存要素到矢量存储失败: {}", e);
         }
     }
 

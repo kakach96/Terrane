@@ -21,7 +21,20 @@ pub async fn handle_wcs_request(
     }
 }
 
-/// 从数据源中查找栅格覆盖数据 (GeoTIFF / WorldImage)
+/// 解析栅格文件的本地路径: 优先经栅格存储解析 (如管理内的栅格), 否则回退到
+/// 数据源连接里记录的原始文件路径 (外部/绝对路径栅格)。
+fn resolve_raster_path(state: &AppState, ds_name: &str, conn_file_path: Option<&String>) -> Option<std::path::PathBuf> {
+    if let Some(rstore) = &state.raster_store {
+        if let Some(p) = rstore.local_path(ds_name) {
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    conn_file_path.map(|f| std::path::PathBuf::from(f))
+}
+
+/// 从数据源中查找栅格覆盖数据 (GeoTIFF / WorldImage / ArcGrid)
 async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::path::PathBuf)> {
     let mut coverages = Vec::new();
 
@@ -32,8 +45,7 @@ async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::pa
                     || ds.data_source_type == DataSourceType::WorldImage
                     || ds.data_source_type == DataSourceType::ArcGrid {
                     if let Some(conn) = &ds.connection {
-                        if let Some(file_path) = &conn.file_path {
-                            let path = std::path::PathBuf::from(file_path);
+                        if let Some(path) = resolve_raster_path(state, &ds.name, conn.file_path.as_ref()) {
                             if path.exists() {
                                 coverages.push((ds.name.clone(), ds.name.clone(), path));
                             }
@@ -85,8 +97,8 @@ async fn handle_describe_coverage(state: &AppState, request: &WcsRequest) -> Res
             if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
                 if ds.data_source_type == DataSourceType::Geotiff {
                     if let Some(conn) = &ds.connection {
-                        if let Some(file_path) = &conn.file_path {
-                            if let Ok(meta) = geotiff::read_geotiff_metadata(file_path) {
+                        if let Some(path) = resolve_raster_path(state, &ds.name, conn.file_path.as_ref()) {
+                            if let Ok(meta) = geotiff::read_geotiff_metadata(&path) {
                                 if let Some(bounds) = meta.bounds {
                                     description.set_bounds(bounds.minx, bounds.miny, bounds.maxx, bounds.maxy);
                                 }
@@ -135,11 +147,11 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
                          || ds.data_source_type == DataSourceType::ArcGrid;
             if is_raster {
                 if let Some(conn) = &ds.connection {
-                    if let Some(file_path) = &conn.file_path {
-                        info!("[WCS] 从 {:?} 读取覆盖: {:?}", ds.data_source_type, file_path);
+                    if let Some(path) = resolve_raster_path(state, &ds.name, conn.file_path.as_ref()) {
+                        info!("[WCS] 从 {:?} 读取覆盖: {:?}", ds.data_source_type, path);
                         match ds.data_source_type {
                             DataSourceType::Geotiff => {
-                                match crate::utils::geotiff::read_geotiff(file_path) {
+                                match crate::utils::geotiff::read_geotiff(&path) {
                                     Ok(cov) => Some((cov.rgba_image, cov.bounds)),
                                     Err(e) => {
                                         info!("[WCS] GeoTIFF 读取失败: {}", e);
@@ -148,7 +160,7 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
                                 }
                             }
                             DataSourceType::WorldImage => {
-                                match crate::utils::worldimage::read_worldimage(file_path) {
+                                match crate::utils::worldimage::read_worldimage(&path) {
                                     Ok(wim) => Some((wim.rgba_image, Some(wim.bounds))),
                                     Err(e) => {
                                         info!("[WCS] WorldImage 读取失败: {}", e);
@@ -157,7 +169,7 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
                                 }
                             }
                             DataSourceType::ArcGrid => {
-                                match crate::utils::arcgrid::read_arcgrid(file_path) {
+                                match crate::utils::arcgrid::read_arcgrid(&path) {
                                     Ok(ag) => Some((ag.rgba_image, Some(ag.bounds))),
                                     Err(e) => {
                                         info!("[WCS] ArcGrid 读取失败: {}", e);

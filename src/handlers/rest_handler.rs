@@ -71,21 +71,21 @@ pub async fn health_ready(state: web::Data<AppState>) -> HttpResponse {
         }));
     }
 
-    // 2. 业务数据存储 (local / metadata / postgres) — 未配置时视为就绪
-    if let Some(ref bs) = state.business_store {
+    // 2. 矢量数据存储 (local / metadata / postgres) — 未配置时视为就绪
+    if let Some(ref bs) = state.vector_store {
         match bs.list_tables().await {
-            Ok(_) => checks.push(serde_json::json!({"name": "business_store", "status": "ok"})),
+            Ok(_) => checks.push(serde_json::json!({"name": "vector_store", "status": "ok"})),
             Err(e) => {
                 ready = false;
                 checks.push(serde_json::json!({
-                    "name": "business_store",
+                    "name": "vector_store",
                     "status": "error",
                     "detail": format!("query failed: {}", e)
                 }));
             }
         }
     } else {
-        checks.push(serde_json::json!({"name": "business_store", "status": "ok", "detail": "not configured"}));
+        checks.push(serde_json::json!({"name": "vector_store", "status": "ok", "detail": "not configured"}));
     }
 
     // 3. 瓦片缓存目录 (可选) — 已配置但不可用时不阻塞就绪, 仅记录

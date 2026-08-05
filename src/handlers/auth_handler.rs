@@ -56,13 +56,13 @@ pub async fn login(
                     let token = generate_token(&user.username, &user.role, 24)
                         .map_err(|e| GeoServerError::InternalError(e))?;
 
-                    // 记录会话到数据库 (支持登出/吊销)
+                    // 记录会话到数据库 (支持登出/吊销) 并写入会话缓存
                     if let Ok(claims) = verify_token(&token) {
                         let now = chrono::Utc::now();
                         let now_str = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
                         let expires_at = (now + chrono::Duration::hours(24))
                             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-                        let _ = store.create_session(&crate::store::SessionRecord {
+                        let session = crate::store::SessionRecord {
                             jti: claims.jti.clone(),
                             username: user.username.clone(),
                             role: user.role.to_string(),
@@ -72,7 +72,11 @@ pub async fn login(
                             revoked: false,
                             user_agent: req_user_agent(&req),
                             ip_address: ip.clone(),
-                        }).await;
+                        };
+                        let _ = store.create_session(&session).await;
+                        if let Some(cache) = &state.session_cache {
+                            let _ = cache.set(session.clone()).await;
+                        }
                         let _ = store.cleanup_expired_sessions().await;
                     }
 
@@ -115,6 +119,9 @@ pub async fn logout(
 
     if let Some(store) = &state.store {
         let _ = store.delete_session(&claims.jti).await;
+        if let Some(cache) = &state.session_cache {
+            let _ = cache.remove(&claims.jti).await;
+        }
         let _ = store.audit_log(&claims.sub, "LOGOUT", None, Some("登出"), req_ip(&req).as_deref()).await;
     }
 
@@ -135,16 +142,36 @@ pub async fn verify(
     let claims = verify_token(auth_header)
         .map_err(|e| GeoServerError::BadRequest(format!("Token 验证失败: {}", e)))?;
 
-    // 校验数据库会话 (未记录 = 已过期/已登出)
+    // 校验会话 (未记录 = 已过期/已登出)
+    // 优先查会话缓存, 未命中回退元数据存储并回填缓存
     if let Some(store) = &state.store {
-        match store.get_session(&claims.jti).await {
-            Ok(Some(session)) => {
+        let session_opt = if let Some(cache) = &state.session_cache {
+            if let Some(s) = cache.get(&claims.jti).await {
+                Some(s)
+            } else {
+                match store.get_session(&claims.jti).await {
+                    Ok(Some(s)) => {
+                        let _ = cache.set(s.clone()).await;
+                        Some(s)
+                    }
+                    Ok(None) => None,
+                    Err(_) => None,
+                }
+            }
+        } else {
+            match store.get_session(&claims.jti).await {
+                Ok(s) => s,
+                Err(_) => None,
+            }
+        };
+
+        match session_opt {
+            Some(session) => {
                 if session.revoked {
                     return Err(GeoServerError::BadRequest("会话已失效".to_string()));
                 }
             }
-            Ok(None) => return Err(GeoServerError::BadRequest("会话不存在或已过期".to_string())),
-            Err(_) => {}
+            None => return Err(GeoServerError::BadRequest("会话不存在或已过期".to_string())),
         }
     }
 

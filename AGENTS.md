@@ -18,7 +18,9 @@ src/              — Rust backend (Actix-web)
   handlers/       — REST + OGC (WMS/WFS/WCS) handlers
   models/         — Shared data structs (Layer, Feature, DataSource, etc.)
   store/          — SQLite store (sqlite_store.rs) with PostGIS extension
-    business/     — Business data store abstraction (local dir / PostgreSQL / metadata reuse)
+    vector/       — Vector store abstraction (local dir / PostgreSQL / metadata reuse)
+    raster/       — Raster store abstraction (local dir; future S3/MinIO)
+    cache/        — Cache abstraction (TileCacheBackend + SessionCache; local disk/in-memory)
   routes.rs       — All route registrations in one file
 frontend/         — Angular 17 + Material
   src/app/
@@ -65,7 +67,7 @@ cargo build
 
 - **API base path**: `/geoserver` (configurable in `geoferris.toml: api_context`)
 - **Frontend build**: `optimization.fonts = false` (offline env), Google Fonts loaded at runtime
-- **Storage split**: metadata store (`AppState.store`, default SQLite, `[metadata]`) vs business data store (`AppState.business_store`, `[business]`). Defaults: metadata=sqlite → business=local dir (`<data_dir>/business`, one GeoJSON per layer); metadata=postgres → business=metadata (reuse, built-in default data source option). Legacy `[database]` config is accepted as a `[metadata]` alias. PostGIS data sources use `deadpool_postgres` pools cached in `AppState.pg_pools`
+- **Storage split**: metadata store (`AppState.store`, default SQLite, `[metadata]`) vs vector store (`AppState.vector_store`, `[vector]`, alias `[business]`) vs raster store (`AppState.raster_store`, `[raster]`) vs cache (`AppState.tile_cache` + `AppState.session_cache`, `[cache]`, alias `[gwc]`). Defaults: metadata=sqlite → vector=local dir (`<data_dir>/business`, one GeoJSON per layer); metadata=postgres → vector=metadata (reuse, built-in default data source option); raster=local dir (`<data_dir>/rasters`); cache=local (tile disk `<data_dir>/gwc` + in-memory session). Legacy `[database]` config is accepted as a `[metadata]` alias. PostGIS data sources use `deadpool_postgres` pools cached in `AppState.pg_pools`
 - **Layer <-> DB mapping**: `layer.store` = data source name, `layer.native_name` = DB table name
 - **Boundary representation**: GET `/layers/{name}` returns `native_bounds.bounds.{minx,miny,maxx,maxy}`; the list endpoint returns `bounds` at top level
 - **No test suite** configured (no test dependencies in Cargo.toml, Angular `ng test` untested)
@@ -84,7 +86,7 @@ cargo build
   ```
 - **JWT secret has a hardcoded default** in `src/auth.rs` (`geoferris-jwt-secret-2026`); inject via env `GEOSERVER__SECURITY__JWT_SECRET` in multi-replica prod (docker-compose passes `GEOSERVER_JWT_SECRET`)
 - **Runtime host**: default `127.0.0.1`; Docker image sets `GEOSERVER__SERVER__HOST=0.0.0.0`
-- **State**: metadata in SQLite (`geoserver.sqlite`) + business data (default local dir `<data_dir>/business`, or PostgreSQL) + in-memory caches (`Arc<RwLock<...>>` in `src/state.rs`) + local disk tile cache (`./data/gwc`) + uploads (`./data`) → multi-replica needs shared storage or PostgreSQL / object-storage backends
+- **State**: metadata in SQLite (`geoserver.sqlite`) + vector data (default local dir `<data_dir>/business`, or PostgreSQL) + raster files (default `<data_dir>/rasters`) + in-memory caches (`Arc<RwLock<...>>` in `src/state.rs`) + session cache (in-memory) + local disk tile cache (`./data/gwc`) + uploads (`./data`) → multi-replica needs shared storage or PostgreSQL / object-storage backends
 - **Observability**: stdout logs (human-readable, not JSON); split probes `/health/live` + `/health/ready` (registered on root path, decoupled from `api_context`); Prometheus `/metrics` (root path; requests/errors, tile cache hit rate, PG pool watermarks, system). Legacy `/health` & `/monitor/*` retained
 - **Lifecycle**: SIGTERM/SIGINT graceful shutdown + `shutdown_timeout_secs` (default 30s, `[server].shutdown_timeout_secs`)
 

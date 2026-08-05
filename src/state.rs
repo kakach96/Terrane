@@ -6,7 +6,10 @@ use tokio::sync::RwLock;
 use std::time::Instant;
 use crate::config::GeoServerConfig;
 use crate::models::{Layer, Feature, layer::LayerGroup};
-use crate::store::{Store, SqliteStore, PostgresStore, BusinessStore, build_business_store};
+use crate::store::{
+    Store, SqliteStore, PostgresStore, VectorStore, build_vector_store, RasterStore, build_raster_store,
+    SessionCache, build_session_cache,
+};
 use crate::utils::sld_parser;
 use crate::utils::tile_cache::TileCache;
 use serde::Serialize;
@@ -60,8 +63,12 @@ pub struct AppState {
     pub styles: Arc<RwLock<HashMap<String, String>>>,
     pub styles_meta: Arc<RwLock<HashMap<String, StyleMeta>>>,
     pub store: Option<Arc<dyn Store>>,
-    /// 业务数据存储 (图层要素; 与元数据存储分离, 见 config::BusinessConfig)
-    pub business_store: Option<Arc<dyn BusinessStore>>,
+    /// 矢量数据存储 (图层要素; 与元数据存储分离, 见 config::VectorConfig)
+    pub vector_store: Option<Arc<dyn VectorStore>>,
+    /// 栅格数据存储 (GeoTIFF/WorldImage/ArcGrid 文件; 见 config::RasterConfig)
+    pub raster_store: Option<Arc<dyn RasterStore>>,
+    /// 会话缓存 (会话快速层; 元数据存储为真源, 见 config::CacheConfig)
+    pub session_cache: Option<Arc<dyn SessionCache>>,
     pub pg_pools: Arc<Mutex<HashMap<String, deadpool_postgres::Pool>>>,
     pub layer_groups: Arc<RwLock<Vec<LayerGroup>>>,
     pub start_time: Instant,
@@ -110,11 +117,11 @@ impl AppState {
             }
         };
 
-        // 构建业务数据存储 (元数据与业务数据分离; 见 config::BusinessConfig)
-        let business_store = build_business_store(&config).await;
-        match &business_store {
+        // 构建矢量数据存储 (元数据与矢量数据分离; 见 config::VectorConfig)
+        let vector_store = build_vector_store(&config).await;
+        match &vector_store {
             Some(_) => {
-                let eff = config.effective_business();
+                let eff = config.effective_vector();
                 let detail = match eff.kind.as_str() {
                     "metadata" => "reuse metadata store".to_string(),
                     "postgres" => format!("PostgreSQL ({})", eff.postgres.instance),
@@ -124,11 +131,39 @@ impl AppState {
                         .map(|d| d.to_string_lossy().to_string())
                         .unwrap_or_default(),
                 };
-                tracing::info!("Business data store backend: {} ({})", eff.kind, detail);
+                tracing::info!("Vector data store backend: {} ({})", eff.kind, detail);
             }
             None => {
-                tracing::warn!("Business data store backend: none");
+                tracing::warn!("Vector data store backend: none");
             }
+        }
+
+        // 构建栅格数据存储 (见 config::RasterConfig)
+        let raster_store = build_raster_store(&config).await;
+        match &raster_store {
+            Some(_) => {
+                let eff = config.effective_raster();
+                let dir = eff
+                    .dir
+                    .as_ref()
+                    .map(|d| d.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                tracing::info!("Raster data store backend: {} ({})", eff.kind, dir);
+            }
+            None => {
+                tracing::warn!("Raster data store backend: none");
+            }
+        }
+
+        // 构建会话缓存 (瓦片缓存之外的会话快速层; 见 config::CacheConfig)
+        let eff_cache = config.effective_cache();
+        let session_cache = build_session_cache(&eff_cache);
+        if session_cache.is_some() {
+            tracing::info!(
+                "Session cache backend: {} (ttl {}s)",
+                eff_cache.kind,
+                eff_cache.session_ttl_secs
+            );
         }
 
         let config_layers: Vec<Layer> = config.workspaces.iter()
@@ -255,12 +290,10 @@ impl AppState {
             crate::auth::ensure_default_admin(store.as_ref()).await;
         }
 
-        // GeoWebCache 初始化
-        let tile_cache = config.gwc.as_ref().map(|gwc_config| {
-            TileCache::new(gwc_config.clone())
-        });
+        // GeoWebCache 初始化 (后端按 [cache].kind 选择; 未配置 [cache] 时保持 None)
+        let tile_cache = config.cache.as_ref().map(|_| TileCache::new(config.effective_cache()));
 
-        // 异步初始化瓦片缓存目录
+        // 异步初始化瓦片缓存后端
         if let Some(ref cache) = tile_cache {
             if let Err(e) = cache.init().await {
                 eprintln!("[GWC] 瓦片缓存初始化失败: {}", e);
@@ -275,7 +308,9 @@ impl AppState {
             styles_meta: Arc::new(RwLock::new(styles_meta_map)),
             layer_groups: Arc::new(RwLock::new(layer_groups_init)),
             store,
-            business_store,
+            vector_store,
+            raster_store,
+            session_cache,
             pg_pools: Arc::new(Mutex::new(HashMap::new())),
             start_time: Instant::now(),
             request_count: AtomicU64::new(0),
