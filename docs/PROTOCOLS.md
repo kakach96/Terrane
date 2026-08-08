@@ -29,7 +29,7 @@ and *which remain to be adapted*.
 | **WFS output formats** | —                          | ✅      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV / KML / Shapefile (SHAPE-ZIP) |
 | **WPS**             | 1.0.0                          | ✅      | GetCapabilities / DescribeProcess / Execute (KVP + XML POST); built-in processes vec:Centroid / vec:Buffer / gs:Bounds |
 | **CSW**             | 2.0.2                          | ✅      | GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain; catalog = Terrane layers as Dublin Core records (KVP + XML POST) |
-| **OGC API series**  | Features / Tiles / Maps / Coverages / Processes / Styles | ❌ | P4 |
+| **OGC API series**  | Features (Core) / Tiles / Maps / Coverages / Processes / Styles | ⚠️ | Features Core ✅ at `/ogc/features` (landing/conformance/collections/items, GeoJSON + bbox/limit/offset); Tiles/Maps/Coverages/Processes/Styles pending |
 
 ## 2. WMS — Web Map Service
 
@@ -177,7 +177,7 @@ Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](IMPLEMENTAT
 | P2       | WFS KML / Shapefile output          | ✅ done |
 | P4       | WPS (processing)                    | ✅ first surface (Centroid/Buffer/Bounds) |
 | P4       | CSW (catalog)                       | ✅ first surface (GetCapabilities/DescribeRecord/GetRecords/GetRecordById/GetDomain) |
-| P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | 2–3 weeks each |
+| P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | ✅ Features Core (batch 19); Tiles/Maps/Coverages/Processes/Styles 2–3 weeks each |
 | P4       | Printing / Importer / GeoFence      | enterprise |
 | P4       | CSS / YSLD / MBStyle styling        | medium |
 
@@ -200,7 +200,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **138 lib unit tests + 115 integration tests**, plus
+`cargo test` currently green: **145 lib unit tests + 123 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -218,6 +218,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | `tests/tms_test.rs` | 7     | TMS (GetCapabilities RESTful + KVP, TileMap document, GetTile geodetic/mercator PNG + JPEG, KVP GetTile) |
 | `tests/wps_test.rs` | 6     | WPS (GetCapabilities, DescribeProcess, Execute KVP raw centroid/buffer/bounds + XML POST) |
 | `tests/csw_test.rs` | 10    | CSW (GetCapabilities, DescribeRecord, GetRecords KVP + XML POST summary/brief/full + CQL constraint + paging/hits, GetRecordById, GetDomain) |
+| `tests/ogc_api_test.rs` | 8 | OGC API Features (landing, conformance, collections, collection, items with limit/offset/bbox, item by id, 404) |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
 has at least one request/response test validating status codes, content types,
@@ -429,4 +430,18 @@ creation now applies them to `native_bounds` / `lat_lon_bounds`. New unit
 tests: 9 (csw.rs); new integration: 10 (csw_test.rs).
 Next candidates:
 
-1. OGC API Features / Processes (P4)
+Batch 19 completed: **OGC API - Features Part 1 Core (OGC 17-069r3) first
+surface** — `src/services/ogc_features.rs` + `src/handlers/ogc_api_handler.rs`
+served at `/ogc/features` (JSON). Resources: landing page, `/conformance`
+(conformsTo: core / oas30 / geojson), `/collections` and `/collections/{id}`
+(collection = Terrane layer: id / title / description / WGS84 extent +
+self/items links), `/collections/{id}/items` (GeoJSON FeatureCollection with
+`numberMatched` / `numberReturned` + `links`, `bbox` filter via
+`calculate_bounds` intersection, `limit` / `offset` paging + `next` link) and
+`/collections/{id}/items/{featureId}`. The reference GeoServer does not ship
+the OGC API extension (404), so this follows the OGC API - Features Core
+schema directly. New unit tests: 7 (ogc_features.rs); new integration: 8
+(ogc_api_test.rs).
+Next candidates:
+
+1. OGC API Tiles / Maps / Processes (P4)

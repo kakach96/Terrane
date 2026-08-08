@@ -173,13 +173,13 @@ chore: bump actix-web to 4.x
 
 ## 7. Testing
 
-- Run `cargo test` for the full suite: **138 lib unit tests + 115 integration tests**
+- Run `cargo test` for the full suite: **145 lib unit tests + 123 integration tests**
   (+ **5 `#[ignore]` live tests** that require running services, run with
   `cargo test -- --ignored`: 3× PostGIS via `GEOSERVER_TEST_PG_*` env, 2×
   CascadedWms against the reference GeoServer at :18080).
 - Integration tests are split by protocol into separate crates under `tests/`
   (`wms_test.rs`, `wfs_test.rs`, `wcs_test.rs`, `wmts_test.rs`, `tms_test.rs`,
-  `wps_test.rs`, `csw_test.rs`, `rest_test.rs`), sharing `tests/common/mod.rs` helpers
+  `wps_test.rs`, `csw_test.rs`, `ogc_api_test.rs`, `rest_test.rs`), sharing `tests/common/mod.rs` helpers
   (`create_test_config` + `build_test_app!`).
   The test config uses in-memory SQLite and disables the tile cache, so tests
   write nothing to `./data`. Full coverage matrix: see [PROTOCOLS.md](PROTOCOLS.md) §11.
