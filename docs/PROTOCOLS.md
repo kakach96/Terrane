@@ -169,7 +169,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 ## 10. Automated test coverage
 
 `cargo test` currently green: **102 lib unit tests + 78 integration tests**, plus
-**4 `#[ignore]`-marked live tests** (3× PostGIS + 1× CascadedWms) that require
+**5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
 The integration tests are split by protocol into separate test crates (Rust
@@ -178,7 +178,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
-| `tests/wms_test.rs` | 20 (+1 ignored live) | WMS (all operations, formats, vendor params; + cascaded WMS live proxy) |
+| `tests/wms_test.rs` | 20 (+2 ignored live) | WMS (all operations, formats, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) |
 | `tests/wfs_test.rs` | 19    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER) |
 | `tests/rest_test.rs`| 23 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 12    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, JPEG / netCDF) |
@@ -214,7 +214,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | Upload             | 1 unit test (`upload_handler.rs`: filename sanitize)                     |
 | Store (cache)      | 4 `LocalSessionCache` unit tests (set/get/remove/remove_user/TTL) + 4 `LocalTileCacheBackend` (put/get/clear/stats/gridset-path sanitize) |
 | Store (vector/raster) | 4 `LocalVectorStore` (save/load/delete/list/sanitize) + 4 `LocalRasterStore` (put/get/delete/list/.tif) + 8 `sqlite_store` (workspace / namespace / layer+features / user+permission / session / styles CRUD / layer-groups CRUD / audit logs) + 2 live `PostgresStore` (metadata CRUD) / `PostgresVectorStore` (feature round-trip) — `#[ignore]` |
-| Data-source adapters | 4 `arcgrid` (read/meta/errors) + 5 `worldimage` (ext/meta/crop) + 4 `cascaded` (config extract + live `fetch_cascaded_map` via WMS proxy) + 8 `geopackage` (layers / validation / features read round-trip / limit + **write→read round-trip** for Point & LineString + **typed attributes: INTEGER/REAL/BOOLEAN/TEXT inference + round-trip**) + 2 `data_source` (serde type round-trip incl. `cascaded_wms`, postgis connection constructor) + 4 `wkb` (Point/LineString/Polygon round-trip + **Multi*/GeometryCollection round-trip** + byte lengths + big-endian decode, all 7 WKB types now parse) |
+| Data-source adapters | 4 `arcgrid` (read/meta/errors) + 5 `worldimage` (ext/meta/crop) + 5 `cascaded` (config extract + **vendor-param URL encoding** + live `fetch_cascaded_map` via WMS proxy: CQL_FILTER valid/invalid + TIME pass-through) + 8 `geopackage` (layers / validation / features read round-trip / limit + **write→read round-trip** for Point & LineString + **typed attributes: INTEGER/REAL/BOOLEAN/TEXT inference + round-trip**) + 2 `data_source` (serde type round-trip incl. `cascaded_wms`, postgis connection constructor) + 4 `wkb` (Point/LineString/Polygon round-trip + **Multi*/GeometryCollection round-trip** + byte lengths + big-endian decode, all 7 WKB types now parse) |
 
 ### 10.2 Coverage gaps (adapted but untested)
 
@@ -291,12 +291,17 @@ endian too), with encoder→decoder round-trip tests for every type.
 Batch 10 completed: GeoPackage **typed attributes** (INTEGER / REAL / BOOLEAN /
 TEXT inferred from `PropertyValue`, typed on read) + REST publish flow
 (`/data-sources/{name}/tables` lists GeoPackage feature tables, `/layers/{layer}/
-feature-type` returns typed columns for a published GeoPackage layer). Next
-candidates:
+feature-type` returns typed columns for a published GeoPackage layer).
 
-1. WMS vendor params on the live cascaded proxy (CQL / TIME pass-through)
-2. OGC XML `FILTER=` edge cases: `ogc:Function`, spatial `Intersects` XML form
-3. WMS PDF / GeoRSS output (reuse the render pipeline)
-4. GeoPackage `FeatureType` describe via WFS `DescribeFeatureType` for a
+Batch 11 completed: cascaded WMS **vendor-param pass-through** — the live proxy
+now forwards CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID (URL-
+encoded) to the upstream; verified live against the reference GeoServer: valid
+CQL_FILTER → PNG, invalid CQL_FILTER → upstream OGC exception (non-PNG, proving
+pass-through), TIME → PNG. Next candidates:
+
+1. OGC XML `FILTER=` edge cases: `ogc:Function`, spatial `Intersects` XML form
+2. WMS PDF / GeoRSS output (reuse the render pipeline)
+3. GeoPackage `FeatureType` describe via WFS `DescribeFeatureType` for a
    published GeoPackage layer
+4. TMS 1.0.0 + WMS-C 1.1.1 (GWC, reuse the tile engine)
 
