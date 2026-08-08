@@ -113,8 +113,14 @@ async fn handle_describe_coverage(state: &AppState, request: &WcsRequest) -> Res
         descriptions.push(description);
     }
 
-    let xml = to_string(&descriptions)
-        .map_err(|e| GeoServerError::ServiceError(format!("Failed to serialize descriptions: {}", e)))?;
+    // quick-xml 无法直接序列化裸 Vec (无根标签), 逐条序列化后拼接
+    let mut inner_xml = String::new();
+    for description in &descriptions {
+        let item = to_string(description)
+            .map_err(|e| GeoServerError::ServiceError(format!("Failed to serialize coverage description: {}", e)))?;
+        inner_xml.push_str(&item);
+        inner_xml.push('\n');
+    }
 
     let xml = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -122,7 +128,7 @@ async fn handle_describe_coverage(state: &AppState, request: &WcsRequest) -> Res
                           xmlns:gml="http://www.opengis.net/gml/3.2">
 {}
 </wcs:CoverageDescriptions>"#,
-        xml
+        inner_xml
     );
 
     Ok(HttpResponse::Ok()

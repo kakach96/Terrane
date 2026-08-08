@@ -572,6 +572,23 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                         text_content.clear();
                     }
                     "Point" | "point" => {}
+                    "FeatureId" | "featureId" | "FEATUREID" if in_delete => {
+                        // Collect ogc:FeatureId fid attributes into the Delete filter
+                        for attr in e.attributes().with_checks(false) {
+                            if let Ok(a) = attr {
+                                let key = String::from_utf8_lossy(a.key.as_ref())
+                                    .split(':').last().unwrap_or("").to_lowercase();
+                                if key == "fid" {
+                                    let fid = String::from_utf8_lossy(a.value.as_ref()).to_string();
+                                    if let Some(ref mut delete) = current_delete {
+                                        if let Filter::FeatureId(ref mut ids) = delete.filter {
+                                            ids.push(fid);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     "LineString" | "linestring" => {
                         in_linestring = true;
                     }
