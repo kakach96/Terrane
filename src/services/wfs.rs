@@ -245,12 +245,12 @@ pub struct ElementDefinition {
 }
 
 impl DescribeFeatureTypeResponse {
-    pub fn new(type_name: &str, properties: Vec<(&str, &str)>) -> Self {
+    pub fn new(type_name: &str, properties: Vec<(String, String)>) -> Self {
         let elements: Vec<ElementDefinition> = properties
-            .iter()
+            .into_iter()
             .map(|(name, type_)| ElementDefinition {
-                name: name.to_string(),
-                type_: type_.to_string(),
+                name,
+                type_,
                 min_occurs: Some(0),
                 max_occurs: Some("1".to_string()),
             })
@@ -267,6 +267,51 @@ impl DescribeFeatureTypeResponse {
             },
         }
     }
+}
+
+/// Map a SQLite column type (as reported by `PRAGMA table_info`) to an XSD type,
+/// following the reference GeoServer mapping: geometry → `gml:GeometryPropertyType`,
+/// INTEGER → `xsd:long`, REAL → `xsd:double`, BOOLEAN → `xsd:boolean`, BLOB →
+/// `xsd:base64Binary`, everything else → `xsd:string`.
+pub fn sqlite_type_to_xsd(name: &str, sqlite_type: &str) -> &'static str {
+    let upper = sqlite_type.to_uppercase();
+    let lower_name = name.to_lowercase();
+    let is_geom = matches!(
+        lower_name.as_str(),
+        "geom" | "geometry" | "the_geom" | "shape"
+    ) || [
+        "POINT",
+        "LINESTRING",
+        "POLYGON",
+        "MULTIPOINT",
+        "MULTILINESTRING",
+        "MULTIPOLYGON",
+        "GEOMETRYCOLLECTION",
+        "GEOMETRY",
+    ]
+    .iter()
+    .any(|g| upper.contains(g));
+    if is_geom {
+        return "gml:GeometryPropertyType";
+    }
+    if upper.contains("INT") {
+        return "xsd:long";
+    }
+    if upper.contains("REAL")
+        || upper.contains("FLOA")
+        || upper.contains("DOUB")
+        || upper.contains("NUM")
+        || upper.contains("DEC")
+    {
+        return "xsd:double";
+    }
+    if upper.contains("BOOL") {
+        return "xsd:boolean";
+    }
+    if upper.contains("BLOB") {
+        return "xsd:base64Binary";
+    }
+    "xsd:string"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1340,4 +1385,41 @@ pub fn parse_transaction_xml(
     }
 
     Ok(transaction)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sqlite_type_to_xsd;
+
+    #[test]
+    fn test_sqlite_type_to_xsd_mapping() {
+        // Geometry columns: by name or by declared geometry type.
+        assert_eq!(
+            sqlite_type_to_xsd("geom", "BLOB"),
+            "gml:GeometryPropertyType"
+        );
+        assert_eq!(
+            sqlite_type_to_xsd("the_geom", "POINT"),
+            "gml:GeometryPropertyType"
+        );
+        assert_eq!(
+            sqlite_type_to_xsd("shape", "MULTIPOLYGON"),
+            "gml:GeometryPropertyType"
+        );
+        // Attribute types.
+        assert_eq!(sqlite_type_to_xsd("count", "INTEGER"), "xsd:long");
+        assert_eq!(sqlite_type_to_xsd("price", "REAL"), "xsd:double");
+        assert_eq!(sqlite_type_to_xsd("ratio", "DOUBLE"), "xsd:double");
+        assert_eq!(sqlite_type_to_xsd("active", "BOOLEAN"), "xsd:boolean");
+        assert_eq!(sqlite_type_to_xsd("name", "TEXT"), "xsd:string");
+        assert_eq!(sqlite_type_to_xsd("payload", "BLOB"), "xsd:base64Binary");
+        // A BLOB not named as a geometry column stays base64Binary.
+        assert_eq!(
+            sqlite_type_to_xsd("geo_blob", "BLOB"),
+            "xsd:base64Binary"
+        );
+        // Unknown / empty types default to string.
+        assert_eq!(sqlite_type_to_xsd("misc", "CLOB"), "xsd:string");
+        assert_eq!(sqlite_type_to_xsd("misc", ""), "xsd:string");
+    }
 }

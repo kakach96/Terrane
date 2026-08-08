@@ -1,5 +1,5 @@
 use crate::error::GeoServerError;
-use crate::models::{Feature, PropertyValue};
+use crate::models::{DataSourceType, Feature, PropertyValue};
 use crate::services::wfs::{self, DescribeFeatureTypeResponse, WfsCapabilities, WfsRequest};
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -225,7 +225,7 @@ async fn handle_get_capabilities(
 }
 
 async fn handle_describe_feature_type(
-    _state: &AppState,
+    state: &AppState,
     request: &WfsRequest,
 ) -> Result<HttpResponse, GeoServerError> {
     let type_names = request
@@ -237,11 +237,47 @@ async fn handle_describe_feature_type(
         GeoServerError::BadRequest("At least one TYPENAME is required".to_string())
     })?;
 
-    let properties: Vec<(&str, &str)> = vec![
-        ("id", "xsd:string"),
-        ("name", "xsd:string"),
-        ("geometry", "xsd:string"),
+    // Default fallback schema (used when the layer has no resolvable store).
+    let mut properties: Vec<(String, String)> = vec![
+        ("id".to_string(), "xsd:string".to_string()),
+        ("name".to_string(), "xsd:string".to_string()),
+        ("geometry".to_string(), "xsd:string".to_string()),
     ];
+
+    // GeoPackage layers report their real typed columns via WFS
+    // DescribeFeatureType (mirrors the reference GeoServer mapping:
+    // INTEGER→xsd:long, REAL→xsd:double, BOOLEAN→xsd:boolean, geometry→
+    // gml:GeometryPropertyType).
+    if let Some(store) = &state.store {
+        let layer = store.get_layer(type_name).await.ok().flatten();
+        if let Some(layer) = layer {
+            if let Ok(Some(data_source)) = store.get_data_source(&layer.store).await {
+                if data_source.data_source_type == DataSourceType::Geopackage {
+                    let table_name = layer.native_name.clone();
+                    let file_path = data_source
+                        .connection
+                        .as_ref()
+                        .and_then(|c| c.file_path.clone());
+                    if let (Some(table_name), Some(file_path)) = (table_name, file_path) {
+                        if let Ok(columns) = crate::utils::geopackage::geopackage_table_columns(
+                            &file_path, &table_name,
+                        ) {
+                            // Skip the internal autoincrement `id` primary key,
+                            // mirroring GeoServer (fid is not a regular attribute).
+                            properties = columns
+                                .into_iter()
+                                .filter(|(name, _)| name != "id")
+                                .map(|(name, ty)| {
+                                    let xsd = wfs::sqlite_type_to_xsd(&name, &ty);
+                                    (name, xsd.to_string())
+                                })
+                                .collect();
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     let response = DescribeFeatureTypeResponse::new(type_name, properties);
 

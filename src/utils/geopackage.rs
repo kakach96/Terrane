@@ -294,6 +294,38 @@ fn infer_attribute_type(values: &[Option<&PropertyValue>]) -> &'static str {
     }
 }
 
+/// 读取 GeoPackage 要素表的列定义 (PRAGMA table_info)。
+///
+/// 返回 `(列名, SQLite 类型)` 对列表, 包含几何列。供 WFS
+/// `DescribeFeatureType` 与 REST `feature-type` 描述真实 schema 使用。
+pub fn geopackage_table_columns<P: AsRef<Path>>(
+    path: P,
+    table_name: &str,
+) -> Result<Vec<(String, String)>, String> {
+    let conn = Connection::open(path.as_ref())
+        .map_err(|e| format!("无法打开 GeoPackage '{:?}': {}", path.as_ref(), e))?;
+    let qn = table_name.replace('"', "\"\"");
+    let pragma = format!("PRAGMA table_info(\"{}\")", qn);
+    let mut stmt = conn
+        .prepare(&pragma)
+        .map_err(|e| format!("查询 GeoPackage 表 '{}' 列失败: {}", table_name, e))?;
+    let rows = stmt
+        .query_map([], |row| {
+            let name: String = row.get(1)?;
+            let ty: String = row.get(2).unwrap_or_default();
+            Ok((name, ty))
+        })
+        .map_err(|e| format!("查询结果错误: {}", e))?;
+
+    let mut cols = Vec::new();
+    for row in rows {
+        if let Ok((name, ty)) = row {
+            cols.push((name, ty));
+        }
+    }
+    Ok(cols)
+}
+
 /// 将要素写入一个新的 GeoPackage 文件（写入端）。
 ///
 /// 按 OGC GeoPackage 标准创建核心元数据表
