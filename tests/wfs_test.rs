@@ -773,7 +773,11 @@ async fn test_wfs_get_feature_xml_filter_function_strtolower() {
         features.len()
     );
     let name = features[0]["properties"]["name"].as_str().unwrap_or("");
-    assert_eq!(name, "Alpha", "应返回 'Alpha' (大小写不敏感匹配), 实际: {:?}", name);
+    assert_eq!(
+        name, "Alpha",
+        "应返回 'Alpha' (大小写不敏感匹配), 实际: {:?}",
+        name
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -937,5 +941,213 @@ async fn test_wfs_describe_feature_type_geopackage() {
     }
 
     // 清理
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+// ---------------------------------------------------------------------------
+// Batch 16: WFS KML 2.2 输出
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_wfs_get_feature_kml() {
+    let app = build_test_app!();
+    create_world_feature!(app, "alpha", 100, 10.0, 20.0);
+    create_world_feature!(app, "beta", 200, 30.0, 40.0);
+
+    let req = test::TestRequest::get()
+        .uri("/wfs?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=world&OUTPUTFORMAT=application/vnd.google-earth.kml+xml")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WFS GetFeature (KML) 应返回 200, 实际: {}",
+        resp.status()
+    );
+    let ct = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        ct.contains("application/vnd.google-earth.kml+xml"),
+        "Content-Type 应为 KML, 实际: {}",
+        ct
+    );
+
+    let bytes = test::read_body(resp).await;
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(body.contains("<kml xmlns=\"http://www.opengis.net/kml/2.2\">"));
+    assert!(body.contains("<Document>"));
+    // Schema 名称 = 类型名 (冒号替换为下划线)
+    assert!(body.contains("<Schema name=\"world\" id=\"world\">"));
+    assert!(body.contains("<SimpleField type=\"string\" name=\"name\"/>"));
+    assert!(body.contains("name=\"elevation\""));
+    // 每个要素一个 Placemark, 属性经 SimpleData 输出, 几何为 lon,lat 顺序的 Point
+    assert_eq!(body.matches("<Placemark id=").count(), 2);
+    assert!(body.contains("<SimpleData name=\"name\">alpha</SimpleData>"));
+    assert!(body.contains("<SimpleData name=\"elevation\">100</SimpleData>"));
+    assert!(body.contains("<Point><coordinates>10,20</coordinates></Point>"));
+    assert!(body.contains("<Point><coordinates>30,40</coordinates></Point>"));
+    assert!(body.ends_with("</kml>\n"));
+}
+
+#[actix_rt::test]
+async fn test_wfs_get_feature_kml_alias() {
+    let app = build_test_app!();
+    create_world_feature!(app, "alpha", 100, 10.0, 20.0);
+
+    // GeoServer 也接受简写 "KML" 以及带空格的 "application/vnd.google-earth.kml xml"
+    // (URI 中空格需百分号编码为 %20)
+    for fmt in ["KML", "application/vnd.google-earth.kml%20xml"] {
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wfs?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=world&OUTPUTFORMAT={}",
+                fmt
+            ))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(
+            resp.status().is_success(),
+            "WFS GetFeature (KML={}) 应返回 200, 实际: {}",
+            fmt,
+            resp.status()
+        );
+        let bytes = test::read_body(resp).await;
+        let body = String::from_utf8_lossy(&bytes);
+        assert!(body.contains("<kml xmlns=\"http://www.opengis.net/kml/2.2\">"));
+    }
+}
+
+#[actix_rt::test]
+async fn test_wfs_get_feature_kml_line_and_polygon() {
+    let app = build_test_app!();
+
+    // 通过 REST 直接写一条 LineString 要素到 world 图层
+    let line = test::TestRequest::post()
+        .uri("/geoserver/layers/world/features")
+        .set_json(&serde_json::json!({
+            "geometry": { "type": "LineString", "coordinates": [[0.0, 0.0], [1.0, 1.0], [2.0, 0.0]] },
+            "properties": { "name": "trail", "elevation": 50 },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, line).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::CREATED);
+
+    let req = test::TestRequest::get()
+        .uri("/wfs?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=world&OUTPUTFORMAT=application/vnd.google-earth.kml+xml")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let bytes = test::read_body(resp).await;
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(
+        body.contains("<LineString><coordinates>0,0 1,1 2,0</coordinates></LineString>"),
+        "KML LineString 坐标应为 lon,lat 列表, 实际: {}",
+        body
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Batch 16: WFS Shapefile 输出 (SHAPE-ZIP)
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_wfs_get_feature_shapefile() {
+    let app = build_test_app!();
+    create_world_feature!(app, "alpha", 100, 10.0, 20.0);
+    create_world_feature!(app, "beta", 200, 30.0, 40.0);
+
+    let req = test::TestRequest::get()
+        .uri("/wfs?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=world&OUTPUTFORMAT=SHAPE-ZIP")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WFS GetFeature (SHAPE-ZIP) 应返回 200, 实际: {}",
+        resp.status()
+    );
+    let ct = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        ct.contains("application/zip"),
+        "Content-Type 应为 application/zip, 实际: {}",
+        ct
+    );
+
+    let bytes = test::read_body(resp).await;
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec())).expect("应能解压 SHAPE-ZIP");
+    assert_eq!(archive.len(), 4, "ZIP 应包含 4 个文件");
+
+    let mut names: Vec<String> = (0..archive.len())
+        .map(|i| archive.by_index(i).unwrap().name().to_string())
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        vec![
+            "world.dbf".to_string(),
+            "world.prj".to_string(),
+            "world.shp".to_string(),
+            "world.shx".to_string()
+        ]
+    );
+
+    // .shp 以 ESRI 魔数 9994 (大端) 开头
+    let mut shp = Vec::new();
+    std::io::Read::read_to_end(&mut archive.by_name("world.shp").unwrap(), &mut shp).unwrap();
+    assert_eq!(&shp[0..4], &[0, 0, 0x27, 0x0A]);
+}
+
+#[actix_rt::test]
+async fn test_wfs_get_feature_shapefile_roundtrip() {
+    let app = build_test_app!();
+    create_world_feature!(app, "alpha", 100, 10.0, 20.0);
+    create_world_feature!(app, "beta", 200, 30.0, 40.0);
+
+    let req = test::TestRequest::get()
+        .uri("/wfs?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=world&OUTPUTFORMAT=SHAPE-ZIP")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let bytes = test::read_body(resp).await;
+
+    // 解压到临时目录并用既有读取器回读, 验证几何/属性往返
+    let dir = std::env::temp_dir().join(format!("terrane-wfs-shp-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec())).expect("应能解压 SHAPE-ZIP");
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).unwrap();
+        let name = file.name().to_string();
+        let mut data = Vec::new();
+        std::io::Read::read_to_end(&mut file, &mut data).unwrap();
+        std::fs::write(dir.join(&name), data).unwrap();
+    }
+
+    let result = terrane::utils::shapefile::read_shapefile(dir.join("world.shp"))
+        .expect("应能读取 shapefile");
+    assert_eq!(result.features.len(), 2);
+    let f0 = &result.features[0];
+    match &f0.geometry {
+        terrane::models::GeoJsonGeometry::Point { coordinates } => {
+            assert!((coordinates[0] - 10.0).abs() < 1e-9);
+            assert!((coordinates[1] - 20.0).abs() < 1e-9);
+        },
+        _ => panic!("应为 Point 几何"),
+    }
+    // 属性 (读取端一律字符串化)
+    assert!(matches!(
+        f0.properties.get("name"),
+        Some(terrane::models::PropertyValue::String(s)) if s == "alpha"
+    ));
+    assert!(matches!(
+        f0.properties.get("elevation"),
+        Some(terrane::models::PropertyValue::String(s)) if s == "100"
+    ));
+
     std::fs::remove_dir_all(&dir).ok();
 }
