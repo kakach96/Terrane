@@ -43,6 +43,8 @@ pub enum CqlExpression {
         operator: ComparisonOp,
         value: LiteralValue,
     },
+    /// 大小写不敏感等值比较 (来自 OGC XML `Function name="strToLowerCase"` 等)
+    CaseInsensitiveEq { property: String, value: String },
     /// 逻辑组合
     And(Box<CqlExpression>, Box<CqlExpression>),
     Or(Box<CqlExpression>, Box<CqlExpression>),
@@ -453,6 +455,13 @@ pub fn evaluate_cql(feature: &Feature, expr: &CqlExpression) -> bool {
             let prop_val = get_property_value(feature, property);
             match prop_val {
                 Some(pv) => compare_values(&pv, operator, value),
+                None => false,
+            }
+        },
+
+        CqlExpression::CaseInsensitiveEq { property, value } => {
+            match get_property_value(feature, property) {
+                Some(pv) => format_value(&pv).to_lowercase() == value.to_lowercase(),
                 None => false,
             }
         },
@@ -1011,5 +1020,26 @@ mod tests {
         // 混合: A OR (B AND C)
         let expr = parse_cql("population < 1 OR (name = 'Tokyo' AND population > 1000)").unwrap();
         assert!(evaluate_cql(&f, &expr));
+    }
+
+    #[test]
+    fn test_case_insensitive_eq() {
+        // 供 OGC XML `Function name="strToLowerCase"` 使用的大小写不敏感等值比较
+        let f = make_feature("Tokyo", 37_000_000f64);
+        let expr = CqlExpression::CaseInsensitiveEq {
+            property: "name".to_string(),
+            value: "tokyo".to_string(),
+        };
+        assert!(evaluate_cql(&f, &expr), "大小写不敏感等值应匹配");
+        let expr = CqlExpression::CaseInsensitiveEq {
+            property: "name".to_string(),
+            value: "LONDON".to_string(),
+        };
+        assert!(!evaluate_cql(&f, &expr), "不同值不应匹配");
+        let expr = CqlExpression::CaseInsensitiveEq {
+            property: "missing".to_string(),
+            value: "x".to_string(),
+        };
+        assert!(!evaluate_cql(&f, &expr), "缺失属性不应匹配");
     }
 }

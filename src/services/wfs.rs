@@ -1,5 +1,5 @@
 use crate::models::{Bounds, Feature, GeoJsonGeometry};
-use crate::utils::cql_filter::{evaluate_cql, parse_cql, CqlExpression};
+use crate::utils::cql_filter::{evaluate_cql, parse_cql, CqlExpression, SpatialOp};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
@@ -639,6 +639,7 @@ fn node_to_filter(node: &XmlNode) -> Result<Filter, String> {
             let pat = child_text(node, "Literal")?;
             Ok(Filter::PropertyIsLike(PropertyName(prop), Literal(pat)))
         },
+        "Intersects" | "Within" | "DWithin" => spatial_filter(node),
         "PropertyIsNull" => {
             let prop = child_text(node, "PropertyName")?;
             Ok(Filter::PropertyIsNull(PropertyName(prop)))
@@ -696,8 +697,15 @@ fn child_text(node: &XmlNode, name: &str) -> Result<String, String> {
 
 /// 比较操作符节点 → Filter
 fn comparison_filter(node: &XmlNode, op: CompareOp) -> Result<Filter, String> {
-    let prop = child_text(node, "PropertyName")?;
+    // 属性名可能被 <Function name="strToLowerCase"> 包裹 (大小写不敏感比较)
+    let (prop, case_insensitive) = extract_property_and_function(node)?;
     let lit = child_text(node, "Literal")?;
+    if case_insensitive {
+        return Ok(Filter::Cql(Box::new(CqlExpression::CaseInsensitiveEq {
+            property: prop,
+            value: lit,
+        })));
+    }
     Ok(match op {
         CompareOp::Equal => Filter::PropertyIsEqualTo(PropertyName(prop), Literal(lit)),
         CompareOp::NotEqual => Filter::PropertyIsNotEqualTo(PropertyName(prop), Literal(lit)),
@@ -710,6 +718,200 @@ fn comparison_filter(node: &XmlNode, op: CompareOp) -> Result<Filter, String> {
             Filter::PropertyIsGreaterThanOrEqualTo(PropertyName(prop), Literal(lit))
         },
     })
+}
+
+/// 提取属性名; 若被 `<Function name="...">` 包裹则同时返回是否大小写不敏感
+fn extract_property_and_function(node: &XmlNode) -> Result<(String, bool), String> {
+    if let Some(pn) = node
+        .children
+        .iter()
+        .find(|c| c.name == "PropertyName")
+    {
+        return Ok((pn.text.trim().to_string(), false));
+    }
+    if let Some(func) = node
+        .children
+        .iter()
+        .find(|c| c.name == "Function")
+    {
+        let fname = func.attr("name").unwrap_or("").to_lowercase();
+        let prop = func
+            .children
+            .iter()
+            .find(|c| c.name == "PropertyName")
+            .map(|c| c.text.trim().to_string())
+            .ok_or_else(|| format!("<Function> 缺少 <PropertyName>: {:?}", node.name))?;
+        // strToLowerCase / strToUpperCase 等函数 → 大小写不敏感比较
+        let ci = fname.contains("tolower") || fname.contains("toupper");
+        return Ok((prop, ci));
+    }
+    Err(format!(
+        "<{}> 缺少 <PropertyName> 或 <Function>",
+        node.name
+    ))
+}
+
+/// 空间操作符节点 → 委托 CQL 引擎求值 (Intersects / Within / DWithin)
+fn spatial_filter(node: &XmlNode) -> Result<Filter, String> {
+    let op = node.name.as_str();
+    let prop = child_text(node, "PropertyName")?;
+    let geom = node
+        .children
+        .iter()
+        .find(|c| {
+            matches!(
+                c.name.as_str(),
+                "Point" | "LineString" | "Polygon" | "Envelope"
+            )
+        })
+        .ok_or_else(|| format!("<{}> 缺少 GML 几何子元素", node.name))?;
+    let wkt = gml_geometry_to_wkt(geom)?;
+    let spatial = match op {
+        "Intersects" => SpatialOp::Intersects { property: prop, wkt },
+        "Within" => SpatialOp::Within { property: prop, wkt },
+        "DWithin" => {
+            let distance = node
+                .children
+                .iter()
+                .find(|c| c.name == "Distance")
+                .and_then(|c| c.text.trim().parse::<f64>().ok())
+                .unwrap_or(0.0);
+            SpatialOp::DWithin {
+                property: prop,
+                wkt,
+                distance,
+            }
+        },
+        _ => unreachable!(),
+    };
+    Ok(Filter::Cql(Box::new(CqlExpression::Spatial(spatial))))
+}
+
+/// 将 GML 几何节点转为 WKT 字符串 (支持 Point / Polygon / Envelope)
+fn gml_geometry_to_wkt(node: &XmlNode) -> Result<String, String> {
+    match node.name.as_str() {
+        "Point" => {
+            let (x, y) = parse_gml_xy(node)?;
+            Ok(format!("POINT({} {})", x, y))
+        },
+        "Polygon" => {
+            let ring = parse_gml_ring(node)?;
+            Ok(format!("POLYGON(({}))", ring))
+        },
+        "Envelope" => {
+            let (minx, miny, maxx, maxy) = parse_envelope_bounds(node)?;
+            Ok(format!(
+                "POLYGON(({} {}, {} {}, {} {}, {} {}, {} {}))",
+                minx, miny, maxx, miny, maxx, maxy, minx, maxy, minx, miny
+            ))
+        },
+        other => Err(format!("不支持的 GML 几何: {}", other)),
+    }
+}
+
+/// 从 GML 坐标文本解析第一个 (x, y)
+fn parse_gml_xy(node: &XmlNode) -> Result<(f64, f64), String> {
+    // gml:coordinates "x,y" 或 gml:pos "x y"
+    let text = node
+        .children
+        .iter()
+        .find(|c| c.name == "coordinates" || c.name == "pos")
+        .map(|c| c.text.trim().to_string())
+        .ok_or_else(|| "GML 几何缺少 <coordinates>/<pos>".to_string())?;
+    let (xs, ys) = if text.contains(',') {
+        let mut parts = text.splitn(2, ',');
+        (parts.next().unwrap_or("").trim(), parts.next().unwrap_or("").trim())
+    } else {
+        let mut parts = text.split_whitespace();
+        (parts.next().unwrap_or(""), parts.next().unwrap_or(""))
+    };
+    let x = xs.parse::<f64>().map_err(|_| format!("无效的 x: '{}'", xs))?;
+    let y = ys.parse::<f64>().map_err(|_| format!("无效的 y: '{}'", ys))?;
+    Ok((x, y))
+}
+
+/// 从 GML Polygon 提取外环坐标 (exterior/LinearRing + coordinates/posList), 返回 "x y, x y, ..."
+fn parse_gml_ring(node: &XmlNode) -> Result<String, String> {
+    let exterior = node
+        .children
+        .iter()
+        .find(|c| c.name == "exterior")
+        .ok_or_else(|| "GML Polygon 缺少 <exterior>".to_string())?;
+    let ring_node = exterior
+        .children
+        .iter()
+        .find(|c| c.name == "LinearRing" || c.name == "Ring")
+        .ok_or_else(|| "GML Polygon 缺少 <LinearRing>".to_string())?;
+    // coordinates "x1,y1 x2,y2 ..." 或 posList "x1 y1 x2 y2 ..."
+    let text = ring_node
+        .children
+        .iter()
+        .find(|c| c.name == "coordinates" || c.name == "posList")
+        .map(|c| c.text.trim().to_string())
+        .ok_or_else(|| "GML Polygon 缺少 <coordinates>/<posList>".to_string())?;
+    let coords = text.trim();
+    if coords.contains(',') {
+        // "x,y x,y"
+        let pts: Vec<String> = coords
+            .split_whitespace()
+            .map(|p| {
+                let mut xy = p.splitn(2, ',');
+                let x = xy.next().unwrap_or("");
+                let y = xy.next().unwrap_or("");
+                format!("{} {}", x, y)
+            })
+            .collect();
+        Ok(pts.join(", "))
+    } else {
+        // "x y x y"
+        let nums: Vec<&str> = coords.split_whitespace().collect();
+        let mut pts = Vec::new();
+        for chunk in nums.chunks(2) {
+            if chunk.len() == 2 {
+                pts.push(format!("{} {}", chunk[0], chunk[1]));
+            }
+        }
+        Ok(pts.join(", "))
+    }
+}
+
+/// 从 GML Envelope 解析边界 (coordinates "minx,miny maxx,maxy" 或 lowerCorner/upperCorner)
+fn parse_envelope_bounds(node: &XmlNode) -> Result<(f64, f64, f64, f64), String> {
+    if let Some(coord) = node
+        .children
+        .iter()
+        .find(|c| c.name == "coordinates")
+    {
+        let mut pairs = coord.text.trim().split_whitespace();
+        let low = pairs
+            .next()
+            .ok_or_else(|| "Envelope 缺少低角点".to_string())?;
+        let high = pairs.next().ok_or_else(|| "Envelope 缺少高角点".to_string())?;
+        let parse_pair = |s: &str| -> Result<(f64, f64), String> {
+            let mut xy = s.splitn(2, ',');
+            let x = xy.next().unwrap_or("").parse::<f64>()
+                .map_err(|_| format!("无效的角点: '{}'", s))?;
+            let y = xy.next().unwrap_or("").parse::<f64>()
+                .map_err(|_| format!("无效的角点: '{}'", s))?;
+            Ok((x, y))
+        };
+        let (minx, miny) = parse_pair(low)?;
+        let (maxx, maxy) = parse_pair(high)?;
+        return Ok((minx, miny, maxx, maxy));
+    }
+    let lower = child_text(node, "lowerCorner")?;
+    let upper = child_text(node, "upperCorner")?;
+    let parse_pair = |s: &str| -> Result<(f64, f64), String> {
+        let parts: Vec<f64> = s.split_whitespace().filter_map(|p| p.parse().ok()).collect();
+        if parts.len() >= 2 {
+            Ok((parts[0], parts[1]))
+        } else {
+            Err(format!("无效的角点: '{}'", s))
+        }
+    };
+    let (minx, miny) = parse_pair(&lower)?;
+    let (maxx, maxy) = parse_pair(&upper)?;
+    Ok((minx, miny, maxx, maxy))
 }
 
 /// 从 BBOX 节点的 Envelope (lowerCorner/upperCorner) 提取角点
