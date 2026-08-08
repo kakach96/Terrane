@@ -35,7 +35,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Security: JWT auth, users/roles, layer-level permissions
 - Angular 17 + Material admin console
 - Cloud-native foundation: multi-stage Docker image, docker-compose, split health probes, Prometheus `/metrics`, graceful shutdown
-- Overall progress: ~57% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
+- Overall progress: ~58% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
 
 ### v1.1 — State Convergence (target: 2026 Q3–Q4)
 

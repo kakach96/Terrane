@@ -29,7 +29,7 @@ and *which remain to be adapted*.
 | **WFS output formats** | —                          | ✅      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV / KML / Shapefile (SHAPE-ZIP) |
 | **WPS**             | 1.0.0                          | ✅      | GetCapabilities / DescribeProcess / Execute (KVP + XML POST); built-in processes vec:Centroid / vec:Buffer / gs:Bounds |
 | **CSW**             | 2.0.2                          | ✅      | GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain; catalog = Terrane layers as Dublin Core records (KVP + XML POST) |
-| **OGC API series**  | Features (Core) / Tiles / Maps / Coverages / Processes / Styles | ⚠️ | Features Core ✅ at `/ogc/features` (landing/conformance/collections/items, GeoJSON + bbox/limit/offset); Tiles/Maps/Coverages/Processes/Styles pending |
+| **OGC API series**  | Features (Core) / Tiles / Maps / Coverages / Processes / Styles | ⚠️ | Features Core ✅ at `/ogc/features`; Tiles ✅ at `/ogc/tiles` (tileMatrixSets + raster tiles, PNG/JPEG); Maps/Coverages/Processes/Styles pending |
 
 ## 2. WMS — Web Map Service
 
@@ -177,7 +177,7 @@ Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](IMPLEMENTAT
 | P2       | WFS KML / Shapefile output          | ✅ done |
 | P4       | WPS (processing)                    | ✅ first surface (Centroid/Buffer/Bounds) |
 | P4       | CSW (catalog)                       | ✅ first surface (GetCapabilities/DescribeRecord/GetRecords/GetRecordById/GetDomain) |
-| P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | ✅ Features Core (batch 19); Tiles/Maps/Coverages/Processes/Styles 2–3 weeks each |
+| P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | ✅ Features Core + Tiles (batch 19/20); Maps/Coverages/Processes/Styles 2–3 weeks each |
 | P4       | Printing / Importer / GeoFence      | enterprise |
 | P4       | CSS / YSLD / MBStyle styling        | medium |
 
@@ -200,7 +200,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **145 lib unit tests + 123 integration tests**, plus
+`cargo test` currently green: **152 lib unit tests + 130 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -219,6 +219,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | `tests/wps_test.rs` | 6     | WPS (GetCapabilities, DescribeProcess, Execute KVP raw centroid/buffer/bounds + XML POST) |
 | `tests/csw_test.rs` | 10    | CSW (GetCapabilities, DescribeRecord, GetRecords KVP + XML POST summary/brief/full + CQL constraint + paging/hits, GetRecordById, GetDomain) |
 | `tests/ogc_api_test.rs` | 8 | OGC API Features (landing, conformance, collections, collection, items with limit/offset/bbox, item by id, 404) |
+| `tests/ogc_tiles_test.rs` | 7 | OGC API Tiles (landing, conformance, tileMatrixSets + definition, collections/tilesets, tile PNG/JPEG, 404) |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
 has at least one request/response test validating status codes, content types,
@@ -444,4 +445,20 @@ schema directly. New unit tests: 7 (ogc_features.rs); new integration: 8
 (ogc_api_test.rs).
 Next candidates:
 
-1. OGC API Tiles / Maps / Processes (P4)
+Batch 20 completed: **OGC API - Tiles first surface (OGC 19-069)** —
+`src/services/ogc_tiles.rs` + `src/handlers/ogc_tiles_handler.rs` served at
+`/ogc/tiles` (JSON). Resources: landing page, `/conformance` (conformsTo:
+core / tileset / tilesets-list / tilematrixset / dataset-tileset),
+`/tileMatrixSets` (+ `/tileMatrixSets/{id}` definitions for EPSG:4326
+global-geodetic and EPSG:3857 global-mercator — OGC 17-083r2 TileMatrixSet
+JSON with cellSize / pointOfOrigin / tileWidth/Height / matrixWidth/Height per
+zoom 0..MAX_ZOOM), `/collections` and `/collections/{id}/tiles` tileset
+listings (2 TileMatrixSets + item links), and raster tiles at
+`/collections/{id}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}`
+(PNG default, JPEG via `?f=image/jpeg`) — rendered through the shared tile
+engine (`render_tile_bytes`), so OGC API - Tiles serves the same tiles as
+WMTS / TMS / WMS-C. New unit tests: 7 (ogc_tiles.rs); new integration: 7
+(ogc_tiles_test.rs).
+Next candidates:
+
+1. OGC API Maps / Processes (P4)
