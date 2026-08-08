@@ -172,9 +172,11 @@ fn try_read_geotiff_tags_native(path: &Path) -> Result<(Option<Bounds>, Option<S
     let (img_width, img_height) = decoder.dimensions()
         .map_err(|e| format!("{:?}", e))?;
 
-    // 读取 ModelTiepointTag (33922) — GeoTIFF 私有标签
-    // 使用 Tag::Unknown 访问非标准标签
-    let model_tiepoint = decoder.get_tag(Tag::Unknown(33922)).ok().and_then(|v| match v {
+    // 读取 ModelTiepointTag (33922) — GeoTIFF 私有标签。
+    // 注意: tiff crate 的 Tag 枚举为这些标签定义了具名变体
+    // (Tag::ModelTiepointTag / Tag::ModelPixelScaleTag), 解码器存入 IFD 时
+    // 用的是具名变体, 必须用具名变体查询 (Tag::Unknown 永远查不到 → bug7)。
+    let model_tiepoint = decoder.get_tag(Tag::ModelTiepointTag).ok().and_then(|v| match v {
         Value::Double(v) => Some(vec![v]),
         Value::List(items) => {
             let nums: Vec<f64> = items.iter().filter_map(|item| match item {
@@ -187,7 +189,7 @@ fn try_read_geotiff_tags_native(path: &Path) -> Result<(Option<Bounds>, Option<S
     });
 
     // ModelPixelScaleTag (33550)
-    let model_pixel_scale = decoder.get_tag(Tag::Unknown(33550)).ok().and_then(|v| match v {
+    let model_pixel_scale = decoder.get_tag(Tag::ModelPixelScaleTag).ok().and_then(|v| match v {
         Value::Double(v) => Some(vec![v]),
         Value::List(items) => {
             let nums: Vec<f64> = items.iter().filter_map(|item| match item {
@@ -339,5 +341,63 @@ mod tests {
         let cropped = crop_coverage(&data, &bounds);
         assert!(cropped.is_some());
         assert_eq!(cropped.unwrap().dimensions(), (100, 100));
+    }
+
+    /// 生成带地理配准标签的 8x8 RGB GeoTIFF fixture (tiff encoder):
+    /// ModelPixelScaleTag=[1,1,0], ModelTiepointTag=[0,0,0,0,8,0] → bounds (0,0,8,8)
+    fn create_georef_tiff_fixture(dir: &std::path::Path) -> std::path::PathBuf {
+        use tiff::encoder::*;
+        use tiff::tags::Tag;
+
+        let path = dir.join("geo.tif");
+        let file = std::fs::File::create(&path).unwrap();
+        let mut tiff = TiffEncoder::new(file).unwrap();
+        let mut image_enc = tiff.new_image::<colortype::RGB8>(8, 8).unwrap();
+        let pixel_scale: &[f64] = &[1.0, 1.0, 0.0];
+        let tiepoint: &[f64] = &[0.0, 0.0, 0.0, 0.0, 8.0, 0.0];
+        image_enc.encoder().write_tag(Tag::ModelPixelScaleTag, pixel_scale).unwrap();
+        image_enc.encoder().write_tag(Tag::ModelTiepointTag, tiepoint).unwrap();
+        let mut data = Vec::with_capacity(8 * 8 * 3);
+        for _ in 0..64 {
+            data.extend_from_slice(&[10, 20, 30]);
+        }
+        image_enc.write_data(&data).unwrap();
+        path
+    }
+
+    /// bug7 守护: 真实 GeoTIFF 的地理配准标签 (ModelTiepointTag/ModelPixelScaleTag)
+    /// 必须能通过 read_geotiff_metadata / read_geotiff 读到边界。此前用
+    /// Tag::Unknown 查询永远失败 → bounds=None → WCS SUBSET 静默返回全图。
+    #[test]
+    fn test_read_geotiff_georef_tags() {
+        let dir = std::env::temp_dir().join(format!("terrane-geotiff-geo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = create_georef_tiff_fixture(&dir);
+
+        // read_geotiff_metadata: 边界 + 尺寸
+        let meta = read_geotiff_metadata(&path).unwrap();
+        let b = meta.bounds.expect("GeoTIFF 应读到地理边界 (bug7 守护)");
+        assert!((b.minx - 0.0).abs() < 1e-6, "minx 应为 0.0, 实际: {}", b.minx);
+        assert!((b.miny - 0.0).abs() < 1e-6, "miny 应为 0.0, 实际: {}", b.miny);
+        assert!((b.maxx - 8.0).abs() < 1e-6, "maxx 应为 8.0, 实际: {}", b.maxx);
+        assert!((b.maxy - 8.0).abs() < 1e-6, "maxy 应为 8.0, 实际: {}", b.maxy);
+        assert_eq!(meta.width, 8);
+        assert_eq!(meta.height, 8);
+
+        // read_geotiff: 完整覆盖数据也应带边界 + 像素比例
+        let cov = read_geotiff(&path).unwrap();
+        let cb = cov.bounds.expect("read_geotiff 也应读到边界");
+        assert!((cb.minx - 0.0).abs() < 1e-6);
+        assert!((cb.maxy - 8.0).abs() < 1e-6);
+        assert!(cov.pixel_scale_x.is_some(), "应读到像素比例 X");
+        assert_eq!(cov.pixel_scale_x.unwrap(), 1.0);
+        assert_eq!(cov.tie_point_y.unwrap(), 8.0);
+
+        // crop_coverage 应能按地理子集裁剪 (SUBSET 0..2 → 2x2)
+        let img = read_geotiff(&path).unwrap();
+        let cropped = crop_coverage(&img, &Bounds::new(0.0, 0.0, 2.0, 2.0)).unwrap();
+        assert_eq!(cropped.dimensions(), (2, 2), "SUBSET(0,2) 应裁剪为 2x2");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
