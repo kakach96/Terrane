@@ -21,8 +21,8 @@ and *which remain to be adapted*.
 | **WMTS**            | 1.0.0                          | ✅ Core | GetCapabilities / GetTile / GetFeatureInfo; KVP + RESTful tile template |
 | **MVT (vector tiles)** | —                          | ✅      | Pure-Rust protobuf encoder; `/tiles/{layer}/{z}/{x}/{y}.pbf`, `/mvt/{layer}/{z}/{x}/{y}` |
 | **REST API**        | —                              | ✅      | Full CRUD under `/geoserver` (see §6) |
-| **TMS**             | 1.0.0                          | ❌      | Exposed by reference GeoServer via GeoWebCache; not implemented |
-| **WMS-C**           | 1.1.1                          | ❌      | Exposed by reference GeoServer via GeoWebCache; not implemented |
+| **TMS**             | 1.0.0                          | ✅      | GetCapabilities / TileMap / GetTile under `/gwc/service/tms` (global-geodetic + global-mercator, PNG/JPEG) |
+| **WMS-C**           | 1.1.1                          | ✅      | GetCapabilities / GetMap with `TILED=true` under `/gwc/service/wms` |
 | **Tile cache (GWC-like)** | —                         | ⚠️      | Basic `/tiles` + local disk cache; no seeding / metastore / full GWC |
 | **SLD styling**     | 1.0.0                          | ⚠️      | Basic CRUD + rendering; no CSS / YSLD / MBStyle, limited SLD features |
 | **WMS output formats** | —                          | ✅      | PNG/JPEG/GIF/WebP/SVG/KML/GeoJSON/PDF/GeoRSS |
@@ -113,9 +113,22 @@ Endpoint `/wmts` (`src/services/wmts.rs`, `src/handlers/wmts_handler.rs`).
   (`<data_dir>/gwc`, `TileCacheBackend` trait, `src/store/cache/`)
 - No GWC seeding / metastore / multi-backend integration yet
 
-### 5.4 TMS 1.0.0 ❌ & WMS-C 1.1.1 ❌
-- The reference GeoServer exposes **TMS 1.0.0** and **WMS-C 1.1.1** through
-  GeoWebCache (`/gwc/service/tms`, `/gwc/service/wms`). Not yet adapted.
+### 5.4 TMS 1.0.0 ✅ & WMS-C 1.1.1 ✅
+
+Both are served under `/gwc/` (mirroring the reference GeoServer GeoWebCache
+paths) and reuse the shared tile engine (`src/handlers/tile_common.rs`) and grid
+math (`src/utils/tile_grid.rs`):
+- **TMS 1.0.0** — `/gwc/service/tms` (KVP) + `/gwc/service/tms/1.0.0[/…]`
+  (RESTful): GetCapabilities (`TileMapService`), per-layer `TileMap` documents,
+  and tiles at `/1.0.0/{layer}@{gridset}@{format}/{z}/{x}/{y}.{ext}`. TMS rows
+  are bottom-up, so `y` is flipped before rendering. Gridsets: `EPSG:4326`
+  (global-geodetic, 2^(z+1)×2^z) and `EPSG:3857`/`EPSG:900913`
+  (global-mercator). Formats: PNG + JPEG.
+- **WMS-C 1.1.1** — `/gwc/service/wms`: GetCapabilities (`WMT_MS_Capabilities`
+  version 1.1.1) and GetMap with `TILED=true`, which resolves the grid-aligned
+  BBOX to a single cached tile (gridset derived from SRS, zoom from the
+  horizontal resolution). Without `TILED`, it delegates to the normal WMS 1.1.1
+  GetMap pipeline.
 
 ## 6. REST API ✅
 
@@ -163,12 +176,12 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 - [x] `GET /wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCapabilities`
 - [x] `GET /wcs?SERVICE=WCS&VERSION=1.1.1&REQUEST=GetCapabilities`
 - [x] `GET /wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetCapabilities`
-- [ ] `GET /gwc/service/tms/1.0.0`  (TMS — pending)
-- [ ] `GET /gwc/service/wms?...&tiled=true` (WMS-C — pending)
+- [x] `GET /gwc/service/tms/1.0.0`  (TMS — adapted)
+- [x] `GET /gwc/service/wms?...&tiled=true` (WMS-C — adapted)
 
 ## 10. Automated test coverage
 
-`cargo test` currently green: **107 lib unit tests + 83 integration tests**, plus
+`cargo test` currently green: **119 lib unit tests + 94 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -178,11 +191,12 @@ convention: every file directly under `tests/` is its own binary), sharing a
 
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
-| `tests/wms_test.rs` | 22 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) |
+| `tests/wms_test.rs` | 26 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
 | `tests/wfs_test.rs` | 22    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns) |
 | `tests/rest_test.rs`| 23 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 12    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
+| `tests/tms_test.rs` | 7     | TMS (GetCapabilities RESTful + KVP, TileMap document, GetTile geodetic/mercator PNG + JPEG, KVP GetTile) |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
 has at least one request/response test validating status codes, content types,
@@ -201,6 +215,9 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
 | WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
+| TMS                | GetCapabilities (RESTful + KVP), TileMap document (SRS / BoundingBox / Origin / TileFormat / TileSets + units-per-pixel), GetTile (global-geodetic + global-mercator, PNG + JPEG, TMS bottom-up y flip) — integration |
+| WMS-C              | GetCapabilities (`WMT_MS_Capabilities` 1.1.1), GetMap `TILED=true` (geodetic + mercator grid-aligned BBOX → cached tile), GetMap without TILED (plain WMS 1.1.1) — integration |
+| Tile grid (util)   | 5 unit tests (`utils/tile_grid.rs`: geodetic matrix/bounds, mercator matrix/bounds, TMS y-flip, zoom-for-resolution, bbox→tile) |
 | MVT                | `/mvt/{layer}/{z}/{x}/{y}` endpoint integration + 5 encoder unit tests    |
 | REST               | health, split probes `/health/live` + `/health/ready` + `/metrics`, `/server/status`, layers, workspaces CRUD, namespaces CRUD, styles CRUD, layer-groups CRUD, features CRUD (+ single get / update / delete), sql-views CRUD, data-sources CRUD, auth (login / verify / users CRUD), permissions CRUD, backup export + import round-trip, GeoJSON upload, `/tiles` PNG tile, tile cache stats / clear / HIT, live PostGIS data source HTTP (`/data-sources/{name}/tables` + `/layers/{layer}/feature-type` against a real schema) — integration |
 | Tile cache (util)  | 10 unit tests (`utils/tile_cache.rs`: gridset, bounds, hit-rate)         |
@@ -324,8 +341,19 @@ hardcoded id/name/geometry stub. The SQLite→XSD mapping (`sqlite_type_to_xsd` 
 `xsd:base64Binary`; the internal `id` primary key is skipped (fid is not a regular
 attribute). Verified against the reference GeoServer `DescribeFeatureType` on
 `sf:archsites` (`cat`→xsd:long, `str1`→xsd:string, `the_geom`→gml:PointPropertyType).
+Batch 15 completed: **TMS 1.0.0 + WMS-C 1.1.1 (GeoWebCache)** — the tile
+surface now shares one grid helper (`src/utils/tile_grid.rs`: EPSG:4326
+global-geodetic 2^(z+1)×2^z with 0.703125/2^z deg/px, EPSG:3857/900913
+global-mercator with 156543.03/2^z m/px) and one render pipeline
+(`src/handlers/tile_common.rs`, PNG + JPEG, cache on PNG only), which the WMTS
+handler was refactored onto (fixing its EPSG:4326 grid to match the advertised
+matrix). TMS is served at `/gwc/service/tms` (+ RESTful `/1.0.0`): GetCapabilities
+(`TileMapService`), per-layer `TileMap` docs, and bottom-up-y tiles. WMS-C at
+`/gwc/service/wms`: 1.1.1 GetCapabilities + GetMap `TILED=true` (snaps the BBOX
+to a cached tile; verified against the reference, which rejects off-grid BBOXes
+over a 10% threshold). New unit tests: 5 (tile_grid) + 5 (tms) + 2 (wmsc); new
+integration tests: 7 (tms_test) + 4 (WMS-C in wms_test).
 Next candidates:
 
-1. TMS 1.0.0 + WMS-C 1.1.1 (GWC, reuse the tile engine)
-2. WFS KML / Shapefile output
+1. WFS KML / Shapefile output
 
