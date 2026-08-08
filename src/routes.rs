@@ -28,6 +28,18 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                 .route("", web::post().to(crate::handlers::handle_csw_post_request)),
         )
         .service(
+            web::scope("/ogc/features")
+                .route("", web::get().to(crate::handlers::handle_ogc_landing))
+                .route("/conformance", web::get().to(crate::handlers::handle_ogc_conformance))
+                .route("/collections", web::get().to(crate::handlers::handle_ogc_collections))
+                .route("/collections/{collection}", web::get().to(crate::handlers::handle_ogc_collection))
+                .route("/collections/{collection}/items", web::get().to(crate::handlers::handle_ogc_items))
+                .route(
+                    "/collections/{collection}/items/{feature}",
+                    web::get().to(crate::handlers::handle_ogc_item),
+                ),
+        )
+        .service(
             web::scope(api_context)
                 .route("/health", web::get().to(crate::handlers::health_check))
                 .service(

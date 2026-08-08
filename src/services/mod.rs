@@ -1,4 +1,5 @@
 pub mod csw;
+pub mod ogc_features;
 pub mod tms;
 pub mod wcs;
 pub mod wfs;
