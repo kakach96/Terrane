@@ -25,7 +25,7 @@ and *which remain to be adapted*.
 | **WMS-C**           | 1.1.1                          | ❌      | Exposed by reference GeoServer via GeoWebCache; not implemented |
 | **Tile cache (GWC-like)** | —                         | ⚠️      | Basic `/tiles` + local disk cache; no seeding / metastore / full GWC |
 | **SLD styling**     | 1.0.0                          | ⚠️      | Basic CRUD + rendering; no CSS / YSLD / MBStyle, limited SLD features |
-| **WMS output formats** | —                          | ⚠️      | PNG/JPEG/GIF/WebP/SVG/KML/GeoJSON ✅; PDF, GeoRSS ❌ |
+| **WMS output formats** | —                          | ✅      | PNG/JPEG/GIF/WebP/SVG/KML/GeoJSON/PDF/GeoRSS |
 | **WFS output formats** | —                          | ⚠️      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV ✅; KML, Shapefile ❌ |
 | **WPS**             | —                              | ❌      | Processing service (P4) |
 | **CSW**             | —                              | ❌      | Catalog service (P4) |
@@ -43,7 +43,7 @@ Endpoint `/wms` (`src/services/wms.rs`, `src/handlers/wms_handler.rs`).
 | Operation           | Status | Notes |
 |---------------------|--------|-------|
 | GetCapabilities     | ✅     | Layers from the catalog |
-| GetMap              | ✅     | Raster (PNG/JPEG/GIF/WebP), vector (SVG), KML, GeoJSON, OpenLayers preview; CascadedWms proxy |
+| GetMap              | ✅     | Raster (PNG/JPEG/GIF/WebP), vector (SVG), KML, GeoJSON, GeoRSS, PDF, OpenLayers preview; CascadedWms proxy |
 | GetFeatureInfo      | ✅     | `text/plain`, `text/html`, `application/json` |
 | DescribeLayer       | ✅     | WMS 1.1.1 DescribeLayerResponse |
 | GetLegendGraphic    | ✅     | SLD-based legend |
@@ -53,7 +53,7 @@ Endpoint `/wms` (`src/services/wms.rs`, `src/handlers/wms_handler.rs`).
 `TIME` (ISO 8601), `ELEVATION`, `SRS/CRS`, `ENV` (style env substitution),
 `featureId` (feature-id filter), `angle`, scale-denominator-aware styling.
 
-**Gaps vs reference**: PDF output, GeoRSS output, full SLD dynamic-styling feature
+**Gaps vs reference**: full SLD dynamic-styling feature
 set, GML `GetFeatureInfo` output.
 
 ## 3. WFS — Web Feature Service
@@ -168,7 +168,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 10. Automated test coverage
 
-`cargo test` currently green: **103 lib unit tests + 80 integration tests**, plus
+`cargo test` currently green: **106 lib unit tests + 82 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -178,7 +178,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
-| `tests/wms_test.rs` | 20 (+2 ignored live) | WMS (all operations, formats, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) |
+| `tests/wms_test.rs` | 22 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) |
 | `tests/wfs_test.rs` | 21    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects`) |
 | `tests/rest_test.rs`| 23 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 12    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, JPEG / netCDF) |
@@ -304,11 +304,19 @@ Batch 12 completed: OGC XML `FILTER=` edge cases — `ogc:Function` (e.g.
 CQL expression) and spatial `Intersects` / `Within` / `DWithin` with GML Point /
 Polygon / Envelope (GML→WKT, delegated to the CQL engine). Note: the reference
 GeoServer's KVP `FILTER=` parser rejects `ogc:`-prefixed tags and GML geometry,
-so this is a Terrane superset. Next candidates:
+so this is a Terrane superset.
 
-1. WMS PDF / GeoRSS output (reuse the render pipeline)
-2. GeoPackage `FeatureType` describe via WFS `DescribeFeatureType` for a
+Batch 13 completed: WMS **PDF / GeoRSS output** — `render_to_georss` emits RSS 2.0
+with the GeoRSS namespace (`<georss:point>` / `<georss:line>` / `<georss:polygon>`
+in `lat lon` order; multi-geometries fall back to the first member) and
+`render_to_pdf` embeds the `MapRenderer` raster in a single-page PDF (FlateDecode-
+compressed RGB image, hand-written xref/trailer). Verified against the reference
+GeoServer: `FORMAT=application/rss+xml` → `application/rss+xml`, `FORMAT=application/
+pdf` → `%PDF-1.5`. Both formats are now advertised in GetMap capabilities.
+Next candidates:
+
+1. GeoPackage `FeatureType` describe via WFS `DescribeFeatureType` for a
    published GeoPackage layer
-3. TMS 1.0.0 + WMS-C 1.1.1 (GWC, reuse the tile engine)
-4. WFS KML / Shapefile output
+2. TMS 1.0.0 + WMS-C 1.1.1 (GWC, reuse the tile engine)
+3. WFS KML / Shapefile output
 
