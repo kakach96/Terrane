@@ -27,7 +27,7 @@ and *which remain to be adapted*.
 | **SLD styling**     | 1.0.0                          | ⚠️      | Basic CRUD + rendering; no CSS / YSLD / MBStyle, limited SLD features |
 | **WMS output formats** | —                          | ✅      | PNG/JPEG/GIF/WebP/SVG/KML/GeoJSON/PDF/GeoRSS |
 | **WFS output formats** | —                          | ✅      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV / KML / Shapefile (SHAPE-ZIP) |
-| **WPS**             | —                              | ❌      | Processing service (P4) |
+| **WPS**             | 1.0.0                          | ✅      | GetCapabilities / DescribeProcess / Execute (KVP + XML POST); built-in processes vec:Centroid / vec:Buffer / gs:Bounds |
 | **CSW**             | —                              | ❌      | Catalog service (P4) |
 | **OGC API series**  | Features / Tiles / Maps / Coverages / Processes / Styles | ❌ | P4 |
 
@@ -145,11 +145,28 @@ All endpoints under `/geoserver` (configurable `api_context`). See
 - **Backup / restore**: `/backup/export`, `/backup/import`
 - **Uploads**: GeoJSON / Shapefile / GeoTIFF
 
-## 7. Data sources
+## 7. WPS — Web Processing Service
+
+Endpoint `/wps` (`src/services/wps.rs`, `src/handlers/wps_handler.rs`). First WPS
+surface (the reference GeoServer has WPS disabled, so this follows the OGC WPS
+1.0.0 schema, OGC 05-007r7).
+
+- **GetCapabilities** — WPS 1.0.0 `wps:Capabilities` with ServiceIdentification /
+  OperationsMetadata / `wps:ProcessOfferings` / Languages.
+- **DescribeProcess** — `wps:ProcessDescriptions` with DataInputs / ProcessOutputs
+  (ComplexData `application/json` + `xsd:double` literals).
+- **Execute** — KVP (`response=raw` → raw GeoJSON, else ExecuteResponse XML) and
+  POST XML (`<wps:DataInputs>` with LiteralData / ComplexData / Reference, where
+  `xlink:href="layer:name"` is a Terrane extension resolving a local layer).
+- **Built-in processes** (pure Rust): `vec:Centroid` (geo `Centroid`),
+  `vec:Buffer` (point-buffer: a circle around every coordinate), `gs:Bounds`
+  (bounding-box rectangle polygon). Outputs are proper GeoJSON FeatureCollections.
+
+## 8. Data sources
 
 PostGIS, Shapefile, GeoTIFF, GeoPackage, WorldImage, CascadedWms, ArcGrid (7 types).
 
-## 8. Pending protocols (to adapt)
+## 9. Pending protocols (to adapt)
 
 Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md):
 
@@ -158,13 +175,13 @@ Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](../IMPLEMEN
 | P2       | TMS 1.0.0 + WMS-C 1.1.1 (GWC)       | small — reuse tile engine |
 | P2       | WMS PDF / GeoRSS output             | small — reuse render pipeline |
 | P2       | WFS KML / Shapefile output          | ✅ done |
-| P4       | WPS (processing)                    | 4–6 weeks |
+| P4       | WPS (processing)                    | ✅ first surface (Centroid/Buffer/Bounds) |
 | P4       | CSW (catalog)                       | 3–4 weeks |
 | P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | 2–3 weeks each |
 | P4       | Printing / Importer / GeoFence      | enterprise |
 | P4       | CSS / YSLD / MBStyle styling        | medium |
 
-## 9. Verification checklist
+## 10. Verification checklist
 
 Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/geoserver/web/`):
 
@@ -178,10 +195,12 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 - [x] `GET /wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetCapabilities`
 - [x] `GET /gwc/service/tms/1.0.0`  (TMS — adapted)
 - [x] `GET /gwc/service/wms?...&tiled=true` (WMS-C — adapted)
+- [x] `GET /wps?SERVICE=WPS&REQUEST=GetCapabilities` (WPS — adapted)
+- [x] `GET /wps?SERVICE=WPS&REQUEST=Execute&IDENTIFIER=vec:Centroid&...` (WPS Execute)
 
-## 10. Automated test coverage
+## 11. Automated test coverage
 
-`cargo test` currently green: **123 lib unit tests + 99 integration tests**, plus
+`cargo test` currently green: **129 lib unit tests + 105 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -197,6 +216,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | `tests/wcs_test.rs` | 12    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
 | `tests/tms_test.rs` | 7     | TMS (GetCapabilities RESTful + KVP, TileMap document, GetTile geodetic/mercator PNG + JPEG, KVP GetTile) |
+| `tests/wps_test.rs` | 6     | WPS (GetCapabilities, DescribeProcess, Execute KVP raw centroid/buffer/bounds + XML POST) |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
 has at least one request/response test validating status codes, content types,
@@ -207,12 +227,13 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 (`#[ignore]`) talk to a local PostGIS (env `GEOSERVER_TEST_PG_*`, defaults
 127.0.0.1:5432 postgres/`kakach2026`) and the reference GeoServer at :18080.
 
-### 10.1 What IS covered
+### 11.1 What IS covered
 
 | Layer              | Coverage                                                                 |
 |--------------------|--------------------------------------------------------------------------|
 | WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
 | WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV / KML 2.2 / Shapefile SHAPE-ZIP), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
+| WPS                | GetCapabilities (ServiceIdentification / OperationsMetadata / ProcessOfferings / Languages), DescribeProcess (DataInputs / ProcessOutputs + xsd:double), Execute (KVP `response=raw` → GeoJSON + document XML, POST XML with `Reference xlink:href="layer:…"`), built-in `vec:Centroid` / `vec:Buffer` / `gs:Bounds` — integration + 6 unit tests (`services/wps.rs`: KVP DataInputs, operation parse, Execute XML, capabilities structure, features_to_geojson, run_process) |
 | WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | TMS                | GetCapabilities (RESTful + KVP), TileMap document (SRS / BoundingBox / Origin / TileFormat / TileSets + units-per-pixel), GetTile (global-geodetic + global-mercator, PNG + JPEG, TMS bottom-up y flip) — integration |
@@ -234,7 +255,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | Store (vector/raster) | 4 `LocalVectorStore` (save/load/delete/list/sanitize) + 4 `LocalRasterStore` (put/get/delete/list/.tif) + 8 `sqlite_store` (workspace / namespace / layer+features / user+permission / session / styles CRUD / layer-groups CRUD / audit logs) + 2 live `PostgresStore` (metadata CRUD) / `PostgresVectorStore` (feature round-trip) — `#[ignore]` |
 | Data-source adapters | 4 `arcgrid` (read/meta/errors) + 5 `worldimage` (ext/meta/crop) + 5 `cascaded` (config extract + **vendor-param URL encoding** + live `fetch_cascaded_map` via WMS proxy: CQL_FILTER valid/invalid + TIME pass-through) + 8 `geopackage` (layers / validation / features read round-trip / limit + **write→read round-trip** for Point & LineString + **typed attributes: INTEGER/REAL/BOOLEAN/TEXT inference + round-trip**) + 2 `data_source` (serde type round-trip incl. `cascaded_wms`, postgis connection constructor) + 4 `wkb` (Point/LineString/Polygon round-trip + **Multi*/GeometryCollection round-trip** + byte lengths + big-endian decode, all 7 WKB types now parse) |
 
-### 10.2 Coverage gaps (adapted but untested)
+### 11.2 Coverage gaps (adapted but untested)
 
 | Protocol / surface | Missing tests                                                              |
 |--------------------|----------------------------------------------------------------------------|
@@ -243,7 +264,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | **Data sources**   | GeoPackage attributes are typed on write (INTEGER/REAL/BOOLEAN/TEXT by value inference) and typed on read, but no GeoPackage **update** / append; GeoPackage writer still only emits Point / LineString geometry types |
 | **WKB**            | decoder now handles all 7 WKB types (2D); EWKB Z/M/SRID flags are masked for routing but Z/M coordinates are not yet parsed; no GeometryCollection-in-GeoPackage round-trip test (GeoPackage write supports Point/LineString only) |
 
-### 10.3 Bugs found by the new tests
+### 11.3 Bugs found by the new tests
 
 - **WCS `DescribeCoverage` always returned 500** — quick-xml cannot serialize a bare
   `Vec` (`cannot serialize sequence without defined root tag`). Fixed in
@@ -296,7 +317,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
   (`{y}` captures `0.pbf` and returns a PNG tile). The `/mvt/{layer}/{z}/{x}/{y}`
   route works and is what the test uses. Reordering routes would un-shadow `.pbf`.
 
-### 10.4 Recommended next tests (small → large)
+### 11.4 Recommended next tests (small → large)
 
 Batch 7 completed the previous list: GeoPackage **write** round-trip (done),
 WCS SUBSET/SIZE on a real georeferenced GeoTIFF (done, caught bug7), and
@@ -371,7 +392,21 @@ google-earth.kml+xml` → KML 2.2 Document with Schema + Placemarks,
 `outputFormat=SHAPE-ZIP` → `application/zip` with .shp/.shx/.dbf/.prj/.cst.
 New unit tests: 4 (shapefile_export); new integration: 5 (KML + SHAPE-ZIP in
 wfs_test).
+Batch 17 completed: **WPS (Web Processing Service) 1.0.0 first surface** —
+`src/services/wps.rs` + `src/handlers/wps_handler.rs` served at `/wps`
+(GetCapabilities / DescribeProcess / Execute, KVP + POST XML). GetCapabilities
+emits `wps:Capabilities` (ServiceIdentification / OperationsMetadata /
+ProcessOfferings / Languages); DescribeProcess emits `wps:ProcessDescriptions`
+with DataInputs / ProcessOutputs. Execute accepts KVP (`response=raw` → raw
+GeoJSON, else ExecuteResponse XML) and POST XML (`<wps:DataInputs>` with
+LiteralData / ComplexData / `<wps:Reference xlink:href="layer:name">`, a Terrane
+extension resolving a local layer). Built-in processes (pure Rust): `vec:Centroid`
+(geo `Centroid`), `vec:Buffer` (point-buffer — a circle around every coordinate;
+geo 0.27 does not ship the Buffer algorithm), `gs:Bounds` (bounding-box
+rectangle). The reference GeoServer has WPS disabled, so this follows the OGC
+WPS 1.0.0 schema directly. New unit tests: 6 (wps.rs); new integration: 6
+(wps_test.rs).
 Next candidates:
 
-1. WPS (processing) — first real P4 surface
-2. CSW (catalog)
+1. CSW (catalog) — next P4 surface
+2. OGC API Features / Processes (P4)
