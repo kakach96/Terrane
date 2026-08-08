@@ -77,18 +77,23 @@ pub fn read_arcgrid<P: AsRef<Path>>(path: P) -> Result<ArcGridData, String> {
             }
             "nrows" => {
                 nrows = val.parse().map_err(|_| "无效的 nrows".to_string())?;
+                header_lines = i + 1;
             }
             "xllcorner" | "xllcenter" => {
                 xllcorner = val.parse().map_err(|_| "无效的 xllcorner".to_string())?;
+                header_lines = i + 1;
             }
             "yllcorner" | "yllcenter" => {
                 yllcorner = val.parse().map_err(|_| "无效的 yllcorner".to_string())?;
+                header_lines = i + 1;
             }
             "cellsize" => {
                 cellsize = val.parse().map_err(|_| "无效的 cellsize".to_string())?;
+                header_lines = i + 1;
             }
             "nodata_value" => {
                 nodata = val.parse().unwrap_or(-9999.0);
+                header_lines = i + 1;
             }
             _ => {}
         }
@@ -208,4 +213,64 @@ pub fn read_arcgrid_meta<P: AsRef<Path>>(path: P) -> Result<(Bounds, u32, u32), 
     let bounds = Bounds::new(minx, miny, maxx, maxy);
 
     Ok((bounds, ncols, nrows))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_fixture(tag: &str, content: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("terrane-arcgrid-{}-{}", tag, std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("dem.asc");
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn test_read_arcgrid_basic() {
+        let content = "ncols 3\nnrows 2\nxllcorner 0.0\nyllcorner 10.0\ncellsize 1.0\nNODATA_value -9999\n1 2 3\n4 5 6\n";
+        let path = write_fixture("basic", content);
+        let data = read_arcgrid(&path).unwrap();
+
+        assert_eq!(data.width, 3);
+        assert_eq!(data.height, 2);
+        assert_eq!(data.cell_size, 1.0);
+        assert_eq!(data.nodata_value, -9999.0);
+        assert_eq!(data.bounds.minx, 0.0);
+        assert_eq!(data.bounds.maxx, 3.0); // xllcorner + ncols * cellsize
+        assert_eq!(data.bounds.miny, 10.0);
+        assert_eq!(data.bounds.maxy, 12.0); // yllcorner + nrows * cellsize
+        assert_eq!(data.min_value, 1.0);
+        assert_eq!(data.max_value, 6.0);
+
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn test_read_arcgrid_meta() {
+        let content = "ncols 4\nnrows 3\nxllcorner 100.0\nyllcorner 200.0\ncellsize 0.5\nNODATA_value -9999\n1 2 3 4\n5 6 7 8\n9 10 11 12\n";
+        let path = write_fixture("meta", content);
+        let (bounds, width, height) = read_arcgrid_meta(&path).unwrap();
+        assert_eq!(width, 4);
+        assert_eq!(height, 3);
+        assert!((bounds.maxx - 102.0).abs() < 1e-6);   // 100 + 4*0.5
+        assert!((bounds.maxy - 201.5).abs() < 1e-6);   // 200 + 3*0.5
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn test_invalid_header() {
+        let path = write_fixture("hdr", "ncols 3\n");
+        assert!(read_arcgrid(&path).is_err());
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn test_data_count_mismatch() {
+        let content = "ncols 3\nnrows 2\nxllcorner 0\nyllcorner 0\ncellsize 1\nNODATA_value -9999\n1 2 3\n4 5\n";
+        let path = write_fixture("cnt", content);
+        assert!(read_arcgrid(&path).is_err(), "数据点数不匹配应报错");
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
 }
