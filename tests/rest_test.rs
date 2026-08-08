@@ -1,0 +1,534 @@
+//! REST API + probes + MVT integration tests.
+//!
+//! Covers: health / split probes / metrics, server status, layers, and CRUD for
+//! workspaces / namespaces / styles / layer-groups / features / sql-views /
+//! data-sources, plus the MVT vector-tile endpoint.
+
+#[macro_use]
+mod common;
+
+use actix_web::http::StatusCode;
+use actix_web::test;
+
+#[actix_rt::test]
+async fn test_health_endpoint() {
+    let app = build_test_app!();
+
+    let req = test::TestRequest::get().uri("/geoserver/health").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "健康检查应返回 200");
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["success"], true);
+    assert_eq!(body["data"]["status"], "healthy");
+}
+
+#[actix_rt::test]
+async fn test_probes_and_metrics() {
+    let app = build_test_app!();
+
+    for path in ["/health/live", "/health/ready", "/metrics"] {
+        let req = test::TestRequest::get().uri(path).to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success(), "{} 应返回 200, 实际: {}", path, resp.status());
+    }
+}
+
+#[actix_rt::test]
+async fn test_server_status() {
+    let app = build_test_app!();
+
+    let req = test::TestRequest::get().uri("/geoserver/server/status").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "GET /server/status 应返回 200");
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(body["success"].as_bool().unwrap_or(false));
+    assert!(body["data"]["uptime"].is_string(), "应包含 uptime");
+    assert!(body["data"]["layerCount"].as_i64().unwrap_or(0) > 0, "应包含 layerCount");
+}
+
+#[actix_rt::test]
+async fn test_rest_layers() {
+    let app = build_test_app!();
+
+    let req = test::TestRequest::get().uri("/geoserver/layers").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "GET /layers 应返回 200");
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(body["success"].as_bool().unwrap_or(false));
+    assert!(body["data"].is_array(), "layers 应为数组, 实际: {:?}", body);
+}
+
+// ---------------------------------------------------------------------------
+// CRUD: Workspaces
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_workspaces_crud() {
+    let app = build_test_app!();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/workspaces")
+        .set_json(&serde_json::json!({
+            "name": "ws_test_1",
+            "title": "Test Workspace",
+            "description": "created by integration test",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建工作空间应返回 201");
+
+    let req = test::TestRequest::get().uri("/geoserver/workspaces").to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|w| w["name"].as_str().map(|s| s.to_string())).collect();
+    assert!(names.contains(&"ws_test_1".to_string()), "工作空间列表应包含 ws_test_1, 实际: {:?}", names);
+
+    let req = test::TestRequest::delete().uri("/geoserver/workspaces/ws_test_1").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "删除工作空间应返回 2xx, 实际: {}", resp.status());
+
+    let req = test::TestRequest::get().uri("/geoserver/workspaces/ws_test_1").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND, "删除后查询应返回 404");
+}
+
+// ---------------------------------------------------------------------------
+// CRUD: Namespaces
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_namespaces_crud() {
+    let app = build_test_app!();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/namespaces")
+        .set_json(&serde_json::json!({
+            "prefix": "ns_test_1",
+            "uri": "http://example.com/ns_test_1",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建命名空间应返回 201");
+
+    let req = test::TestRequest::get().uri("/geoserver/namespaces").to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let prefixes: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|n| n["prefix"].as_str().map(|s| s.to_string())).collect();
+    assert!(prefixes.contains(&"ns_test_1".to_string()), "命名空间列表应包含 ns_test_1, 实际: {:?}", prefixes);
+
+    let req = test::TestRequest::delete().uri("/geoserver/namespaces/ns_test_1").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "删除命名空间应返回 2xx, 实际: {}", resp.status());
+}
+
+// ---------------------------------------------------------------------------
+// CRUD: Styles
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_styles_crud() {
+    let app = build_test_app!();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/styles")
+        .set_json(&serde_json::json!({
+            "name": "style_test_1",
+            "title": "Test Style",
+            "content": "<StyledLayerDescriptor version=\"1.0.0\"></StyledLayerDescriptor>",
+            "format": "SLD",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建样式应返回 201");
+
+    let req = test::TestRequest::get().uri("/geoserver/styles").to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|s| s["name"].as_str().map(|v| v.to_string())).collect();
+    assert!(names.contains(&"style_test_1".to_string()), "样式列表应包含 style_test_1, 实际: {:?}", names);
+}
+
+// ---------------------------------------------------------------------------
+// CRUD: Layer groups
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_layer_groups_crud() {
+    let app = build_test_app!();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layer-groups")
+        .set_json(&serde_json::json!({
+            "name": "lg_test_1",
+            "title": "Test Layer Group",
+            "layers": ["world"],
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建图层组应返回 201");
+
+    let req = test::TestRequest::get().uri("/geoserver/layer-groups").to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|g| g["name"].as_str().map(|v| v.to_string())).collect();
+    assert!(names.contains(&"lg_test_1".to_string()), "图层组列表应包含 lg_test_1, 实际: {:?}", names);
+}
+
+// ---------------------------------------------------------------------------
+// CRUD: Features
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_features_crud() {
+    let app = build_test_app!();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layers/world/features")
+        .set_json(&serde_json::json!({
+            "geometry": { "type": "Point", "coordinates": [10.0, 20.0] },
+            "properties": { "name": "integration-test" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建要素应返回 201");
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(body["id"].is_string(), "应返回要素 id");
+
+    let req = test::TestRequest::get().uri("/geoserver/layers/world/features").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "读取图层要素应返回 200, 实际: {}", resp.status());
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let total = body["totalFeatures"].as_i64().unwrap_or(0);
+    assert!(total >= 1, "应至少 1 条要素, 实际: {}", total);
+}
+
+// ---------------------------------------------------------------------------
+// CRUD: SQL views
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_sql_views_crud() {
+    let app = build_test_app!();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/sql-views")
+        .set_json(&serde_json::json!({
+            "name": "sqlview_test_1",
+            "sql": "SELECT id, geom FROM cities",
+            "workspace": "default",
+            "store": "shapes",
+            "geometry_column": "geom",
+            "geometry_type": "Point",
+            "crs": "EPSG:4326",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建 SQL 视图应返回 201");
+
+    let req = test::TestRequest::get().uri("/geoserver/sql-views").to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|v| v["name"].as_str().map(|s| s.to_string())).collect();
+    assert!(names.contains(&"sqlview_test_1".to_string()), "SQL 视图列表应包含 sqlview_test_1, 实际: {:?}", names);
+}
+
+// ---------------------------------------------------------------------------
+// CRUD: Data sources
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_data_sources_crud() {
+    let app = build_test_app!();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(&serde_json::json!({
+            "name": "ds_test_1",
+            "type": "shapefile",
+            "workspace": "default",
+            "enabled": true,
+            "connection": { "file_path": "./data/test.shp", "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建数据源应返回 201");
+
+    let req = test::TestRequest::get().uri("/geoserver/data-sources").to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|d| d["name"].as_str().map(|s| s.to_string())).collect();
+    assert!(names.contains(&"ds_test_1".to_string()), "数据源列表应包含 ds_test_1, 实际: {:?}", names);
+}
+
+// ---------------------------------------------------------------------------
+// MVT vector tiles
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_mvt_endpoint() {
+    let app = build_test_app!();
+
+    // 注意: /tiles/{layer}/{z}/{x}/{y} 通用路由会先匹配 .pbf, 故用专用 /mvt/ 路由
+    let req = test::TestRequest::get().uri("/geoserver/mvt/world/0/0/0").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "MVT 瓦片应返回 200, 实际: {}", resp.status());
+
+    let content_type = resp.headers()
+        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    assert!(content_type.contains("mapbox-vector-tile"), "Content-Type 应为 MVT, 实际: {}", content_type);
+}
+
+// ---------------------------------------------------------------------------
+// Batch 3: 单要素查询/更新/删除 + 认证 + 权限 + 备份 + 上传
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_feature_single_get_update_delete() {
+    let app = build_test_app!();
+
+    // 1. 创建要素, 获取 id
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layers/world/features")
+        .set_json(&serde_json::json!({
+            "geometry": { "type": "Point", "coordinates": [50.0, 60.0] },
+            "properties": { "name": "before-update" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建要素应返回 201");
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let fid = body["id"].as_str().expect("应返回要素 id").to_string();
+
+    // 2. 单条查询
+    let req = test::TestRequest::get()
+        .uri(&format!("/geoserver/layers/world/features/{}", fid))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "GET 单要素应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["id"], fid, "应返回同一要素 id");
+
+    // 3. 更新属性
+    let update = test::TestRequest::put()
+        .uri(&format!("/geoserver/layers/world/features/{}", fid))
+        .set_json(&serde_json::json!({
+            "properties": { "name": "after-update" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert!(resp.status().is_success(), "PUT 单要素应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["properties"]["name"], "after-update", "属性应已更新");
+
+    // 4. 删除
+    let del = test::TestRequest::delete()
+        .uri(&format!("/geoserver/layers/world/features/{}", fid))
+        .to_request();
+    let resp = test::call_service(&app, del).await;
+    assert!(resp.status().is_success(), "DELETE 单要素应返回 200, 实际: {}", resp.status());
+
+    // 5. 删除后再查 → 404
+    let req = test::TestRequest::get()
+        .uri(&format!("/geoserver/layers/world/features/{}", fid))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND, "删除后查询应返回 404");
+}
+
+// ---------------------------------------------------------------------------
+// Batch 3: 认证 (登录 / 验证 / 用户管理)
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_auth_login_and_verify() {
+    let app = build_test_app!();
+
+    // 默认管理员登录
+    let login = test::TestRequest::post()
+        .uri("/geoserver/auth/login")
+        .set_json(&serde_json::json!({ "username": "admin", "password": "geoserver" }))
+        .to_request();
+    let resp = test::call_service(&app, login).await;
+    assert_eq!(resp.status(), StatusCode::OK, "admin 登录应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let token = body["data"]["token"].as_str().expect("应返回 token").to_string();
+    assert_eq!(body["data"]["username"], "admin");
+    assert_eq!(body["data"]["role"], "admin");
+
+    // 用 token 验证身份
+    let verify = test::TestRequest::get()
+        .uri("/geoserver/auth/verify")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, verify).await;
+    assert_eq!(resp.status(), StatusCode::OK, "verify 应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["username"], "admin");
+
+    // 错误密码 → 400
+    let bad = test::TestRequest::post()
+        .uri("/geoserver/auth/login")
+        .set_json(&serde_json::json!({ "username": "admin", "password": "wrong" }))
+        .to_request();
+    let resp = test::call_service(&app, bad).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "错误密码应返回 400, 实际: {}", resp.status());
+}
+
+#[actix_rt::test]
+async fn test_rest_auth_users_crud() {
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    // 创建用户
+    let create = test::TestRequest::post()
+        .uri("/geoserver/auth/users")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(&serde_json::json!({ "username": "tester1", "password": "secret123", "role": "guest" }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建用户应返回 201, 实际: {}", resp.status());
+
+    // 列出用户 → 包含 tester1
+    let list = test::TestRequest::get()
+        .uri("/geoserver/auth/users")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, list).await;
+    assert!(resp.status().is_success(), "列出用户应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|u| u["username"].as_str().map(|s| s.to_string())).collect();
+    assert!(names.contains(&"tester1".to_string()), "用户列表应包含 tester1, 实际: {:?}", names);
+
+    // 新用户可登录
+    let login2 = test::TestRequest::post()
+        .uri("/geoserver/auth/login")
+        .set_json(&serde_json::json!({ "username": "tester1", "password": "secret123" }))
+        .to_request();
+    let resp = test::call_service(&app, login2).await;
+    assert_eq!(resp.status(), StatusCode::OK, "新用户应能登录, 实际: {}", resp.status());
+
+    // 删除用户
+    let del = test::TestRequest::delete()
+        .uri("/geoserver/auth/users/tester1")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, del).await;
+    assert!(resp.status().is_success(), "删除用户应返回 200, 实际: {}", resp.status());
+}
+
+// ---------------------------------------------------------------------------
+// Batch 3: 权限管理
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_permissions_crud() {
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    // 创建权限 (layer/world 只读)
+    let create = test::TestRequest::post()
+        .uri("/geoserver/permissions")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(&serde_json::json!({
+            "username": "admin",
+            "resource_type": "layer",
+            "resource_name": "world",
+            "access_mode": "read",
+            "effect": "allow",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建权限应返回 201, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let perm_id = body["data"]["id"].as_i64().unwrap_or(0);
+
+    // 列出权限 → 包含该资源
+    let list = test::TestRequest::get()
+        .uri("/geoserver/permissions")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, list).await;
+    assert!(resp.status().is_success(), "列出权限应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let perms = body["data"].as_array().cloned().unwrap_or_default();
+    assert!(perms.iter().any(|p| p["resourceType"] == "layer" && p["resourceName"] == "world"),
+            "权限列表应包含 layer/world, 实际: {:?}", perms);
+
+    // 删除权限
+    let del = test::TestRequest::delete()
+        .uri(&format!("/geoserver/permissions/{}", perm_id))
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, del).await;
+    assert!(resp.status().is_success(), "删除权限应返回 200, 实际: {}", resp.status());
+}
+
+// ---------------------------------------------------------------------------
+// Batch 3: 备份导出 / 上传 GeoJSON
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_backup_export() {
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    let req = test::TestRequest::get()
+        .uri("/geoserver/backup/export")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "备份导出应返回 200, 实际: {}", resp.status());
+
+    let content_type = resp.headers()
+        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    assert!(content_type.contains("application/json"), "备份应导出为 JSON, 实际: {}", content_type);
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(body["success"].as_bool().unwrap_or(false), "备份导出应成功, 实际: {:?}", body);
+}
+
+#[actix_rt::test]
+async fn test_rest_upload_geojson() {
+    let app = build_test_app!();
+
+    // 注意: FeatureCollection 需要 total_count, Feature 需要 id (模型无默认值)
+    let payload = serde_json::json!({
+        "type": "FeatureCollection",
+        "total_count": 1,
+        "features": [
+            {
+                "id": "uploaded-1",
+                "type": "Feature",
+                "geometry": { "type": "Point", "coordinates": [12.0, 34.0] },
+                "properties": { "name": "uploaded-feature", "layer_name": "uploaded_layer" }
+            }
+        ]
+    });
+    let req = test::TestRequest::post()
+        .uri("/geoserver/data/upload")
+        .set_json(&payload)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "上传 GeoJSON 应返回 201, 实际: {}", resp.status());
+
+    // 上传后可查询该图层要素
+    let req = test::TestRequest::get()
+        .uri("/geoserver/layers/uploaded_layer/features")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "查询上传图层应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(body["totalFeatures"].as_i64().unwrap_or(0) >= 1, "上传图层应有要素, 实际: {:?}", body);
+}

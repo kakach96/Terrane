@@ -173,8 +173,12 @@ chore: bump actix-web to 4.x
 
 ## 7. Testing
 
-- No test suite is configured yet (no test dependencies in `Cargo.toml`; Angular `ng test` untested).
-- A minimal integration test exists at `tests/api_integration_test.rs`.
+- Run `cargo test` for the full suite: **50 lib unit tests + 60 integration tests**.
+- Integration tests are split by protocol into separate crates under `tests/`
+  (`wms_test.rs`, `wfs_test.rs`, `wcs_test.rs`, `wmts_test.rs`, `rest_test.rs`),
+  sharing `tests/common/mod.rs` helpers (`create_test_config` + `build_test_app!`).
+  The test config uses in-memory SQLite and disables the tile cache, so tests
+  write nothing to `./data`.
 - Adding `#[cfg(test)]` unit tests and actix-rt integration tests is planned — see [ROADMAP.md](ROADMAP.md).
 
 ## 8. Troubleshooting

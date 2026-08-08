@@ -34,3 +34,6 @@ geoserver.sqlite
 
 # Trae IDE
 .trae/
+
+# Runtime data
+data/
