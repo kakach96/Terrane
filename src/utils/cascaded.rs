@@ -48,7 +48,25 @@ pub fn extract_cascaded_config(
     })
 }
 
+/// 对查询串参数值做百分号编码 (空格/引号/逗号/括号/& 等)
+fn url_encode(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() * 3);
+    for b in value.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            b' ' => out.push_str("%20"),
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
 /// 向外部 WMS 请求瓦片/地图图像
+///
+/// `extra_params` 为请求级透传的厂商参数 (如 CQL_FILTER / TIME / ELEVATION),
+/// 会百分号编码后追加到上游 URL。
 ///
 /// 返回 (image_bytes, content_type)
 pub async fn fetch_cascaded_map(
@@ -60,6 +78,7 @@ pub async fn fetch_cascaded_map(
     srs: &str,
     style: Option<&str>,
     transparent: bool,
+    extra_params: &HashMap<String, String>,
 ) -> Result<(Vec<u8>, String), String> {
     let mut url = format!(
         "{}&LAYERS={}&BBOX={}&WIDTH={}&HEIGHT={}&FORMAT={}&SRS={}&TRANSPARENT={}",
@@ -77,9 +96,16 @@ pub async fn fetch_cascaded_map(
         url.push_str(&format!("&STYLES={}", style_name));
     }
 
-    // 添加额外参数
+    // 添加数据源静态自定义参数
     for (key, value) in &config.extra_params {
-        url.push_str(&format!("&{}={}", key, value));
+        url.push_str(&format!("&{}={}", key, url_encode(value)));
+    }
+
+    // 添加请求级透传厂商参数 (CQL_FILTER / TIME / ELEVATION 等)
+    for (key, value) in extra_params {
+        if !value.trim().is_empty() {
+            url.push_str(&format!("&{}={}", key, url_encode(value)));
+        }
     }
 
     info!("[Cascaded] 请求外部 WMS: {}", url);

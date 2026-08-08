@@ -1932,6 +1932,46 @@ async fn handle_cascaded_wms_request(
     let srs = &context.output_crs;
     let style = context.layers.first().and_then(|_| None); // 暂不使用样式
 
+    // 收集请求级厂商参数, 透传到上游 WMS (CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID)
+    let mut passthrough: HashMap<String, String> = HashMap::new();
+    if let Some(cql) = context
+        .cql_filter
+        .as_ref()
+        .filter(|c| !c.trim().is_empty())
+    {
+        passthrough.insert("CQL_FILTER".to_string(), cql.clone());
+    }
+    if let Some(time) = context.time.as_ref().filter(|t| !t.trim().is_empty()) {
+        passthrough.insert("TIME".to_string(), time.clone());
+    }
+    if let Some(elev) = context
+        .elevation
+        .as_ref()
+        .filter(|e| !e.trim().is_empty())
+    {
+        passthrough.insert("ELEVATION".to_string(), elev.clone());
+    }
+    if let Some(env) = &context.env {
+        if !env.is_empty() {
+            let env_str = env
+                .iter()
+                .map(|(k, v)| format!("{}:'{}'", k, v))
+                .collect::<Vec<_>>()
+                .join(";");
+            passthrough.insert("ENV".to_string(), env_str);
+        }
+    }
+    if let Some(angle) = context.angle {
+        passthrough.insert("ANGLE".to_string(), angle.to_string());
+    }
+    if let Some(fids) = context
+        .feature_id
+        .as_ref()
+        .filter(|f| !f.is_empty())
+    {
+        passthrough.insert("FEATUREID".to_string(), fids.join(","));
+    }
+
     match fetch_cascaded_map(
         &config,
         &bbox_str,
@@ -1941,6 +1981,7 @@ async fn handle_cascaded_wms_request(
         srs,
         style,
         context.transparent,
+        &passthrough,
     )
     .await
     {
