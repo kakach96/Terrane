@@ -265,3 +265,62 @@ async fn test_wcs_get_coverage_netcdf_fallback() {
         .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
     assert!(content_type.contains("image/tiff"), "netCDF 应回退为 TIFF, 实际: {}", content_type);
 }
+
+// ---------------------------------------------------------------------------
+// Batch 6: 真实 ArcGrid 上的 SUBSET / SIZE (裁剪 + 重采样真实栅格)
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_wcs_get_coverage_real_arcgrid_subset_size() {
+    use actix_web::http::StatusCode;
+
+    let app = build_test_app!();
+
+    // 1. 4x3 ArcGrid fixture (bounds: 0,0 → 4,3)
+    let dir = std::env::temp_dir().join(format!("terrane-wcs-arcgrid-sub-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let asc_path = dir.join("cov_asc_sub.asc");
+    std::fs::write(
+        &asc_path,
+        "ncols 4\nnrows 3\nxllcorner 0.0\nyllcorner 0.0\ncellsize 1.0\nNODATA_value -9999\n1 2 3 4\n5 6 7 8\n9 10 11 12\n",
+    )
+    .unwrap();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(&serde_json::json!({
+            "name": "cov_asc_sub",
+            "type": "arcgrid",
+            "workspace": "default",
+            "enabled": true,
+            "connection": { "file_path": asc_path.to_string_lossy(), "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建 ArcGrid 数据源应返回 201, 实际: {}", resp.status());
+
+    // 2. SUBSET 裁剪 → 2x2 (fallback 会忽略 SUBSET 返回 512x512, 可区分真实栅格路径)
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_asc_sub&FORMAT=image/tiff&SUBSET=x(0,2)&SUBSET=y(0,2)")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "WCS GetCoverage + SUBSET (真实 ArcGrid) 应返回 200, 实际: {}", resp.status());
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
+    assert_eq!(decoded.width(), 2, "SUBSET x(0,2) y(0,2) 应裁剪为 2x2, 实际: {}", decoded.width());
+    assert_eq!(decoded.height(), 2);
+
+    // 3. SUBSET + SIZE 重采样 → 8x8
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_asc_sub&FORMAT=image/tiff&SUBSET=x(0,2)&SUBSET=y(0,2)&SIZE=8,8")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "WCS GetCoverage + SUBSET + SIZE 应返回 200, 实际: {}", resp.status());
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
+    assert_eq!(decoded.width(), 8, "SUBSET + SIZE=8,8 应输出 8x8, 实际: {}", decoded.width());
+    assert_eq!(decoded.height(), 8);
+
+    // 清理 fixture
+    std::fs::remove_dir_all(&dir).ok();
+}

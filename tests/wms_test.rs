@@ -302,3 +302,66 @@ async fn test_wms_get_feature_info_plain() {
         .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
     assert!(content_type.contains("text/plain"), "Content-Type 应为 text/plain, 实际: {}", content_type);
 }
+
+// ---------------------------------------------------------------------------
+// Batch 6: 级联 WMS 在线代理 (需要参考 GeoServer http://127.0.0.1:18080)
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+#[ignore = "requires the reference GeoServer at http://127.0.0.1:18080"]
+async fn test_wms_cascaded_live() {
+    use actix_web::http::StatusCode;
+
+    let app = build_test_app!();
+
+    // 1. 创建级联 WMS 数据源, 指向参考 GeoServer 的 WMS 端点 (sf:archsites 点图层)
+    let create_ds = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(&serde_json::json!({
+            "name": "casc1",
+            "type": "cascaded_wms",
+            "workspace": "default",
+            "enabled": true,
+            "connection": {
+                "host": "127.0.0.1",
+                "port": 18080,
+                "database": "/geoserver/wms",
+                "schema": "sf:archsites"
+            },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create_ds).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建级联 WMS 数据源应返回 201, 实际: {}", resp.status());
+
+    // 2. 创建图层引用该级联数据源
+    let create_layer = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(&serde_json::json!({
+            "name": "casc_layer",
+            "title": "Cascaded Layer",
+            "workspace": "default",
+            "store": "casc1",
+            "native_name": "sf:archsites",
+            "srs": "EPSG:4326",
+            "minx": -110.0, "miny": 20.0, "maxx": -80.0, "maxy": 50.0,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create_layer).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建图层应返回 201, 实际: {}", resp.status());
+
+    // 3. WMS GetMap → 应代理到上游参考 GeoServer 并返回 PNG
+    let req = test::TestRequest::get()
+        .uri("/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=casc_layer&BBOX=-110,20,-80,50&WIDTH=256&HEIGHT=256&SRS=EPSG:4326&FORMAT=image/png")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "级联 WMS GetMap 应返回 200, 实际: {}", resp.status());
+
+    let content_type = resp.headers()
+        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    assert!(content_type.contains("image/png"), "级联 GetMap 应返回 PNG, 实际: {}", content_type);
+
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码级联返回的 PNG");
+    assert_eq!(decoded.width(), 256, "级联返回瓦片应为 256x256");
+    assert_eq!(decoded.height(), 256);
+}

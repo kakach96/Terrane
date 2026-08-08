@@ -1394,3 +1394,101 @@ impl Store for PostgresStore {
         Ok(res as usize)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::Store;
+    use crate::config::PostgresConfig;
+
+    /// 构造一个指向本地 PostGIS 的元数据配置。
+    /// 连接参数可用 `GEOSERVER_TEST_PG_*` 环境变量覆盖, 默认匹配本地开发栈
+    /// (`docker compose --profile postgres` 或本机 postgis 容器)。
+    fn test_metadata_config(schema: &str) -> MetadataConfig {
+        let host = std::env::var("GEOSERVER_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+        let port: u16 = std::env::var("GEOSERVER_TEST_PG_PORT")
+            .ok().and_then(|v| v.parse().ok()).unwrap_or(5432);
+        let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "postgres".into());
+        let password = std::env::var("GEOSERVER_TEST_PG_PASSWORD")
+            .unwrap_or_else(|_| "kakach2026".into());
+        let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "postgres".into());
+
+        MetadataConfig {
+            kind: "postgres".into(),
+            sqlite_path: std::path::PathBuf::new(),
+            postgres: PostgresConfig {
+                host, port, instance, schema: schema.to_string(),
+                user, password, pool_size: 2,
+            },
+        }
+    }
+
+    /// 删除测试 schema (清理) — 走独立连接池, 不依赖 store 的 search_path。
+    async fn drop_test_schema(cfg: &MetadataConfig) {
+        let pg = &cfg.postgres;
+        let mut pg_cfg = deadpool_postgres::Config::new();
+        pg_cfg.host = Some(pg.host.clone());
+        pg_cfg.port = Some(pg.port);
+        pg_cfg.dbname = Some(pg.instance.clone());
+        pg_cfg.user = Some(pg.user.clone());
+        pg_cfg.password = Some(pg.password.clone());
+        let pool = pg_cfg.create_pool(Some(deadpool_postgres::Runtime::Tokio1), NoTls).unwrap();
+        if let Ok(client) = pool.get().await {
+            let _ = client
+                .batch_execute(&format!("DROP SCHEMA IF EXISTS {} CASCADE", pg.schema))
+                .await;
+        }
+    }
+
+    #[actix_rt::test]
+    #[ignore = "requires a live PostGIS (e.g. docker compose --profile postgres)"]
+    async fn test_live_postgres_metadata_store() {
+        // 每进程独立 schema, 避免并行运行互相清理
+        let schema = format!("terrane_test_{}", std::process::id());
+        let cfg = test_metadata_config(&schema);
+
+        // 1. 连接 + 建表
+        let store = PostgresStore::new(&cfg).await.expect("应能连接 PostGIS 并初始化表结构");
+
+        // 2. workspace CRUD
+        store.create_workspace(&CreateWorkspaceRequest {
+            name: "pg_ws".into(),
+            title: Some("PG WS".into()),
+            description: None,
+        })
+        .await
+        .unwrap();
+        let ws = store.get_workspace("pg_ws").await.unwrap().unwrap();
+        assert_eq!(ws.name, "pg_ws");
+
+        // 3. layer CRUD
+        let layer = Layer {
+            name: "pg_layer".into(),
+            title: "PG Layer".into(),
+            workspace: "pg_ws".into(),
+            store: "pg_store".into(),
+            srs: "EPSG:4326".into(),
+            abstract_text: None,
+            native_name: Some("pg_layer".into()),
+            enabled: true,
+            minx: -180.0, miny: -90.0, maxx: 180.0, maxy: 90.0,
+            created: String::new(),
+            modified: String::new(),
+        };
+        store.create_layer(&layer).await.unwrap();
+        let got = store.get_layer("pg_layer").await.unwrap().unwrap();
+        assert_eq!(got.title, "PG Layer");
+
+        // 4. user CRUD
+        store
+            .create_user("pgalice", "hash", "salt", &crate::auth::UserRole::User, true)
+            .await
+            .unwrap();
+        assert!(store.get_user("pgalice").await.unwrap().is_some());
+        store.delete_user("pgalice").await.unwrap();
+        assert!(store.get_user("pgalice").await.unwrap().is_none());
+
+        // 5. 清理测试 schema
+        drop_test_schema(&cfg).await;
+    }
+}
