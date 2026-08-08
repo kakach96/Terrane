@@ -314,17 +314,11 @@ async fn test_wms_get_map_pdf() {
     );
 
     let body = actix_web::test::read_body(resp).await;
-    assert!(
-        body.starts_with(b"%PDF-"),
-        "PDF 应以 %PDF- 魔数开头"
-    );
+    assert!(body.starts_with(b"%PDF-"), "PDF 应以 %PDF- 魔数开头");
     let text = String::from_utf8_lossy(&body);
     assert!(text.contains("/Type /Page"), "PDF 应包含页面对象");
     assert!(text.contains("startxref"), "PDF 应包含 xref 起始偏移");
-    assert!(
-        text.trim_end().ends_with("%%EOF"),
-        "PDF 应以 %%EOF 结尾"
-    );
+    assert!(text.trim_end().ends_with("%%EOF"), "PDF 应以 %%EOF 结尾");
 }
 
 #[actix_rt::test]
@@ -598,6 +592,134 @@ async fn test_wms_get_feature_info_plain() {
 }
 
 // ---------------------------------------------------------------------------
+// Batch 15: WMS-C 1.1.1 (GeoWebCache) — GetCapabilities + TILED=true GetMap
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_wmsc_get_capabilities() {
+    let app = build_test_app!();
+
+    let req = test::TestRequest::get()
+        .uri("/geoserver/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetCapabilities")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS-C GetCapabilities 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("xml"),
+        "Content-Type 应为 XML, 实际: {}",
+        content_type
+    );
+
+    let bytes = test::read_body(resp).await;
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(
+        body.contains("<WMT_MS_Capabilities version=\"1.1.1\">"),
+        "应包含 WMS 1.1.1 能力根元素"
+    );
+    assert!(body.contains("<Name>OGC:WMS</Name>"));
+    assert!(body.contains("GeoWebCache"));
+    assert!(body.contains("<GetMap>"));
+    assert!(body.contains("<Name>world</Name>"));
+    assert!(body.contains("<SRS>EPSG:4326</SRS>"));
+    assert!(body.contains("<LatLonBoundingBox"));
+}
+
+#[actix_rt::test]
+async fn test_wmsc_get_map_tiled() {
+    let app = build_test_app!();
+
+    // TILED=true + 网格对齐 BBOX (global-geodetic z=0 左半: -180,-90,0,90)
+    let req = test::TestRequest::get()
+        .uri("/geoserver/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&STYLES=&SRS=EPSG:4326&BBOX=-180,-90,0,90&WIDTH=256&HEIGHT=256&FORMAT=image/png&TILED=true")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS-C TILED=true GetMap 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/png"),
+        "Content-Type 应为 image/png, 实际: {}",
+        content_type
+    );
+}
+
+#[actix_rt::test]
+async fn test_wmsc_get_map_tiled_mercator() {
+    let app = build_test_app!();
+
+    // TILED=true on the mercator gridset: 整世界 z=0 (1x1).
+    let req = test::TestRequest::get()
+        .uri("/geoserver/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&STYLES=&SRS=EPSG:900913&BBOX=-20037508.34,-20037508.34,20037508.34,20037508.34&WIDTH=256&HEIGHT=256&FORMAT=image/png&TILED=true")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS-C TILED=true (mercator) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/png"),
+        "Content-Type 应为 image/png, 实际: {}",
+        content_type
+    );
+}
+
+#[actix_rt::test]
+async fn test_wmsc_get_map_untiled() {
+    let app = build_test_app!();
+
+    // 无 TILED 参数 → 走标准 WMS 1.1.1 GetMap 管线.
+    let req = test::TestRequest::get()
+        .uri("/geoserver/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&STYLES=&SRS=EPSG:4326&BBOX=-180,-90,180,90&WIDTH=256&HEIGHT=256&FORMAT=image/png")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS-C 普通 GetMap 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/png"),
+        "Content-Type 应为 image/png, 实际: {}",
+        content_type
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Batch 6: 级联 WMS 在线代理 (需要参考 GeoServer http://127.0.0.1:18080)
 // ---------------------------------------------------------------------------
 
@@ -710,7 +832,11 @@ async fn test_wms_cascaded_vendor_params_live() {
         }))
         .to_request();
     let resp = test::call_service(&app, create_ds).await;
-    assert_eq!(resp.status(), StatusCode::CREATED, "创建级联数据源应返回 201");
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建级联数据源应返回 201"
+    );
 
     let create_layer = test::TestRequest::post()
         .uri("/geoserver/layers")
@@ -731,10 +857,17 @@ async fn test_wms_cascaded_vendor_params_live() {
 
     // 2. 有效 CQL_FILTER 透传 → 上游应用过滤并返回 PNG
     let req = test::TestRequest::get()
-        .uri(&format!("{}&CQL_FILTER=str1%3D%27Signature%20Rock%27", base))
+        .uri(&format!(
+            "{}&CQL_FILTER=str1%3D%27Signature%20Rock%27",
+            base
+        ))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "CQL_FILTER 透传应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "CQL_FILTER 透传应返回 200, 实际: {}",
+        resp.status()
+    );
     let ct = resp
         .headers()
         .get("Content-Type")
@@ -752,7 +885,11 @@ async fn test_wms_cascaded_vendor_params_live() {
         .uri(&format!("{}&CQL_FILTER=INVALID%20SYNTAX%20BROKEN", base))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "无效 CQL_FILTER 透传应仍返回 200 (OGC 异常), 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "无效 CQL_FILTER 透传应仍返回 200 (OGC 异常), 实际: {}",
+        resp.status()
+    );
     let ct = resp
         .headers()
         .get("Content-Type")
@@ -770,7 +907,11 @@ async fn test_wms_cascaded_vendor_params_live() {
         .uri(&format!("{}&TIME=2024-01-01", base))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "TIME 透传应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "TIME 透传应返回 200, 实际: {}",
+        resp.status()
+    );
     let ct = resp
         .headers()
         .get("Content-Type")
