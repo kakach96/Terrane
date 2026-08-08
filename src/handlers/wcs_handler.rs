@@ -92,18 +92,38 @@ async fn handle_describe_coverage(state: &AppState, request: &WcsRequest) -> Res
     for coverage_id in coverage_ids {
         let mut description = CoverageDescription::new(coverage_id);
 
-        // 尝试从 GeoTIFF 数据源获取真实元数据
+        // 尝试从栅格数据源获取真实元数据 (GeoTIFF / ArcGrid / WorldImage)
         if let Some(store) = &state.store {
             if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
-                if ds.data_source_type == DataSourceType::Geotiff {
-                    if let Some(conn) = &ds.connection {
-                        if let Some(path) = resolve_raster_path(state, &ds.name, conn.file_path.as_ref()) {
-                            if let Ok(meta) = geotiff::read_geotiff_metadata(&path) {
-                                if let Some(bounds) = meta.bounds {
-                                    description.set_bounds(bounds.minx, bounds.miny, bounds.maxx, bounds.maxy);
+                if let Some(conn) = &ds.connection {
+                    if let Some(path) = resolve_raster_path(state, &ds.name, conn.file_path.as_ref()) {
+                        match ds.data_source_type {
+                            DataSourceType::Geotiff => {
+                                if let Ok(meta) = geotiff::read_geotiff_metadata(&path) {
+                                    if let Some(bounds) = meta.bounds {
+                                        description.set_bounds(bounds.minx, bounds.miny, bounds.maxx, bounds.maxy);
+                                    }
+                                    description.set_size(meta.width, meta.height, meta.band_count);
                                 }
-                                description.set_size(meta.width, meta.height, meta.band_count);
                             }
+                            DataSourceType::ArcGrid => {
+                                if let Ok((bounds, width, height)) =
+                                    crate::utils::arcgrid::read_arcgrid_meta(&path)
+                                {
+                                    description.set_bounds(bounds.minx, bounds.miny, bounds.maxx, bounds.maxy);
+                                    description.set_size(width, height, 1);
+                                }
+                            }
+                            DataSourceType::WorldImage => {
+                                if let Ok(meta) = crate::utils::worldimage::read_worldimage_meta(&path) {
+                                    description.set_bounds(
+                                        meta.bounds.minx, meta.bounds.miny,
+                                        meta.bounds.maxx, meta.bounds.maxy,
+                                    );
+                                    description.set_size(meta.width, meta.height, 4);
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
