@@ -828,3 +828,120 @@ async fn test_live_rest_postgis_data_source_http() {
     drop(setup_client);
     pg_http_drop_schema(&schema).await;
 }
+
+// ---------------------------------------------------------------------------
+// Batch 10: GeoPackage 类型化属性 + FeatureType describe over REST
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_geopackage_feature_type() {
+    use std::collections::HashMap;
+
+    // 1. 在临时目录写入带类型化属性的 GeoPackage
+    let dir = std::env::temp_dir().join(format!("terrane-gpkg-rest-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("typed.gpkg");
+
+    let mut props1 = HashMap::new();
+    props1.insert("name".to_string(), terrane::models::PropertyValue::String("alpha".to_string()));
+    props1.insert("count".to_string(), terrane::models::PropertyValue::Integer(10));
+    props1.insert("price".to_string(), terrane::models::PropertyValue::Number(9.5));
+    props1.insert("active".to_string(), terrane::models::PropertyValue::Boolean(true));
+    let mut props2 = HashMap::new();
+    props2.insert("name".to_string(), terrane::models::PropertyValue::String("beta".to_string()));
+    props2.insert("count".to_string(), terrane::models::PropertyValue::Integer(20));
+    props2.insert("price".to_string(), terrane::models::PropertyValue::Number(19.25));
+    props2.insert("active".to_string(), terrane::models::PropertyValue::Boolean(false));
+
+    let features = vec![
+        terrane::models::Feature::with_id(
+            "f1".into(),
+            terrane::models::GeoJsonGeometry::Point { coordinates: vec![1.0, 1.0] },
+            props1,
+        ),
+        terrane::models::Feature::with_id(
+            "f2".into(),
+            terrane::models::GeoJsonGeometry::Point { coordinates: vec![2.0, 2.0] },
+            props2,
+        ),
+    ];
+    let bounds = terrane::models::Bounds::new(1.0, 1.0, 2.0, 2.0);
+    let layer_info = terrane::utils::geopackage::write_geopackage_features(
+        &path, "typed", "POINT", 4326, &features, &bounds,
+    )
+    .expect("应能写入 GeoPackage");
+    assert_eq!(layer_info.feature_count, 2);
+
+    let app = build_test_app!();
+
+    // 2. 通过 REST 创建 geopackage 数据源
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(&serde_json::json!({
+            "name": "gpkg_ds",
+            "type": "geopackage",
+            "workspace": "default",
+            "enabled": true,
+            "connection": { "file_path": path.to_str(), "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED,
+        "创建 GeoPackage 数据源应返回 201, 实际: {}", resp.status());
+
+    // 3. 表列表 → 应包含 typed
+    let req = test::TestRequest::get()
+        .uri("/geoserver/data-sources/gpkg_ds/tables")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "表列表应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let tables: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect();
+    assert!(tables.contains(&"typed".to_string()),
+        "表列表应包含 typed, 实际: {:?}", tables);
+
+    // 4. 创建图层 (store=gpkg_ds, native_name=typed)
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(&serde_json::json!({
+            "name": "typed_layer",
+            "title": "Typed",
+            "workspace": "default",
+            "store": "gpkg_ds",
+            "native_name": "typed",
+            "srs": "EPSG:4326",
+            "minx": 1.0, "miny": 1.0, "maxx": 2.0, "maxy": 2.0,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED,
+        "创建图层应返回 201, 实际: {}", resp.status());
+
+    // 5. feature-type → 返回类型化列 (name TEXT / count INTEGER / price REAL / active BOOLEAN)
+    let req = test::TestRequest::get()
+        .uri("/geoserver/layers/typed_layer/feature-type")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "feature-type 应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let cols = body["data"].as_array().cloned().unwrap_or_default();
+    let col_map: HashMap<String, String> = cols.iter()
+        .filter_map(|c| {
+            let n = c["name"].as_str().map(|s| s.to_string());
+            let t = c["type"].as_str().map(|s| s.to_string());
+            n.zip(t)
+        })
+        .collect();
+    assert_eq!(col_map.get("name"), Some(&"TEXT".to_string()),
+        "name 列应为 TEXT, 实际: {:?}", col_map);
+    assert_eq!(col_map.get("count"), Some(&"INTEGER".to_string()),
+        "count 列应为 INTEGER, 实际: {:?}", col_map);
+    assert_eq!(col_map.get("price"), Some(&"REAL".to_string()),
+        "price 列应为 REAL, 实际: {:?}", col_map);
+    assert_eq!(col_map.get("active"), Some(&"BOOLEAN".to_string()),
+        "active 列应为 BOOLEAN, 实际: {:?}", col_map);
+
+    // 清理
+    std::fs::remove_dir_all(&dir).ok();
+}
