@@ -605,3 +605,105 @@ async fn test_wms_cascaded_live() {
     assert_eq!(decoded.width(), 256, "级联返回瓦片应为 256x256");
     assert_eq!(decoded.height(), 256);
 }
+
+// ---------------------------------------------------------------------------
+// Batch 11: 级联 WMS 厂商参数 (CQL_FILTER / TIME) 透传到上游
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+#[ignore = "requires the reference GeoServer at http://127.0.0.1:18080"]
+async fn test_wms_cascaded_vendor_params_live() {
+    use actix_web::http::StatusCode;
+
+    let app = build_test_app!();
+
+    // 1. 创建级联 WMS 数据源 (参考 GeoServer sf:archsites, 原生 CRS EPSG:26713)
+    let create_ds = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(&serde_json::json!({
+            "name": "casc_vendor",
+            "type": "cascaded_wms",
+            "workspace": "default",
+            "enabled": true,
+            "connection": {
+                "host": "127.0.0.1",
+                "port": 18080,
+                "database": "/geoserver/wms",
+                "schema": "sf:archsites"
+            },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create_ds).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建级联数据源应返回 201");
+
+    let create_layer = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(&serde_json::json!({
+            "name": "casc_vendor_layer",
+            "title": "Cascaded Vendor Layer",
+            "workspace": "default",
+            "store": "casc_vendor",
+            "native_name": "sf:archsites",
+            "srs": "EPSG:26713",
+            "minx": 590000.0, "miny": 4910000.0, "maxx": 610000.0, "maxy": 4930000.0,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create_layer).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建图层应返回 201");
+
+    let base = "/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=casc_vendor_layer&BBOX=590000,4910000,610000,4930000&SRS=EPSG:26713&WIDTH=256&HEIGHT=256&FORMAT=image/png";
+
+    // 2. 有效 CQL_FILTER 透传 → 上游应用过滤并返回 PNG
+    let req = test::TestRequest::get()
+        .uri(&format!("{}&CQL_FILTER=str1%3D%27Signature%20Rock%27", base))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "CQL_FILTER 透传应返回 200, 实际: {}", resp.status());
+    let ct = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        ct.contains("image/png"),
+        "有效 CQL_FILTER 应返回 PNG, 实际: {}",
+        ct
+    );
+
+    // 3. 无效 CQL_FILTER 透传 → 上游返回 OGC 异常 (非 PNG), 证明参数确实到达上游
+    let req = test::TestRequest::get()
+        .uri(&format!("{}&CQL_FILTER=INVALID%20SYNTAX%20BROKEN", base))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "无效 CQL_FILTER 透传应仍返回 200 (OGC 异常), 实际: {}", resp.status());
+    let ct = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        !ct.contains("image/png"),
+        "无效 CQL_FILTER 应返回上游异常 (非 PNG), 证明透传生效, 实际: {}",
+        ct
+    );
+
+    // 4. TIME 透传 → 上游 (无时间维度图层) 忽略并返回 PNG
+    let req = test::TestRequest::get()
+        .uri(&format!("{}&TIME=2024-01-01", base))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "TIME 透传应返回 200, 实际: {}", resp.status());
+    let ct = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        ct.contains("image/png"),
+        "TIME 透传应返回 PNG, 实际: {}",
+        ct
+    );
+}
