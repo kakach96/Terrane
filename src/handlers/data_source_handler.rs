@@ -381,9 +381,22 @@ pub async fn get_data_source_tables(
                 let elapsed_get_ds = t1.elapsed();
                 tracing::debug!("[get_data_source_tables] get_data_source 耗时: {:?}", elapsed_get_ds);
 
+                if data_source.data_source_type == DataSourceType::Geopackage {
+                    // GeoPackage: 列出文件中的要素表
+                    let file_path = data_source.connection.as_ref()
+                        .and_then(|c| c.file_path.clone())
+                        .ok_or_else(|| GeoServerError::BadRequest(
+                            "GeoPackage data source has no file path".to_string()
+                        ))?;
+                    let tables = crate::utils::geopackage::read_geopackage_layers(&file_path)
+                        .map(|layers| layers.iter().map(|l| l.table_name.clone()).collect::<Vec<String>>())
+                        .unwrap_or_default();
+                    return Ok(HttpResponse::Ok().json(ApiResponse::success(tables)));
+                }
+
                 if data_source.data_source_type != DataSourceType::Postgis {
-                    tracing::debug!("[get_data_source_tables] 非 PostGIS 数据源, 跳过");
-                    return Err(GeoServerError::BadRequest("Only PostGIS data sources support table listing".to_string()));
+                    tracing::debug!("[get_data_source_tables] 非 PostGIS/GeoPackage 数据源, 跳过");
+                    return Err(GeoServerError::BadRequest("Only PostGIS and GeoPackage data sources support table listing".to_string()));
                 }
 
                 if let Some(conn_info) = &data_source.connection {
@@ -496,24 +509,39 @@ pub async fn get_layer_feature_type(
             })?
             .ok_or_else(|| GeoServerError::NotFound(format!("Data source '{}' not found", layer.store)))?;
 
-        if data_source.data_source_type != DataSourceType::Postgis {
-            return Err(GeoServerError::BadRequest(
-                "Feature type information is only available for PostGIS data sources".to_string()
-            ));
-        }
+        if data_source.data_source_type == DataSourceType::Postgis {
+            let table_name = layer.native_name
+                .as_ref()
+                .ok_or_else(|| GeoServerError::BadRequest(
+                    "Layer has no native table name configured".to_string()
+                ))?;
 
-        let table_name = layer.native_name
-            .as_ref()
-            .ok_or_else(|| GeoServerError::BadRequest(
-                "Layer has no native table name configured".to_string()
-            ))?;
-
-        if let Some(conn_info) = &data_source.connection {
-            let pool = state.get_pg_pool(&data_source.name, conn_info);
-            let columns = get_postgis_table_columns(&pool, conn_info, table_name).await;
+            if let Some(conn_info) = &data_source.connection {
+                let pool = state.get_pg_pool(&data_source.name, conn_info);
+                let columns = get_postgis_table_columns(&pool, conn_info, table_name).await;
+                Ok(HttpResponse::Ok().json(ApiResponse::success(columns)))
+            } else {
+                Err(GeoServerError::BadRequest("Data source has no connection configuration".to_string()))
+            }
+        } else if data_source.data_source_type == DataSourceType::Geopackage {
+            // GeoPackage: 从 .gpkg 文件的要素表读取列定义
+            let table_name = layer.native_name
+                .as_ref()
+                .ok_or_else(|| GeoServerError::BadRequest(
+                    "Layer has no native table name configured".to_string()
+                ))?;
+            let file_path = data_source.connection.as_ref()
+                .and_then(|c| c.file_path.clone())
+                .ok_or_else(|| GeoServerError::BadRequest(
+                    "GeoPackage data source has no file path".to_string()
+                ))?;
+            let columns = get_geopackage_table_columns(&file_path, table_name).await
+                .map_err(|e| GeoServerError::BadRequest(format!("Failed to read GeoPackage: {}", e)))?;
             Ok(HttpResponse::Ok().json(ApiResponse::success(columns)))
         } else {
-            Err(GeoServerError::BadRequest("Data source has no connection configuration".to_string()))
+            Err(GeoServerError::BadRequest(
+                "Feature type information is only available for PostGIS and GeoPackage data sources".to_string()
+            ))
         }
     } else {
         Err(GeoServerError::InternalError("Database not available".to_string()))
@@ -566,4 +594,35 @@ async fn get_postgis_table_columns(
             vec![]
         }
     }
+}
+
+/// 读取 GeoPackage 要素表的列定义 (PRAGMA table_info)
+async fn get_geopackage_table_columns(
+    file_path: &str,
+    table_name: &str,
+) -> Result<Vec<serde_json::Value>, String> {
+    let conn = rusqlite::Connection::open(file_path)
+        .map_err(|e| format!("无法打开 GeoPackage '{}': {}", file_path, e))?;
+    let qn = table_name.replace('"', "\"\"");
+    let pragma = format!("PRAGMA table_info(\"{}\")", qn);
+    let mut stmt = conn.prepare(&pragma)
+        .map_err(|e| format!("查询 GeoPackage 表 '{}' 列失败: {}", table_name, e))?;
+    let rows = stmt.query_map([], |row| {
+        let name: String = row.get(1)?;
+        let ty: String = row.get(2).unwrap_or_default();
+        Ok((name, ty))
+    }).map_err(|e| format!("查询结果错误: {}", e))?;
+
+    let mut cols = Vec::new();
+    for row in rows {
+        if let Ok((name, ty)) = row {
+            cols.push(serde_json::json!({
+                "name": name,
+                "type": ty,
+                "length": serde_json::Value::Null,
+                "nullable": true,
+            }));
+        }
+    }
+    Ok(cols)
 }

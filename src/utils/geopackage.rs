@@ -125,19 +125,22 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
     let crs = srs_map.get(&layer_info.2).cloned()
         .unwrap_or_else(|| format!("EPSG:{}", layer_info.2));
 
-    // 读取所有非几何列名
+    // 读取所有非几何列名及其声明的类型 (PRAGMA table_info: cid, name, type, ...)
     let geom_col = &layer_info.0;
     let mut attr_columns: Vec<String> = Vec::new();
+    let mut col_types: HashMap<String, String> = HashMap::new();
     let pragma_stmt = format!("PRAGMA table_info(\"{}\")", layer_name);
     if let Ok(mut stmt) = conn.prepare(&pragma_stmt) {
         if let Ok(rows) = stmt.query_map([], |row| {
             let col_name: String = row.get(1)?;
-            Ok(col_name)
+            let col_type: String = row.get(2).unwrap_or_default();
+            Ok((col_name, col_type))
         }) {
             for row in rows {
-                if let Ok(name) = row {
+                if let Ok((name, ty)) = row {
                     if name != *geom_col {
-                        attr_columns.push(name);
+                        attr_columns.push(name.clone());
+                        col_types.insert(name, ty);
                     }
                 }
             }
@@ -164,12 +167,25 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
         if let Ok(rows) = stmt.query_map([], |row| {
             // 读取几何 (WKB)
             let geom_blob: Option<Vec<u8>> = row.get(0).ok();
-            // 读取属性
+            // 读取属性 (按 SQLite 实际存储的值类型还原)
             let mut props = HashMap::new();
             for (i, col_name) in attr_columns.iter().enumerate() {
-                let val: Option<String> = row.get(i + 1).ok();
-                if let Some(v) = val {
-                    props.insert(col_name.clone(), PropertyValue::String(v));
+                let v: Option<rusqlite::types::Value> = row.get(i + 1).ok();
+                if let Some(v) = v {
+                    let prop = match v {
+                        rusqlite::types::Value::Integer(n) => {
+                            let ty = col_types.get(col_name).cloned().unwrap_or_default().to_uppercase();
+                            if ty.contains("BOOL") {
+                                PropertyValue::Boolean(n != 0)
+                            } else {
+                                PropertyValue::Integer(n)
+                            }
+                        }
+                        rusqlite::types::Value::Real(n) => PropertyValue::Number(n),
+                        rusqlite::types::Value::Text(s) => PropertyValue::String(s),
+                        _ => continue,
+                    };
+                    props.insert(col_name.clone(), prop);
                 }
             }
             Ok((geom_blob, props))
@@ -221,13 +237,46 @@ fn read_srs(conn: &Connection) -> Result<HashMap<i32, String>, String> {
     Ok(map)
 }
 
+/// 推断属性列的 SQLite 类型:
+/// - 全部为 Boolean → `BOOLEAN` (以 INTEGER 0/1 存储)
+/// - 全部为 Integer → `INTEGER`
+/// - 全部为 Number(浮点) → `REAL`
+/// - 其余情况 (含 String / 混合数值 / Null / Array / Object) → `TEXT`
+fn infer_attribute_type(values: &[Option<&PropertyValue>]) -> &'static str {
+    let mut has_string = false;
+    let mut has_bool = false;
+    let mut has_int = false;
+    let mut has_real = false;
+    let mut has_other = false;
+    for v in values.iter().flatten() {
+        match v {
+            PropertyValue::String(_) => has_string = true,
+            PropertyValue::Boolean(_) => has_bool = true,
+            PropertyValue::Integer(_) => has_int = true,
+            PropertyValue::Number(_) => has_real = true,
+            _ => has_other = true,
+        }
+    }
+    if has_string || has_other {
+        "TEXT"
+    } else if has_bool && !has_int && !has_real {
+        "BOOLEAN"
+    } else if has_real {
+        "REAL"
+    } else if has_int {
+        "INTEGER"
+    } else {
+        "TEXT"
+    }
+}
+
 /// 将要素写入一个新的 GeoPackage 文件（写入端）。
 ///
 /// 按 OGC GeoPackage 标准创建核心元数据表
 /// (`gpkg_contents` / `gpkg_geometry_columns` / `gpkg_spatial_ref_sys`),
-/// 再创建要素表并写入 WKB 几何 + 属性。属性列取所有要素属性键的并集
-/// (当前以 TEXT 存储)。`geometry_type` 用 GeoPackage 命名, 如 "POINT"。
-/// 返回写入的图层信息。
+/// 再创建要素表并写入 WKB 几何 + 属性。属性列取所有要素属性键的并集,
+/// 并按值类型推断列类型 (INTEGER / REAL / BOOLEAN / TEXT)。`geometry_type`
+/// 用 GeoPackage 命名, 如 "POINT"。返回写入的图层信息。
 pub fn write_geopackage_features<P: AsRef<Path>>(
     path: P,
     layer_name: &str,
@@ -288,7 +337,7 @@ pub fn write_geopackage_features<P: AsRef<Path>>(
     )
     .map_err(|e| format!("写入空间参考系失败: {}", e))?;
 
-    // 3. 属性列 = 所有要素属性键的并集
+    // 3. 属性列 = 所有要素属性键的并集, 并按值类型推断 SQLite 列类型
     let mut attr_columns: Vec<String> = Vec::new();
     for f in features {
         for key in f.properties.keys() {
@@ -297,6 +346,10 @@ pub fn write_geopackage_features<P: AsRef<Path>>(
             }
         }
     }
+    let attr_types: HashMap<String, &'static str> = attr_columns.iter().map(|col| {
+        let values: Vec<Option<&PropertyValue>> = features.iter().map(|f| f.properties.get(col)).collect();
+        (col.clone(), infer_attribute_type(&values))
+    }).collect();
 
     // 4. 图层元数据
     conn.execute(
@@ -319,13 +372,13 @@ pub fn write_geopackage_features<P: AsRef<Path>>(
     let qn = |s: &str| s.replace('"', "\"\"");
     let mut create_sql = format!("CREATE TABLE \"{}\" (id INTEGER PRIMARY KEY AUTOINCREMENT, \"geom\" BLOB", qn(layer_name));
     for col in &attr_columns {
-        create_sql.push_str(&format!(", \"{}\" TEXT", qn(col)));
+        create_sql.push_str(&format!(", \"{}\" {}", qn(col), attr_types[col]));
     }
     create_sql.push(')');
     conn.execute_batch(&create_sql)
         .map_err(|e| format!("创建要素表失败: {}", e))?;
 
-    // 6. 写入要素 (WKB 几何 + 属性)
+    // 6. 写入要素 (WKB 几何 + 类型化属性)
     let mut insert_sql = format!("INSERT INTO \"{}\" (\"geom\"", qn(layer_name));
     for col in &attr_columns {
         insert_sql.push_str(&format!(", \"{}\"", qn(col)));
@@ -344,6 +397,11 @@ pub fn write_geopackage_features<P: AsRef<Path>>(
         let mut values: Vec<rusqlite::types::Value> = vec![rusqlite::types::Value::Blob(wkb)];
         for col in &attr_columns {
             let val = match f.properties.get(col) {
+                Some(PropertyValue::String(s)) => rusqlite::types::Value::Text(s.clone()),
+                Some(PropertyValue::Integer(i)) => rusqlite::types::Value::Integer(*i),
+                Some(PropertyValue::Number(n)) => rusqlite::types::Value::Real(*n),
+                Some(PropertyValue::Boolean(b)) => rusqlite::types::Value::Integer(if *b { 1 } else { 0 }),
+                // Array / Object / Null 等复杂值 → 文本或 NULL
                 Some(pv) => rusqlite::types::Value::Text(pv.to_string()),
                 None => rusqlite::types::Value::Null,
             };
@@ -634,6 +692,92 @@ mod tests {
             }
             other => panic!("应为 LineString, 实际: {:?}", other),
         }
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // -----------------------------------------------------------------------
+    // Batch 10: GeoPackage 类型化属性 (INTEGER / REAL / BOOLEAN / TEXT)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_infer_attribute_type() {
+        let str1 = PropertyValue::String("a".to_string());
+        let int1 = PropertyValue::Integer(1);
+        let int2 = PropertyValue::Integer(2);
+        let real1 = PropertyValue::Number(1.5);
+        let real2 = PropertyValue::Number(2.5);
+        let bool1 = PropertyValue::Boolean(true);
+        let bool2 = PropertyValue::Boolean(false);
+        let none: Option<&PropertyValue> = None;
+
+        assert_eq!(infer_attribute_type(&[Some(&int1), Some(&int2)]), "INTEGER");
+        assert_eq!(infer_attribute_type(&[Some(&real1), Some(&real2)]), "REAL");
+        assert_eq!(infer_attribute_type(&[Some(&bool1), Some(&bool2)]), "BOOLEAN");
+        assert_eq!(infer_attribute_type(&[Some(&str1)]), "TEXT");
+        // 混合数值 → REAL
+        assert_eq!(infer_attribute_type(&[Some(&int1), Some(&real1)]), "REAL");
+        // 含字符串 → TEXT
+        assert_eq!(infer_attribute_type(&[Some(&int1), Some(&str1)]), "TEXT");
+        // 全 Null → TEXT
+        assert_eq!(infer_attribute_type(&[none, none]), "TEXT");
+    }
+
+    /// 写入混合类型属性 (String/Integer/Number/Boolean) → 读回类型保持一致,
+    /// 且列类型 (PRAGMA table_info) 正确推断为 TEXT/INTEGER/REAL/BOOLEAN
+    #[test]
+    fn test_write_geopackage_typed_attributes_roundtrip() {
+        let dir = temp_dir("wr3");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("typed.gpkg");
+
+        let mut props1 = HashMap::new();
+        props1.insert("name".to_string(), PropertyValue::String("alpha".to_string()));
+        props1.insert("count".to_string(), PropertyValue::Integer(10));
+        props1.insert("price".to_string(), PropertyValue::Number(9.5));
+        props1.insert("active".to_string(), PropertyValue::Boolean(true));
+
+        let mut props2 = HashMap::new();
+        props2.insert("name".to_string(), PropertyValue::String("beta".to_string()));
+        props2.insert("count".to_string(), PropertyValue::Integer(20));
+        props2.insert("price".to_string(), PropertyValue::Number(19.25));
+        props2.insert("active".to_string(), PropertyValue::Boolean(false));
+
+        let features = vec![
+            Feature::with_id("f1".into(), GeoJsonGeometry::Point { coordinates: vec![1.0, 1.0] }, props1),
+            Feature::with_id("f2".into(), GeoJsonGeometry::Point { coordinates: vec![2.0, 2.0] }, props2),
+        ];
+        let bounds = Bounds::new(1.0, 1.0, 2.0, 2.0);
+
+        write_geopackage_features(&path, "typed", "POINT", 4326, &features, &bounds).unwrap();
+
+        // 1) 列类型按值推断
+        let conn = Connection::open(&path).unwrap();
+        let types: Vec<(String, String)> = {
+            let mut stmt = conn.prepare("PRAGMA table_info(\"typed\")").unwrap();
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, String>(2).unwrap_or_default()))
+            }).unwrap();
+            rows.filter_map(|r| r.ok()).collect()
+        };
+        let get_type = |col: &str| types.iter().find(|(n, _)| n == col).map(|(_, t)| t.as_str());
+        assert_eq!(get_type("name"), Some("TEXT"));
+        assert_eq!(get_type("count"), Some("INTEGER"));
+        assert_eq!(get_type("price"), Some("REAL"));
+        assert_eq!(get_type("active"), Some("BOOLEAN"));
+
+        // 2) 读回类型保持一致
+        let result = read_geopackage_layer_features(&path, "typed", None).unwrap();
+        assert_eq!(result.features.len(), 2);
+
+        let p0 = &result.features[0].properties;
+        match p0.get("name") { Some(PropertyValue::String(v)) => assert_eq!(v, "alpha"), other => panic!("name 应为 String, 实际: {:?}", other) }
+        match p0.get("count") { Some(PropertyValue::Integer(v)) => assert_eq!(*v, 10), other => panic!("count 应为 Integer, 实际: {:?}", other) }
+        match p0.get("price") { Some(PropertyValue::Number(v)) => assert!((*v - 9.5).abs() < 1e-6), other => panic!("price 应为 Number, 实际: {:?}", other) }
+        match p0.get("active") { Some(PropertyValue::Boolean(v)) => assert!(*v), other => panic!("active 应为 Boolean, 实际: {:?}", other) }
+
+        let p1 = &result.features[1].properties;
+        match p1.get("active") { Some(PropertyValue::Boolean(v)) => assert!(!*v), other => panic!("beta.active 应为 false, 实际: {:?}", other) }
 
         std::fs::remove_dir_all(&dir).ok();
     }
