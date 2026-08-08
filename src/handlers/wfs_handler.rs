@@ -260,7 +260,8 @@ async fn handle_describe_feature_type(
                         .and_then(|c| c.file_path.clone());
                     if let (Some(table_name), Some(file_path)) = (table_name, file_path) {
                         if let Ok(columns) = crate::utils::geopackage::geopackage_table_columns(
-                            &file_path, &table_name,
+                            &file_path,
+                            &table_name,
                         ) {
                             // Skip the internal autoincrement `id` primary key,
                             // mirroring GeoServer (fid is not a regular attribute).
@@ -376,6 +377,34 @@ async fn handle_get_feature(
             .content_type("text/csv; charset=utf-8")
             .insert_header(("Content-Disposition", "attachment; filename=features.csv"))
             .body(csv));
+    }
+
+    let output_format_lower = output_format.to_lowercase();
+    let type_name = type_names.first().map(|s| s.as_str()).unwrap_or("features");
+
+    // KML 输出 (OGC KML 2.2)
+    if output_format_lower.contains("kml") {
+        let kml = generate_kml_response(&response, type_name);
+        return Ok(HttpResponse::Ok()
+            .content_type("application/vnd.google-earth.kml+xml")
+            .insert_header(("Content-Disposition", "attachment; filename=features.kml"))
+            .body(kml));
+    }
+
+    // Shapefile 输出 (SHAPE-ZIP)
+    if output_format_lower.contains("shape") {
+        let base = type_name.replace(':', "_");
+        let pkg = crate::utils::shapefile_export::features_to_shapefile(&response.features)
+            .map_err(GeoServerError::ServiceError)?;
+        let zip = crate::utils::shapefile_export::zip_shapefile_package(&pkg, &base)
+            .map_err(GeoServerError::ServiceError)?;
+        return Ok(HttpResponse::Ok()
+            .content_type("application/zip")
+            .insert_header((
+                "Content-Disposition",
+                format!("attachment; filename={}.zip", base),
+            ))
+            .body(zip));
     }
 
     // GML 输出
@@ -653,4 +682,167 @@ fn escape_xml(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
+}
+
+// ---- KML 序列化辅助函数 (OGC KML 2.2) ----
+
+/// KML `SimpleField` type for an attribute (from the first non-null value).
+fn kml_field_type(name: &str, features: &[crate::models::Feature]) -> &'static str {
+    for feature in features {
+        if let Some(v) = feature.properties.get(name) {
+            return match v {
+                crate::models::PropertyValue::Integer(_) => "int",
+                crate::models::PropertyValue::Number(_) => "float",
+                crate::models::PropertyValue::Boolean(_) => "bool",
+                _ => "string",
+            };
+        }
+    }
+    "string"
+}
+
+/// Format a `lon,lat` pair for KML `<coordinates>`.
+fn kml_coord(c: &[f64]) -> String {
+    if c.len() >= 2 {
+        format!("{},{}", c[0], c[1])
+    } else {
+        String::new()
+    }
+}
+
+/// Format a coordinate list `lon,lat lon,lat …` for KML `<coordinates>`.
+fn kml_coord_list(coords: &[Vec<f64>]) -> String {
+    coords
+        .iter()
+        .map(|c| kml_coord(c))
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Geometry → KML (compact form, GeoServer-style `lon,lat` ordering).
+fn geometry_to_kml(geometry: &crate::models::GeoJsonGeometry) -> String {
+    use crate::models::GeoJsonGeometry as G;
+    match geometry {
+        G::Point { coordinates } => format!(
+            "<Point><coordinates>{}</coordinates></Point>",
+            kml_coord(coordinates)
+        ),
+        G::MultiPoint { coordinates } => {
+            let items: Vec<String> = coordinates
+                .iter()
+                .map(|c| format!("<Point><coordinates>{}</coordinates></Point>", kml_coord(c)))
+                .collect();
+            format!("<MultiGeometry>{}</MultiGeometry>", items.concat())
+        },
+        G::LineString { coordinates } => format!(
+            "<LineString><coordinates>{}</coordinates></LineString>",
+            kml_coord_list(coordinates)
+        ),
+        G::MultiLineString { coordinates } => {
+            let items: Vec<String> = coordinates
+                .iter()
+                .map(|line| {
+                    format!(
+                        "<LineString><coordinates>{}</coordinates></LineString>",
+                        kml_coord_list(line)
+                    )
+                })
+                .collect();
+            format!("<MultiGeometry>{}</MultiGeometry>", items.concat())
+        },
+        G::Polygon { coordinates } => kml_polygon(coordinates),
+        G::MultiPolygon { coordinates } => {
+            let items: Vec<String> = coordinates.iter().map(|poly| kml_polygon(poly)).collect();
+            format!("<MultiGeometry>{}</MultiGeometry>", items.concat())
+        },
+        G::GeometryCollection { geometries } => {
+            let items: Vec<String> = geometries.iter().map(geometry_to_kml).collect();
+            format!("<MultiGeometry>{}</MultiGeometry>", items.concat())
+        },
+    }
+}
+
+/// A KML `<Polygon>` from rings (first ring = outer boundary, rest are holes).
+fn kml_polygon(rings: &[Vec<Vec<f64>>]) -> String {
+    let mut out = String::from("<Polygon>");
+    if let Some(outer) = rings.first() {
+        out.push_str(&format!(
+            "<outerBoundaryIs><LinearRing><coordinates>{}</coordinates></LinearRing></outerBoundaryIs>",
+            kml_coord_list(outer)
+        ));
+    }
+    for ring in rings.iter().skip(1) {
+        out.push_str(&format!(
+            "<innerBoundaryIs><LinearRing><coordinates>{}</coordinates></LinearRing></innerBoundaryIs>",
+            kml_coord_list(ring)
+        ));
+    }
+    out.push_str("</Polygon>");
+    out
+}
+
+/// Build a KML 2.2 document: a `<Document>` with a `<Schema>` of the layer's
+/// attributes and one `<Placemark>` per feature.
+fn generate_kml_response(collection: &crate::models::FeatureCollection, type_name: &str) -> String {
+    let schema_name = type_name.replace(':', "_");
+
+    // Attribute union, preserving insertion order.
+    let mut attr_order: Vec<String> = Vec::new();
+    for feature in &collection.features {
+        for key in feature.properties.keys() {
+            if !attr_order.iter().any(|a| a == key) {
+                attr_order.push(key.clone());
+            }
+        }
+    }
+
+    let mut out = String::new();
+    out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n");
+    out.push_str("<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n");
+    out.push_str("  <Document>\n");
+    out.push_str(&format!(
+        "    <Schema name=\"{}\" id=\"{}\">\n",
+        escape_xml(&schema_name),
+        escape_xml(&schema_name)
+    ));
+    for attr in &attr_order {
+        let field_type = kml_field_type(attr, &collection.features);
+        out.push_str(&format!(
+            "      <SimpleField type=\"{}\" name=\"{}\"/>\n",
+            field_type,
+            escape_xml(attr)
+        ));
+    }
+    out.push_str("    </Schema>\n");
+    out.push_str("    <Folder>\n");
+    out.push_str(&format!("      <name>{}</name>\n", escape_xml(type_name)));
+    for feature in &collection.features {
+        out.push_str(&format!(
+            "      <Placemark id=\"{}\">\n",
+            escape_xml(&feature.id)
+        ));
+        out.push_str("        <ExtendedData>\n");
+        out.push_str(&format!(
+            "          <SchemaData schemaUrl=\"#{}\">\n",
+            escape_xml(&schema_name)
+        ));
+        for attr in &attr_order {
+            if let Some(value) = feature.properties.get(attr) {
+                out.push_str(&format!(
+                    "            <SimpleData name=\"{}\">{}</SimpleData>\n",
+                    escape_xml(attr),
+                    escape_xml(&value.to_string())
+                ));
+            }
+        }
+        out.push_str("          </SchemaData>\n");
+        out.push_str("        </ExtendedData>\n");
+        out.push_str(&format!("        {}\n", geometry_to_kml(&feature.geometry)));
+        out.push_str("      </Placemark>\n");
+    }
+    out.push_str("    </Folder>\n");
+    out.push_str("  </Document>\n");
+    out.push_str("</kml>\n");
+    out
 }

@@ -11,6 +11,7 @@ pub mod mvt;
 pub mod projection;
 pub mod rendering;
 pub mod shapefile;
+pub mod shapefile_export;
 pub mod sld_parser;
 pub mod tile_cache;
 pub mod tile_grid;

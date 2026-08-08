@@ -193,6 +193,9 @@ impl WfsCapabilities {
                             "application/gml+xml; version=3.2".to_string(),
                             "application/json".to_string(),
                             "application/geojson".to_string(),
+                            "application/vnd.google-earth.kml+xml".to_string(),
+                            "SHAPE-ZIP".to_string(),
+                            "text/csv".to_string(),
                         ],
                         result_type: vec!["results".to_string(), "hits".to_string()],
                         dcp_type: vec![WfsDcpType {
@@ -767,18 +770,10 @@ fn comparison_filter(node: &XmlNode, op: CompareOp) -> Result<Filter, String> {
 
 /// 提取属性名; 若被 `<Function name="...">` 包裹则同时返回是否大小写不敏感
 fn extract_property_and_function(node: &XmlNode) -> Result<(String, bool), String> {
-    if let Some(pn) = node
-        .children
-        .iter()
-        .find(|c| c.name == "PropertyName")
-    {
+    if let Some(pn) = node.children.iter().find(|c| c.name == "PropertyName") {
         return Ok((pn.text.trim().to_string(), false));
     }
-    if let Some(func) = node
-        .children
-        .iter()
-        .find(|c| c.name == "Function")
-    {
+    if let Some(func) = node.children.iter().find(|c| c.name == "Function") {
         let fname = func.attr("name").unwrap_or("").to_lowercase();
         let prop = func
             .children
@@ -790,10 +785,7 @@ fn extract_property_and_function(node: &XmlNode) -> Result<(String, bool), Strin
         let ci = fname.contains("tolower") || fname.contains("toupper");
         return Ok((prop, ci));
     }
-    Err(format!(
-        "<{}> 缺少 <PropertyName> 或 <Function>",
-        node.name
-    ))
+    Err(format!("<{}> 缺少 <PropertyName> 或 <Function>", node.name))
 }
 
 /// 空间操作符节点 → 委托 CQL 引擎求值 (Intersects / Within / DWithin)
@@ -812,8 +804,14 @@ fn spatial_filter(node: &XmlNode) -> Result<Filter, String> {
         .ok_or_else(|| format!("<{}> 缺少 GML 几何子元素", node.name))?;
     let wkt = gml_geometry_to_wkt(geom)?;
     let spatial = match op {
-        "Intersects" => SpatialOp::Intersects { property: prop, wkt },
-        "Within" => SpatialOp::Within { property: prop, wkt },
+        "Intersects" => SpatialOp::Intersects {
+            property: prop,
+            wkt,
+        },
+        "Within" => SpatialOp::Within {
+            property: prop,
+            wkt,
+        },
         "DWithin" => {
             let distance = node
                 .children
@@ -865,13 +863,20 @@ fn parse_gml_xy(node: &XmlNode) -> Result<(f64, f64), String> {
         .ok_or_else(|| "GML 几何缺少 <coordinates>/<pos>".to_string())?;
     let (xs, ys) = if text.contains(',') {
         let mut parts = text.splitn(2, ',');
-        (parts.next().unwrap_or("").trim(), parts.next().unwrap_or("").trim())
+        (
+            parts.next().unwrap_or("").trim(),
+            parts.next().unwrap_or("").trim(),
+        )
     } else {
         let mut parts = text.split_whitespace();
         (parts.next().unwrap_or(""), parts.next().unwrap_or(""))
     };
-    let x = xs.parse::<f64>().map_err(|_| format!("无效的 x: '{}'", xs))?;
-    let y = ys.parse::<f64>().map_err(|_| format!("无效的 y: '{}'", ys))?;
+    let x = xs
+        .parse::<f64>()
+        .map_err(|_| format!("无效的 x: '{}'", xs))?;
+    let y = ys
+        .parse::<f64>()
+        .map_err(|_| format!("无效的 y: '{}'", ys))?;
     Ok((x, y))
 }
 
@@ -922,21 +927,25 @@ fn parse_gml_ring(node: &XmlNode) -> Result<String, String> {
 
 /// 从 GML Envelope 解析边界 (coordinates "minx,miny maxx,maxy" 或 lowerCorner/upperCorner)
 fn parse_envelope_bounds(node: &XmlNode) -> Result<(f64, f64, f64, f64), String> {
-    if let Some(coord) = node
-        .children
-        .iter()
-        .find(|c| c.name == "coordinates")
-    {
+    if let Some(coord) = node.children.iter().find(|c| c.name == "coordinates") {
         let mut pairs = coord.text.trim().split_whitespace();
         let low = pairs
             .next()
             .ok_or_else(|| "Envelope 缺少低角点".to_string())?;
-        let high = pairs.next().ok_or_else(|| "Envelope 缺少高角点".to_string())?;
+        let high = pairs
+            .next()
+            .ok_or_else(|| "Envelope 缺少高角点".to_string())?;
         let parse_pair = |s: &str| -> Result<(f64, f64), String> {
             let mut xy = s.splitn(2, ',');
-            let x = xy.next().unwrap_or("").parse::<f64>()
+            let x = xy
+                .next()
+                .unwrap_or("")
+                .parse::<f64>()
                 .map_err(|_| format!("无效的角点: '{}'", s))?;
-            let y = xy.next().unwrap_or("").parse::<f64>()
+            let y = xy
+                .next()
+                .unwrap_or("")
+                .parse::<f64>()
                 .map_err(|_| format!("无效的角点: '{}'", s))?;
             Ok((x, y))
         };
@@ -947,7 +956,10 @@ fn parse_envelope_bounds(node: &XmlNode) -> Result<(f64, f64, f64, f64), String>
     let lower = child_text(node, "lowerCorner")?;
     let upper = child_text(node, "upperCorner")?;
     let parse_pair = |s: &str| -> Result<(f64, f64), String> {
-        let parts: Vec<f64> = s.split_whitespace().filter_map(|p| p.parse().ok()).collect();
+        let parts: Vec<f64> = s
+            .split_whitespace()
+            .filter_map(|p| p.parse().ok())
+            .collect();
         if parts.len() >= 2 {
             Ok((parts[0], parts[1]))
         } else {
@@ -1414,10 +1426,7 @@ mod tests {
         assert_eq!(sqlite_type_to_xsd("name", "TEXT"), "xsd:string");
         assert_eq!(sqlite_type_to_xsd("payload", "BLOB"), "xsd:base64Binary");
         // A BLOB not named as a geometry column stays base64Binary.
-        assert_eq!(
-            sqlite_type_to_xsd("geo_blob", "BLOB"),
-            "xsd:base64Binary"
-        );
+        assert_eq!(sqlite_type_to_xsd("geo_blob", "BLOB"), "xsd:base64Binary");
         // Unknown / empty types default to string.
         assert_eq!(sqlite_type_to_xsd("misc", "CLOB"), "xsd:string");
         assert_eq!(sqlite_type_to_xsd("misc", ""), "xsd:string");
