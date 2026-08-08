@@ -532,3 +532,143 @@ async fn test_rest_upload_geojson() {
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert!(body["totalFeatures"].as_i64().unwrap_or(0) >= 1, "上传图层应有要素, 实际: {:?}", body);
 }
+
+// ---------------------------------------------------------------------------
+// Batch 5: /tiles 瓦片端点 + 瓦片缓存 clear/stats + 备份导入往返
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_tiles_endpoint() {
+    let app = build_test_app!();
+
+    let req = test::TestRequest::get().uri("/geoserver/tiles/world/0/0/0").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "/tiles/world/0/0/0 应返回 200, 实际: {}", resp.status());
+
+    let content_type = resp.headers()
+        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    assert!(content_type.contains("image/png"), "瓦片 Content-Type 应为 image/png, 实际: {}", content_type);
+
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码瓦片 PNG");
+    assert_eq!(decoded.width(), 256, "瓦片应为 256x256");
+    assert_eq!(decoded.height(), 256);
+}
+
+#[actix_rt::test]
+async fn test_rest_tile_cache_stats_and_clear() {
+    let app = build_test_app!();
+
+    // 缓存统计
+    let req = test::TestRequest::get().uri("/geoserver/tiles/cache/stats").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "/tiles/cache/stats 应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(body["success"].as_bool().unwrap_or(false), "stats 应成功, 实际: {:?}", body);
+    assert!(body["data"].is_object(), "stats 应返回对象, 实际: {:?}", body);
+    assert!(body["data"]["hits"].is_number(), "stats 应含 hits, 实际: {:?}", body);
+    assert!(body["data"]["misses"].is_number(), "stats 应含 misses, 实际: {:?}", body);
+
+    // 清除图层缓存
+    let req = test::TestRequest::delete().uri("/geoserver/tiles/cache/clear/world").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "/tiles/cache/clear/world 应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(body["success"].as_bool().unwrap_or(false), "clear 应成功, 实际: {:?}", body);
+}
+
+#[actix_rt::test]
+async fn test_rest_tile_cache_hit() {
+    // 使用启用缓存的自定义配置 (独立临时目录), 验证 MISS → HIT
+    let mut config = common::create_test_config();
+    config.cache = Some(terrane::config::CacheConfig {
+        kind: "local".to_string(),
+        cache_dir: std::env::temp_dir().join(format!("terrane-rest-gwc-{}", std::process::id())),
+        meta_dir: std::env::temp_dir().join(format!("terrane-rest-gwc-meta-{}", std::process::id())),
+        expire_after_secs: 0,
+        max_tiles: 0,
+        enabled: true,
+        default_gridset: "EPSG:4326".to_string(),
+        session_ttl_secs: 300,
+    });
+    let state = actix_web::web::Data::new(terrane::state::AppState::new(config).await);
+    let app = actix_web::test::init_service(
+        actix_web::App::new()
+            .app_data(state.clone())
+            .wrap(actix_web::middleware::Logger::default())
+            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver"))
+    )
+    .await;
+
+    let uri = "/geoserver/tiles/world/0/0/0";
+    let req = test::TestRequest::get().uri(uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "首次瓦片请求应返回 200, 实际: {}", resp.status());
+    let hdr = resp.headers().get("X-Tile-Cache").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    assert_eq!(hdr, "MISS", "首次请求应为 MISS, 实际: {}", hdr);
+
+    let req = test::TestRequest::get().uri(uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "二次瓦片请求应返回 200, 实际: {}", resp.status());
+    let hdr = resp.headers().get("X-Tile-Cache").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    assert_eq!(hdr, "HIT", "二次请求应命中缓存 HIT, 实际: {}", hdr);
+
+    // 清理临时缓存目录
+    std::fs::remove_dir_all(std::env::temp_dir().join(format!("terrane-rest-gwc-{}", std::process::id()))).ok();
+    std::fs::remove_dir_all(std::env::temp_dir().join(format!("terrane-rest-gwc-meta-{}", std::process::id()))).ok();
+}
+
+#[actix_rt::test]
+async fn test_rest_backup_import_roundtrip() {
+    // App A: 创建自定义工作空间后导出备份
+    let app_a = build_test_app!();
+    let token_a = login_admin_token!(app_a);
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/workspaces")
+        .set_json(&serde_json::json!({
+            "name": "ws_import",
+            "title": "Import Workspace",
+            "description": "created for backup import round-trip",
+        }))
+        .to_request();
+    let resp = test::call_service(&app_a, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建工作空间应返回 201, 实际: {}", resp.status());
+
+    let req = test::TestRequest::get()
+        .uri("/geoserver/backup/export")
+        .insert_header(("Authorization", format!("Bearer {}", token_a)))
+        .to_request();
+    let resp = test::call_service(&app_a, req).await;
+    assert!(resp.status().is_success(), "备份导出应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let backup = body["data"].clone();
+    let has_ws = backup["workspaces"].as_array()
+        .map(|a| a.iter().any(|w| w["name"] == "ws_import"))
+        .unwrap_or(false);
+    assert!(has_ws, "导出应包含 ws_import, 实际: {:?}", backup["workspaces"]);
+
+    // App B (全新实例): 导入备份
+    let app_b = build_test_app!();
+    let token_b = login_admin_token!(app_b);
+
+    let req = test::TestRequest::post()
+        .uri("/geoserver/backup/import")
+        .set_json(&backup)
+        .insert_header(("Authorization", format!("Bearer {}", token_b)))
+        .to_request();
+    let resp = test::call_service(&app_b, req).await;
+    assert!(resp.status().is_success(), "备份导入应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(body["success"].as_bool().unwrap_or(false), "导入应成功, 实际: {:?}", body);
+    assert!(body["data"]["report"].is_object(), "应返回导入报告, 实际: {:?}", body);
+
+    // 验证 ws_import 已在 App B 中创建
+    let req = test::TestRequest::get().uri("/geoserver/workspaces").to_request();
+    let resp = test::call_service(&app_b, req).await;
+    assert!(resp.status().is_success(), "查询工作空间应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|w| w["name"].as_str().map(|s| s.to_string())).collect();
+    assert!(names.contains(&"ws_import".to_string()), "导入后 App B 应包含 ws_import, 实际: {:?}", names);
+}

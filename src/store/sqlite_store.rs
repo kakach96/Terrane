@@ -1920,4 +1920,101 @@ mod tests {
         store.delete_session("jti-1").await.unwrap();
         assert!(store.get_session("jti-1").await.unwrap().is_none());
     }
+
+    #[actix_rt::test]
+    async fn test_styles_crud() {
+        let store = new_store().await;
+        let ts = String::new();
+        store
+            .create_style(&StyleRecord {
+                name: "s1".into(),
+                title: "S1".into(),
+                format: "SLD".into(),
+                is_builtin: false,
+                content: "<StyledLayerDescriptor/>".into(),
+                created: ts.clone(),
+                modified: ts.clone(),
+            })
+            .await
+            .unwrap();
+
+        let got = store.get_style("s1").await.unwrap().unwrap();
+        assert_eq!(got.title, "S1");
+        assert_eq!(got.format, "SLD");
+
+        store
+            .update_style(
+                "s1",
+                Some("S1 v2".into()),
+                None,
+                Some("<StyledLayerDescriptor>v2</StyledLayerDescriptor>".into()),
+                None,
+            )
+            .await
+            .unwrap();
+        let got = store.get_style("s1").await.unwrap().unwrap();
+        assert_eq!(got.title, "S1 v2");
+        assert!(got.content.contains("v2"), "内容应已更新, 实际: {}", got.content);
+
+        let all = store.get_all_styles().await.unwrap();
+        assert!(all.iter().any(|s| s.name == "s1"));
+
+        store.delete_style("s1").await.unwrap();
+        assert!(store.get_style("s1").await.unwrap().is_none());
+    }
+
+    #[actix_rt::test]
+    async fn test_layer_group_crud() {
+        let store = new_store().await;
+        let ts = String::new();
+        store
+            .create_layer_group(&LayerGroupRecord {
+                name: "lg1".into(),
+                title: "LG1".into(),
+                layers: vec!["world".into()],
+                styles: vec![Some("default".into())],
+                created: ts.clone(),
+                modified: ts.clone(),
+            })
+            .await
+            .unwrap();
+
+        let got = store.get_layer_group("lg1").await.unwrap().unwrap();
+        assert_eq!(got.title, "LG1");
+        assert_eq!(got.layers, vec!["world".to_string()]);
+        assert_eq!(got.styles, vec![Some("default".to_string())]);
+
+        let all = store.get_all_layer_groups().await.unwrap();
+        assert!(all.iter().any(|g| g.name == "lg1"));
+
+        store.delete_layer_group("lg1").await.unwrap();
+        assert!(store.get_layer_group("lg1").await.unwrap().is_none());
+    }
+
+    #[actix_rt::test]
+    async fn test_audit_logs() {
+        let store = new_store().await;
+        store
+            .audit_log("alice", "login", Some("auth"), Some("login success"), Some("127.0.0.1"))
+            .await
+            .unwrap();
+        store
+            .audit_log("alice", "delete", Some("layer/world"), None, None)
+            .await
+            .unwrap();
+
+        let logs = store.get_audit_logs(10, 0).await.unwrap();
+        assert_eq!(logs.len(), 2, "应记录 2 条审计日志, 实际: {}", logs.len());
+        assert!(logs.iter().all(|l| l.username == "alice"));
+
+        let login = logs.iter().find(|l| l.action == "login").unwrap();
+        assert_eq!(login.resource.as_deref(), Some("auth"));
+        assert_eq!(login.detail.as_deref(), Some("login success"));
+        assert_eq!(login.ip_address.as_deref(), Some("127.0.0.1"));
+        assert!(!login.created_at.is_empty(), "审计日志应带时间戳");
+
+        // 分页
+        let paged = store.get_audit_logs(1, 1).await.unwrap();
+        assert_eq!(paged.len(), 1, "limit=1 offset=1 应返回 1 条");
+    }
 }

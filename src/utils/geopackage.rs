@@ -309,4 +309,90 @@ mod tests {
         assert!(read_geopackage_layers(&path).is_err(), "无 gpkg_contents 应报错");
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    /// 构造一个 WKB 点 (小端序)
+    fn wkb_point(x: f64, y: f64) -> Vec<u8> {
+        let mut v = Vec::with_capacity(21);
+        v.push(0x01); // little-endian
+        v.extend_from_slice(&1u32.to_le_bytes()); // type = Point
+        v.extend_from_slice(&x.to_le_bytes());
+        v.extend_from_slice(&y.to_le_bytes());
+        v
+    }
+
+    /// 构造带真实要素数据 (3 个点 + 属性) 的 GeoPackage
+    /// tag: 每测试独立子目录, 避免并行测试 remove_dir_all 互相破坏
+    fn create_features_gpkg(tag: &str) -> PathBuf {
+        let dir = temp_dir(tag);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("features.gpkg");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE gpkg_contents (
+                table_name TEXT PRIMARY KEY, data_type TEXT, identifier TEXT, description TEXT,
+                last_change TEXT, min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER);
+             CREATE TABLE gpkg_geometry_columns (
+                table_name TEXT, column_name TEXT, geometry_type_name TEXT, srs_id INTEGER, z TEXT, m TEXT);
+             CREATE TABLE gpkg_spatial_ref_sys (
+                srs_name TEXT, srs_id INTEGER PRIMARY KEY, organization TEXT,
+                organization_coordsys_id INTEGER, definition TEXT, description TEXT);
+             CREATE TABLE places (id INTEGER PRIMARY KEY, geom BLOB, name TEXT);
+             INSERT INTO gpkg_spatial_ref_sys VALUES ('WGS 84', 4326, 'EPSG', 4326, 'GEOGCS[...]', '');
+             INSERT INTO gpkg_contents VALUES ('places', 'features', 'places', '', '2026-01-01', 10.0, 20.0, 12.0, 22.0, 4326);
+             INSERT INTO gpkg_geometry_columns VALUES ('places', 'geom', 'POINT', 4326, 'XY', '');
+            ",
+        )
+        .unwrap();
+        let rows = [(10.0, 20.0, "p1"), (11.5, 21.5, "p2"), (12.0, 22.0, "p3")];
+        for (i, (x, y, name)) in rows.iter().enumerate() {
+            let wkb_hex: String = wkb_point(*x, *y).iter().map(|b| format!("{:02X}", b)).collect();
+            conn.execute_batch(&format!(
+                "INSERT INTO places (id, geom, name) VALUES ({}, X'{}', '{}');",
+                i + 1, wkb_hex, name
+            ))
+            .unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn test_read_geopackage_features() {
+        let path = create_features_gpkg("feat1");
+        let result = read_geopackage_layer_features(&path, "places", None).unwrap();
+
+        assert_eq!(result.feature_count, 3);
+        assert_eq!(result.features.len(), 3);
+
+        // 边界应覆盖全部 3 个点
+        assert!((result.bounds.minx - 10.0).abs() < 1e-6, "minx 应为 10.0, 实际: {}", result.bounds.minx);
+        assert!((result.bounds.miny - 20.0).abs() < 1e-6, "miny 应为 20.0, 实际: {}", result.bounds.miny);
+        assert!((result.bounds.maxx - 12.0).abs() < 1e-6, "maxx 应为 12.0, 实际: {}", result.bounds.maxx);
+        assert!((result.bounds.maxy - 22.0).abs() < 1e-6, "maxy 应为 22.0, 实际: {}", result.bounds.maxy);
+
+        // CRS 来自 gpkg_spatial_ref_sys
+        assert!(result.crs.contains("4326"), "CRS 应包含 4326, 实际: {}", result.crs);
+
+        // 几何解析 (Point) + 属性 (name)
+        if let crate::models::GeoJsonGeometry::Point { coordinates } = &result.features[0].geometry {
+            assert!((coordinates[0] - 10.0).abs() < 1e-6, "x 应为 10.0, 实际: {:?}", coordinates);
+            assert!((coordinates[1] - 20.0).abs() < 1e-6, "y 应为 20.0, 实际: {:?}", coordinates);
+        } else {
+            panic!("第一个要素应为点, 实际: {:?}", result.features[0].geometry);
+        }
+        match result.features[0].properties.get("name") {
+            Some(crate::models::PropertyValue::String(v)) => assert_eq!(v, "p1"),
+            other => panic!("name 属性应为 String, 实际: {:?}", other),
+        }
+
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn test_read_geopackage_features_limit() {
+        let path = create_features_gpkg("feat2");
+        let result = read_geopackage_layer_features(&path, "places", Some(2)).unwrap();
+        assert_eq!(result.feature_count, 2, "limit=2 应只读取 2 个要素");
+        assert_eq!(result.features.len(), 2);
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
 }
