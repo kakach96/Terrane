@@ -94,3 +94,65 @@ impl SessionCache for LocalSessionCache {
 pub fn build_session_cache(config: &CacheConfig) -> Option<Arc<dyn SessionCache>> {
     Some(Arc::new(LocalSessionCache::new(config.session_ttl_secs)))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_session(jti: &str, username: &str) -> SessionRecord {
+        SessionRecord {
+            jti: jti.to_string(),
+            username: username.to_string(),
+            role: "admin".to_string(),
+            issued_at: "2026-01-01T00:00:00Z".to_string(),
+            expires_at: "2026-01-02T00:00:00Z".to_string(),
+            last_seen_at: "2026-01-01T00:00:00Z".to_string(),
+            revoked: false,
+            user_agent: None,
+            ip_address: None,
+        }
+    }
+
+    #[actix_rt::test]
+    async fn test_set_get_remove() {
+        let cache = LocalSessionCache::new(300);
+        cache.set(sample_session("jti-1", "alice")).await.unwrap();
+
+        let got = cache.get("jti-1").await;
+        assert!(got.is_some(), "已 set 的会话应能 get 到");
+        assert_eq!(got.unwrap().username, "alice");
+
+        cache.remove("jti-1").await.unwrap();
+        assert!(cache.get("jti-1").await.is_none(), "remove 后应 miss");
+    }
+
+    #[actix_rt::test]
+    async fn test_miss_returns_none() {
+        let cache = LocalSessionCache::new(300);
+        assert!(cache.get("unknown-jti").await.is_none());
+    }
+
+    #[actix_rt::test]
+    async fn test_remove_user_invalidates_all() {
+        let cache = LocalSessionCache::new(300);
+        cache.set(sample_session("jti-a", "alice")).await.unwrap();
+        cache.set(sample_session("jti-b", "alice")).await.unwrap();
+        cache.set(sample_session("jti-c", "bob")).await.unwrap();
+
+        cache.remove_user("alice").await.unwrap();
+
+        assert!(cache.get("jti-a").await.is_none());
+        assert!(cache.get("jti-b").await.is_none());
+        assert!(cache.get("jti-c").await.is_some(), "其他用户的会话应保留");
+    }
+
+    #[actix_rt::test]
+    async fn test_ttl_expiry() {
+        let cache = LocalSessionCache::new(1); // 1 秒 TTL
+        cache.set(sample_session("jti-ttl", "carol")).await.unwrap();
+        assert!(cache.get("jti-ttl").await.is_some());
+
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+        assert!(cache.get("jti-ttl").await.is_none(), "TTL 过期后应 miss");
+    }
+}

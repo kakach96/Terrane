@@ -173,7 +173,7 @@ chore: bump actix-web to 4.x
 
 ## 7. Testing
 
-- Run `cargo test` for the full suite: **50 lib unit tests + 60 integration tests**.
+- Run `cargo test` for the full suite: **85 lib unit tests + 62 integration tests**.
 - Integration tests are split by protocol into separate crates under `tests/`
   (`wms_test.rs`, `wfs_test.rs`, `wcs_test.rs`, `wmts_test.rs`, `rest_test.rs`),
   sharing `tests/common/mod.rs` helpers (`create_test_config` + `build_test_app!`).

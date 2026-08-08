@@ -111,3 +111,57 @@ pub async fn fetch_cascaded_map(
     info!("[Cascaded] 外部 WMS 响应: {} bytes, Content-Type: {}", bytes.len(), content_type);
     Ok((bytes, content_type))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::DataSourceConnection;
+
+    fn conn_with(host: Option<&str>, port: Option<u16>, database: Option<&str>, schema: Option<&str>) -> DataSourceConnection {
+        DataSourceConnection {
+            host: host.map(String::from),
+            port,
+            database: database.map(String::from),
+            schema: schema.map(String::from),
+            username: None,
+            password: None,
+            file_path: None,
+            file_storage_type: Some("local".to_string()),
+        }
+    }
+
+    #[test]
+    fn test_extract_cascaded_config_defaults() {
+        let conn = conn_with(Some("example.com"), Some(8080), Some("/geoserver/wms"), Some("remote_layer"));
+        let cfg = extract_cascaded_config(&conn).expect("应能提取级联配置");
+
+        assert!(cfg.get_map_url.contains("http://example.com:8080/geoserver/wms"));
+        assert!(cfg.get_map_url.contains("REQUEST=GetMap"));
+        assert!(cfg.capabilities_url.as_deref().unwrap().contains("REQUEST=GetCapabilities"));
+        assert_eq!(cfg.remote_layer, "remote_layer");
+        assert_eq!(cfg.timeout_secs, 10);
+    }
+
+    #[test]
+    fn test_extract_cascaded_config_https() {
+        let conn = conn_with(Some("secure.example.com"), Some(443), None, Some("world"));
+        let cfg = extract_cascaded_config(&conn).unwrap();
+        assert!(cfg.get_map_url.starts_with("https://secure.example.com:443/wms"));
+        assert_eq!(cfg.remote_layer, "world");
+    }
+
+    #[test]
+    fn test_extract_cascaded_config_default_port() {
+        // 未指定端口时默认 80, database 缺省 /wms
+        let conn = conn_with(Some("plain.example.com"), None, None, None);
+        let cfg = extract_cascaded_config(&conn).unwrap();
+        assert!(cfg.get_map_url.starts_with("http://plain.example.com:80/wms"));
+        assert_eq!(cfg.remote_layer, "layer");
+    }
+
+    #[test]
+    fn test_extract_cascaded_config_missing_host() {
+        let conn = conn_with(None, None, None, None);
+        assert!(extract_cascaded_config(&conn).is_none());
+    }
+}

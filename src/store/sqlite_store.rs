@@ -1787,3 +1787,137 @@ impl super::Store for SqliteStore {
         Ok(count)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::handlers::CreateWorkspaceRequest;
+    use crate::models::permission::{AccessMode, Effect, Permission};
+    use crate::models::{Feature, GeoJsonGeometry};
+    use crate::store::Store;
+
+    async fn new_store() -> SqliteStore {
+        SqliteStore::new(":memory:").await.expect("in-memory store")
+    }
+
+    #[actix_rt::test]
+    async fn test_workspace_crud() {
+        let store = new_store().await;
+        store.create_workspace(&CreateWorkspaceRequest {
+            name: "ws1".into(),
+            title: Some("WS1".into()),
+            description: None,
+        })
+        .await
+        .unwrap();
+
+        let got = store.get_workspace("ws1").await.unwrap().unwrap();
+        assert_eq!(got.name, "ws1");
+        assert_eq!(got.title, "WS1");
+
+        let all = store.get_all_workspaces().await.unwrap();
+        assert!(all.iter().any(|w| w.name == "ws1"));
+
+        store.delete_workspace("ws1").await.unwrap();
+        assert!(store.get_workspace("ws1").await.unwrap().is_none());
+    }
+
+    #[actix_rt::test]
+    async fn test_namespace_crud() {
+        let store = new_store().await;
+        store.create_namespace("ns1", "http://example.com/ns1", None, false).await.unwrap();
+        let got = store.get_namespace("ns1").await.unwrap().unwrap();
+        assert_eq!(got.prefix, "ns1");
+        assert_eq!(got.uri, "http://example.com/ns1");
+        store.delete_namespace("ns1").await.unwrap();
+        assert!(store.get_namespace("ns1").await.unwrap().is_none());
+    }
+
+    #[actix_rt::test]
+    async fn test_layer_and_features_roundtrip() {
+        let store = new_store().await;
+        let layer = Layer {
+            name: "world".into(),
+            title: "World".into(),
+            workspace: "default".into(),
+            store: "shapes".into(),
+            srs: "EPSG:4326".into(),
+            abstract_text: None,
+            native_name: Some("world".into()),
+            enabled: true,
+            minx: -180.0, miny: -90.0, maxx: 180.0, maxy: 90.0,
+            created: String::new(),
+            modified: String::new(),
+        };
+        store.create_layer(&layer).await.unwrap();
+        let got = store.get_layer("world").await.unwrap().unwrap();
+        assert_eq!(got.title, "World");
+
+        let feature = Feature::new(
+            GeoJsonGeometry::Point { coordinates: vec![10.0, 20.0] },
+            std::collections::HashMap::new(),
+        );
+        store.save_features("world", &[feature]).await.unwrap();
+        let feats = store.load_features("world").await.unwrap();
+        assert_eq!(feats.len(), 1);
+        store.delete_features("world").await.unwrap();
+        assert!(store.load_features("world").await.unwrap().is_empty());
+    }
+
+    #[actix_rt::test]
+    async fn test_user_and_permission() {
+        let store = new_store().await;
+        store
+            .create_user("alice", "hash", "salt", &crate::auth::UserRole::User, true)
+            .await
+            .unwrap();
+        let u = store.get_user("alice").await.unwrap().unwrap();
+        assert_eq!(u.username, "alice");
+
+        let perm = Permission {
+            id: None,
+            username: "alice".into(),
+            role: "*".into(),
+            resource_type: "layer".into(),
+            resource_name: "world".into(),
+            access_mode: AccessMode::Read,
+            effect: Effect::Allow,
+            priority: 0,
+        };
+        let id = store.create_permission(&perm).await.unwrap();
+        assert!(id > 0);
+        let perms = store.get_permissions().await.unwrap();
+        assert!(perms.iter().any(|p| p.id == Some(id) && p.resource_name == "world"));
+
+        let allowed = store
+            .check_permission("alice", "user", "layer", "world", "read")
+            .await
+            .unwrap();
+        assert!(allowed, "alice 应对 layer/world 有读权限");
+
+        store.delete_permission(id).await.unwrap();
+        store.delete_user("alice").await.unwrap();
+        assert!(store.get_user("alice").await.unwrap().is_none());
+    }
+
+    #[actix_rt::test]
+    async fn test_session_crud() {
+        let store = new_store().await;
+        let session = SessionRecord {
+            jti: "jti-1".into(),
+            username: "bob".into(),
+            role: "user".into(),
+            issued_at: "2026-01-01T00:00:00Z".into(),
+            expires_at: "2026-01-02T00:00:00Z".into(),
+            last_seen_at: "2026-01-01T00:00:00Z".into(),
+            revoked: false,
+            user_agent: None,
+            ip_address: None,
+        };
+        store.create_session(&session).await.unwrap();
+        let got = store.get_session("jti-1").await.unwrap().unwrap();
+        assert_eq!(got.username, "bob");
+        store.delete_session("jti-1").await.unwrap();
+        assert!(store.get_session("jti-1").await.unwrap().is_none());
+    }
+}

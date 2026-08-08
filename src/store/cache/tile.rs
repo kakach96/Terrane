@@ -268,3 +268,94 @@ async fn count_files_and_size(dir: &Path) -> (u64, u64) {
     }
     (count, size)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::CacheConfig;
+
+    fn test_config(tag: &str) -> CacheConfig {
+        let dir = std::env::temp_dir().join(format!("terrane-tile-test-{}-{}", tag, std::process::id()));
+        CacheConfig {
+            kind: "local".to_string(),
+            cache_dir: dir.clone(),
+            meta_dir: dir.join("meta"),
+            expire_after_secs: 0,
+            max_tiles: 0,
+            enabled: true,
+            default_gridset: "EPSG:4326".to_string(),
+            session_ttl_secs: 300,
+        }
+    }
+
+    fn sample_key() -> TileCacheKey {
+        TileCacheKey {
+            layer: "world".to_string(),
+            gridset: "EPSG:4326".to_string(),
+            z: 0,
+            x: 0,
+            y: 0,
+        }
+    }
+
+    #[actix_rt::test]
+    async fn test_put_get_roundtrip() {
+        let backend = LocalTileCacheBackend::new(test_config("put"));
+        backend.init().await.unwrap();
+        let key = sample_key();
+
+        assert!(backend.get(&key).await.is_none(), "未 put 前应 miss");
+        backend.put(&key, b"tile-bytes-123").await;
+        assert_eq!(backend.get(&key).await, Some(b"tile-bytes-123".to_vec()));
+
+        std::fs::remove_dir_all(&backend.config.cache_dir).ok();
+    }
+
+    #[actix_rt::test]
+    async fn test_tile_path_sanitizes_gridset() {
+        let backend = LocalTileCacheBackend::new(test_config("path"));
+        let p = backend.tile_path(&sample_key());
+        let s = p.to_string_lossy().to_string();
+        assert!(s.contains("EPSG_4326"), "gridset 中的 ':' 应消毒为 '_', 实际: {}", s);
+        assert!(!s.contains("EPSG:4326"), "路径中不应含 ':'");
+        assert!(s.ends_with("0.png"));
+    }
+
+    #[actix_rt::test]
+    async fn test_clear_layer_and_clear_all() {
+        let backend = LocalTileCacheBackend::new(test_config("clear"));
+        backend.init().await.unwrap();
+
+        let k1 = sample_key();
+        let k2 = TileCacheKey { layer: "world".into(), gridset: "EPSG:4326".into(), z: 1, x: 1, y: 1 };
+        let k3 = TileCacheKey { layer: "ocean".into(), gridset: "EPSG:4326".into(), z: 0, x: 0, y: 0 };
+        backend.put(&k1, b"a").await;
+        backend.put(&k2, b"b").await;
+        backend.put(&k3, b"c").await;
+
+        let cleared = backend.clear_layer("world").await.unwrap();
+        assert_eq!(cleared, 2, "world 图层应清除 2 张瓦片");
+
+        assert!(backend.get(&k1).await.is_none());
+        assert!(backend.get(&k3).await.is_some(), "其他图层瓦片应保留");
+
+        let all = backend.clear_all().await.unwrap();
+        assert_eq!(all, 1, "clear_all 应清除剩余 1 张");
+        assert!(backend.get(&k3).await.is_none());
+
+        std::fs::remove_dir_all(&backend.config.cache_dir).ok();
+    }
+
+    #[actix_rt::test]
+    async fn test_disk_stats() {
+        let backend = LocalTileCacheBackend::new(test_config("stats"));
+        backend.init().await.unwrap();
+        backend.put(&sample_key(), b"12345").await;
+
+        let stats = backend.disk_stats().await;
+        assert_eq!(stats.total_tiles, 1);
+        assert!(stats.cache_size_bytes >= 5);
+
+        std::fs::remove_dir_all(&backend.config.cache_dir).ok();
+    }
+}

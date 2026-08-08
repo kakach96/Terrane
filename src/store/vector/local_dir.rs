@@ -103,3 +103,71 @@ impl super::VectorStore for LocalVectorStore {
         Ok(tables)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::VectorStore;
+    use std::path::PathBuf;
+    use crate::models::{Feature, GeoJsonGeometry, PropertyValue};
+    use std::collections::HashMap;
+
+    fn sample_feature(name: &str, x: f64, y: f64) -> Feature {
+        let mut props = HashMap::new();
+        props.insert("name".to_string(), PropertyValue::String(name.to_string()));
+        Feature::new(GeoJsonGeometry::Point { coordinates: vec![x, y] }, props)
+    }
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("terrane-vstore-{}-{}", tag, std::process::id()))
+    }
+
+    #[actix_rt::test]
+    async fn test_save_load_roundtrip() {
+        let dir = temp_dir("rt");
+        let store = LocalVectorStore::new(dir.clone());
+
+        store.save_features("layer1", &[sample_feature("a", 1.0, 2.0)]).await.unwrap();
+        let loaded = store.load_features("layer1").await.unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].properties.get("name").unwrap().to_string(), "a");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[actix_rt::test]
+    async fn test_load_missing_returns_empty() {
+        let dir = temp_dir("miss");
+        let store = LocalVectorStore::new(dir.clone());
+        assert!(store.load_features("nope").await.unwrap().is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[actix_rt::test]
+    async fn test_delete_and_list_tables() {
+        let dir = temp_dir("dl");
+        let store = LocalVectorStore::new(dir.clone());
+        store.save_features("alpha", &[sample_feature("1", 0.0, 0.0)]).await.unwrap();
+        store.save_features("beta", &[sample_feature("2", 1.0, 1.0)]).await.unwrap();
+
+        let tables = store.list_tables().await.unwrap();
+        assert_eq!(tables, vec!["alpha".to_string(), "beta".to_string()]);
+
+        store.delete_features("alpha").await.unwrap();
+        let tables = store.list_tables().await.unwrap();
+        assert_eq!(tables, vec!["beta".to_string()]);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[actix_rt::test]
+    async fn test_file_path_sanitizes_illegal_chars() {
+        let dir = temp_dir("san");
+        let store = LocalVectorStore::new(dir.clone());
+        let p = store.file_path("ws:layer/name?x");
+        let s = p.to_string_lossy().to_string();
+        assert!(s.contains("ws_layer_name_x"), "非法字符应消毒, 实际: {}", s);
+        assert!(s.ends_with(".geojson"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

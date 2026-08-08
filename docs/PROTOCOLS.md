@@ -168,7 +168,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 10. Automated test coverage
 
-`cargo test` currently green: **50 lib unit tests + 60 integration tests**.
+`cargo test` currently green: **85 lib unit tests + 62 integration tests**.
 
 The integration tests are split by protocol into separate test crates (Rust
 convention: every file directly under `tests/` is its own binary), sharing a
@@ -177,9 +177,9 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
 | `tests/wms_test.rs` | 20    | WMS (all operations, formats, vendor params)              |
-| `tests/wfs_test.rs` | 12    | WFS (all operations + WFS-T)                              |
+| `tests/wfs_test.rs` | 13    | WFS (all operations + WFS-T + LockFeature contract)       |
 | `tests/rest_test.rs`| 18    | health / probes / metrics, REST CRUD, MVT, auth, backup   |
-| `tests/wcs_test.rs` | 6     | WCS (DescribeCoverage / GetCoverage / SUBSET)             |
+| `tests/wcs_test.rs` | 7     | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF)   |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
@@ -194,8 +194,8 @@ metadata store for vectors, so tests write nothing to `./data`.
 | Layer              | Coverage                                                                 |
 |--------------------|--------------------------------------------------------------------------|
 | WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
-| WFS                | GetCapabilities, DescribeFeatureType, GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId) — integration |
-| WCS                | GetCapabilities, DescribeCoverage, GetCoverage (TIFF / PNG / default-format fallback + SUBSET / SIZE) — integration |
+| WFS                | GetCapabilities, DescribeFeatureType, GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported) — integration |
+| WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF metadata enrichment), GetCoverage (TIFF / PNG / default-format fallback + real GeoTIFF bytes + SUBSET / SIZE) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | MVT                | `/mvt/{layer}/{z}/{x}/{y}` endpoint integration + 5 encoder unit tests    |
 | REST               | health, split probes `/health/live` + `/health/ready` + `/metrics`, `/server/status`, layers, workspaces CRUD, namespaces CRUD, styles CRUD, layer-groups CRUD, features CRUD (+ single get / update / delete), sql-views CRUD, data-sources CRUD, auth (login / verify / users CRUD), permissions CRUD, backup export, GeoJSON upload — integration |
@@ -208,16 +208,19 @@ metadata store for vectors, so tests write nothing to `./data`.
 | Config             | 3 unit tests (`config.rs`, incl. legacy `[business]`/`[gwc]` alias)      |
 | Auth               | 8 unit tests (`auth.rs`: salt, hash, verify, JWT)                        |
 | Upload             | 1 unit test (`upload_handler.rs`: filename sanitize)                     |
+| Store (cache)      | 4 `LocalSessionCache` unit tests (set/get/remove/remove_user/TTL) + 4 `LocalTileCacheBackend` (put/get/clear/stats/gridset-path sanitize) |
+| Store (vector/raster) | 4 `LocalVectorStore` (save/load/delete/list/sanitize) + 4 `LocalRasterStore` (put/get/delete/list/.tif) + 5 `sqlite_store` (workspace/namespace/layer+features/user+permission/session) |
+| Data-source adapters | 4 `arcgrid` (read/meta/errors) + 5 `worldimage` (ext/meta/crop) + 4 `cascaded` (config extract) + 2 `geopackage` (layers/validation) |
 
 ### 10.2 Coverage gaps (adapted but untested)
 
 | Protocol / surface | Missing tests                                                              |
 |--------------------|----------------------------------------------------------------------------|
-| **WFS**            | LockFeature (declared but returns 400 — decide adapt vs document)          |
-| **WCS**            | Real GeoTIFF data source (DescribeCoverage enrichment, GetCoverage bytes), ArcGrid output, subsetting with a real raster |
+| **WFS**            | LockFeature (documented as unsupported — GET returns 400)                  |
+| **WCS**            | ArcGrid output via WCS, subsetting against a real raster, netcdf/JPEG output |
 | **REST**           | `/tiles`, tile cache clear/stats, backup import round-trip                |
-| **Store layer**    | No tests for `sqlite_store`, `postgres_store`, cache backends (`TileCacheBackend` / `SessionCache`), raster / vector stores |
-| **Data sources**   | PostGIS connection, GeoPackage, WorldImage, CascadedWms, ArcGrid          |
+| **Store layer**    | `postgres_store` (needs a live PostGIS); SqliteStore remaining edges (styles CRUD, layer-groups, audit logs) |
+| **Data sources**   | PostGIS live connection, GeoPackage features read (only layer metadata tested), CascadedWms live fetch |
 
 ### 10.3 Bugs found by the new tests
 
@@ -231,6 +234,11 @@ metadata store for vectors, so tests write nothing to `./data`.
   `src/services/wfs.rs` by collecting `fid` attributes from `ogc:FeatureId` elements
   into the Delete filter. (The URL `FILTER=` parameter is still served by a hardcoded
   stub `parse_filter_xml` — pending.)
+- **ArcGrid header parsing started data at the wrong line** — `read_arcgrid` only
+  advanced `header_lines` in the `ncols` branch, so with the standard header order
+  (`ncols` first) the first data rows were misread as header values and the value
+  count never matched `nrows * ncols`. Fixed in `src/utils/arcgrid.rs` by advancing
+  `header_lines` for every header key.
 - **MVT `.pbf` route is shadowed** — the generic `/tiles/{layer}/{z}/{x}/{y}` route is
   registered before `/tiles/{layer}/{z}/{x}/{y}.pbf`, so the latter never matches
   (`{y}` captures `0.pbf` and returns a PNG tile). The `/mvt/{layer}/{z}/{x}/{y}`
@@ -238,8 +246,9 @@ metadata store for vectors, so tests write nothing to `./data`.
 
 ### 10.4 Recommended next tests (small → large)
 
-1. WCS against a real GeoTIFF fixture (metadata enrichment + coverage bytes)
-2. WFS LockFeature (unimplemented — decide adapt vs document)
-3. Store-layer unit tests (SQLite store, tile cache backend)
-4. Data-source adapters (GeoPackage / WorldImage / CascadedWms / ArcGrid)
+1. GeoPackage features read round-trip + WCS ArcGrid output + netcdf/JPEG
+2. REST `/tiles` + tile cache clear/stats endpoints + backup import round-trip
+3. Store-layer: SqliteStore remaining edges (styles CRUD, layer-groups, audit logs)
+4. PostGIS live connection test (needs a live PostGIS / `docker compose --profile postgres`)
+5. CascadedWms live fetch against the reference GeoServer (:18080)
 

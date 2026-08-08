@@ -300,3 +300,21 @@ async fn test_wfs_transaction_delete_no_match() {
     let xml_resp = String::from_utf8_lossy(&body);
     assert!(xml_resp.contains("totalDeleted>0"), "无匹配应删除 0 条, 响应: {}", xml_resp);
 }
+
+// ---------------------------------------------------------------------------
+// Batch 4: LockFeature 契约固化 (WfsOperation 中声明, 但 GET handler 未实现)
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_wfs_lock_feature_returns_400() {
+    let app = build_test_app!();
+
+    // 当前契约: LockFeature 已声明但未实现, GET handler 返回
+    // 400 "Operation not implemented"。固化该行为以防意外回归。
+    let req = test::TestRequest::get()
+        .uri("/wfs?SERVICE=WFS&REQUEST=LockFeature&TYPENAME=world")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST,
+        "LockFeature 未实现应返回 400, 实际: {}", resp.status());
+}

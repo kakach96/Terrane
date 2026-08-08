@@ -246,3 +246,67 @@ fn update_bounds_from_geometry(geometry: &GeoJsonGeometry, bounds: &mut Bounds) 
         _ => {}
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("terrane-gpkg-{}-{}", tag, std::process::id()))
+    }
+
+    fn create_minimal_gpkg() -> PathBuf {
+        let dir = temp_dir("fixture");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test.gpkg");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE gpkg_contents (
+                table_name TEXT PRIMARY KEY, data_type TEXT, identifier TEXT, description TEXT,
+                last_change TEXT, min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER);
+             CREATE TABLE gpkg_geometry_columns (
+                table_name TEXT, column_name TEXT, geometry_type_name TEXT, srs_id INTEGER, z TEXT, m TEXT);
+             CREATE TABLE gpkg_spatial_ref_sys (
+                srs_name TEXT, srs_id INTEGER PRIMARY KEY, organization TEXT,
+                organization_coordsys_id INTEGER, definition TEXT, description TEXT);
+             CREATE TABLE points (id INTEGER PRIMARY KEY, geom BLOB, name TEXT);
+             INSERT INTO gpkg_spatial_ref_sys VALUES ('WGS 84', 4326, 'EPSG', 4326, 'GEOGCS[...]', '');
+             INSERT INTO gpkg_contents VALUES ('points', 'features', 'points', '', '2026-01-01', 0.0, 0.0, 1.0, 1.0, 4326);
+             INSERT INTO gpkg_geometry_columns VALUES ('points', 'geom', 'POINT', 4326, 'XY', '');
+             INSERT INTO points VALUES (1, X'0101000000', 'p1');
+            ",
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn test_read_geopackage_layers() {
+        let path = create_minimal_gpkg();
+        let layers = read_geopackage_layers(&path).unwrap();
+
+        assert_eq!(layers.len(), 1);
+        assert_eq!(layers[0].table_name, "points");
+        assert_eq!(layers[0].geometry_column, "geom");
+        assert_eq!(layers[0].geometry_type, "POINT");
+        assert_eq!(layers[0].srs_id, 4326);
+        assert!(layers[0].crs.contains("4326"), "CRS 应包含 4326, 实际: {}", layers[0].crs);
+        assert_eq!(layers[0].feature_count, 1);
+
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn test_invalid_gpkg() {
+        let dir = temp_dir("bad");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bad.gpkg");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("CREATE TABLE foo (id INTEGER);")
+            .unwrap();
+        assert!(read_geopackage_layers(&path).is_err(), "无 gpkg_contents 应报错");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

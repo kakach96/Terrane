@@ -197,3 +197,72 @@ pub fn crop_worldimage(data: &WorldImageData, bounds: &Bounds) -> Option<RgbaIma
 
     Some(image::imageops::crop(&mut data.rgba_image.clone(), x, y, w, h).to_image())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("terrane-wld-{}-{}", tag, std::process::id()))
+    }
+
+    fn write_fixture(tag: &str) -> PathBuf {
+        let dir = temp_dir(tag);
+        std::fs::create_dir_all(&dir).unwrap();
+        let img_path = dir.join("ortho.png");
+        let img = RgbaImage::from_pixel(2, 2, image::Rgba([10, 20, 30, 255]));
+        img.save(&img_path).unwrap();
+        let wld_path = dir.join("ortho.pgw");
+        // A=0.5 D=0 B=0 E=-0.5 C=100 F=200
+        std::fs::write(&wld_path, "0.5\n0.0\n0.0\n-0.5\n100.0\n200.0\n").unwrap();
+        img_path
+    }
+
+    #[test]
+    fn test_world_file_ext_mapping() {
+        assert_eq!(world_file_ext(Path::new("a.png")), Some("pgw"));
+        assert_eq!(world_file_ext(Path::new("a.jpg")), Some("jgw"));
+        assert_eq!(world_file_ext(Path::new("a.tif")), Some("tfw"));
+        assert_eq!(world_file_ext(Path::new("a.bmp")), Some("bpw"));
+        assert_eq!(world_file_ext(Path::new("a.txt")), None);
+    }
+
+    #[test]
+    fn test_read_worldimage_meta() {
+        let img_path = write_fixture("meta");
+        let meta = read_worldimage_meta(&img_path).unwrap();
+
+        assert_eq!(meta.width, 2);
+        assert_eq!(meta.height, 2);
+        // minx = 100 - 0.25 = 99.75; maxx = 99.75 + 2*0.5 = 100.75
+        assert!((meta.bounds.minx - 99.75).abs() < 1e-6);
+        assert!((meta.bounds.maxx - 100.75).abs() < 1e-6);
+        // maxy = 200 + 0.25 = 200.25; miny = 200.25 - 2*0.5 = 199.25
+        assert!((meta.bounds.maxy - 200.25).abs() < 1e-6);
+        assert!((meta.bounds.miny - 199.25).abs() < 1e-6);
+        assert_eq!(meta.crs.as_deref(), Some("EPSG:4326"));
+
+        std::fs::remove_dir_all(img_path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn test_crop_worldimage() {
+        let img_path = write_fixture("crop");
+        let data = read_worldimage(&img_path).unwrap();
+        // 裁剪左下角 1x1 (像素坐标 x=0, y=1)
+        let crop = crop_worldimage(&data, &Bounds::new(99.75, 199.25, 100.25, 199.75)).unwrap();
+        assert_eq!(crop.width(), 1);
+        assert_eq!(crop.height(), 1);
+        std::fs::remove_dir_all(img_path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn test_missing_world_file() {
+        let dir = temp_dir("nowld");
+        std::fs::create_dir_all(&dir).unwrap();
+        let img_path = dir.join("orphan.png");
+        RgbaImage::new(1, 1).save(&img_path).unwrap();
+        assert!(read_worldimage(&img_path).is_err(), "缺世界文件应报错");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
