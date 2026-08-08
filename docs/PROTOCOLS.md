@@ -168,7 +168,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 10. Automated test coverage
 
-`cargo test` currently green: **98 lib unit tests + 77 integration tests**, plus
+`cargo test` currently green: **100 lib unit tests + 77 integration tests**, plus
 **4 `#[ignore]`-marked live tests** (3× PostGIS + 1× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -214,7 +214,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | Upload             | 1 unit test (`upload_handler.rs`: filename sanitize)                     |
 | Store (cache)      | 4 `LocalSessionCache` unit tests (set/get/remove/remove_user/TTL) + 4 `LocalTileCacheBackend` (put/get/clear/stats/gridset-path sanitize) |
 | Store (vector/raster) | 4 `LocalVectorStore` (save/load/delete/list/sanitize) + 4 `LocalRasterStore` (put/get/delete/list/.tif) + 8 `sqlite_store` (workspace / namespace / layer+features / user+permission / session / styles CRUD / layer-groups CRUD / audit logs) + 2 live `PostgresStore` (metadata CRUD) / `PostgresVectorStore` (feature round-trip) — `#[ignore]` |
-| Data-source adapters | 4 `arcgrid` (read/meta/errors) + 5 `worldimage` (ext/meta/crop) + 4 `cascaded` (config extract + live `fetch_cascaded_map` via WMS proxy) + 6 `geopackage` (layers / validation / features read round-trip / limit + **write→read round-trip** for Point & LineString via new `write_geopackage_features`) + 2 `data_source` (serde type round-trip incl. `cascaded_wms`, postgis connection constructor) + 2 `wkb` (geometry→WKB encode→parse round-trip, Multi*/GeometryCollection lengths) |
+| Data-source adapters | 4 `arcgrid` (read/meta/errors) + 5 `worldimage` (ext/meta/crop) + 4 `cascaded` (config extract + live `fetch_cascaded_map` via WMS proxy) + 6 `geopackage` (layers / validation / features read round-trip / limit + **write→read round-trip** for Point & LineString via new `write_geopackage_features`) + 2 `data_source` (serde type round-trip incl. `cascaded_wms`, postgis connection constructor) + 4 `wkb` (Point/LineString/Polygon round-trip + **Multi*/GeometryCollection round-trip** + byte lengths + big-endian decode, all 7 WKB types now parse) |
 
 ### 10.2 Coverage gaps (adapted but untested)
 
@@ -223,7 +223,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | **WFS**            | LockFeature (documented as unsupported — GET returns 400); OGC XML `FILTER=` supports the common operators (And/Or/Not, the 6 PropertyIs* comparisons, Like, Null, Between, BBox, FeatureId) but not `ogc:Function` / spatial `Intersects` XML forms (ECQL path covers those via CQL) |
 | **WCS**            | native netCDF output (falls back to TIFF); elevation / time subsetting on real rasters (only recorded) |
 | **Data sources**   | GeoPackage attributes are stored as TEXT only (numbers / booleans not typed); no GeoPackage **update** / append |
-| **WKB**            | encoder emits MultiPoint / MultiLineString / MultiPolygon / GeometryCollection, but the **decoder** only parses Point / LineString / Polygon (others fall back to Point) |
+| **WKB**            | decoder now handles all 7 WKB types (2D); EWKB Z/M/SRID flags are masked for routing but Z/M coordinates are not yet parsed; no GeometryCollection-in-GeoPackage round-trip test (GeoPackage write supports Point/LineString only) |
 
 ### 10.3 Bugs found by the new tests
 
@@ -285,12 +285,15 @@ WCS SUBSET/SIZE on a real georeferenced GeoTIFF (done, caught bug7), and
 PostGIS data source HTTP integration (done, live).
 
 Batch 8 completed: WFS URL `FILTER=` (OGC XML + ECQL) and `CQL_FILTER` over HTTP
-(done, caught bug8 in the CQL parser). Next candidates:
+(done, caught bug8 in the CQL parser).
 
-1. Extend the WKB **decoder** to MultiPoint / MultiLineString / MultiPolygon /
-   GeometryCollection, then cover the encoder round-trip for those types
-2. GeoPackage typed attributes (INTEGER / REAL / BOOLEAN) + `FeatureType`
+Batch 9 completed: WKB decoder extended to MultiPoint / MultiLineString /
+MultiPolygon / GeometryCollection (cursor-based `WkbReader`, all 7 types, big-
+endian too), with encoder→decoder round-trip tests for every type. Next candidates:
+
+1. GeoPackage typed attributes (INTEGER / REAL / BOOLEAN) + `FeatureType`
    describe over REST for a published GeoPackage layer
-3. WMS vendor params on the live cascaded proxy (CQL / TIME pass-through)
-4. OGC XML `FILTER=` edge cases: `ogc:Function`, spatial `Intersects` XML form
+2. WMS vendor params on the live cascaded proxy (CQL / TIME pass-through)
+3. OGC XML `FILTER=` edge cases: `ogc:Function`, spatial `Intersects` XML form
+4. WMS PDF / GeoRSS output (reuse the render pipeline)
 
