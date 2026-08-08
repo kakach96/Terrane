@@ -268,6 +268,7 @@ srs = "EPSG:4326"
 ## 📚 Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — design rationale, module dependency graph, data flows, API contracts
+- [Protocols](docs/PROTOCOLS.md) — protocol adaptation matrix (adapted vs pending)
 - [Roadmap](docs/ROADMAP.md) — milestones, quarterly plan, known technical debt, future vision
 - [Development guide](docs/DEVELOPMENT.md) — local setup, environment variables, git conventions
 - [Feature gap analysis & implementation plan](IMPLEMENTATION_PLAN.md)

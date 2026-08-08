@@ -241,6 +241,9 @@ flowchart LR
 - **REST API** under the configurable context path (default `/geoserver`)
 - **Probes & metrics** on the root path, decoupled from the context: `/health/live`, `/health/ready`, `/metrics`
 
+> See [PROTOCOLS.md](PROTOCOLS.md) for the full protocol adaptation matrix (versions,
+> operations, output formats, and pending protocols).
+
 ### 6.2 REST endpoint groups
 
 All endpoints below live under `/geoserver` (the configurable `api_context`).

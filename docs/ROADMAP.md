@@ -1,8 +1,9 @@
 # Terrane — Roadmap
 
 > Product roadmap, milestone plan, known technical debt, and future vision.
-> Complements [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) (feature-gap analysis)
-> and [ARCHITECTURE.md](ARCHITECTURE.md) (design rationale).
+> Complements [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) (feature-gap analysis),
+> [ARCHITECTURE.md](ARCHITECTURE.md) (design rationale), and
+> [PROTOCOLS.md](PROTOCOLS.md) (protocol adaptation matrix).
 
 ## Vision
 
