@@ -13,7 +13,7 @@ Material** frontend.
 - Architecture & API contracts: `docs/ARCHITECTURE.md`
 - Roadmap & milestones: `docs/ROADMAP.md`
 - Local setup & conventions: `docs/DEVELOPMENT.md`
-- Cloud-native status: `IMPLEMENTATION_PLAN.md` §7
+- Cloud-native status: `docs/IMPLEMENTATION_PLAN.md` §6
 
 ## Repository layout
 

@@ -219,7 +219,7 @@ Copy the `dist/terrane-ui/` directory to the backend project's static file direc
 
 ### Cloud-Native Deployment
 
-- **Multi-stage container build (recommended)**: run `npm ci && ng build --configuration production` in the Docker `node` stage; the `dist/terrane-ui/` output is bundled into the runtime image alongside the Rust binary and served from the backend `static/` directory — **no separate frontend service needed** (see section 7 of the root `IMPLEMENTATION_PLAN.md`).
+- **Multi-stage container build (recommended)**: run `npm ci && ng build --configuration production` in the Docker `node` stage; the `dist/terrane-ui/` output is bundled into the runtime image alongside the Rust binary and served from the backend `static/` directory — **no separate frontend service needed** (see section 6 of `docs/IMPLEMENTATION_PLAN.md`).
 - **Standalone NGINX container (optional)**: serve the static assets separately and reverse-proxy `/api`, `/geoserver`, `/wms`, `/wfs`, `/wcs`, `/tiles` to the backend service.
 - The build output defaults to `dist/terrane-ui/`.
 

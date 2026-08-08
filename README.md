@@ -42,7 +42,7 @@
 - ⚠️ TODO: tile cache / uploaded data on local disk, needs PVC or object storage
 - ⚠️ TODO: CI pipeline + image registry push (GitHub Actions / GitLab CI)
 
-**Cloud-native roadmap**: containerization → 12-Factor/observability → state convergence → CI/CD. See section 7 of [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+**Cloud-native roadmap**: containerization → 12-Factor/observability → state convergence → CI/CD. See section 6 of [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
 ## 🚀 Quick Start
 
@@ -271,7 +271,7 @@ srs = "EPSG:4326"
 - [Protocols](docs/PROTOCOLS.md) — protocol adaptation matrix (adapted vs pending)
 - [Roadmap](docs/ROADMAP.md) — milestones, quarterly plan, known technical debt, future vision
 - [Development guide](docs/DEVELOPMENT.md) — local setup, environment variables, git conventions
-- [Feature gap analysis & implementation plan](IMPLEMENTATION_PLAN.md)
+- [Feature gap analysis & implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [Frontend documentation](frontend/README.md)
 - [Frontend project summary](frontend/PROJECT_SUMMARY.md)
 

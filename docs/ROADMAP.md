@@ -1,7 +1,7 @@
 # Terrane — Roadmap
 
 > Product roadmap, milestone plan, known technical debt, and future vision.
-> Complements [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) (feature-gap analysis),
+> Complements [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (feature-gap analysis),
 > [ARCHITECTURE.md](ARCHITECTURE.md) (design rationale), and
 > [PROTOCOLS.md](PROTOCOLS.md) (protocol adaptation matrix).
 
@@ -35,7 +35,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Security: JWT auth, users/roles, layer-level permissions
 - Angular 17 + Material admin console
 - Cloud-native foundation: multi-stage Docker image, docker-compose, split health probes, Prometheus `/metrics`, graceful shutdown
-- Overall progress: ~54% (see [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md))
+- Overall progress: ~55% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
 
 ### v1.1 — State Convergence (target: 2026 Q3–Q4)
 

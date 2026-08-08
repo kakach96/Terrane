@@ -4,7 +4,7 @@
 > GeoServer instance (`http://127.0.0.1:18080/geoserver/web/`, 9 workspaces / 30 layers).
 > Complements [ARCHITECTURE.md](ARCHITECTURE.md) (API contract design),
 > [ROADMAP.md](ROADMAP.md) (milestones), and
-> [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) (feature-gap analysis).
+> [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (feature-gap analysis).
 
 Per the technical roadmap, Terrane is a **protocol adapter**: it speaks the standard
 OGC interfaces (WMS / WFS / WCS / WMTS / REST) while all state lives in external stores.
@@ -168,7 +168,7 @@ PostGIS, Shapefile, GeoTIFF, GeoPackage, WorldImage, CascadedWms, ArcGrid (7 typ
 
 ## 9. Pending protocols (to adapt)
 
-Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md):
+Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md):
 
 | Priority | Protocol / surface                  | Effort |
 |----------|-------------------------------------|--------|

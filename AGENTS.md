@@ -3,7 +3,7 @@
 ## Overview
 
 - **Goal**: Terrane — cloud-native spatial data server powered by Rust and Angular (a modern re-implementation of GeoServer)
-- **Cloud-native**: target is containerized deployment (Docker / Kubernetes); see the cloud-native roadmap in `IMPLEMENTATION_PLAN.md` §7
+- **Cloud-native**: target is containerized deployment (Docker / Kubernetes); see the cloud-native roadmap in `docs/IMPLEMENTATION_PLAN.md` §6
 
 ## Documentation
 
@@ -76,7 +76,7 @@ cargo build
 - **Frontend proxy**: `proxy.conf.json` routes `/api`, `/wms`, `/wfs`, `/wcs` to `http://localhost:8080`
 - **AGENTS.md** is the single instruction file (no .cursorrules). `.github/copilot-instructions.md` is a thin entry point that points back to AGENTS.md, so GitHub Copilot contexts (e.g. GitHub.com / PRs) pick up the same guidance.
 
-## Cloud-native status (see IMPLEMENTATION_PLAN.md §7)
+## Cloud-native status (see docs/IMPLEMENTATION_PLAN.md §6)
 
 - **Containerized**: multi-stage `Dockerfile` (node → rust → debian-slim, non-root) + `.dockerignore` + `docker-compose.yml`; no CI pipeline yet
   ```bash

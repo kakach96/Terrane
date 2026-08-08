@@ -2,8 +2,8 @@
 
 > Comparison analysis based on the GeoServer official documentation (https://docs.geoserver.org/latest/en/user/)
 >
-> For the product roadmap, milestones and known technical debt, see [docs/ROADMAP.md](docs/ROADMAP.md).
-> For design rationale and architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+> For the product roadmap, milestones and known technical debt, see [ROADMAP.md](ROADMAP.md).
+> For design rationale and architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -17,8 +17,22 @@
 | Styling System | 4/5 | 0 | 1 | **80%** |
 | Tile Caching | 3/6 | 0 | 3 | **50%** |
 | Security | 3/7 | 0 | 4 | **43%** |
-| Extensions | 4/14 | 0 | 10 | **29%** |
-| **Overall Progress** | | | | **~50%** |
+| Extensions | 5/14 | 0 | 9 | **36%** |
+| Cloud-Native | 4/7 | 0 | 3 | **57%** |
+| **Overall Progress** | | | | **~55%** |
+
+```
+OGC services     █████████████░░░░  71%
+REST API         █████████████░░░░  69%
+Data sources     █████████░░░░░░░  47%
+Styling system   ████████████████░  80%
+Tile caching     ██████████░░░░░░  50%
+Security         ████████░░░░░░░░  43%
+Extensions       ███████░░░░░░░░░  36%
+Cloud-Native     █████████░░░░░░░  57%
+──────────────────────────────
+Overall progress █████████░░░░░░░  55%
+```
 
 ---
 
@@ -179,7 +193,7 @@
 
 | # | Feature | Description | Est. Effort |
 |---|------|------|:---------:|
-| 25 | **WPS (Web Processing Service)** | Geoprocessing services: buffer, union/intersection/difference, coordinate transforms, etc. | 4-6 weeks |
+| 25 | **WPS (Web Processing Service)** | Geoprocessing services: buffer, union/intersection/difference, coordinate transforms, etc. | ✅ **Completed** (first surface: vec:Centroid / vec:Buffer / gs:Bounds) |
 | 26 | **CSW (Catalog Service)** | Catalog service: data discovery and metadata management | 3-4 weeks |
 | 27 | **OGC API series** | Features / Tiles / Maps / Coverages / Processes / Styles | 2-3 weeks each |
 | 28 | **Vector Tiles** | MVT (Mapbox Vector Tile) format output | ✅ **Completed** |
@@ -272,29 +286,13 @@
 
 ---
 
-## 六、📊 Current Feature Summary
-
-```
-OGC services     █████████████░░░░  71%
-REST API         █████████████░░░░  69%
-Data sources     █████████░░░░░░░  47%
-Styling system   ████████████████░  80%
-Tile caching     ██████████░░░░░░  50%
-Security         ████████░░░░░░░░  43%
-Extensions       ██████░░░░░░░░░░  29%
-──────────────────────────────
-Overall progress ███████████░░░░░░  54%
-```
-
----
-
-## 七、☁️ Cloud-Native Evolution Roadmap
+## 六、☁️ Cloud-Native Evolution Roadmap
 
 > **Goal**: equip the application with **containerization, 12-Factor configuration, observability, horizontal scalability, and automated delivery** so it can run on modern infrastructure such as Docker / Kubernetes.
 >
-> See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the target architecture and [docs/ROADMAP.md](docs/ROADMAP.md) for the milestone timeline.
+> See [ARCHITECTURE.md](ARCHITECTURE.md) for the target architecture and [ROADMAP.md](ROADMAP.md) for the milestone timeline.
 
-### 7.1 Cloud-Native Readiness Assessment
+### 6.1 Cloud-Native Readiness Assessment
 
 | Dimension | Current State | Gap | Priority |
 |------|------|------|:-----:|
@@ -306,7 +304,7 @@ Overall progress ███████████░░░░░░  54%
 | **CI/CD & security** | No CI pipeline, no image registry push | Missing GitHub Actions/GitLab CI, image vulnerability scanning, dependency update automation | **P2** |
 | **Resilience** | CORS defaults to `["*"]`; no rate-limiting/request-timeout middleware; no backoff-retry for cascaded WMS upstreams | No circuit breaking or protection under high concurrency | **P2** |
 
-### 7.2 Phased Roadmap
+### 6.2 Phased Roadmap
 
 #### Phase 0: Containerization Foundations (~1 week)
 
@@ -343,7 +341,7 @@ Overall progress ███████████░░░░░░  54%
 - Credential management: data source passwords injectable via env, never logged; integrate with K8s Secrets
 - Resilience hardening: backoff-retry for cascaded WMS upstreams, request-timeout and rate-limiting middleware, circuit breaking
 
-### 7.3 Target Deployment Architecture
+### 6.3 Target Deployment Architecture
 
 ```
                     ┌──────────────────────────────────┐
