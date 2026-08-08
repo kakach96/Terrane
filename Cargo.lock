@@ -3153,6 +3153,7 @@ dependencies = [
  "clap",
  "config",
  "deadpool-postgres",
+ "flate2",
  "futures-util",
  "geo",
  "geo-types",

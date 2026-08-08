@@ -287,6 +287,11 @@ impl WmsCapabilities {
                             "image/jpeg".to_string(),
                             "image/gif".to_string(),
                             "image/webp".to_string(),
+                            "image/svg+xml".to_string(),
+                            "application/vnd.google-earth.kml+xml".to_string(),
+                            "application/json".to_string(),
+                            "application/pdf".to_string(),
+                            "application/rss+xml".to_string(),
                         ],
                         dcp_type: vec![DcpType {
                             http: HttpMetadata {

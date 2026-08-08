@@ -946,3 +946,332 @@ fn geometry_to_kml(g: &GeoJsonGeometry) -> String {
         _ => String::new(),
     }
 }
+
+// ---------------------------------------------------------------------------
+// GeoRSS 渲染 — 将要素输出为 RSS 2.0 + GeoRSS
+// ---------------------------------------------------------------------------
+
+/// Convert a `(lon, lat)` coordinate pair to GeoRSS's `lat lon` ordering.
+fn format_georss_coord(coordinates: &[f64]) -> Option<String> {
+    if coordinates.len() >= 2 {
+        Some(format!("{} {}", coordinates[1], coordinates[0]))
+    } else {
+        None
+    }
+}
+
+/// Render features as an RSS 2.0 feed with the GeoRSS namespace. Points become
+/// `<georss:point>`, lines `<georss:line>` and polygons `<georss:polygon>`,
+/// always in `lat lon` order (GeoRSS convention, matching GeoServer).
+pub fn render_to_georss(features: &[(GeoJsonGeometry, Style)], layer_name: &str) -> String {
+    let mut rss = String::new();
+    rss.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
+    rss.push_str(&format!(
+        r#"<rss xmlns:georss="http://www.georss.org/georss" version="2.0">
+<channel><title>{}</title><description>{}</description>"#,
+        layer_name, layer_name
+    ));
+
+    for (i, (geometry, _style)) in features.iter().enumerate() {
+        rss.push_str(&format!(r#"<item><title>Feature {}</title>"#, i));
+        rss.push_str(&geometry_to_georss(geometry));
+        rss.push_str("</item>");
+    }
+
+    rss.push_str("</channel></rss>");
+    rss
+}
+
+fn geometry_to_georss(g: &GeoJsonGeometry) -> String {
+    match g {
+        GeoJsonGeometry::Point { coordinates } => {
+            if let Some(c) = format_georss_coord(coordinates) {
+                format!("<georss:point>{}</georss:point>", c)
+            } else {
+                String::new()
+            }
+        },
+        GeoJsonGeometry::LineString { coordinates } => {
+            let pts: Vec<String> = coordinates
+                .iter()
+                .filter_map(|c| format_georss_coord(c))
+                .collect();
+            if !pts.is_empty() {
+                format!("<georss:line>{}</georss:line>", pts.join(" "))
+            } else {
+                String::new()
+            }
+        },
+        GeoJsonGeometry::Polygon { coordinates } => {
+            // GeoRSS polygon uses the (closed) exterior ring only.
+            if let Some(ring) = coordinates.first() {
+                let pts: Vec<String> = ring
+                    .iter()
+                    .filter_map(|c| format_georss_coord(c))
+                    .collect();
+                if !pts.is_empty() {
+                    format!("<georss:polygon>{}</georss:polygon>", pts.join(" "))
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        },
+        // GeoRSS has no multi-geometry element: fall back to the first member.
+        GeoJsonGeometry::MultiPoint { coordinates } => {
+            if let Some(c) = coordinates.first().and_then(|c| format_georss_coord(c)) {
+                format!("<georss:point>{}</georss:point>", c)
+            } else {
+                String::new()
+            }
+        },
+        GeoJsonGeometry::MultiLineString { coordinates } => {
+            if let Some(line) = coordinates.first() {
+                let pts: Vec<String> = line
+                    .iter()
+                    .filter_map(|c| format_georss_coord(c))
+                    .collect();
+                if !pts.is_empty() {
+                    format!("<georss:line>{}</georss:line>", pts.join(" "))
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        },
+        GeoJsonGeometry::MultiPolygon { coordinates } => {
+            if let Some(poly) = coordinates.first() {
+                if let Some(ring) = poly.first() {
+                    let pts: Vec<String> = ring
+                        .iter()
+                        .filter_map(|c| format_georss_coord(c))
+                        .collect();
+                    if !pts.is_empty() {
+                        format!("<georss:polygon>{}</georss:polygon>", pts.join(" "))
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        },
+        _ => String::new(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PDF 渲染 — 将渲染好的地图图像封装为单页 PDF
+// ---------------------------------------------------------------------------
+
+/// Render features as a single-page PDF with the rendered map embedded as a
+/// FlateDecode-compressed RGB image (reuses the `MapRenderer` pipeline).
+pub fn render_to_pdf(
+    features: &[(GeoJsonGeometry, Style)],
+    bounds: &Bounds,
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    // Render the map onto an opaque (white) background.
+    let options = RenderOptions {
+        width,
+        height,
+        transparent: false,
+        bg_color: None,
+        format: RenderFormat::PNG,
+    };
+    let renderer = MapRenderer::new(options, bounds.clone());
+    let img = renderer.render(features.to_vec());
+
+    // RgbaImage -> raw RGB bytes (drop alpha).
+    let raw = img.as_raw();
+    let mut rgb = Vec::with_capacity(raw.len() / 4 * 3);
+    for px in raw.chunks_exact(4) {
+        rgb.push(px[0]);
+        rgb.push(px[1]);
+        rgb.push(px[2]);
+    }
+
+    // zlib-compress the samples (PDF /FlateDecode filter).
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    use std::io::Write;
+    let _ = encoder.write_all(&rgb);
+    let compressed = encoder.finish().unwrap_or_default();
+
+    build_single_page_pdf(width, height, &compressed)
+}
+
+/// Assemble a minimal one-page PDF document embedding a FlateDecode image
+/// XObject, with a correct xref table and trailer.
+fn build_single_page_pdf(width: u32, height: u32, image_data: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut offsets: Vec<usize> = Vec::new();
+
+    out.extend_from_slice(b"%PDF-1.4\n");
+
+    // Object 1: document catalog.
+    offsets.push(out.len());
+    out.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+    // Object 2: page tree root.
+    offsets.push(out.len());
+    out.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+
+    // Object 3: single page.
+    offsets.push(out.len());
+    let page = format!(
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>\nendobj\n",
+        width, height
+    );
+    out.extend_from_slice(page.as_bytes());
+
+    // Object 4: content stream that places the image full-page.
+    offsets.push(out.len());
+    let content = format!("q {} 0 0 {} 0 0 cm /Im0 Do Q", width, height);
+    let content_obj = format!(
+        "4 0 obj\n<< /Length {} >>\nstream\n{}\nendstream\nendobj\n",
+        content.len(),
+        content
+    );
+    out.extend_from_slice(content_obj.as_bytes());
+
+    // Object 5: image XObject (FlateDecode-compressed RGB samples).
+    offsets.push(out.len());
+    let image_header = format!(
+        "5 0 obj\n<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>\nstream\n",
+        width, height, image_data.len()
+    );
+    out.extend_from_slice(image_header.as_bytes());
+    out.extend_from_slice(image_data);
+    out.extend_from_slice(b"\nendstream\nendobj\n");
+
+    // Cross-reference table (objects 0..5) + trailer.
+    let xref_offset = out.len();
+    out.extend_from_slice(b"xref\n0 6\n0000000000 65535 f \n");
+    for off in &offsets {
+        out.extend_from_slice(format!("{:010} 00000 n \n", off).as_bytes());
+    }
+    out.extend_from_slice(
+        format!(
+            "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{}\n%%EOF\n",
+            xref_offset
+        )
+        .as_bytes(),
+    );
+
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn point(lon: f64, lat: f64) -> GeoJsonGeometry {
+        GeoJsonGeometry::Point {
+            coordinates: vec![lon, lat],
+        }
+    }
+
+    #[test]
+    fn test_render_to_georss_point_latlon_order() {
+        let features = vec![(point(103.8, 44.3), Style::default())];
+        let rss = render_to_georss(&features, "archsites");
+        assert!(rss.starts_with(r#"<?xml version="1.0" encoding="UTF-8"?>"#));
+        assert!(rss.contains(r#"<rss xmlns:georss="http://www.georss.org/georss" version="2.0">"#));
+        assert!(rss.contains("<channel><title>archsites</title>"));
+        assert!(rss.contains("<item><title>Feature 0</title>"));
+        // GeoRSS orders as "lat lon" (not "lon lat").
+        assert!(rss.contains("<georss:point>44.3 103.8</georss:point>"));
+        assert!(rss.ends_with("</channel></rss>"));
+    }
+
+    #[test]
+    fn test_render_to_georss_line_and_polygon() {
+        let line = GeoJsonGeometry::LineString {
+            coordinates: vec![vec![0.0, 1.0], vec![2.0, 3.0], vec![4.0, 5.0]],
+        };
+        let polygon = GeoJsonGeometry::Polygon {
+            coordinates: vec![vec![
+                vec![0.0, 0.0],
+                vec![0.0, 4.0],
+                vec![4.0, 4.0],
+                vec![4.0, 0.0],
+                vec![0.0, 0.0],
+            ]],
+        };
+        let features = vec![(line, Style::default()), (polygon, Style::default())];
+        let rss = render_to_georss(&features, "shapes");
+        assert!(rss.contains("<georss:line>1 0 3 2 5 4</georss:line>"));
+        assert!(rss.contains(
+            "<georss:polygon>0 0 4 0 4 4 0 4 0 0</georss:polygon>"
+        ));
+    }
+
+    fn find_bytes(hay: &[u8], needle: &[u8]) -> Option<usize> {
+        hay.windows(needle.len()).position(|w| w == needle)
+    }
+
+    #[test]
+    fn test_render_to_pdf_valid_structure() {
+        let bounds = Bounds::new(-180.0, -90.0, 180.0, 90.0);
+        let features = vec![(point(0.0, 0.0), Style::default())];
+        let pdf = render_to_pdf(&features, &bounds, 64, 64);
+        assert!(pdf.starts_with(b"%PDF-1.4"));
+        assert!(find_bytes(&pdf, b"/Type /Catalog").is_some());
+        assert!(find_bytes(&pdf, b"/Type /Page").is_some());
+        assert!(find_bytes(&pdf, b"/Subtype /Image").is_some());
+        assert!(find_bytes(&pdf, b"/Filter /FlateDecode").is_some());
+        assert!(pdf.ends_with(b"%%EOF\n"));
+
+        // Every object offset in the xref table must point at "N 0 obj".
+        // Parse as raw bytes because the image stream is binary.
+        let startxref_pos = find_bytes(&pdf, b"startxref\n").expect("startxref");
+        let after = &pdf[startxref_pos + b"startxref\n".len()..];
+        let xref_offset: usize = std::str::from_utf8(
+            after.split(|&b| b == b'\n').next().expect("offset line"),
+        )
+        .expect("utf8 offset")
+        .trim()
+        .parse()
+        .expect("xref offset");
+
+        let xref = &pdf[xref_offset..];
+        assert!(xref.starts_with(b"xref\n0 6\n"));
+        let mut cursor = xref_offset + b"xref\n0 6\n".len();
+        let mut expected_obj = 0usize;
+        for line_no in 0..6 {
+            let line_end = pdf[cursor..]
+                .iter()
+                .position(|&b| b == b'\n')
+                .map(|p| cursor + p)
+                .expect("line end");
+            let line = &pdf[cursor..line_end];
+            cursor = line_end + 1;
+            if line_no == 0 {
+                // Object 0: free head entry.
+                assert!(line.starts_with(b"0000000000 65535 f"));
+                expected_obj = 1;
+                continue;
+            }
+            let off: usize = std::str::from_utf8(&line[..10])
+                .expect("utf8 entry")
+                .parse()
+                .expect("offset number");
+            let expected = format!("{} 0 obj", expected_obj);
+            assert_eq!(
+                &pdf[off..off + expected.len()],
+                expected.as_bytes(),
+                "xref 条目 {} 应指向 '{} 0 obj'",
+                expected_obj,
+                expected_obj
+            );
+            expected_obj += 1;
+        }
+        // Image stream must contain actual FlateDecode data.
+        assert!(pdf.len() > 200, "PDF 应包含压缩图像数据");
+    }
+}

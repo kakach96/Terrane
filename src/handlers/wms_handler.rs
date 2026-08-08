@@ -812,6 +812,26 @@ fn render_map_image(
             .json(geojson));
     }
 
+    // 非图片格式: GeoRSS (RSS 2.0 + GeoRSS 命名空间, 要素点/线/面)
+    if format_lower.contains("rss") || format_lower.contains("georss") {
+        let layer_name = context.layers.first().map(|s| s.as_str()).unwrap_or("map");
+        let georss = crate::utils::rendering::render_to_georss(&all_render_items, layer_name);
+        return Ok(HttpResponse::Ok()
+            .content_type("application/rss+xml")
+            .body(georss));
+    }
+
+    // 非图片格式: PDF (渲染地图图像并封装为单页 PDF)
+    if format_lower.contains("pdf") {
+        let pdf = crate::utils::rendering::render_to_pdf(
+            &all_render_items,
+            &context.bounds,
+            context.width,
+            context.height,
+        );
+        return Ok(HttpResponse::Ok().content_type("application/pdf").body(pdf));
+    }
+
     // 图片格式: 使用 MapRenderer 渲染
     let renderer = MapRenderer::new(context.options.clone(), context.bounds.clone());
     let img = renderer.render(all_render_items);
