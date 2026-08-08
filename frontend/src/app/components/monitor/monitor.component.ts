@@ -5,7 +5,7 @@ import { MonitorStats, RequestRecord, AuditLogEntry } from '../../models/geoserv
 @Component({
   selector: 'app-monitor',
   templateUrl: './monitor.component.html',
-  styleUrls: ['./monitor.component.scss']
+  styleUrls: ['./monitor.component.scss'],
 })
 export class MonitorComponent implements OnInit, OnDestroy {
   stats: MonitorStats | null = null;
@@ -14,7 +14,7 @@ export class MonitorComponent implements OnInit, OnDestroy {
   loading = true;
   error = '';
   activeTab: 'overview' | 'requests' | 'audit' = 'overview';
-  refreshInterval: any;
+  refreshInterval: ReturnType<typeof setInterval> | null = null;
 
   // 图表数据
   requestHistory: number[] = [];
@@ -44,17 +44,17 @@ export class MonitorComponent implements OnInit, OnDestroy {
       error: (e) => {
         this.error = '加载监控数据失败: ' + e.message;
         this.loading = false;
-      }
+      },
     });
 
     this.geoserver.getRecentRequests(50).subscribe({
-      next: (r) => this.recentRequests = r,
-      error: () => {}
+      next: (r) => (this.recentRequests = r),
+      error: () => {},
     });
 
     this.geoserver.getAuditLogs(50, 0).subscribe({
-      next: (l) => this.auditLogs = l,
-      error: () => {}
+      next: (l) => (this.auditLogs = l),
+      error: () => {},
     });
   }
 
@@ -65,7 +65,7 @@ export class MonitorComponent implements OnInit, OnDestroy {
     const h = Math.floor((s % 86400) / 3600);
     const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
-    let parts: string[] = [];
+    const parts: string[] = [];
     if (d > 0) parts.push(`${d}天`);
     if (h > 0) parts.push(`${h}小时`);
     if (m > 0) parts.push(`${m}分`);
@@ -86,7 +86,7 @@ export class MonitorComponent implements OnInit, OnDestroy {
       .map(([name, data]) => ({
         name,
         count: data.count,
-        avgDuration: data.avg_duration_ms
+        avgDuration: data.avg_duration_ms,
       }));
   }
 
@@ -108,7 +108,7 @@ export class MonitorComponent implements OnInit, OnDestroy {
     if (confirm('确认重置监控统计？')) {
       this.geoserver.resetMonitorStats().subscribe({
         next: () => this.loadData(),
-        error: (e) => this.error = '重置失败: ' + e.message
+        error: (e) => (this.error = '重置失败: ' + e.message),
       });
     }
   }

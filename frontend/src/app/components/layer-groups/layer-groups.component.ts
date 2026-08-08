@@ -9,7 +9,7 @@ import { CreateLayerGroupDialogComponent } from './create-layer-group-dialog.com
 @Component({
   selector: 'app-layer-groups',
   templateUrl: './layer-groups.component.html',
-  styleUrls: ['./layer-groups.component.scss']
+  styleUrls: ['./layer-groups.component.scss'],
 })
 export class LayerGroupsComponent implements OnInit {
   groups: LayerGroup[] = [];
@@ -20,13 +20,13 @@ export class LayerGroupsComponent implements OnInit {
   constructor(
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {
     this.loadGroups();
     this.geoserverService.getLayers().subscribe({
-      next: (data) => this.layers = data
+      next: (data) => (this.layers = data),
     });
   }
 
@@ -40,16 +40,16 @@ export class LayerGroupsComponent implements OnInit {
       error: () => {
         this.notificationService.error('加载图层组失败');
         this.loading = false;
-      }
+      },
     });
   }
 
   createGroup(): void {
     const dialogRef = this.dialog.open(CreateLayerGroupDialogComponent, {
       width: '500px',
-      data: { layers: this.layers }
+      data: { layers: this.layers },
     });
-    dialogRef.afterClosed().subscribe(result => {
+    dialogRef.afterClosed().subscribe((result) => {
       if (result) this.loadGroups();
     });
   }
@@ -58,17 +58,17 @@ export class LayerGroupsComponent implements OnInit {
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       data: {
         title: '删除图层组',
-        message: `确定要删除图层组 "${group.title || group.name}" 吗？`
-      }
+        message: `确定要删除图层组 "${group.title || group.name}" 吗？`,
+      },
     });
-    dialogRef.afterClosed().subscribe(confirmed => {
+    dialogRef.afterClosed().subscribe((confirmed) => {
       if (!confirmed) return;
       this.geoserverService.deleteLayerGroup(group.name).subscribe({
         next: () => {
           this.notificationService.success('图层组已删除');
           this.loadGroups();
         },
-        error: () => this.notificationService.error('删除失败')
+        error: () => this.notificationService.error('删除失败'),
       });
     });
   }

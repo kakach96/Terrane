@@ -7,7 +7,11 @@
   </div>
 
   <div class="preview-toolbar">
-    <mat-button-toggle-group [(ngModel)]="previewMode" (change)="onModeChange()" class="mode-toggle">
+    <mat-button-toggle-group
+      [(ngModel)]="previewMode"
+      (change)="onModeChange()"
+      class="mode-toggle"
+    >
       <mat-button-toggle value="layer">图层</mat-button-toggle>
       <mat-button-toggle value="group">图层组</mat-button-toggle>
     </mat-button-toggle-group>
@@ -22,20 +26,34 @@
     <mat-form-field appearance="outline" class="search-field">
       <mat-label>搜索</mat-label>
       <mat-icon matPrefix>search</mat-icon>
-      <input matInput [(ngModel)]="searchQuery" placeholder="搜索图层 / 图层组">
+      <input matInput [(ngModel)]="searchQuery" placeholder="搜索图层 / 图层组" />
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat">
       <mat-label>宽</mat-label>
-      <input matInput type="number" [(ngModel)]="previewOptions.width" (change)="refreshPreview()">
+      <input
+        matInput
+        type="number"
+        [(ngModel)]="previewOptions.width"
+        (change)="refreshPreview()"
+      />
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat">
       <mat-label>高</mat-label>
-      <input matInput type="number" [(ngModel)]="previewOptions.height" (change)="refreshPreview()">
+      <input
+        matInput
+        type="number"
+        [(ngModel)]="previewOptions.height"
+        (change)="refreshPreview()"
+      />
     </mat-form-field>
 
-    <mat-checkbox *ngIf="isStaticFormat" [(ngModel)]="previewOptions.transparent" (change)="refreshPreview()">
+    <mat-checkbox
+      *ngIf="isStaticFormat"
+      [(ngModel)]="previewOptions.transparent"
+      (change)="refreshPreview()"
+    >
       透明背景
     </mat-checkbox>
   </div>
@@ -44,14 +62,22 @@
     <aside class="layer-panel">
       <div class="panel-header">
         <span class="panel-title">{{ previewMode === 'layer' ? '图层列表' : '图层组列表' }}</span>
-        <span class="panel-count">{{ previewMode === 'layer' ? filteredLayers.length : filteredGroups.length }}</span>
+        <span class="panel-count">{{
+          previewMode === 'layer' ? filteredLayers.length : filteredGroups.length
+        }}</span>
       </div>
 
       <div class="panel-list" *ngIf="previewMode === 'layer'">
-        <div *ngFor="let layer of filteredLayers"
-             class="layer-item"
-             [class.active]="isActiveLayer(layer)"
-             (click)="selectLayer(layer.name)">
+        <div
+          *ngFor="let layer of filteredLayers"
+          class="layer-item"
+          [class.active]="isActiveLayer(layer)"
+          (click)="selectLayer(layer.name)"
+          (keydown.enter)="selectLayer(layer.name)"
+          (keydown.space)="selectLayer(layer.name)"
+          role="button"
+          tabindex="0"
+        >
           <mat-icon class="item-icon">map</mat-icon>
           <div class="item-info">
             <div class="item-title">{{ layer.title || layer.name }}</div>
@@ -64,10 +90,16 @@
       </div>
 
       <div class="panel-list" *ngIf="previewMode === 'group'">
-        <div *ngFor="let group of filteredGroups"
-             class="layer-item"
-             [class.active]="isActiveGroup(group)"
-             (click)="selectGroup(group.name)">
+        <div
+          *ngFor="let group of filteredGroups"
+          class="layer-item"
+          [class.active]="isActiveGroup(group)"
+          (click)="selectGroup(group.name)"
+          (keydown.enter)="selectGroup(group.name)"
+          (keydown.space)="selectGroup(group.name)"
+          role="button"
+          tabindex="0"
+        >
           <mat-icon class="item-icon">folder</mat-icon>
           <div class="item-info">
             <div class="item-title">{{ group.title || group.name }}</div>
@@ -76,7 +108,10 @@
         </div>
       </div>
 
-      <div class="panel-empty" *ngIf="(previewMode === 'layer' ? filteredLayers.length : filteredGroups.length) === 0">
+      <div
+        class="panel-empty"
+        *ngIf="(previewMode === 'layer' ? filteredLayers.length : filteredGroups.length) === 0"
+      >
         <mat-icon>search_off</mat-icon>
         <p>未找到匹配的{{ previewMode === 'layer' ? '图层' : '图层组' }}</p>
       </div>
@@ -86,7 +121,11 @@
       <div class="map-toolbar" *ngIf="displayBounds">
         <div class="map-info">
           <span class="map-name">
-            {{ previewMode === 'layer' ? (currentLayer?.title || currentLayer?.name) : (currentGroup?.title || currentGroup?.name) }}
+            {{
+              previewMode === 'layer'
+                ? currentLayer?.title || currentLayer?.name
+                : currentGroup?.title || currentGroup?.name
+            }}
           </span>
           <span class="map-crs">{{ previewOptions.crs }}</span>
           <span class="geom-chips" *ngIf="previewMode === 'layer' && geometryTypes.length">
@@ -102,7 +141,12 @@
             <mat-icon>refresh</mat-icon>
             <span>刷新预览</span>
           </button>
-          <button mat-stroked-button [disabled]="!previewUrl" (click)="openInNewWindow()" matTooltip="在新窗口打开预览">
+          <button
+            mat-stroked-button
+            [disabled]="!previewUrl"
+            (click)="openInNewWindow()"
+            matTooltip="在新窗口打开预览"
+          >
             <mat-icon>open_in_new</mat-icon>
             <span>在新窗口打开</span>
           </button>
@@ -110,10 +154,13 @@
       </div>
 
       <div class="map-container" *ngIf="previewUrl">
-        <iframe *ngIf="!isStaticFormat"
-          [src]="safePreviewUrl" class="map-frame" title="地图预览"></iframe>
-        <img *ngIf="isStaticFormat"
-          [src]="previewUrl" alt="地图预览" class="map-image">
+        <iframe
+          *ngIf="!isStaticFormat"
+          [src]="safePreviewUrl"
+          class="map-frame"
+          title="地图预览"
+        ></iframe>
+        <img *ngIf="isStaticFormat" [src]="previewUrl" alt="地图预览" class="map-image" />
       </div>
 
       <div class="empty-state" *ngIf="!previewUrl">

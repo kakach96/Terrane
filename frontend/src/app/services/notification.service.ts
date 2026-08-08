@@ -3,7 +3,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { Observable, of } from 'rxjs';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class NotificationService {
   constructor(private snackBar: MatSnackBar) {}
@@ -13,7 +13,7 @@ export class NotificationService {
       duration,
       panelClass: ['snackbar-success'],
       horizontalPosition: 'end',
-      verticalPosition: 'bottom'
+      verticalPosition: 'bottom',
     });
   }
 
@@ -22,7 +22,7 @@ export class NotificationService {
       duration,
       panelClass: ['snackbar-error'],
       horizontalPosition: 'end',
-      verticalPosition: 'bottom'
+      verticalPosition: 'bottom',
     });
   }
 
@@ -31,7 +31,7 @@ export class NotificationService {
       duration,
       panelClass: ['snackbar-info'],
       horizontalPosition: 'end',
-      verticalPosition: 'bottom'
+      verticalPosition: 'bottom',
     });
   }
 
@@ -40,7 +40,7 @@ export class NotificationService {
       duration,
       panelClass: ['snackbar-warning'],
       horizontalPosition: 'end',
-      verticalPosition: 'bottom'
+      verticalPosition: 'bottom',
     });
   }
 

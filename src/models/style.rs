@@ -51,7 +51,10 @@ pub fn detect_style_format(content: &str) -> StyleFormat {
         } else {
             StyleFormat::SLD
         }
-    } else if trimmed.starts_with("name:") || trimmed.starts_with("title:") || trimmed.starts_with("feature-styles:") {
+    } else if trimmed.starts_with("name:")
+        || trimmed.starts_with("title:")
+        || trimmed.starts_with("feature-styles:")
+    {
         StyleFormat::YSLD
     } else {
         StyleFormat::CSS

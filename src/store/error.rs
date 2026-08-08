@@ -45,7 +45,7 @@ impl fmt::Display for StoreError {
             StoreError::Sqlite(e) => write!(f, "SQLite error: {}", e),
             StoreError::Postgres(e) => {
                 write!(f, "PostgreSQL error: {}", describe_pg_error(e.as_ref()))
-            }
+            },
             StoreError::Other(msg) => write!(f, "Store error: {}", msg),
         }
     }

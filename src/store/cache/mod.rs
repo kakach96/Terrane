@@ -10,6 +10,4 @@ pub mod session;
 pub mod tile;
 
 pub use session::{build_session_cache, SessionCache};
-pub use tile::{
-    build_tile_cache_backend, TileCacheBackend, TileCacheKey, TileCacheStats,
-};
+pub use tile::{build_tile_cache_backend, TileCacheBackend, TileCacheKey, TileCacheStats};

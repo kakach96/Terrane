@@ -50,8 +50,11 @@ pub async fn build_raster_store(config: &GeoServerConfig) -> Option<Arc<dyn Rast
     match rc.kind.as_str() {
         // Local directory backend (default). Future: "s3" / "minio".
         _ => {
-            let dir = rc.dir.clone().unwrap_or_else(|| config.data_dir.join("rasters"));
+            let dir = rc
+                .dir
+                .clone()
+                .unwrap_or_else(|| config.data_dir.join("rasters"));
             Some(Arc::new(local::LocalRasterStore::new(dir)))
-        }
+        },
     }
 }

@@ -16,7 +16,11 @@ async fn test_wcs_get_capabilities() {
         .uri("/wcs?SERVICE=WCS&REQUEST=GetCapabilities")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCapabilities 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCapabilities 应返回 200, 实际: {}",
+        resp.status()
+    );
 }
 
 #[actix_rt::test]
@@ -28,14 +32,26 @@ async fn test_wcs_describe_coverage() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     let status = resp.status();
-    let content_type = resp.headers()
-        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
     let body = test::read_body(resp).await;
-    assert!(status.is_success(),
+    assert!(
+        status.is_success(),
         "WCS DescribeCoverage 应返回 200, 实际: {}, content-type: {}, body: {}",
-        status, content_type, String::from_utf8_lossy(&body));
+        status,
+        content_type,
+        String::from_utf8_lossy(&body)
+    );
 
-    assert!(content_type.contains("xml"), "Content-Type 应为 XML, 实际: {}", content_type);
+    assert!(
+        content_type.contains("xml"),
+        "Content-Type 应为 XML, 实际: {}",
+        content_type
+    );
     let xml = String::from_utf8_lossy(&body);
     assert!(xml.contains("world"), "应包含 world 覆盖描述");
 }
@@ -45,14 +61,28 @@ async fn test_wcs_get_coverage_tiff() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/wcs?SERVICE=WCS&REQUEST=GetCoverage&COVERAGEID=world&FORMAT=image/tiff&VERSION=2.0.1")
+        .uri(
+            "/wcs?SERVICE=WCS&REQUEST=GetCoverage&COVERAGEID=world&FORMAT=image/tiff&VERSION=2.0.1",
+        )
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage 应返回 200, 实际: {}",
+        resp.status()
+    );
 
-    let content_type = resp.headers()
-        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    assert!(content_type.contains("image/tiff"), "Content-Type 应为 image/tiff, 实际: {}", content_type);
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/tiff"),
+        "Content-Type 应为 image/tiff, 实际: {}",
+        content_type
+    );
 }
 
 #[actix_rt::test]
@@ -63,11 +93,23 @@ async fn test_wcs_get_coverage_png() {
         .uri("/wcs?SERVICE=WCS&REQUEST=GetCoverage&COVERAGEID=world&FORMAT=image/png&VERSION=2.0.1")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage (PNG) 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage (PNG) 应返回 200, 实际: {}",
+        resp.status()
+    );
 
-    let content_type = resp.headers()
-        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    assert!(content_type.contains("image/png"), "Content-Type 应为 image/png, 实际: {}", content_type);
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/png"),
+        "Content-Type 应为 image/png, 实际: {}",
+        content_type
+    );
 }
 
 #[actix_rt::test]
@@ -79,11 +121,23 @@ async fn test_wcs_get_coverage_default_format() {
         .uri("/wcs?SERVICE=WCS&REQUEST=GetCoverage&COVERAGEID=world&VERSION=2.0.1")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage (默认格式) 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage (默认格式) 应返回 200, 实际: {}",
+        resp.status()
+    );
 
-    let content_type = resp.headers()
-        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    assert!(content_type.contains("image/tiff"), "默认 Content-Type 应为 image/tiff, 实际: {}", content_type);
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/tiff"),
+        "默认 Content-Type 应为 image/tiff, 实际: {}",
+        content_type
+    );
 }
 
 #[actix_rt::test]
@@ -95,11 +149,23 @@ async fn test_wcs_get_coverage_subset() {
         .uri("/wcs?SERVICE=WCS&REQUEST=GetCoverage&COVERAGEID=world&FORMAT=image/tiff&VERSION=2.0.1&SUBSET=x(10,20)&SUBSET=y(10,20)&SIZE=64,64")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage + SUBSET 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage + SUBSET 应返回 200, 实际: {}",
+        resp.status()
+    );
 
-    let content_type = resp.headers()
-        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    assert!(content_type.contains("image/tiff"), "Content-Type 应为 image/tiff, 实际: {}", content_type);
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/tiff"),
+        "Content-Type 应为 image/tiff, 实际: {}",
+        content_type
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +181,11 @@ async fn test_wcs_get_coverage_real_geotiff() {
     // 1. 生成 8x8 小 GeoTIFF fixture
     let img = image::RgbaImage::from_pixel(8, 8, image::Rgba([200, 100, 50, 255]));
     let mut buf = Vec::new();
-    img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Tiff).unwrap();
+    img.write_to(
+        &mut std::io::Cursor::new(&mut buf),
+        image::ImageFormat::Tiff,
+    )
+    .unwrap();
     let dir = std::env::temp_dir().join(format!("terrane-wcs-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let tif_path = dir.join("cov1.tif");
@@ -133,29 +203,58 @@ async fn test_wcs_get_coverage_real_geotiff() {
         }))
         .to_request();
     let resp = test::call_service(&app, create).await;
-    assert_eq!(resp.status(), StatusCode::CREATED, "创建 GeoTIFF 数据源应返回 201, 实际: {}", resp.status());
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建 GeoTIFF 数据源应返回 201, 实际: {}",
+        resp.status()
+    );
 
     // 3. DescribeCoverage → 应返回真实 GeoTIFF 元数据 (8x8 尺寸, 来自 fixture)
     let req = test::TestRequest::get()
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=DescribeCoverage&COVERAGEID=cov1")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS DescribeCoverage 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS DescribeCoverage 应返回 200, 实际: {}",
+        resp.status()
+    );
     let body = test::read_body(resp).await;
     let xml = String::from_utf8_lossy(&body);
-    assert!(xml.contains("cov1"), "DescribeCoverage 应包含覆盖 id, 实际: {}", xml);
-    assert!(xml.contains("8x8"), "DescribeCoverage 应包含真实 GeoTIFF 尺寸 8x8, 实际: {}", xml);
+    assert!(
+        xml.contains("cov1"),
+        "DescribeCoverage 应包含覆盖 id, 实际: {}",
+        xml
+    );
+    assert!(
+        xml.contains("8x8"),
+        "DescribeCoverage 应包含真实 GeoTIFF 尺寸 8x8, 实际: {}",
+        xml
+    );
 
     // 4. GetCoverage → 读取真实 8x8 数据 (fallback 是 512x512)
     let req = test::TestRequest::get()
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov1&FORMAT=image/tiff")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage (真实 GeoTIFF) 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage (真实 GeoTIFF) 应返回 200, 实际: {}",
+        resp.status()
+    );
 
-    let content_type = resp.headers()
-        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    assert!(content_type.contains("tiff"), "Content-Type 应为 image/tiff, 实际: {}", content_type);
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("tiff"),
+        "Content-Type 应为 image/tiff, 实际: {}",
+        content_type
+    );
 
     let body = test::read_body(resp).await;
     let decoded = image::load_from_memory(&body).expect("应能解码返回的 TIFF");
@@ -198,18 +297,35 @@ async fn test_wcs_get_coverage_real_arcgrid() {
         }))
         .to_request();
     let resp = test::call_service(&app, create).await;
-    assert_eq!(resp.status(), StatusCode::CREATED, "创建 ArcGrid 数据源应返回 201, 实际: {}", resp.status());
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建 ArcGrid 数据源应返回 201, 实际: {}",
+        resp.status()
+    );
 
     // 3. GetCoverage → 读取真实 ArcGrid 数据 (fallback 是 512x512)
     let req = test::TestRequest::get()
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_asc&FORMAT=image/tiff")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage (ArcGrid) 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage (ArcGrid) 应返回 200, 实际: {}",
+        resp.status()
+    );
 
-    let content_type = resp.headers()
-        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    assert!(content_type.contains("tiff"), "Content-Type 应为 image/tiff, 实际: {}", content_type);
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("tiff"),
+        "Content-Type 应为 image/tiff, 实际: {}",
+        content_type
+    );
 
     let body = test::read_body(resp).await;
     let decoded = image::load_from_memory(&body).expect("应能解码返回的 TIFF");
@@ -221,10 +337,18 @@ async fn test_wcs_get_coverage_real_arcgrid() {
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=DescribeCoverage&COVERAGEID=cov_asc")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS DescribeCoverage 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS DescribeCoverage 应返回 200, 实际: {}",
+        resp.status()
+    );
     let body = test::read_body(resp).await;
     let xml = String::from_utf8_lossy(&body);
-    assert!(xml.contains("4x3"), "DescribeCoverage 应包含真实 ArcGrid 尺寸 4x3, 实际: {}", xml);
+    assert!(
+        xml.contains("4x3"),
+        "DescribeCoverage 应包含真实 ArcGrid 尺寸 4x3, 实际: {}",
+        xml
+    );
 
     // 清理 fixture
     std::fs::remove_dir_all(&dir).ok();
@@ -235,14 +359,28 @@ async fn test_wcs_get_coverage_jpeg() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=world&FORMAT=image/jpeg")
+        .uri(
+            "/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=world&FORMAT=image/jpeg",
+        )
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage (JPEG) 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage (JPEG) 应返回 200, 实际: {}",
+        resp.status()
+    );
 
-    let content_type = resp.headers()
-        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    assert!(content_type.contains("image/jpeg"), "Content-Type 应为 image/jpeg, 实际: {}", content_type);
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/jpeg"),
+        "Content-Type 应为 image/jpeg, 实际: {}",
+        content_type
+    );
 
     let body = test::read_body(resp).await;
     let decoded = image::load_from_memory(&body).expect("应能解码返回的 JPEG");
@@ -259,11 +397,23 @@ async fn test_wcs_get_coverage_netcdf_fallback() {
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=world&FORMAT=application/x-netcdf")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage (netCDF) 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage (netCDF) 应返回 200, 实际: {}",
+        resp.status()
+    );
 
-    let content_type = resp.headers()
-        .get("Content-Type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    assert!(content_type.contains("image/tiff"), "netCDF 应回退为 TIFF, 实际: {}", content_type);
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/tiff"),
+        "netCDF 应回退为 TIFF, 实际: {}",
+        content_type
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -297,17 +447,31 @@ async fn test_wcs_get_coverage_real_arcgrid_subset_size() {
         }))
         .to_request();
     let resp = test::call_service(&app, create).await;
-    assert_eq!(resp.status(), StatusCode::CREATED, "创建 ArcGrid 数据源应返回 201, 实际: {}", resp.status());
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建 ArcGrid 数据源应返回 201, 实际: {}",
+        resp.status()
+    );
 
     // 2. SUBSET 裁剪 → 2x2 (fallback 会忽略 SUBSET 返回 512x512, 可区分真实栅格路径)
     let req = test::TestRequest::get()
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_asc_sub&FORMAT=image/tiff&SUBSET=x(0,2)&SUBSET=y(0,2)")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage + SUBSET (真实 ArcGrid) 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage + SUBSET (真实 ArcGrid) 应返回 200, 实际: {}",
+        resp.status()
+    );
     let body = test::read_body(resp).await;
     let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
-    assert_eq!(decoded.width(), 2, "SUBSET x(0,2) y(0,2) 应裁剪为 2x2, 实际: {}", decoded.width());
+    assert_eq!(
+        decoded.width(),
+        2,
+        "SUBSET x(0,2) y(0,2) 应裁剪为 2x2, 实际: {}",
+        decoded.width()
+    );
     assert_eq!(decoded.height(), 2);
 
     // 3. SUBSET + SIZE 重采样 → 8x8
@@ -315,10 +479,19 @@ async fn test_wcs_get_coverage_real_arcgrid_subset_size() {
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_asc_sub&FORMAT=image/tiff&SUBSET=x(0,2)&SUBSET=y(0,2)&SIZE=8,8")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage + SUBSET + SIZE 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage + SUBSET + SIZE 应返回 200, 实际: {}",
+        resp.status()
+    );
     let body = test::read_body(resp).await;
     let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
-    assert_eq!(decoded.width(), 8, "SUBSET + SIZE=8,8 应输出 8x8, 实际: {}", decoded.width());
+    assert_eq!(
+        decoded.width(),
+        8,
+        "SUBSET + SIZE=8,8 应输出 8x8, 实际: {}",
+        decoded.width()
+    );
     assert_eq!(decoded.height(), 8);
 
     // 清理 fixture
@@ -387,26 +560,48 @@ async fn test_wcs_get_coverage_real_geotiff_subset_size() {
         }))
         .to_request();
     let resp = test::call_service(&app, create).await;
-    assert_eq!(resp.status(), StatusCode::CREATED, "创建 GeoTIFF 数据源应返回 201, 实际: {}", resp.status());
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建 GeoTIFF 数据源应返回 201, 实际: {}",
+        resp.status()
+    );
 
     // 3. DescribeCoverage → 应包含真实尺寸 8x8 与地理边界
     let req = test::TestRequest::get()
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=DescribeCoverage&COVERAGEID=cov_geo")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS DescribeCoverage 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS DescribeCoverage 应返回 200, 实际: {}",
+        resp.status()
+    );
     let xml = String::from_utf8_lossy(&test::read_body(resp).await).to_string();
-    assert!(xml.contains("8x8"), "DescribeCoverage 应包含真实 GeoTIFF 尺寸 8x8, 实际: {}", xml);
+    assert!(
+        xml.contains("8x8"),
+        "DescribeCoverage 应包含真实 GeoTIFF 尺寸 8x8, 实际: {}",
+        xml
+    );
 
     // 4. SUBSET x(0,2) y(0,2) → 真实裁剪为 2x2 (无地理配准时 SUBSET 会被忽略, 可区分)
     let req = test::TestRequest::get()
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_geo&FORMAT=image/tiff&SUBSET=x(0,2)&SUBSET=y(0,2)")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage + SUBSET (真实 GeoTIFF) 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage + SUBSET (真实 GeoTIFF) 应返回 200, 实际: {}",
+        resp.status()
+    );
     let body = test::read_body(resp).await;
     let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
-    assert_eq!(decoded.width(), 2, "SUBSET x(0,2) y(0,2) 应裁剪为 2x2, 实际: {}", decoded.width());
+    assert_eq!(
+        decoded.width(),
+        2,
+        "SUBSET x(0,2) y(0,2) 应裁剪为 2x2, 实际: {}",
+        decoded.width()
+    );
     assert_eq!(decoded.height(), 2);
 
     // 5. SUBSET + SIZE=8,8 → 重采样为 8x8
@@ -414,10 +609,19 @@ async fn test_wcs_get_coverage_real_geotiff_subset_size() {
         .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_geo&FORMAT=image/tiff&SUBSET=x(0,2)&SUBSET=y(0,2)&SIZE=8,8")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "WCS GetCoverage + SUBSET + SIZE (真实 GeoTIFF) 应返回 200, 实际: {}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "WCS GetCoverage + SUBSET + SIZE (真实 GeoTIFF) 应返回 200, 实际: {}",
+        resp.status()
+    );
     let body = test::read_body(resp).await;
     let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
-    assert_eq!(decoded.width(), 8, "SUBSET + SIZE=8,8 应输出 8x8, 实际: {}", decoded.width());
+    assert_eq!(
+        decoded.width(),
+        8,
+        "SUBSET + SIZE=8,8 应输出 8x8, 实际: {}",
+        decoded.width()
+    );
     assert_eq!(decoded.height(), 8);
 
     // 清理 fixture

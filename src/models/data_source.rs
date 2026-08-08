@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataSource {
@@ -16,10 +16,14 @@ pub struct DataSource {
 impl DataSource {
     /// 判断数据源是否为基于文件的类型（shapefile / geotiff / geopackage）
     pub fn is_file_based(&self) -> bool {
-        matches!(self.data_source_type,
-            DataSourceType::Shapefile | DataSourceType::Geotiff |
-            DataSourceType::Geopackage | DataSourceType::WorldImage |
-            DataSourceType::ArcGrid)
+        matches!(
+            self.data_source_type,
+            DataSourceType::Shapefile
+                | DataSourceType::Geotiff
+                | DataSourceType::Geopackage
+                | DataSourceType::WorldImage
+                | DataSourceType::ArcGrid
+        )
     }
 
     /// 判断数据源是否为 PostGIS 数据库类型
@@ -185,15 +189,23 @@ mod tests {
             assert_eq!(&parsed, expected, "type '{}' 反序列化结果不符", name);
             // serde 序列化
             let serialized = serde_json::to_string(expected).unwrap();
-            assert_eq!(serialized, format!("\"{}\"", name), "type '{}' 序列化结果不符", name);
+            assert_eq!(
+                serialized,
+                format!("\"{}\"", name),
+                "type '{}' 序列化结果不符",
+                name
+            );
         }
     }
 
     #[test]
     fn test_data_source_connection_postgis() {
         let conn = DataSourceConnection::postgis(
-            "localhost".to_string(), 5432, "geoserver".to_string(),
-            "user".to_string(), Some("pass".to_string()),
+            "localhost".to_string(),
+            5432,
+            "geoserver".to_string(),
+            "user".to_string(),
+            Some("pass".to_string()),
         );
         assert_eq!(conn.host.as_deref(), Some("localhost"));
         assert_eq!(conn.port, Some(5432));

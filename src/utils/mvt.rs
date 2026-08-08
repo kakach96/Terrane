@@ -3,7 +3,7 @@
 //! 纯 Rust 实现 MVT 2.1 规范的 Protocol Buffers 编码，
 //! 无需 prost/protobuf 编译依赖。
 
-use crate::models::{Feature, GeoJsonGeometry, Bounds, PropertyValue};
+use crate::models::{Bounds, Feature, GeoJsonGeometry, PropertyValue};
 use std::collections::HashMap;
 
 // ==================== Protobuf 编码基础 ====================
@@ -127,7 +127,7 @@ fn property_value_to_mvt(value: &PropertyValue) -> Vec<u8> {
             } else {
                 encode_mvt_value_double(*n)
             }
-        }
+        },
         PropertyValue::Boolean(b) => encode_mvt_value_bool(*b),
         PropertyValue::Integer(i) => encode_mvt_value_int(*i),
         PropertyValue::Null => encode_mvt_value_string("null"),
@@ -141,11 +141,7 @@ fn property_value_to_mvt(value: &PropertyValue) -> Vec<u8> {
 /// 将 GeoJSON 坐标转换为 MVT 瓦片坐标 (整数)
 ///
 /// `extent` 默认为 4096
-fn project_to_tile(
-    coords: &[f64],
-    bbox: &Bounds,
-    extent: u32,
-) -> (i64, i64) {
+fn project_to_tile(coords: &[f64], bbox: &Bounds, extent: u32) -> (i64, i64) {
     if coords.len() < 2 {
         return (0, 0);
     }
@@ -159,11 +155,7 @@ fn project_to_tile(
 }
 
 /// 编码几何为 MVT 几何命令序列
-fn encode_geometry(
-    geom: &GeoJsonGeometry,
-    bbox: &Bounds,
-    extent: u32,
-) -> (MvtGeomType, Vec<u8>) {
+fn encode_geometry(geom: &GeoJsonGeometry, bbox: &Bounds, extent: u32) -> (MvtGeomType, Vec<u8>) {
     match geom {
         GeoJsonGeometry::Point { coordinates } => {
             let (tx, ty) = project_to_tile(coordinates, bbox, extent);
@@ -172,7 +164,7 @@ fn encode_geometry(
             buf.extend(encode_varint(cmd_integer(CMD_MOVE_TO, 1) as u64));
             buf.extend(encode_geom_params(&[tx, ty]));
             (MvtGeomType::Point, buf)
-        }
+        },
         GeoJsonGeometry::MultiPoint { coordinates } => {
             let mut buf = Vec::new();
             let mut params = Vec::new();
@@ -185,10 +177,12 @@ fn encode_geometry(
                 cursor_x = tx;
                 cursor_y = ty;
             }
-            buf.extend(encode_varint(cmd_integer(CMD_MOVE_TO, coordinates.len() as u32) as u64));
+            buf.extend(encode_varint(
+                cmd_integer(CMD_MOVE_TO, coordinates.len() as u32) as u64,
+            ));
             buf.extend(encode_geom_params(&params));
             (MvtGeomType::Point, buf)
-        }
+        },
         GeoJsonGeometry::LineString { coordinates } => {
             let mut buf = Vec::new();
             if coordinates.is_empty() {
@@ -208,10 +202,12 @@ fn encode_geometry(
                 cursor_x = tx;
                 cursor_y = ty;
             }
-            buf.extend(encode_varint(cmd_integer(CMD_LINE_TO, params.len() as u32 / 2) as u64));
+            buf.extend(encode_varint(
+                cmd_integer(CMD_LINE_TO, params.len() as u32 / 2) as u64,
+            ));
             buf.extend(encode_geom_params(&params));
             (MvtGeomType::LineString, buf)
-        }
+        },
         GeoJsonGeometry::MultiLineString { coordinates } => {
             let mut buf = Vec::new();
             for line in coordinates {
@@ -232,11 +228,13 @@ fn encode_geometry(
                     cursor_x = tx;
                     cursor_y = ty;
                 }
-                buf.extend(encode_varint(cmd_integer(CMD_LINE_TO, params.len() as u32 / 2) as u64));
+                buf.extend(encode_varint(
+                    cmd_integer(CMD_LINE_TO, params.len() as u32 / 2) as u64,
+                ));
                 buf.extend(encode_geom_params(&params));
             }
             (MvtGeomType::LineString, buf)
-        }
+        },
         GeoJsonGeometry::Polygon { coordinates } => {
             let mut buf = Vec::new();
             for ring in coordinates {
@@ -259,13 +257,15 @@ fn encode_geometry(
                     cursor_x = tx;
                     cursor_y = ty;
                 }
-                buf.extend(encode_varint(cmd_integer(CMD_LINE_TO, params.len() as u32 / 2) as u64));
+                buf.extend(encode_varint(
+                    cmd_integer(CMD_LINE_TO, params.len() as u32 / 2) as u64,
+                ));
                 buf.extend(encode_geom_params(&params));
                 // ClosePath
                 buf.extend(encode_varint(cmd_integer(CMD_CLOSE_PATH, 1) as u64));
             }
             (MvtGeomType::Polygon, buf)
-        }
+        },
         GeoJsonGeometry::MultiPolygon { coordinates } => {
             let mut buf = Vec::new();
             for polygon in coordinates {
@@ -288,20 +288,22 @@ fn encode_geometry(
                         cursor_x = tx;
                         cursor_y = ty;
                     }
-                    buf.extend(encode_varint(cmd_integer(CMD_LINE_TO, params.len() as u32 / 2) as u64));
+                    buf.extend(encode_varint(
+                        cmd_integer(CMD_LINE_TO, params.len() as u32 / 2) as u64,
+                    ));
                     buf.extend(encode_geom_params(&params));
                     buf.extend(encode_varint(cmd_integer(CMD_CLOSE_PATH, 1) as u64));
                 }
             }
             (MvtGeomType::Polygon, buf)
-        }
+        },
         GeoJsonGeometry::GeometryCollection { geometries } => {
             // 递归编码第一个几何
             for g in geometries {
                 return encode_geometry(g, bbox, extent);
             }
             (MvtGeomType::Point, Vec::new())
-        }
+        },
     }
 }
 
@@ -314,12 +316,7 @@ fn encode_geometry(
 /// * `layer_name` - 图层名称
 /// * `bbox` - 瓦片对应的地理范围
 /// * `extent` - 瓦片坐标范围 (默认 4096)
-pub fn encode_tile(
-    features: &[Feature],
-    layer_name: &str,
-    bbox: &Bounds,
-    extent: u32,
-) -> Vec<u8> {
+pub fn encode_tile(features: &[Feature], layer_name: &str, bbox: &Bounds, extent: u32) -> Vec<u8> {
     // ========== 构建 Layer ==========
     // 收集 keys 和 values (去重字典)
     let mut keys: Vec<String> = Vec::new();
@@ -340,7 +337,7 @@ pub fn encode_tile(
                     keys.push(k.clone());
                     key_index.insert(k.clone(), idx);
                     idx
-                }
+                },
             };
 
             let value_bytes = property_value_to_mvt(v);
@@ -353,7 +350,7 @@ pub fn encode_tile(
                     values.push(value_bytes);
                     value_index.insert(value_hash, idx);
                     idx
-                }
+                },
             };
 
             tags.push(kidx);
@@ -374,7 +371,10 @@ pub fn encode_tile(
         let mut feature_buf = Vec::new();
 
         // field 1 (id): uint64 - 使用 feature.id 的 hash
-        let id = feature.id.parse::<u64>().unwrap_or_else(|_| simple_hash(feature.id.as_bytes()));
+        let id = feature
+            .id
+            .parse::<u64>()
+            .unwrap_or_else(|_| simple_hash(feature.id.as_bytes()));
         feature_buf.extend(field_varint(1, id));
 
         // field 2 (tags): repeated uint32
@@ -427,8 +427,12 @@ pub fn tile_bounds(z: u32, x: u32, y: u32) -> Bounds {
     let n = (1u64 << z) as f64;
     let minx = (x as f64 / n) * 360.0 - 180.0;
     let maxx = ((x + 1) as f64 / n) * 360.0 - 180.0;
-    let miny_rad = (std::f64::consts::PI * (1.0 - 2.0 * (y + 1) as f64 / n)).sin().asinh();
-    let maxy_rad = (std::f64::consts::PI * (1.0 - 2.0 * y as f64 / n)).sin().asinh();
+    let miny_rad = (std::f64::consts::PI * (1.0 - 2.0 * (y + 1) as f64 / n))
+        .sin()
+        .asinh();
+    let maxy_rad = (std::f64::consts::PI * (1.0 - 2.0 * y as f64 / n))
+        .sin()
+        .asinh();
     let miny = miny_rad.to_degrees();
     let maxy = maxy_rad.to_degrees();
     Bounds::new(minx, miny, maxx, maxy)
@@ -473,9 +477,14 @@ mod tests {
     fn test_encode_point_feature() {
         let b = tile_bounds(0, 0, 0);
         let mut props = std::collections::HashMap::new();
-        props.insert("name".to_string(), PropertyValue::String("test".to_string()));
+        props.insert(
+            "name".to_string(),
+            PropertyValue::String("test".to_string()),
+        );
         let feature = Feature::new(
-            GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+            GeoJsonGeometry::Point {
+                coordinates: vec![0.0, 0.0],
+            },
             props,
         );
         let result = encode_tile(&[feature], "test", &b, 4096);

@@ -6,7 +6,7 @@
 //! 相同的表列表 / 要素读写路径。
 
 use async_trait::async_trait;
-use deadpool_postgres::{ManagerConfig, RecyclingMethod, Runtime, Pool};
+use deadpool_postgres::{ManagerConfig, Pool, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
 
 use crate::config::PostgresConfig;
@@ -69,7 +69,13 @@ impl PostgresVectorStore {
     fn table_name(&self, layer_name: &str) -> String {
         let safe: String = layer_name
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         format!("\"{}{}\"", BIZ_TABLE_PREFIX, safe)
     }
@@ -82,7 +88,11 @@ impl PostgresVectorStore {
             .to_string()
     }
 
-    async fn ensure_table(&self, client: &deadpool_postgres::Client, layer_name: &str) -> Result<(), StoreError> {
+    async fn ensure_table(
+        &self,
+        client: &deadpool_postgres::Client,
+        layer_name: &str,
+    ) -> Result<(), StoreError> {
         let table = self.table_name(layer_name);
         client
             .batch_execute(&format!(
@@ -100,7 +110,11 @@ impl PostgresVectorStore {
 
 #[async_trait]
 impl super::VectorStore for PostgresVectorStore {
-    async fn save_features(&self, layer_name: &str, features: &[Feature]) -> Result<usize, StoreError> {
+    async fn save_features(
+        &self,
+        layer_name: &str,
+        features: &[Feature],
+    ) -> Result<usize, StoreError> {
         let mut client = self.pool.get().await?;
         let table = self.table_name(layer_name);
         let tx = client.transaction().await?;
@@ -167,8 +181,11 @@ impl super::VectorStore for PostgresVectorStore {
                 let id: String = row.try_get(0)?;
                 let geometry_str: String = row.try_get(1)?;
                 let properties_str: Option<String> = row.try_get(2)?;
-                let geometry = serde_json::from_str(&geometry_str)
-                    .unwrap_or(crate::models::GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] });
+                let geometry = serde_json::from_str(&geometry_str).unwrap_or(
+                    crate::models::GeoJsonGeometry::Point {
+                        coordinates: vec![0.0, 0.0],
+                    },
+                );
                 let properties = properties_str
                     .and_then(|s| serde_json::from_str(&s).ok())
                     .unwrap_or_default();
@@ -233,15 +250,22 @@ mod tests {
     fn test_pg_config(schema: &str) -> PostgresConfig {
         let host = std::env::var("GEOSERVER_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
         let port: u16 = std::env::var("GEOSERVER_TEST_PG_PORT")
-            .ok().and_then(|v| v.parse().ok()).unwrap_or(5432);
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5432);
         let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "postgres".into());
-        let password = std::env::var("GEOSERVER_TEST_PG_PASSWORD")
-            .unwrap_or_else(|_| "kakach2026".into());
+        let password =
+            std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "kakach2026".into());
         let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "postgres".into());
 
         PostgresConfig {
-            host, port, instance, schema: schema.to_string(),
-            user, password, pool_size: 2,
+            host,
+            port,
+            instance,
+            schema: schema.to_string(),
+            user,
+            password,
+            pool_size: 2,
         }
     }
 
@@ -253,7 +277,9 @@ mod tests {
         pg_cfg.dbname = Some(cfg.instance.clone());
         pg_cfg.user = Some(cfg.user.clone());
         pg_cfg.password = Some(cfg.password.clone());
-        let pool = pg_cfg.create_pool(Some(deadpool_postgres::Runtime::Tokio1), NoTls).unwrap();
+        let pool = pg_cfg
+            .create_pool(Some(deadpool_postgres::Runtime::Tokio1), NoTls)
+            .unwrap();
         if let Ok(client) = pool.get().await {
             let _ = client
                 .batch_execute(&format!("DROP SCHEMA IF EXISTS {} CASCADE", cfg.schema))
@@ -269,11 +295,15 @@ mod tests {
         let cfg = test_pg_config(&schema);
 
         // 1. 连接 + 确保 schema
-        let store = PostgresVectorStore::new(&cfg).await.expect("应能连接 PostGIS 并初始化 schema");
+        let store = PostgresVectorStore::new(&cfg)
+            .await
+            .expect("应能连接 PostGIS 并初始化 schema");
 
         // 2. 要素保存/读取往返
         let feature = Feature::new(
-            GeoJsonGeometry::Point { coordinates: vec![10.0, 20.0] },
+            GeoJsonGeometry::Point {
+                coordinates: vec![10.0, 20.0],
+            },
             std::collections::HashMap::new(),
         );
         let saved = store.save_features("vec_layer", &[feature]).await.unwrap();
@@ -290,7 +320,11 @@ mod tests {
 
         // 3. list_tables 应包含该图层
         let tables = store.list_tables().await.unwrap();
-        assert!(tables.iter().any(|t| t == "vec_layer"), "list_tables 应包含 vec_layer, 实际: {:?}", tables);
+        assert!(
+            tables.iter().any(|t| t == "vec_layer"),
+            "list_tables 应包含 vec_layer, 实际: {:?}",
+            tables
+        );
 
         // 4. 删除后为空
         let deleted = store.delete_features("vec_layer").await.unwrap();
@@ -301,4 +335,3 @@ mod tests {
         drop_test_schema(&cfg).await;
     }
 }
-

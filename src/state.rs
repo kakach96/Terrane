@@ -1,18 +1,18 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
-use tokio::sync::RwLock;
-use std::time::Instant;
 use crate::config::GeoServerConfig;
-use crate::models::{Layer, Feature, layer::LayerGroup};
+use crate::models::{layer::LayerGroup, Feature, Layer};
 use crate::store::{
-    Store, SqliteStore, PostgresStore, VectorStore, build_vector_store, RasterStore, build_raster_store,
-    SessionCache, build_session_cache,
+    build_raster_store, build_session_cache, build_vector_store, PostgresStore, RasterStore,
+    SessionCache, SqliteStore, Store, VectorStore,
 };
 use crate::utils::sld_parser;
 use crate::utils::tile_cache::TileCache;
 use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Instant;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Clone)]
 pub struct StyleMeta {
@@ -94,27 +94,34 @@ impl AppState {
         let store: Option<Arc<dyn Store>> = match config.metadata.kind.as_str() {
             "postgres" => match PostgresStore::new(&config.metadata).await {
                 Ok(s) => {
-                    tracing::info!("Metadata store backend: PostgreSQL ({})", config.metadata.postgres.instance);
+                    tracing::info!(
+                        "Metadata store backend: PostgreSQL ({})",
+                        config.metadata.postgres.instance
+                    );
                     Some(Arc::new(s))
-                }
+                },
                 Err(e) => {
                     eprintln!("Failed to initialize PostgreSQL store: {}", e);
                     None
-                }
+                },
             },
             _ => {
-                let sqlite_path = config.metadata.sqlite_path.to_str().unwrap_or("geoserver.sqlite");
+                let sqlite_path = config
+                    .metadata
+                    .sqlite_path
+                    .to_str()
+                    .unwrap_or("geoserver.sqlite");
                 match SqliteStore::new(sqlite_path).await {
                     Ok(s) => {
                         tracing::info!("Metadata store backend: SQLite ({})", sqlite_path);
                         Some(Arc::new(s))
-                    }
+                    },
                     Err(e) => {
                         eprintln!("Failed to initialize SQLite store: {}", e);
                         None
-                    }
+                    },
                 }
-            }
+            },
         };
 
         // 构建矢量数据存储 (元数据与矢量数据分离; 见 config::VectorConfig)
@@ -132,10 +139,10 @@ impl AppState {
                         .unwrap_or_default(),
                 };
                 tracing::info!("Vector data store backend: {} ({})", eff.kind, detail);
-            }
+            },
             None => {
                 tracing::warn!("Vector data store backend: none");
-            }
+            },
         }
 
         // 构建栅格数据存储 (见 config::RasterConfig)
@@ -149,10 +156,10 @@ impl AppState {
                     .map(|d| d.to_string_lossy().to_string())
                     .unwrap_or_default();
                 tracing::info!("Raster data store backend: {} ({})", eff.kind, dir);
-            }
+            },
             None => {
                 tracing::warn!("Raster data store backend: none");
-            }
+            },
         }
 
         // 构建会话缓存 (瓦片缓存之外的会话快速层; 见 config::CacheConfig)
@@ -166,28 +173,46 @@ impl AppState {
             );
         }
 
-        let config_layers: Vec<Layer> = config.workspaces.iter()
+        let config_layers: Vec<Layer> = config
+            .workspaces
+            .iter()
             .flat_map(|workspace| {
-                workspace.stores.iter().flat_map(|store| {
-                    store.layers.iter().map(|layer_config| {
-                        Layer::new(
-                            layer_config.name.clone(),
-                            layer_config.title.clone(),
-                            workspace.name.clone(),
-                            store.name.clone(),
-                            crate::models::CoordinateReferenceSystem::from_epsg(&layer_config.srs),
-                        ).with_bounds(crate::models::BoundingBox::new(
-                            crate::models::CoordinateReferenceSystem::from_epsg(&layer_config.srs),
-                            crate::models::Bounds::new(
-                                layer_config.bounds.minx,
-                                layer_config.bounds.miny,
-                                layer_config.bounds.maxx,
-                                layer_config.bounds.maxy,
-                            ),
-                        ))
-                    }).collect::<Vec<_>>()
-                }).collect::<Vec<_>>()
-            }).collect();
+                workspace
+                    .stores
+                    .iter()
+                    .flat_map(|store| {
+                        store
+                            .layers
+                            .iter()
+                            .map(|layer_config| {
+                                Layer::new(
+                                    layer_config.name.clone(),
+                                    layer_config.title.clone(),
+                                    workspace.name.clone(),
+                                    store.name.clone(),
+                                    crate::models::CoordinateReferenceSystem::from_epsg(
+                                        &layer_config.srs,
+                                    ),
+                                )
+                                .with_bounds(
+                                    crate::models::BoundingBox::new(
+                                        crate::models::CoordinateReferenceSystem::from_epsg(
+                                            &layer_config.srs,
+                                        ),
+                                        crate::models::Bounds::new(
+                                            layer_config.bounds.minx,
+                                            layer_config.bounds.miny,
+                                            layer_config.bounds.maxx,
+                                            layer_config.bounds.maxy,
+                                        ),
+                                    ),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
 
         let mut all_layers = config_layers.clone();
 
@@ -200,7 +225,8 @@ impl AppState {
                         db_layer.workspace.clone(),
                         db_layer.store.clone(),
                         crate::models::CoordinateReferenceSystem::from_epsg(&db_layer.srs),
-                    ).with_bounds(crate::models::BoundingBox::new(
+                    )
+                    .with_bounds(crate::models::BoundingBox::new(
                         crate::models::CoordinateReferenceSystem::from_epsg(&db_layer.srs),
                         crate::models::Bounds::new(
                             db_layer.minx,
@@ -238,15 +264,22 @@ impl AppState {
 
         for builtin in sld_parser::builtin_styles() {
             default_styles.insert(builtin.name.to_string(), builtin.sld.to_string());
-            styles_meta_map.insert(builtin.name.to_string(), StyleMeta {
-                title: builtin.title.to_string(),
-                is_builtin: true,
-                format: crate::models::style::StyleFormat::SLD,
-            });
+            styles_meta_map.insert(
+                builtin.name.to_string(),
+                StyleMeta {
+                    title: builtin.title.to_string(),
+                    is_builtin: true,
+                    format: crate::models::style::StyleFormat::SLD,
+                },
+            );
         }
 
         for layer in &features_layers {
-            let style_name = layer.styles.first().map(|s| s.name.clone()).unwrap_or_else(|| "default".to_string());
+            let style_name = layer
+                .styles
+                .first()
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| "default".to_string());
             if !default_styles.contains_key(&style_name) {
                 let sld = sld_parser::default_sld(&layer.name);
                 default_styles.insert(style_name.clone(), sld);
@@ -265,11 +298,13 @@ impl AppState {
                 for rec in style_records {
                     if !default_styles.contains_key(&rec.name) {
                         default_styles.insert(rec.name.clone(), rec.content.clone());
-                        styles_meta_map.entry(rec.name.clone()).or_insert(StyleMeta {
-                            title: rec.title.clone(),
-                            is_builtin: rec.is_builtin,
-                            format: parse_style_format(&rec.format),
-                        });
+                        styles_meta_map
+                            .entry(rec.name.clone())
+                            .or_insert(StyleMeta {
+                                title: rec.title.clone(),
+                                is_builtin: rec.is_builtin,
+                                format: parse_style_format(&rec.format),
+                            });
                     }
                 }
             }
@@ -291,7 +326,10 @@ impl AppState {
         }
 
         // GeoWebCache 初始化 (后端按 [cache].kind 选择; 未配置 [cache] 时保持 None)
-        let tile_cache = config.cache.as_ref().map(|_| TileCache::new(config.effective_cache()));
+        let tile_cache = config
+            .cache
+            .as_ref()
+            .map(|_| TileCache::new(config.effective_cache()));
 
         // 异步初始化瓦片缓存后端
         if let Some(ref cache) = tile_cache {
@@ -325,7 +363,11 @@ impl AppState {
     }
 
     /// 获取或创建指定数据源的 PostgreSQL 连接池
-    pub fn get_pg_pool(&self, ds_name: &str, conn_info: &crate::models::DataSourceConnection) -> deadpool_postgres::Pool {
+    pub fn get_pg_pool(
+        &self,
+        ds_name: &str,
+        conn_info: &crate::models::DataSourceConnection,
+    ) -> deadpool_postgres::Pool {
         let start = Instant::now();
 
         let t1 = Instant::now();
@@ -334,13 +376,22 @@ impl AppState {
         tracing::debug!("[get_pg_pool] Mutex 锁定耗时: {:?}", lock_elapsed);
 
         if let Some(pool) = pools.get(ds_name) {
-            tracing::debug!("[get_pg_pool] 命中缓存, ds_name={}, 总耗时: {:?}", ds_name, start.elapsed());
+            tracing::debug!(
+                "[get_pg_pool] 命中缓存, ds_name={}, 总耗时: {:?}",
+                ds_name,
+                start.elapsed()
+            );
             return pool.clone();
         }
 
         let host_str = conn_info.host.as_deref().unwrap_or("127.0.0.1");
         let port_u16 = conn_info.port.unwrap_or(5432);
-        tracing::debug!("[get_pg_pool] 缓存未命中, 开始创建新连接池, ds_name={}, host={}, port={}", ds_name, host_str, port_u16);
+        tracing::debug!(
+            "[get_pg_pool] 缓存未命中, 开始创建新连接池, ds_name={}, host={}, port={}",
+            ds_name,
+            host_str,
+            port_u16
+        );
 
         let t2 = Instant::now();
         let mut cfg = deadpool_postgres::Config::new();
@@ -352,35 +403,49 @@ impl AppState {
         };
         cfg.host = Some(host);
         cfg.port = Some(port_u16);
-        cfg.dbname = conn_info.database.clone().or_else(|| Some("geoserver".to_string()));
-        cfg.user = conn_info.username.clone().or_else(|| Some("postgres".to_string()));
+        cfg.dbname = conn_info
+            .database
+            .clone()
+            .or_else(|| Some("geoserver".to_string()));
+        cfg.user = conn_info
+            .username
+            .clone()
+            .or_else(|| Some("postgres".to_string()));
         cfg.password = conn_info.password.clone();
         // 设置连接超时，避免因网络问题长时间挂起
-        cfg.connect_timeout = Some(std::time::Duration::from_secs(self.config.server.connect_timeout_secs));
+        cfg.connect_timeout = Some(std::time::Duration::from_secs(
+            self.config.server.connect_timeout_secs,
+        ));
         cfg.manager = Some(deadpool_postgres::ManagerConfig {
             recycling_method: deadpool_postgres::RecyclingMethod::Fast,
         });
 
-        let pool = cfg.create_pool(
-            Some(deadpool_postgres::Runtime::Tokio1),
-            tokio_postgres::NoTls,
-        ).expect("Failed to create PG pool");
+        let pool = cfg
+            .create_pool(
+                Some(deadpool_postgres::Runtime::Tokio1),
+                tokio_postgres::NoTls,
+            )
+            .expect("Failed to create PG pool");
         let create_elapsed = t2.elapsed();
         tracing::debug!("[get_pg_pool] create_pool 耗时: {:?}", create_elapsed);
 
         pools.insert(ds_name.to_string(), pool.clone());
-        tracing::debug!("[get_pg_pool] 新连接池已创建并缓存, ds_name={}, 总耗时: {:?}", ds_name, start.elapsed());
+        tracing::debug!(
+            "[get_pg_pool] 新连接池已创建并缓存, ds_name={}, 总耗时: {:?}",
+            ds_name,
+            start.elapsed()
+        );
         pool
     }
 
     pub fn increment_request_count(&self) {
         self.request_count.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     pub fn increment_error_count(&self) {
         self.error_count.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     pub fn get_uptime(&self) -> String {
         let duration = self.start_time.elapsed();
         let total_secs = duration.as_secs();
@@ -389,17 +454,17 @@ impl AppState {
         let minutes = (total_secs % 3600) / 60;
         format!("{}天 {}小时 {}分钟", days, hours, minutes)
     }
-    
+
     pub async fn get_layer_features(&self, layer_name: &str) -> Option<Vec<Feature>> {
         let features = self.features.read().await;
         features.get(layer_name).cloned()
     }
-    
+
     pub async fn add_layer_features(&self, layer_name: &str, features: Vec<Feature>) {
         let mut features_map = self.features.write().await;
         features_map.insert(layer_name.to_string(), features);
     }
-    
+
     pub async fn add_feature(&self, layer_name: &str, feature: Feature) {
         let mut features_map = self.features.write().await;
         features_map
@@ -407,32 +472,32 @@ impl AppState {
             .or_insert_with(Vec::new)
             .push(feature);
     }
-    
+
     pub async fn get_layer(&self, layer_name: &str) -> Option<Layer> {
         let layers = self.layers.read().await;
         layers.iter().find(|l| l.name == layer_name).cloned()
     }
-    
+
     pub async fn list_layers(&self) -> Vec<Layer> {
         let layers = self.layers.read().await;
         layers.clone()
     }
-    
+
     pub async fn get_style(&self, style_name: &str) -> Option<String> {
         let styles = self.styles.read().await;
         styles.get(style_name).cloned()
     }
-    
+
     pub async fn add_style(&self, style_name: &str, content: String) {
         let mut styles = self.styles.write().await;
         styles.insert(style_name.to_string(), content);
     }
-    
+
     pub async fn add_layer(&self, layer: Layer) {
         let mut layers = self.layers.write().await;
         layers.push(layer);
     }
-    
+
     pub async fn update_layer(&self, layer_name: &str, updates: LayerUpdates) -> bool {
         let mut layers = self.layers.write().await;
         if let Some(layer) = layers.iter_mut().find(|l| l.name == layer_name) {
@@ -450,7 +515,7 @@ impl AppState {
             false
         }
     }
-    
+
     pub async fn delete_layer(&self, layer_name: &str) -> bool {
         let mut layers = self.layers.write().await;
         if let Some(pos) = layers.iter().position(|l| l.name == layer_name) {

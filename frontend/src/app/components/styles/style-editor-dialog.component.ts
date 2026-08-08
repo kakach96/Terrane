@@ -11,7 +11,12 @@ import { StyleInfo } from '../../models/geoserver.models';
       <div class="form-row">
         <mat-form-field appearance="outline" class="name-field">
           <mat-label>样式名称</mat-label>
-          <input matInput [(ngModel)]="name" placeholder="my-style" [readonly]="data.mode === 'edit'">
+          <input
+            matInput
+            [(ngModel)]="name"
+            placeholder="my-style"
+            [readonly]="data.mode === 'edit'"
+          />
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="format-field">
@@ -27,7 +32,7 @@ import { StyleInfo } from '../../models/geoserver.models';
 
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>标题</mat-label>
-        <input matInput [(ngModel)]="title" placeholder="我的样式">
+        <input matInput [(ngModel)]="title" placeholder="我的样式" />
       </mat-form-field>
 
       <div class="template-buttons" *ngIf="data.mode === 'create'">
@@ -72,36 +77,52 @@ import { StyleInfo } from '../../models/geoserver.models';
       </button>
     </mat-dialog-actions>
   `,
-  styles: [`
-    .full-width { width: 100%; margin-bottom: 16px; }
-    .form-row { display: flex; gap: 16px; }
-    .name-field { flex: 1; margin-bottom: 16px; }
-    .format-field { width: 200px; margin-bottom: 16px; }
-    .code-editor { margin-bottom: 0; }
-    .code-textarea {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      line-height: 1.5;
-      white-space: pre;
-      overflow: auto;
-    }
-    .template-buttons {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-      .label {
-        font-size: 13px;
-        color: var(--text-secondary, #666);
-        white-space: nowrap;
+  styles: [
+    `
+      .full-width {
+        width: 100%;
+        margin-bottom: 16px;
       }
-      button {
+      .form-row {
+        display: flex;
+        gap: 16px;
+      }
+      .name-field {
+        flex: 1;
+        margin-bottom: 16px;
+      }
+      .format-field {
+        width: 200px;
+        margin-bottom: 16px;
+      }
+      .code-editor {
+        margin-bottom: 0;
+      }
+      .code-textarea {
+        font-family: 'JetBrains Mono', monospace;
         font-size: 12px;
-        line-height: 28px;
+        line-height: 1.5;
+        white-space: pre;
+        overflow: auto;
       }
-    }
-  `]
+      .template-buttons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        .label {
+          font-size: 13px;
+          color: var(--text-secondary, #666);
+          white-space: nowrap;
+        }
+        button {
+          font-size: 12px;
+          line-height: 28px;
+        }
+      }
+    `,
+  ],
 })
 export class StyleEditorDialogComponent implements OnInit {
   name = '';
@@ -113,15 +134,19 @@ export class StyleEditorDialogComponent implements OnInit {
     public dialogRef: MatDialogRef<StyleEditorDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { mode: 'create' | 'edit'; style?: StyleInfo },
     private geoserverService: GeoserverService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
   ) {}
 
   get formatLabel(): string {
     switch (this.format) {
-      case 'CSS': return 'CSS';
-      case 'YSLD': return 'YSLD (YAML)';
-      case 'MBStyle': return 'Mapbox Style JSON';
-      default: return 'SLD XML';
+      case 'CSS':
+        return 'CSS';
+      case 'YSLD':
+        return 'YSLD (YAML)';
+      case 'MBStyle':
+        return 'Mapbox Style JSON';
+      default:
+        return 'SLD XML';
     }
   }
 
@@ -142,35 +167,53 @@ export class StyleEditorDialogComponent implements OnInit {
 
   applyDefaultForFormat(): void {
     switch (this.format) {
-      case 'CSS': this.content = this.getTemplate('css-default'); break;
-      case 'YSLD': this.content = this.getTemplate('ysld-default'); break;
-      case 'MBStyle': this.content = this.getTemplate('mb-default'); break;
-      default: this.content = this.getTemplate('polygon'); break;
+      case 'CSS':
+        this.content = this.getTemplate('css-default');
+        break;
+      case 'YSLD':
+        this.content = this.getTemplate('ysld-default');
+        break;
+      case 'MBStyle':
+        this.content = this.getTemplate('mb-default');
+        break;
+      default:
+        this.content = this.getTemplate('polygon');
+        break;
     }
   }
 
   save(): void {
     if (this.data.mode === 'create') {
-      this.geoserverService.createStyle({
-        name: this.name,
-        title: this.title || this.name,
-        content: this.content,
-        format: this.format
-      }).subscribe({
-        next: () => {
-          this.notificationService.success('样式创建成功');
-          this.dialogRef.close(true);
-        },
-        error: (e) => this.notificationService.error('创建失败: ' + (e.error?.message || e.message))
-      });
+      this.geoserverService
+        .createStyle({
+          name: this.name,
+          title: this.title || this.name,
+          content: this.content,
+          format: this.format,
+        })
+        .subscribe({
+          next: () => {
+            this.notificationService.success('样式创建成功');
+            this.dialogRef.close(true);
+          },
+          error: (e) =>
+            this.notificationService.error('创建失败: ' + (e.error?.message || e.message)),
+        });
     } else {
-      this.geoserverService.updateStyle(this.name, { title: this.title || this.name, content: this.content, format: this.format }).subscribe({
-        next: () => {
-          this.notificationService.success('样式已保存');
-          this.dialogRef.close(true);
-        },
-        error: (e) => this.notificationService.error('保存失败: ' + (e.error?.message || e.message))
-      });
+      this.geoserverService
+        .updateStyle(this.name, {
+          title: this.title || this.name,
+          content: this.content,
+          format: this.format,
+        })
+        .subscribe({
+          next: () => {
+            this.notificationService.success('样式已保存');
+            this.dialogRef.close(true);
+          },
+          error: (e) =>
+            this.notificationService.error('保存失败: ' + (e.error?.message || e.message)),
+        });
     }
   }
 

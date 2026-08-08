@@ -159,7 +159,8 @@
   border-collapse: collapse;
   font-size: 13px;
 
-  th, td {
+  th,
+  td {
     padding: 8px 12px;
     text-align: left;
     border-bottom: 1px solid #e0e0e0;
@@ -203,7 +204,9 @@
   }
 }
 
-.method-badge, .action-badge, .status-badge {
+.method-badge,
+.action-badge,
+.status-badge {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
@@ -212,19 +215,52 @@
   font-family: 'Consolas', 'Courier New', monospace;
 }
 
-.method-get { background: #e3f2fd; color: #1565c0; }
-.method-post { background: #e8f5e9; color: #2e7d32; }
-.method-put { background: #fff3e0; color: #e65100; }
-.method-delete { background: #ffebee; color: #c62828; }
-.method-patch { background: #f3e5f5; color: #7b1fa2; }
+.method-get {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+.method-post {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.method-put {
+  background: #fff3e0;
+  color: #e65100;
+}
+.method-delete {
+  background: #ffebee;
+  color: #c62828;
+}
+.method-patch {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
 
-.status-badge.success { background: #e8f5e9; color: #2e7d32; }
-.status-badge.error { background: #ffebee; color: #c62828; }
+.status-badge.success {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.status-badge.error {
+  background: #ffebee;
+  color: #c62828;
+}
 
-.action-badge.login { background: #e3f2fd; color: #1565c0; }
-.action-badge.create { background: #e8f5e9; color: #2e7d32; }
-.action-badge.delete { background: #ffebee; color: #c62828; }
-.action-badge.update { background: #fff3e0; color: #e65100; }
+.action-badge.login {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+.action-badge.create {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.action-badge.delete {
+  background: #ffebee;
+  color: #c62828;
+}
+.action-badge.update {
+  background: #fff3e0;
+  color: #e65100;
+}
 
 .bar-chart {
   padding: 8px 0;
@@ -265,11 +301,21 @@
   }
 }
 
-.method-get .bar-fill { background: #1565c0; }
-.method-post .bar-fill { background: #2e7d32; }
-.method-put .bar-fill { background: #e65100; }
-.method-delete .bar-fill { background: #c62828; }
-.method-patch .bar-fill { background: #7b1fa2; }
+.method-get .bar-fill {
+  background: #1565c0;
+}
+.method-post .bar-fill {
+  background: #2e7d32;
+}
+.method-put .bar-fill {
+  background: #e65100;
+}
+.method-delete .bar-fill {
+  background: #c62828;
+}
+.method-patch .bar-fill {
+  background: #7b1fa2;
+}
 
 .empty-state {
   text-align: center;

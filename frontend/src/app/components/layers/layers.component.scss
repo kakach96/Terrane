@@ -27,7 +27,7 @@
   align-items: center;
   justify-content: center;
   padding: 80px;
-  
+
   p {
     margin-top: 16px;
     color: var(--text-secondary);
@@ -107,12 +107,12 @@
 
     mat-chip {
       font-size: 12px;
-      
+
       &.enabled {
         background: #e8f5e9;
         color: #2e7d32;
       }
-      
+
       &:not(.enabled) {
         background: #ffebee;
         color: #c62828;

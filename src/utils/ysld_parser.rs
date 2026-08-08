@@ -1,5 +1,5 @@
-use super::rendering::{Style, FillStyle, StrokeStyle};
-use super::sld_parser::{ParsedRule, OgcFilter};
+use super::rendering::{FillStyle, StrokeStyle, Style};
+use super::sld_parser::{OgcFilter, ParsedRule};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -95,39 +95,60 @@ fn parse_ysld_filters(val: &serde_json::Value) -> Vec<OgcFilter> {
                         match key.as_str() {
                             "greater-than" => {
                                 if let Some(v) = val.as_str() {
-                                    filters.push(OgcFilter::PropertyIsGreaterThan(prop.to_string(), v.to_string()));
+                                    filters.push(OgcFilter::PropertyIsGreaterThan(
+                                        prop.to_string(),
+                                        v.to_string(),
+                                    ));
                                 }
-                            }
+                            },
                             "less-than" => {
                                 if let Some(v) = val.as_str() {
-                                    filters.push(OgcFilter::PropertyIsLessThan(prop.to_string(), v.to_string()));
+                                    filters.push(OgcFilter::PropertyIsLessThan(
+                                        prop.to_string(),
+                                        v.to_string(),
+                                    ));
                                 }
-                            }
+                            },
                             "equals" => {
                                 if let Some(v) = val.as_str() {
-                                    filters.push(OgcFilter::PropertyIsEqualTo(prop.to_string(), v.to_string()));
+                                    filters.push(OgcFilter::PropertyIsEqualTo(
+                                        prop.to_string(),
+                                        v.to_string(),
+                                    ));
                                 }
-                            }
+                            },
                             "not-equal" => {
                                 if let Some(v) = val.as_str() {
-                                    filters.push(OgcFilter::PropertyIsNotEqualTo(prop.to_string(), v.to_string()));
+                                    filters.push(OgcFilter::PropertyIsNotEqualTo(
+                                        prop.to_string(),
+                                        v.to_string(),
+                                    ));
                                 }
-                            }
+                            },
                             "like" => {
                                 if let Some(v) = val.as_str() {
-                                    filters.push(OgcFilter::PropertyIsLike(prop.to_string(), v.to_string()));
+                                    filters.push(OgcFilter::PropertyIsLike(
+                                        prop.to_string(),
+                                        v.to_string(),
+                                    ));
                                 }
-                            }
+                            },
                             "between" => {
                                 if let Some(arr) = val.as_array() {
                                     if arr.len() >= 2 {
-                                        if let (Some(low), Some(high)) = (arr[0].as_str(), arr[1].as_str()) {
-                                            filters.push(OgcFilter::PropertyIsBetween(prop.to_string(), low.to_string(), high.to_string()));
+                                        if let (Some(low), Some(high)) =
+                                            (arr[0].as_str(), arr[1].as_str())
+                                        {
+                                            filters.push(OgcFilter::PropertyIsBetween(
+                                                prop.to_string(),
+                                                low.to_string(),
+                                                high.to_string(),
+                                            ));
                                         }
                                     }
                                 }
-                            }
-                            _ => {}
+                            },
+                            _ => {},
                         }
                     }
                 }
@@ -144,81 +165,130 @@ fn apply_ysld_symbolizer(style: &mut Style, sym: &HashMap<String, serde_json::Va
                 if let Some(obj) = props.as_object() {
                     apply_ysld_polygon(style, obj);
                 }
-            }
+            },
             "line" => {
                 if let Some(obj) = props.as_object() {
                     apply_ysld_line(style, obj);
                 }
-            }
+            },
             "point" => {
                 if let Some(obj) = props.as_object() {
                     apply_ysld_point(style, obj);
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 }
 
 fn apply_ysld_polygon(style: &mut Style, props: &serde_json::Map<String, serde_json::Value>) {
-    let mut fill_color = style.fill.as_ref().map(|f| f.color.clone()).unwrap_or_else(|| "#808080".to_string());
+    let mut fill_color = style
+        .fill
+        .as_ref()
+        .map(|f| f.color.clone())
+        .unwrap_or_else(|| "#808080".to_string());
     let mut fill_opacity = style.fill.as_ref().map(|f| f.opacity).unwrap_or(1.0);
-    let mut stroke_color = style.stroke.as_ref().map(|s| s.color.clone()).unwrap_or_else(|| "#000000".to_string());
+    let mut stroke_color = style
+        .stroke
+        .as_ref()
+        .map(|s| s.color.clone())
+        .unwrap_or_else(|| "#000000".to_string());
     let mut stroke_width = style.stroke.as_ref().and_then(|s| s.width);
     let mut stroke_opacity = style.stroke.as_ref().map(|s| s.opacity).unwrap_or(1.0);
 
     for (key, val) in props {
         match key.as_str() {
             "fill-color" => {
-                if let Some(s) = val.as_str() { fill_color = s.to_string(); }
-            }
+                if let Some(s) = val.as_str() {
+                    fill_color = s.to_string();
+                }
+            },
             "fill-opacity" => {
-                if let Some(n) = val.as_f64() { fill_opacity = n.min(1.0).max(0.0); }
-            }
+                if let Some(n) = val.as_f64() {
+                    fill_opacity = n.min(1.0).max(0.0);
+                }
+            },
             "stroke-color" => {
-                if let Some(s) = val.as_str() { stroke_color = s.to_string(); }
-            }
+                if let Some(s) = val.as_str() {
+                    stroke_color = s.to_string();
+                }
+            },
             "stroke-width" => {
-                if let Some(n) = val.as_f64() { stroke_width = Some(n); }
-            }
+                if let Some(n) = val.as_f64() {
+                    stroke_width = Some(n);
+                }
+            },
             "stroke-opacity" => {
-                if let Some(n) = val.as_f64() { stroke_opacity = n.min(1.0).max(0.0); }
-            }
-            _ => {}
+                if let Some(n) = val.as_f64() {
+                    stroke_opacity = n.min(1.0).max(0.0);
+                }
+            },
+            _ => {},
         }
     }
 
-    style.fill = Some(FillStyle { color: fill_color, opacity: fill_opacity });
-    style.stroke = Some(StrokeStyle { color: stroke_color, width: stroke_width, opacity: stroke_opacity, dash_array: style.stroke.as_ref().and_then(|s| s.dash_array.clone()) });
+    style.fill = Some(FillStyle {
+        color: fill_color,
+        opacity: fill_opacity,
+    });
+    style.stroke = Some(StrokeStyle {
+        color: stroke_color,
+        width: stroke_width,
+        opacity: stroke_opacity,
+        dash_array: style.stroke.as_ref().and_then(|s| s.dash_array.clone()),
+    });
 }
 
 fn apply_ysld_line(style: &mut Style, props: &serde_json::Map<String, serde_json::Value>) {
-    let mut stroke_color = style.stroke.as_ref().map(|s| s.color.clone()).unwrap_or_else(|| "#000000".to_string());
+    let mut stroke_color = style
+        .stroke
+        .as_ref()
+        .map(|s| s.color.clone())
+        .unwrap_or_else(|| "#000000".to_string());
     let mut stroke_width = style.stroke.as_ref().and_then(|s| s.width);
     let mut stroke_opacity = style.stroke.as_ref().map(|s| s.opacity).unwrap_or(1.0);
 
     for (key, val) in props {
         match key.as_str() {
             "stroke-color" => {
-                if let Some(s) = val.as_str() { stroke_color = s.to_string(); }
-            }
+                if let Some(s) = val.as_str() {
+                    stroke_color = s.to_string();
+                }
+            },
             "stroke-width" => {
-                if let Some(n) = val.as_f64() { stroke_width = Some(n); }
-            }
+                if let Some(n) = val.as_f64() {
+                    stroke_width = Some(n);
+                }
+            },
             "stroke-opacity" => {
-                if let Some(n) = val.as_f64() { stroke_opacity = n.min(1.0).max(0.0); }
-            }
-            _ => {}
+                if let Some(n) = val.as_f64() {
+                    stroke_opacity = n.min(1.0).max(0.0);
+                }
+            },
+            _ => {},
         }
     }
 
-    style.stroke = Some(StrokeStyle { color: stroke_color, width: stroke_width, opacity: stroke_opacity, dash_array: style.stroke.as_ref().and_then(|s| s.dash_array.clone()) });
+    style.stroke = Some(StrokeStyle {
+        color: stroke_color,
+        width: stroke_width,
+        opacity: stroke_opacity,
+        dash_array: style.stroke.as_ref().and_then(|s| s.dash_array.clone()),
+    });
 }
 
 fn apply_ysld_point(style: &mut Style, props: &serde_json::Map<String, serde_json::Value>) {
-    let mut fill_color = style.fill.as_ref().map(|f| f.color.clone()).unwrap_or_else(|| "#FF0000".to_string());
+    let mut fill_color = style
+        .fill
+        .as_ref()
+        .map(|f| f.color.clone())
+        .unwrap_or_else(|| "#FF0000".to_string());
     let mut fill_opacity = style.fill.as_ref().map(|f| f.opacity).unwrap_or(1.0);
-    let mut stroke_color = style.stroke.as_ref().map(|s| s.color.clone()).unwrap_or_else(|| "#000000".to_string());
+    let mut stroke_color = style
+        .stroke
+        .as_ref()
+        .map(|s| s.color.clone())
+        .unwrap_or_else(|| "#000000".to_string());
     let mut stroke_width = style.stroke.as_ref().and_then(|s| s.width);
     let mut mark = style.mark.clone();
     let mut point_size = style.point_size;
@@ -226,33 +296,55 @@ fn apply_ysld_point(style: &mut Style, props: &serde_json::Map<String, serde_jso
     for (key, val) in props {
         match key.as_str() {
             "fill-color" => {
-                if let Some(s) = val.as_str() { fill_color = s.to_string(); }
-            }
+                if let Some(s) = val.as_str() {
+                    fill_color = s.to_string();
+                }
+            },
             "fill-opacity" => {
-                if let Some(n) = val.as_f64() { fill_opacity = n.min(1.0).max(0.0); }
-            }
+                if let Some(n) = val.as_f64() {
+                    fill_opacity = n.min(1.0).max(0.0);
+                }
+            },
             "stroke-color" => {
-                if let Some(s) = val.as_str() { stroke_color = s.to_string(); }
-            }
+                if let Some(s) = val.as_str() {
+                    stroke_color = s.to_string();
+                }
+            },
             "stroke-width" => {
-                if let Some(n) = val.as_f64() { stroke_width = Some(n); }
-            }
+                if let Some(n) = val.as_f64() {
+                    stroke_width = Some(n);
+                }
+            },
             "mark" => {
-                if let Some(s) = val.as_str() { mark = Some(s.to_lowercase()); }
-            }
+                if let Some(s) = val.as_str() {
+                    mark = Some(s.to_lowercase());
+                }
+            },
             "mark-size" => {
-                if let Some(n) = val.as_f64() { point_size = Some(n); }
-            }
+                if let Some(n) = val.as_f64() {
+                    point_size = Some(n);
+                }
+            },
             "size" => {
-                if let Some(n) = val.as_f64() { point_size = Some(n); }
-            }
-            _ => {}
+                if let Some(n) = val.as_f64() {
+                    point_size = Some(n);
+                }
+            },
+            _ => {},
         }
     }
 
-    style.fill = Some(FillStyle { color: fill_color, opacity: fill_opacity });
+    style.fill = Some(FillStyle {
+        color: fill_color,
+        opacity: fill_opacity,
+    });
     if stroke_width.is_some() || stroke_color != "#000000" {
-        style.stroke = Some(StrokeStyle { color: stroke_color, width: stroke_width, opacity: 1.0, dash_array: None });
+        style.stroke = Some(StrokeStyle {
+            color: stroke_color,
+            width: stroke_width,
+            opacity: 1.0,
+            dash_array: None,
+        });
     }
     style.mark = mark;
     style.point_size = point_size;

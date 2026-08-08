@@ -8,7 +8,7 @@ import { DataSource } from '../../models/geoserver.models';
 @Component({
   selector: 'app-data-sources',
   templateUrl: './data-sources.component.html',
-  styleUrls: ['./data-sources.component.scss']
+  styleUrls: ['./data-sources.component.scss'],
 })
 export class DataSourcesComponent implements OnInit {
   dataSources: DataSource[] = [];
@@ -18,7 +18,7 @@ export class DataSourcesComponent implements OnInit {
   constructor(
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {
@@ -32,18 +32,18 @@ export class DataSourcesComponent implements OnInit {
         this.dataSources = data;
         this.loading = false;
       },
-      error: (err: any) => {
+      error: (err) => {
         console.error('Failed to load data sources:', err);
         this.loading = false;
         this.notificationService.error('加载数据源失败');
-      }
+      },
     });
   }
 
   openCreateDialog(): void {
     const dialogRef = this.dialog.open(DataSourceDialogComponent, {
       width: '600px',
-      data: { mode: 'create' }
+      data: { mode: 'create' },
     });
 
     dialogRef.afterClosed().subscribe((result) => {
@@ -56,7 +56,7 @@ export class DataSourcesComponent implements OnInit {
   openEditDialog(dataSource: DataSource): void {
     const dialogRef = this.dialog.open(DataSourceDialogComponent, {
       width: '600px',
-      data: { mode: 'edit', dataSource }
+      data: { mode: 'edit', dataSource },
     });
 
     dialogRef.afterClosed().subscribe((result) => {
@@ -67,35 +67,37 @@ export class DataSourcesComponent implements OnInit {
   }
 
   deleteDataSource(name: string): void {
-    this.notificationService.confirm('确认删除', `确定要删除数据源 "${name}" 吗？`).subscribe((confirmed: boolean) => {
-      if (confirmed) {
-        this.geoserverService.deleteDataSource(name).subscribe({
-          next: () => {
-            this.notificationService.success('删除成功');
-            this.loadDataSources();
-          },
-          error: (err: any) => {
-            console.error('Failed to delete data source:', err);
-            this.notificationService.error('删除失败');
-          }
-        });
-      }
-    });
+    this.notificationService
+      .confirm('确认删除', `确定要删除数据源 "${name}" 吗？`)
+      .subscribe((confirmed: boolean) => {
+        if (confirmed) {
+          this.geoserverService.deleteDataSource(name).subscribe({
+            next: () => {
+              this.notificationService.success('删除成功');
+              this.loadDataSources();
+            },
+            error: (err) => {
+              console.error('Failed to delete data source:', err);
+              this.notificationService.error('删除失败');
+            },
+          });
+        }
+      });
   }
 
   testConnection(dataSource: DataSource): void {
     this.geoserverService.testDataSourceConnection(dataSource.name).subscribe({
-      next: (result: any) => {
+      next: (result) => {
         if (result.success) {
           this.notificationService.success('连接测试成功');
         } else {
           this.notificationService.warning(`连接测试失败: ${result.message}`);
         }
       },
-      error: (err: any) => {
+      error: (err) => {
         console.error('Failed to test connection:', err);
         this.notificationService.error('连接测试失败');
-      }
+      },
     });
   }
 
@@ -106,10 +108,10 @@ export class DataSourcesComponent implements OnInit {
         dataSource.enabled = enabled;
         this.notificationService.success(`数据源已${enabled ? '启用' : '禁用'}`);
       },
-      error: (err: any) => {
+      error: (err) => {
         console.error('Failed to update data source:', err);
         this.notificationService.error('更新失败');
-      }
+      },
     });
   }
 

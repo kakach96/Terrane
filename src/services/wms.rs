@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use crate::models::{Bounds, Layer};
 use crate::error::GeoServerError;
+use crate::models::{Bounds, Layer};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WmsRequest {
@@ -247,7 +247,10 @@ impl WmsCapabilities {
             service: ServiceMetadata {
                 name: "WMS".to_string(),
                 title: "Terrane".to_string(),
-                abstract_text: Some("Cloud-native, high-performance spatial data server, powered by Rust".to_string()),
+                abstract_text: Some(
+                    "Cloud-native, high-performance spatial data server, powered by Rust"
+                        .to_string(),
+                ),
                 keywords: vec![
                     "WMS".to_string(),
                     "Web Map Service".to_string(),
@@ -363,14 +366,18 @@ impl WmsCapabilities {
             no_subsets: None,
             fixed_width: None,
             fixed_height: None,
-            styles: layer.styles.iter().map(|s| StyleMetadata {
-                name: s.name.clone(),
-                title: Some(s.name.clone()),
-                abstract_text: None,
-                legend_url: None,
-                style_sheet_url: None,
-                style_url: None,
-            }).collect(),
+            styles: layer
+                .styles
+                .iter()
+                .map(|s| StyleMetadata {
+                    name: s.name.clone(),
+                    title: Some(s.name.clone()),
+                    abstract_text: None,
+                    legend_url: None,
+                    style_sheet_url: None,
+                    style_url: None,
+                })
+                .collect(),
             min_scale_denominator: None,
             max_scale_denominator: None,
             scale_hint: None,
@@ -380,7 +387,7 @@ impl WmsCapabilities {
             data_urls: None,
             layers: vec![],
         };
-        
+
         self.capability.layers.push(layer_cap);
     }
 }
@@ -426,14 +433,20 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
                     "getlegendgraphic" => Some(WmsOperation::GetLegendGraphic),
                     "getstyles" => Some(WmsOperation::GetStyles),
                     "putstyles" => Some(WmsOperation::PutStyles),
-                    _ => return Err(GeoServerError::BadRequest(format!("Unknown request: {}", value))),
+                    _ => {
+                        return Err(GeoServerError::BadRequest(format!(
+                            "Unknown request: {}",
+                            value
+                        )))
+                    },
                 }
-            }
+            },
             "LAYERS" => layers = Some(value.split(',').map(|s| s.trim().to_string()).collect()),
             "STYLES" => styles = Some(value.split(',').map(|s| s.trim().to_string()).collect()),
             "CRS" | "SRS" => crs = Some(value.clone()),
             "BBOX" => {
-                let parts: Vec<f64> = value.split(',')
+                let parts: Vec<f64> = value
+                    .split(',')
                     .filter_map(|s| s.trim().parse().ok())
                     .collect();
                 if parts.len() == 4 {
@@ -445,7 +458,7 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
                     };
                     bbox = Some(normalize_bbox(raw, version.as_deref(), crs.as_deref()));
                 }
-            }
+            },
             "WIDTH" => width = value.parse().ok(),
             "HEIGHT" => height = value.parse().ok(),
             "FORMAT" => format = Some(value.clone()),
@@ -454,7 +467,9 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
             "EXCEPTIONS" => exceptions = Some(value.clone()),
             "TIME" => time = Some(value.clone()),
             "ELEVATION" => elevation = Some(value.clone()),
-            "QUERY_LAYERS" => query_layers = Some(value.split(',').map(|s| s.trim().to_string()).collect()),
+            "QUERY_LAYERS" => {
+                query_layers = Some(value.split(',').map(|s| s.trim().to_string()).collect())
+            },
             "INFO_FORMAT" => info_format = Some(value.clone()),
             "FEATURE_COUNT" => feature_count = value.parse().ok(),
             "I" => i = value.parse().ok(),
@@ -468,15 +483,18 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
             "ENV" => env = Some(value.clone()),
             "FEATUREID" | "FEATURE_ID" => feature_id = Some(value.clone()),
             "ANGLE" => angle = value.parse().ok(),
-            _ => {}
+            _ => {},
         }
     }
 
-    let request = request.ok_or_else(|| GeoServerError::BadRequest("Missing REQUEST parameter".to_string()))?;
-    
+    let request = request
+        .ok_or_else(|| GeoServerError::BadRequest("Missing REQUEST parameter".to_string()))?;
+
     if let Some(ref svc) = service {
         if svc.to_uppercase() != "WMS" {
-            return Err(GeoServerError::BadRequest("Invalid service type".to_string()));
+            return Err(GeoServerError::BadRequest(
+                "Invalid service type".to_string(),
+            ));
         }
     }
 
@@ -522,12 +540,20 @@ fn normalize_bbox(raw: Bbox, version: Option<&str>, crs: Option<&str>) -> Bbox {
     if is_130 && is_geographic {
         // WMS 1.3.0 要求 BBOX = minLat, minLon, maxLat, maxLon
         // 内部使用 minx=lon, miny=lat，所以需要交换
-        tracing::debug!("[normalize_bbox] WMS 1.3.0 地理CRS: 交换轴序 ({}, {}, {}, {}) -> ({}, {}, {}, {})",
-            raw.minx, raw.miny, raw.maxx, raw.maxy,
-            raw.miny, raw.minx, raw.maxy, raw.maxx);
+        tracing::debug!(
+            "[normalize_bbox] WMS 1.3.0 地理CRS: 交换轴序 ({}, {}, {}, {}) -> ({}, {}, {}, {})",
+            raw.minx,
+            raw.miny,
+            raw.maxx,
+            raw.maxy,
+            raw.miny,
+            raw.minx,
+            raw.maxy,
+            raw.maxx
+        );
         Bbox {
-            minx: raw.miny,  // 纬度 → 经度
-            miny: raw.minx,  // 经度 → 纬度
+            minx: raw.miny, // 纬度 → 经度
+            miny: raw.minx, // 经度 → 纬度
             maxx: raw.maxy,
             maxy: raw.maxx,
         }
@@ -536,7 +562,12 @@ fn normalize_bbox(raw: Bbox, version: Option<&str>, crs: Option<&str>) -> Bbox {
     }
 }
 
-pub fn format_wms_exception(err: &GeoServerError, exceptions: Option<&str>, width: u32, height: u32) -> (Vec<u8>, &'static str) {
+pub fn format_wms_exception(
+    err: &GeoServerError,
+    exceptions: Option<&str>,
+    width: u32,
+    height: u32,
+) -> (Vec<u8>, &'static str) {
     let msg = format!("{}", err);
     let fmt = exceptions.unwrap_or("application/vnd.ogc.se_xml");
 
@@ -547,23 +578,33 @@ pub fn format_wms_exception(err: &GeoServerError, exceptions: Option<&str>, widt
                 *pixel = image::Rgba([255, 255, 255, 255]);
             }
             let mut buf = Vec::new();
-            use image::ImageEncoder;
             use image::codecs::png::PngEncoder;
+            use image::ImageEncoder;
             PngEncoder::new(&mut buf)
-                .write_image(img.as_raw(), width.max(1), height.max(1), image::ColorType::Rgba8)
+                .write_image(
+                    img.as_raw(),
+                    width.max(1),
+                    height.max(1),
+                    image::ColorType::Rgba8,
+                )
                 .ok();
             (buf, "image/png")
-        }
+        },
         "application/vnd.ogc.se_blank" => {
             let img = image::RgbaImage::new(width.max(1), height.max(1));
             let mut buf = Vec::new();
-            use image::ImageEncoder;
             use image::codecs::png::PngEncoder;
+            use image::ImageEncoder;
             PngEncoder::new(&mut buf)
-                .write_image(img.as_raw(), width.max(1), height.max(1), image::ColorType::Rgba8)
+                .write_image(
+                    img.as_raw(),
+                    width.max(1),
+                    height.max(1),
+                    image::ColorType::Rgba8,
+                )
                 .ok();
             (buf, "image/png")
-        }
+        },
         _ => {
             let xml = format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -571,36 +612,48 @@ pub fn format_wms_exception(err: &GeoServerError, exceptions: Option<&str>, widt
   <ServiceException code="{}">{}</ServiceException>
 </ServiceExceptionReport>"#,
                 "InvalidRequest",
-                msg.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+                msg.replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;")
             );
             (xml.into_bytes(), "application/vnd.ogc.se_xml")
-        }
+        },
     }
 }
 
 pub fn validate_wms_get_map_request(req: &WmsRequest) -> Result<(), GeoServerError> {
     if req.layers.is_none() || req.layers.as_ref().unwrap().is_empty() {
-        return Err(GeoServerError::BadRequest("LAYERS parameter is required".to_string()));
+        return Err(GeoServerError::BadRequest(
+            "LAYERS parameter is required".to_string(),
+        ));
     }
-    
+
     if req.bbox.is_none() {
-        return Err(GeoServerError::BadRequest("BBOX parameter is required".to_string()));
+        return Err(GeoServerError::BadRequest(
+            "BBOX parameter is required".to_string(),
+        ));
     }
-    
+
     let width = req.width.unwrap_or(512);
     let height = req.height.unwrap_or(512);
-    
+
     if width == 0 || width > 4096 {
-        return Err(GeoServerError::BadRequest("Invalid WIDTH parameter (must be between 1 and 4096)".to_string()));
+        return Err(GeoServerError::BadRequest(
+            "Invalid WIDTH parameter (must be between 1 and 4096)".to_string(),
+        ));
     }
-    
+
     if height == 0 || height > 4096 {
-        return Err(GeoServerError::BadRequest("Invalid HEIGHT parameter (must be between 1 and 4096)".to_string()));
+        return Err(GeoServerError::BadRequest(
+            "Invalid HEIGHT parameter (must be between 1 and 4096)".to_string(),
+        ));
     }
-    
+
     if req.format.is_none() {
-        return Err(GeoServerError::BadRequest("FORMAT parameter is required".to_string()));
+        return Err(GeoServerError::BadRequest(
+            "FORMAT parameter is required".to_string(),
+        ));
     }
-    
+
     Ok(())
 }

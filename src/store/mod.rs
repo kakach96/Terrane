@@ -8,20 +8,20 @@ pub mod vector;
 
 pub use cache::{build_session_cache, SessionCache};
 pub use error::StoreError;
+pub use postgres_store::PostgresStore;
 pub use raster::{build_raster_store, RasterStore};
 pub use sqlite_store::SqliteStore;
-pub use postgres_store::PostgresStore;
-pub use vector::{build_vector_store, VectorStore};
 pub use types::{
     AuditLogRecord, Layer, LayerGroupRecord, NamespaceRecord, SessionRecord, StyleRecord, Workspace,
 };
+pub use vector::{build_vector_store, VectorStore};
 
-use async_trait::async_trait;
 use crate::auth::{User, UserRole};
 use crate::handlers::CreateWorkspaceRequest;
 use crate::models::permission::Permission;
-use crate::models::{DataSource, DataSourceConnection, DataSourceType};
 use crate::models::sql_view::SqlView;
+use crate::models::{DataSource, DataSourceConnection, DataSourceType};
+use async_trait::async_trait;
 
 /// 存储抽象层 — SqliteStore 与 PostgresStore 共同实现。
 ///
@@ -31,7 +31,10 @@ pub trait Store: Send + Sync {
     // ---- 工作空间 ----
     async fn get_workspace(&self, name: &str) -> Result<Option<Workspace>, StoreError>;
     async fn get_all_workspaces(&self) -> Result<Vec<Workspace>, StoreError>;
-    async fn create_workspace(&self, request: &CreateWorkspaceRequest) -> Result<Workspace, StoreError>;
+    async fn create_workspace(
+        &self,
+        request: &CreateWorkspaceRequest,
+    ) -> Result<Workspace, StoreError>;
     async fn update_workspace(
         &self,
         name: &str,
@@ -139,7 +142,11 @@ pub trait Store: Send + Sync {
         detail: Option<&str>,
         ip_address: Option<&str>,
     ) -> Result<(), StoreError>;
-    async fn get_audit_logs(&self, limit: usize, offset: usize) -> Result<Vec<AuditLogRecord>, StoreError>;
+    async fn get_audit_logs(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<AuditLogRecord>, StoreError>;
 
     // ---- 权限 ----
     async fn get_permissions(&self) -> Result<Vec<Permission>, StoreError>;

@@ -1,9 +1,9 @@
-use actix_web::{HttpResponse, web, HttpRequest};
-use serde::Deserialize;
-use crate::state::AppState;
+use super::rest_handler::ApiResponse;
 use crate::error::GeoServerError;
 use crate::models::DataSourceType;
-use super::rest_handler::ApiResponse;
+use crate::state::AppState;
+use actix_web::{web, HttpRequest, HttpResponse};
+use serde::Deserialize;
 
 /// 存储类型：矢量存储 vs 栅格存储
 #[derive(Debug, Deserialize)]
@@ -25,8 +25,12 @@ impl std::fmt::Display for StoreType {
 
 fn ds_type_to_store_type(ds_type: &DataSourceType) -> &'static str {
     match ds_type {
-        DataSourceType::Postgis | DataSourceType::Shapefile | DataSourceType::Geopackage => "DataStore",
-        DataSourceType::Geotiff | DataSourceType::WorldImage | DataSourceType::ArcGrid => "CoverageStore",
+        DataSourceType::Postgis | DataSourceType::Shapefile | DataSourceType::Geopackage => {
+            "DataStore"
+        },
+        DataSourceType::Geotiff | DataSourceType::WorldImage | DataSourceType::ArcGrid => {
+            "CoverageStore"
+        },
         DataSourceType::CascadedWms => "CascadedStore",
         DataSourceType::Metadata => "DataStore",
     }
@@ -44,24 +48,29 @@ pub async fn list_stores(state: web::Data<AppState>) -> Result<HttpResponse, Geo
     if let Some(store) = &state.store {
         match store.get_all_data_sources().await {
             Ok(ds_list) => {
-                let result: Vec<_> = ds_list.iter().map(|ds| {
-                    let store_type = ds_type_to_store_type(&ds.data_source_type);
-                    serde_json::json!({
-                        "name": ds.name,
-                        "type": store_type,
-                        "workspace": ds.workspace,
-                        "enabled": ds.enabled,
-                        "connection": ds.connection,
-                        "created": ds.created,
-                        "modified": ds.modified,
+                let result: Vec<_> = ds_list
+                    .iter()
+                    .map(|ds| {
+                        let store_type = ds_type_to_store_type(&ds.data_source_type);
+                        serde_json::json!({
+                            "name": ds.name,
+                            "type": store_type,
+                            "workspace": ds.workspace,
+                            "enabled": ds.enabled,
+                            "connection": ds.connection,
+                            "created": ds.created,
+                            "modified": ds.modified,
+                        })
                     })
-                }).collect();
+                    .collect();
                 Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
-            }
+            },
             Err(e) => {
                 eprintln!("Failed to list stores: {}", e);
-                Err(GeoServerError::InternalError("Failed to list stores".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to list stores".to_string(),
+                ))
+            },
         }
     } else {
         let empty: Vec<serde_json::Value> = vec![];
@@ -79,7 +88,8 @@ pub async fn list_workspace_stores(
     if let Some(store) = &state.store {
         match store.get_all_data_sources().await {
             Ok(ds_list) => {
-                let result: Vec<_> = ds_list.iter()
+                let result: Vec<_> = ds_list
+                    .iter()
                     .filter(|ds| ds.workspace.as_deref() == Some(ws_name))
                     .map(|ds| {
                         let store_type = ds_type_to_store_type(&ds.data_source_type);
@@ -92,13 +102,16 @@ pub async fn list_workspace_stores(
                             "created": ds.created,
                             "modified": ds.modified,
                         })
-                    }).collect();
+                    })
+                    .collect();
                 Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
-            }
+            },
             Err(e) => {
                 eprintln!("Failed to list stores for workspace '{}': {}", ws_name, e);
-                Err(GeoServerError::InternalError("Failed to list stores".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to list stores".to_string(),
+                ))
+            },
         }
     } else {
         let empty: Vec<serde_json::Value> = vec![];
@@ -127,15 +140,23 @@ pub async fn get_store(
                     "modified": ds.modified,
                 });
                 Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
-            }
-            Ok(None) => Err(GeoServerError::NotFound(format!("Store '{}' not found", name))),
+            },
+            Ok(None) => Err(GeoServerError::NotFound(format!(
+                "Store '{}' not found",
+                name
+            ))),
             Err(e) => {
                 eprintln!("Failed to get store: {}", e);
-                Err(GeoServerError::InternalError("Failed to get store".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to get store".to_string(),
+                ))
+            },
         }
     } else {
-        Err(GeoServerError::NotFound(format!("Store '{}' not found", name)))
+        Err(GeoServerError::NotFound(format!(
+            "Store '{}' not found",
+            name
+        )))
     }
 }
 
@@ -151,9 +172,10 @@ pub async fn get_workspace_store(
         match store.get_data_source(name).await {
             Ok(Some(ds)) => {
                 if ds.workspace.as_deref() != Some(ws_name) {
-                    return Err(GeoServerError::NotFound(
-                        format!("Store '{}' not found in workspace '{}'", name, ws_name)
-                    ));
+                    return Err(GeoServerError::NotFound(format!(
+                        "Store '{}' not found in workspace '{}'",
+                        name, ws_name
+                    )));
                 }
                 let store_type = ds_type_to_store_type(&ds.data_source_type);
                 let response = serde_json::json!({
@@ -166,14 +188,22 @@ pub async fn get_workspace_store(
                     "modified": ds.modified,
                 });
                 Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
-            }
-            Ok(None) => Err(GeoServerError::NotFound(format!("Store '{}' not found", name))),
+            },
+            Ok(None) => Err(GeoServerError::NotFound(format!(
+                "Store '{}' not found",
+                name
+            ))),
             Err(e) => {
                 eprintln!("Failed to get store: {}", e);
-                Err(GeoServerError::InternalError("Failed to get store".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to get store".to_string(),
+                ))
+            },
         }
     } else {
-        Err(GeoServerError::NotFound(format!("Store '{}' not found", name)))
+        Err(GeoServerError::NotFound(format!(
+            "Store '{}' not found",
+            name
+        )))
     }
 }

@@ -3,11 +3,11 @@
 //! 提供用户认证、JWT Token、密码哈希等功能。
 //! 支持 Basic Auth 和 Bearer Token 两种认证方式。
 
-use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
-use chrono::{Utc, Duration};
-use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use rand::Rng;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tracing::info;
 
 // ---------------------------------------------------------------------------
@@ -106,7 +106,10 @@ pub fn init_secret(secret: &str) {
 }
 
 fn jwt_secret() -> &'static str {
-    JWT_SECRET.get().map(|s| s.as_str()).unwrap_or(DEFAULT_JWT_SECRET)
+    JWT_SECRET
+        .get()
+        .map(|s| s.as_str())
+        .unwrap_or(DEFAULT_JWT_SECRET)
 }
 
 /// 生成 JWT Token (含 jti，用于数据库会话关联)
@@ -158,9 +161,9 @@ mod tests {
     fn test_generate_salt() {
         let s1 = generate_salt();
         let s2 = generate_salt();
-        assert_eq!(s1.len(), 32);  // 16 bytes = 32 hex chars
+        assert_eq!(s1.len(), 32); // 16 bytes = 32 hex chars
         assert_eq!(s2.len(), 32);
-        assert_ne!(s1, s2);  // 每次生成的 salt 应不同
+        assert_ne!(s1, s2); // 每次生成的 salt 应不同
     }
 
     #[test]
@@ -168,7 +171,7 @@ mod tests {
         let salt = generate_salt();
         let hash1 = hash_password("mypassword", &salt);
         let hash2 = hash_password("mypassword", &salt);
-        assert_eq!(hash1, hash2);  // 相同 salt + 相同密码 = 相同 hash
+        assert_eq!(hash1, hash2); // 相同 salt + 相同密码 = 相同 hash
     }
 
     #[test]
@@ -177,7 +180,7 @@ mod tests {
         let salt2 = generate_salt();
         let hash1 = hash_password("mypassword", &salt1);
         let hash2 = hash_password("mypassword", &salt2);
-        assert_ne!(hash1, hash2);  // 不同 salt = 不同 hash
+        assert_ne!(hash1, hash2); // 不同 salt = 不同 hash
     }
 
     #[test]
@@ -232,14 +235,17 @@ pub async fn ensure_default_admin(store: &dyn crate::store::Store) {
     match store.get_user("admin").await {
         Ok(Some(_)) => {
             info!("[Auth] 默认管理员用户已存在");
-        }
+        },
         _ => {
             let salt = generate_salt();
             let hash = hash_password("geoserver", &salt);
-            match store.create_user("admin", &hash, &salt, &UserRole::Admin, true).await {
+            match store
+                .create_user("admin", &hash, &salt, &UserRole::Admin, true)
+                .await
+            {
                 Ok(_) => info!("[Auth] 已创建默认管理员: admin / geoserver"),
                 Err(e) => eprintln!("[Auth] 创建默认管理员失败: {}", e),
             }
-        }
+        },
     }
 }

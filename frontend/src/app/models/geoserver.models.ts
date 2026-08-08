@@ -41,7 +41,7 @@ export interface Feature {
   id: string;
   type: 'Feature';
   geometry: GeoJsonGeometry;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
 }
 
 export interface GeoJsonGeometry {
@@ -85,12 +85,12 @@ export interface UpdateLayerRequest {
 
 export interface CreateFeatureRequest {
   geometry: GeoJsonGeometry;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
 }
 
 export interface UpdateFeatureRequest {
   geometry?: GeoJsonGeometry;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
 }
 
 export interface ApiResponse<T> {
@@ -183,7 +183,8 @@ export interface CreateDataSourceRequest {
 }
 
 export interface UpdateDataSourceRequest {
-  type?: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage' | 'worldimage' | 'cascaded_wms' | 'arcgrid';
+  type?:
+    'postgis' | 'shapefile' | 'geotiff' | 'geopackage' | 'worldimage' | 'cascaded_wms' | 'arcgrid';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;
@@ -345,4 +346,43 @@ export interface AuditLogEntry {
   username: string;
   resource?: string;
   detail?: string;
+}
+
+// ===== 用户 / 存储 / 瓦片缓存 =====
+
+/** 用户 */
+export interface User {
+  username: string;
+  role: string;
+  enabled: boolean;
+  created?: string;
+  modified?: string;
+}
+
+/** 存储 (Store) */
+export interface Store {
+  name: string;
+  type: 'DataStore' | 'CoverageStore' | string;
+  workspace: string | null;
+  enabled: boolean;
+  connection?: DataSourceConnection;
+  created?: string;
+  modified?: string;
+}
+
+/** 瓦片缓存统计 */
+export interface TileCacheStats {
+  enabled: boolean;
+  hits: number;
+  misses: number;
+  hitRate: number;
+  totalTiles: number;
+  cacheSizeBytes: number;
+  cacheSizeMb?: string;
+}
+
+/** 清除瓦片缓存结果 */
+export interface TileCacheResult {
+  cleared?: number;
+  message?: string;
 }

@@ -8,11 +8,11 @@
 //! - shapefile::Shape::Polygon(Poly)     → poly.rings() → &[PolygonRing], ring.points()
 //! - shapefile::Shape::Multipoint(Mp)    → mp.points()  → &[Point]
 
-use std::path::Path;
 use std::collections::HashMap;
-use tracing::{info, warn, debug};
+use std::path::Path;
+use tracing::{debug, info, warn};
 
-use crate::models::{Feature, GeoJsonGeometry, PropertyValue, Bounds, CoordinateReferenceSystem};
+use crate::models::{Bounds, CoordinateReferenceSystem, Feature, GeoJsonGeometry, PropertyValue};
 
 /// Shapefile 读取结果
 #[derive(Debug, Clone)]
@@ -50,10 +50,10 @@ pub fn read_shapefile<P: AsRef<Path>>(shp_path: P) -> Result<ShapefileReadResult
                     let feature = Feature::new(geometry, HashMap::new());
                     features.push(feature);
                 }
-            }
+            },
             Err(e) => {
                 warn!("[Shapefile] 跳过一条无效记录: {}", e);
-            }
+            },
         }
     }
 
@@ -81,19 +81,21 @@ pub fn read_shapefile<P: AsRef<Path>>(shp_path: P) -> Result<ShapefileReadResult
                 let srs = parse_prj_wkt(&wkt);
                 debug!("[Shapefile] 解析 PRJ: {:?}", srs);
                 srs
-            }
+            },
             Err(e) => {
                 warn!("[Shapefile] 读取 PRJ 失败: {}", e);
                 None
-            }
+            },
         }
     } else {
         None
     };
 
     let feature_count = features.len();
-    info!("[Shapefile] 读取完成: {} 个要素, shape_type={}, bounds={:?}",
-          feature_count, shape_type_name, bounds);
+    info!(
+        "[Shapefile] 读取完成: {} 个要素, shape_type={}, bounds={:?}",
+        feature_count, shape_type_name, bounds
+    );
 
     Ok(ShapefileReadResult {
         features,
@@ -108,122 +110,128 @@ pub fn read_shapefile<P: AsRef<Path>>(shp_path: P) -> Result<ShapefileReadResult
 fn shape_to_geojson(shape: &shapefile::Shape) -> Option<GeoJsonGeometry> {
     use shapefile::record::{Point, PointZ};
     match shape {
-        shapefile::Shape::Point(p) => {
-            Some(GeoJsonGeometry::Point {
-                coordinates: vec![p.x, p.y],
-            })
-        }
-        shapefile::Shape::PointZ(p) => {
-            Some(GeoJsonGeometry::Point {
-                coordinates: vec![p.x, p.y],
-            })
-        }
-        shapefile::Shape::PointM(p) => {
-            Some(GeoJsonGeometry::Point {
-                coordinates: vec![p.x, p.y],
-            })
-        }
+        shapefile::Shape::Point(p) => Some(GeoJsonGeometry::Point {
+            coordinates: vec![p.x, p.y],
+        }),
+        shapefile::Shape::PointZ(p) => Some(GeoJsonGeometry::Point {
+            coordinates: vec![p.x, p.y],
+        }),
+        shapefile::Shape::PointM(p) => Some(GeoJsonGeometry::Point {
+            coordinates: vec![p.x, p.y],
+        }),
         shapefile::Shape::Polyline(poly) => {
             let parts: &Vec<Vec<Point>> = poly.parts();
             if parts.len() == 1 {
-                let coords: Vec<Vec<f64>> = parts[0].iter()
-                    .map(|p| vec![p.x, p.y])
-                    .collect();
-                Some(GeoJsonGeometry::LineString { coordinates: coords })
+                let coords: Vec<Vec<f64>> = parts[0].iter().map(|p| vec![p.x, p.y]).collect();
+                Some(GeoJsonGeometry::LineString {
+                    coordinates: coords,
+                })
             } else {
-                let coords: Vec<Vec<Vec<f64>>> = parts.iter()
+                let coords: Vec<Vec<Vec<f64>>> = parts
+                    .iter()
                     .map(|part| part.iter().map(|p| vec![p.x, p.y]).collect())
                     .collect();
-                Some(GeoJsonGeometry::MultiLineString { coordinates: coords })
+                Some(GeoJsonGeometry::MultiLineString {
+                    coordinates: coords,
+                })
             }
-        }
+        },
         shapefile::Shape::PolylineZ(poly) => {
             let parts: &Vec<Vec<PointZ>> = poly.parts();
             if parts.len() == 1 {
-                let coords: Vec<Vec<f64>> = parts[0].iter()
-                    .map(|p| vec![p.x, p.y])
-                    .collect();
-                Some(GeoJsonGeometry::LineString { coordinates: coords })
+                let coords: Vec<Vec<f64>> = parts[0].iter().map(|p| vec![p.x, p.y]).collect();
+                Some(GeoJsonGeometry::LineString {
+                    coordinates: coords,
+                })
             } else {
-                let coords: Vec<Vec<Vec<f64>>> = parts.iter()
+                let coords: Vec<Vec<Vec<f64>>> = parts
+                    .iter()
                     .map(|part| part.iter().map(|p| vec![p.x, p.y]).collect())
                     .collect();
-                Some(GeoJsonGeometry::MultiLineString { coordinates: coords })
+                Some(GeoJsonGeometry::MultiLineString {
+                    coordinates: coords,
+                })
             }
-        }
+        },
         shapefile::Shape::PolylineM(poly) => {
             let parts: &Vec<Vec<shapefile::record::PointM>> = poly.parts();
             if parts.len() == 1 {
-                let coords: Vec<Vec<f64>> = parts[0].iter()
-                    .map(|p| vec![p.x, p.y])
-                    .collect();
-                Some(GeoJsonGeometry::LineString { coordinates: coords })
+                let coords: Vec<Vec<f64>> = parts[0].iter().map(|p| vec![p.x, p.y]).collect();
+                Some(GeoJsonGeometry::LineString {
+                    coordinates: coords,
+                })
             } else {
-                let coords: Vec<Vec<Vec<f64>>> = parts.iter()
+                let coords: Vec<Vec<Vec<f64>>> = parts
+                    .iter()
                     .map(|part| part.iter().map(|p| vec![p.x, p.y]).collect())
                     .collect();
-                Some(GeoJsonGeometry::MultiLineString { coordinates: coords })
+                Some(GeoJsonGeometry::MultiLineString {
+                    coordinates: coords,
+                })
             }
-        }
+        },
         shapefile::Shape::Polygon(poly) => {
             let rings = poly.rings();
             if rings.is_empty() {
                 return None;
             }
-            let coords: Vec<Vec<Vec<f64>>> = rings.iter()
-                .map(|ring| {
-                    ring.points().iter().map(|p| vec![p.x, p.y]).collect()
-                })
+            let coords: Vec<Vec<Vec<f64>>> = rings
+                .iter()
+                .map(|ring| ring.points().iter().map(|p| vec![p.x, p.y]).collect())
                 .collect();
-            Some(GeoJsonGeometry::Polygon { coordinates: coords })
-        }
+            Some(GeoJsonGeometry::Polygon {
+                coordinates: coords,
+            })
+        },
         shapefile::Shape::PolygonZ(poly) => {
             let rings = poly.rings();
             if rings.is_empty() {
                 return None;
             }
-            let coords: Vec<Vec<Vec<f64>>> = rings.iter()
-                .map(|ring| {
-                    ring.points().iter().map(|p| vec![p.x, p.y]).collect()
-                })
+            let coords: Vec<Vec<Vec<f64>>> = rings
+                .iter()
+                .map(|ring| ring.points().iter().map(|p| vec![p.x, p.y]).collect())
                 .collect();
-            Some(GeoJsonGeometry::Polygon { coordinates: coords })
-        }
+            Some(GeoJsonGeometry::Polygon {
+                coordinates: coords,
+            })
+        },
         shapefile::Shape::PolygonM(poly) => {
             let rings = poly.rings();
             if rings.is_empty() {
                 return None;
             }
-            let coords: Vec<Vec<Vec<f64>>> = rings.iter()
-                .map(|ring| {
-                    ring.points().iter().map(|p| vec![p.x, p.y]).collect()
-                })
+            let coords: Vec<Vec<Vec<f64>>> = rings
+                .iter()
+                .map(|ring| ring.points().iter().map(|p| vec![p.x, p.y]).collect())
                 .collect();
-            Some(GeoJsonGeometry::Polygon { coordinates: coords })
-        }
+            Some(GeoJsonGeometry::Polygon {
+                coordinates: coords,
+            })
+        },
         shapefile::Shape::Multipoint(mp) => {
-            let coords: Vec<Vec<f64>> = mp.points().iter()
-                .map(|p| vec![p.x, p.y])
-                .collect();
-            Some(GeoJsonGeometry::MultiPoint { coordinates: coords })
-        }
+            let coords: Vec<Vec<f64>> = mp.points().iter().map(|p| vec![p.x, p.y]).collect();
+            Some(GeoJsonGeometry::MultiPoint {
+                coordinates: coords,
+            })
+        },
         shapefile::Shape::MultipointZ(mp) => {
-            let coords: Vec<Vec<f64>> = mp.points().iter()
-                .map(|p| vec![p.x, p.y])
-                .collect();
-            Some(GeoJsonGeometry::MultiPoint { coordinates: coords })
-        }
+            let coords: Vec<Vec<f64>> = mp.points().iter().map(|p| vec![p.x, p.y]).collect();
+            Some(GeoJsonGeometry::MultiPoint {
+                coordinates: coords,
+            })
+        },
         shapefile::Shape::MultipointM(mp) => {
-            let coords: Vec<Vec<f64>> = mp.points().iter()
-                .map(|p| vec![p.x, p.y])
-                .collect();
-            Some(GeoJsonGeometry::MultiPoint { coordinates: coords })
-        }
+            let coords: Vec<Vec<f64>> = mp.points().iter().map(|p| vec![p.x, p.y]).collect();
+            Some(GeoJsonGeometry::MultiPoint {
+                coordinates: coords,
+            })
+        },
         shapefile::Shape::NullShape => None,
         shapefile::Shape::Multipatch(_) => {
             warn!("[Shapefile] Multipatch 类型暂不支持");
             None
-        }
+        },
     }
 }
 
@@ -245,33 +253,37 @@ fn extract_coordinates(geometry: &GeoJsonGeometry) -> Vec<Vec<f64>> {
     match geometry {
         GeoJsonGeometry::Point { coordinates } => vec![coordinates.clone()],
         GeoJsonGeometry::LineString { coordinates } => coordinates.clone(),
-        GeoJsonGeometry::Polygon { coordinates } => {
-            coordinates.iter().flat_map(|ring| ring.iter().cloned()).collect()
-        }
+        GeoJsonGeometry::Polygon { coordinates } => coordinates
+            .iter()
+            .flat_map(|ring| ring.iter().cloned())
+            .collect(),
         GeoJsonGeometry::MultiPoint { coordinates } => coordinates.clone(),
-        GeoJsonGeometry::MultiLineString { coordinates } => {
-            coordinates.iter().flat_map(|line| line.iter().cloned()).collect()
-        }
-        GeoJsonGeometry::MultiPolygon { coordinates } => {
-            coordinates.iter()
-                .flat_map(|poly| poly.iter())
-                .flat_map(|ring| ring.iter().cloned())
-                .collect()
-        }
-        GeoJsonGeometry::GeometryCollection { geometries } => {
-            geometries.iter().flat_map(|g| extract_coordinates(g)).collect()
-        }
+        GeoJsonGeometry::MultiLineString { coordinates } => coordinates
+            .iter()
+            .flat_map(|line| line.iter().cloned())
+            .collect(),
+        GeoJsonGeometry::MultiPolygon { coordinates } => coordinates
+            .iter()
+            .flat_map(|poly| poly.iter())
+            .flat_map(|ring| ring.iter().cloned())
+            .collect(),
+        GeoJsonGeometry::GeometryCollection { geometries } => geometries
+            .iter()
+            .flat_map(|g| extract_coordinates(g))
+            .collect(),
     }
 }
 
 /// 读取 .dbf 属性文件并将属性关联到对应要素
 fn read_dbf_attributes(dbf_path: &Path, features: &mut [Feature]) -> Result<usize, String> {
-    use shapefile::dbase::{Reader, FieldValue};
+    use shapefile::dbase::{FieldValue, Reader};
 
-    let mut reader = Reader::from_path(dbf_path)
-        .map_err(|e| format!("无法打开 DBF '{:?}': {}", dbf_path, e))?;
+    let mut reader =
+        Reader::from_path(dbf_path).map_err(|e| format!("无法打开 DBF '{:?}': {}", dbf_path, e))?;
 
-    let field_names: Vec<String> = reader.fields().iter()
+    let field_names: Vec<String> = reader
+        .fields()
+        .iter()
         .map(|f| f.name().trim().to_string())
         .collect();
 
@@ -287,7 +299,7 @@ fn read_dbf_attributes(dbf_path: &Path, features: &mut [Feature]) -> Result<usiz
                     let value_str = match record.get(field_name) {
                         Some(FieldValue::Character(Some(s))) if !s.trim().is_empty() => {
                             Some(s.trim().to_string())
-                        }
+                        },
                         Some(FieldValue::Numeric(Some(v))) => Some(v.to_string()),
                         Some(FieldValue::Float(Some(v))) => Some(v.to_string()),
                         Some(FieldValue::Logical(Some(v))) => Some(v.to_string()),
@@ -301,10 +313,10 @@ fn read_dbf_attributes(dbf_path: &Path, features: &mut [Feature]) -> Result<usiz
                 }
                 features[i].properties = properties;
                 record_count += 1;
-            }
+            },
             Err(e) => {
                 warn!("[Shapefile] 跳过第 {} 条属性记录: {}", i, e);
-            }
+            },
         }
     }
 
@@ -314,15 +326,19 @@ fn read_dbf_attributes(dbf_path: &Path, features: &mut [Feature]) -> Result<usiz
 /// 简单解析 .prj WKT 字符串，提取 CRS 名称
 fn parse_prj_wkt(wkt: &str) -> Option<CoordinateReferenceSystem> {
     if wkt.contains("WGS_1984") || wkt.contains("GCS_WGS_1984") || wkt.contains("4326") {
-        if wkt.contains("900913") || wkt.contains("3857")
-            || wkt.contains("Mercator") || wkt.contains("Web_Mercator")
+        if wkt.contains("900913")
+            || wkt.contains("3857")
+            || wkt.contains("Mercator")
+            || wkt.contains("Web_Mercator")
         {
             Some(CoordinateReferenceSystem::EPSG3857)
         } else {
             Some(CoordinateReferenceSystem::EPSG4326)
         }
-    } else if wkt.contains("3857") || wkt.contains("900913")
-        || wkt.contains("Mercator") || wkt.contains("Web_Mercator")
+    } else if wkt.contains("3857")
+        || wkt.contains("900913")
+        || wkt.contains("Mercator")
+        || wkt.contains("Web_Mercator")
     {
         Some(CoordinateReferenceSystem::EPSG3857)
     } else if wkt.contains("AUTHORITY[\"EPSG\",\"") {
@@ -330,7 +346,10 @@ fn parse_prj_wkt(wkt: &str) -> Option<CoordinateReferenceSystem> {
             let rest = &wkt[start + 20..];
             if let Some(end) = rest.find('"') {
                 let code = &rest[..end];
-                return Some(CoordinateReferenceSystem::from_epsg(&format!("EPSG:{}", code)));
+                return Some(CoordinateReferenceSystem::from_epsg(&format!(
+                    "EPSG:{}",
+                    code
+                )));
             }
         }
         None
@@ -350,17 +369,17 @@ pub fn read_shapefile_from_zip<P: AsRef<Path>>(zip_path: P) -> Result<ShapefileR
 
     let file = std::fs::File::open(zip_path)
         .map_err(|e| format!("无法打开 ZIP 文件 '{:?}': {}", zip_path, e))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("无法解析 ZIP 文件: {}", e))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("无法解析 ZIP 文件: {}", e))?;
 
-    let temp_dir = tempfile::tempdir()
-        .map_err(|e| format!("无法创建临时目录: {}", e))?;
+    let temp_dir = tempfile::tempdir().map_err(|e| format!("无法创建临时目录: {}", e))?;
     let temp_path = temp_dir.path();
 
     let mut found_shp = None;
 
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)
+        let mut entry = archive
+            .by_index(i)
             .map_err(|e| format!("读取 ZIP 条目失败: {}", e))?;
         let name = entry.name().to_string();
         let lower = name.to_lowercase();
@@ -382,7 +401,8 @@ pub fn read_shapefile_from_zip<P: AsRef<Path>>(zip_path: P) -> Result<ShapefileR
         let mut out = std::fs::File::create(&target_path)
             .map_err(|e| format!("无法创建临时文件 '{:?}': {}", target_path, e))?;
         let mut buffer = Vec::new();
-        entry.read_to_end(&mut buffer)
+        entry
+            .read_to_end(&mut buffer)
             .map_err(|e| format!("读取 ZIP 条目失败: {}", e))?;
         std::io::copy(&mut buffer.as_slice(), &mut out)
             .map_err(|e| format!("写入临时文件失败: {}", e))?;
@@ -416,7 +436,9 @@ mod tests {
 
     #[test]
     fn test_extract_coordinates_point() {
-        let geom = GeoJsonGeometry::Point { coordinates: vec![1.0, 2.0] };
+        let geom = GeoJsonGeometry::Point {
+            coordinates: vec![1.0, 2.0],
+        };
         let coords = extract_coordinates(&geom);
         assert_eq!(coords.len(), 1);
         assert_eq!(coords[0], vec![1.0, 2.0]);

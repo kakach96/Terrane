@@ -73,20 +73,32 @@
       <ng-container matColumnDef="actions">
         <mat-header-cell *matHeaderCellDef>操作</mat-header-cell>
         <mat-cell *matCellDef="let ds">
-          <button mat-icon-button color="primary" (click)="openEditDialog(ds)" title="编辑" [disabled]="ds.builtin">
+          <button
+            mat-icon-button
+            color="primary"
+            (click)="openEditDialog(ds)"
+            title="编辑"
+            [disabled]="ds.builtin"
+          >
             <mat-icon>edit</mat-icon>
           </button>
           <button mat-icon-button color="accent" (click)="testConnection(ds)" title="测试连接">
             <mat-icon>network_check</mat-icon>
           </button>
-          <button mat-icon-button color="warn" (click)="deleteDataSource(ds.name)" title="删除" [disabled]="ds.builtin">
+          <button
+            mat-icon-button
+            color="warn"
+            (click)="deleteDataSource(ds.name)"
+            title="删除"
+            [disabled]="ds.builtin"
+          >
             <mat-icon>delete</mat-icon>
           </button>
         </mat-cell>
       </ng-container>
 
       <mat-header-row *matHeaderRowDef="displayedColumns"></mat-header-row>
-      <mat-row *matRowDef="let row; columns: displayedColumns;"></mat-row>
+      <mat-row *matRowDef="let row; columns: displayedColumns"></mat-row>
     </mat-table>
   </mat-card>
 </div>

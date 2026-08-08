@@ -32,9 +32,7 @@
 
   <!-- 错误提示 -->
   <mat-card *ngIf="error" class="error-card">
-    <mat-card-content>
-      <mat-icon color="warn">error</mat-icon> {{ error }}
-    </mat-card-content>
+    <mat-card-content> <mat-icon color="warn">error</mat-icon> {{ error }} </mat-card-content>
   </mat-card>
 
   <!-- ======== 概览 Tab ======== -->
@@ -58,14 +56,16 @@
       <mat-card class="stat-card">
         <mat-card-content>
           <div class="stat-icon"><mat-icon>error</mat-icon></div>
-          <div class="stat-value" [class.text-danger]="stats.error_rate > 5">{{ stats.total_errors | number }}</div>
+          <div class="stat-value" [class.text-danger]="stats.error_rate > 5">
+            {{ stats.total_errors | number }}
+          </div>
           <div class="stat-label">错误数 ({{ errorRateFormatted }})</div>
         </mat-card-content>
       </mat-card>
       <mat-card class="stat-card">
         <mat-card-content>
           <div class="stat-icon"><mat-icon>speed</mat-icon></div>
-          <div class="stat-value">{{ stats.requests_per_second | number:'1.2-2' }}</div>
+          <div class="stat-value">{{ stats.requests_per_second | number: '1.2-2' }}</div>
           <div class="stat-label">请求/秒 (近5分钟)</div>
         </mat-card-content>
       </mat-card>
@@ -129,7 +129,7 @@
                 <td>{{ i + 1 }}</td>
                 <td class="endpoint-name">{{ ep.name }}</td>
                 <td>{{ ep.count | number }}</td>
-                <td>{{ ep.avgDuration | number:'1.1-1' }}</td>
+                <td>{{ ep.avgDuration | number: '1.1-1' }}</td>
               </tr>
             </tbody>
           </table>
@@ -147,9 +147,10 @@
             <div *ngFor="let m of methodChart" class="bar-item">
               <div class="bar-label">{{ m.method }}</div>
               <div class="bar-track">
-                <div class="bar-fill method-{{ m.method | lowercase }}" 
-                     [style.width.%]="(m.count / getMaxMethodCount() * 100)">
-                </div>
+                <div
+                  class="bar-fill method-{{ m.method | lowercase }}"
+                  [style.width.%]="(m.count / getMaxMethodCount()) * 100"
+                ></div>
               </div>
               <div class="bar-value">{{ m.count | number }}</div>
             </div>
@@ -182,14 +183,22 @@
             <tbody>
               <tr *ngFor="let req of recentRequests">
                 <td>{{ formatTimestamp(req.timestamp) }}</td>
-                <td><span class="method-badge method-{{ req.method | lowercase }}">{{ req.method }}</span></td>
+                <td>
+                  <span class="method-badge method-{{ req.method | lowercase }}">{{
+                    req.method
+                  }}</span>
+                </td>
                 <td class="path-cell">{{ req.path }}</td>
                 <td>
-                  <span class="status-badge" [class.success]="req.status < 400" [class.error]="req.status >= 400">
+                  <span
+                    class="status-badge"
+                    [class.success]="req.status < 400"
+                    [class.error]="req.status >= 400"
+                  >
                     {{ req.status }}
                   </span>
                 </td>
-                <td>{{ req.duration_ms | number:'1.1-1' }}</td>
+                <td>{{ req.duration_ms | number: '1.1-1' }}</td>
                 <td class="addr-cell">{{ req.remote_addr }}</td>
               </tr>
             </tbody>
@@ -227,10 +236,13 @@
                 <td>{{ formatTimestamp(log.timestamp) }}</td>
                 <td>{{ log.username }}</td>
                 <td>
-                  <span class="action-badge" [class.login]="log.action === 'LOGIN' || log.action === 'LOGIN_FAILED'"
-                        [class.create]="log.action.startsWith('CREATE')"
-                        [class.delete]="log.action.startsWith('DELETE')"
-                        [class.update]="log.action.startsWith('UPDATE')">
+                  <span
+                    class="action-badge"
+                    [class.login]="log.action === 'LOGIN' || log.action === 'LOGIN_FAILED'"
+                    [class.create]="log.action.startsWith('CREATE')"
+                    [class.delete]="log.action.startsWith('DELETE')"
+                    [class.update]="log.action.startsWith('UPDATE')"
+                  >
                     {{ log.action }}
                   </span>
                 </td>

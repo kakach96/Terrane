@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use geo::Coord;
 use geo_types::Rect;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bounds {
@@ -12,7 +12,12 @@ pub struct Bounds {
 
 impl Bounds {
     pub fn new(minx: f64, miny: f64, maxx: f64, maxy: f64) -> Self {
-        Bounds { minx, miny, maxx, maxy }
+        Bounds {
+            minx,
+            miny,
+            maxx,
+            maxy,
+        }
     }
 
     pub fn from_rect(rect: Rect<f64>) -> Self {
@@ -26,14 +31,22 @@ impl Bounds {
 
     pub fn to_rect(&self) -> Rect<f64> {
         Rect::new(
-            Coord { x: self.minx, y: self.miny },
-            Coord { x: self.maxx, y: self.maxy },
+            Coord {
+                x: self.minx,
+                y: self.miny,
+            },
+            Coord {
+                x: self.maxx,
+                y: self.maxy,
+            },
         )
     }
 
     pub fn intersects(&self, other: &Bounds) -> bool {
-        self.minx <= other.maxx && self.maxx >= other.minx &&
-        self.miny <= other.maxy && self.maxy >= other.miny
+        self.minx <= other.maxx
+            && self.maxx >= other.minx
+            && self.miny <= other.maxy
+            && self.maxy >= other.miny
     }
 
     pub fn contains(&self, x: f64, y: f64) -> bool {
@@ -105,19 +118,17 @@ impl BoundingBox {
 
     pub fn world(crs: CoordinateReferenceSystem) -> Self {
         let bounds = match &crs {
-            CoordinateReferenceSystem::EPSG4326 => {
-                Bounds::new(-180.0, -90.0, 180.0, 90.0)
-            }
+            CoordinateReferenceSystem::EPSG4326 => Bounds::new(-180.0, -90.0, 180.0, 90.0),
             CoordinateReferenceSystem::EPSG3857 => {
                 Bounds::new(-20037508.34, -20037508.34, 20037508.34, 20037508.34)
-            }
+            },
             CoordinateReferenceSystem::Custom(code) => {
                 if code.contains("3857") || code.contains("900913") {
                     Bounds::new(-20037508.34, -20037508.34, 20037508.34, 20037508.34)
                 } else {
                     Bounds::new(-180.0, -90.0, 180.0, 90.0)
                 }
-            }
+            },
         };
         BoundingBox { crs, bounds }
     }

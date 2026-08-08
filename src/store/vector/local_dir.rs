@@ -34,7 +34,11 @@ impl LocalVectorStore {
 
 #[async_trait::async_trait]
 impl super::VectorStore for LocalVectorStore {
-    async fn save_features(&self, layer_name: &str, features: &[Feature]) -> Result<usize, StoreError> {
+    async fn save_features(
+        &self,
+        layer_name: &str,
+        features: &[Feature],
+    ) -> Result<usize, StoreError> {
         std::fs::create_dir_all(&self.dir)?;
 
         // 序列化为标准 GeoJSON FeatureCollection
@@ -43,7 +47,10 @@ impl super::VectorStore for LocalVectorStore {
             .map(|f| {
                 let mut v = serde_json::to_value(f).unwrap_or(serde_json::Value::Null);
                 if let serde_json::Value::Object(ref mut obj) = v {
-                    obj.insert("type".to_string(), serde_json::Value::String("Feature".to_string()));
+                    obj.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("Feature".to_string()),
+                    );
                 }
                 v
             })
@@ -53,7 +60,10 @@ impl super::VectorStore for LocalVectorStore {
             "features": features_json,
         });
 
-        std::fs::write(self.file_path(layer_name), serde_json::to_string_pretty(&fc)?)?;
+        std::fs::write(
+            self.file_path(layer_name),
+            serde_json::to_string_pretty(&fc)?,
+        )?;
         Ok(features.len())
     }
 
@@ -106,16 +116,21 @@ impl super::VectorStore for LocalVectorStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::VectorStore;
-    use std::path::PathBuf;
+    use super::*;
     use crate::models::{Feature, GeoJsonGeometry, PropertyValue};
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
     fn sample_feature(name: &str, x: f64, y: f64) -> Feature {
         let mut props = HashMap::new();
         props.insert("name".to_string(), PropertyValue::String(name.to_string()));
-        Feature::new(GeoJsonGeometry::Point { coordinates: vec![x, y] }, props)
+        Feature::new(
+            GeoJsonGeometry::Point {
+                coordinates: vec![x, y],
+            },
+            props,
+        )
     }
 
     fn temp_dir(tag: &str) -> PathBuf {
@@ -127,7 +142,10 @@ mod tests {
         let dir = temp_dir("rt");
         let store = LocalVectorStore::new(dir.clone());
 
-        store.save_features("layer1", &[sample_feature("a", 1.0, 2.0)]).await.unwrap();
+        store
+            .save_features("layer1", &[sample_feature("a", 1.0, 2.0)])
+            .await
+            .unwrap();
         let loaded = store.load_features("layer1").await.unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].properties.get("name").unwrap().to_string(), "a");
@@ -147,8 +165,14 @@ mod tests {
     async fn test_delete_and_list_tables() {
         let dir = temp_dir("dl");
         let store = LocalVectorStore::new(dir.clone());
-        store.save_features("alpha", &[sample_feature("1", 0.0, 0.0)]).await.unwrap();
-        store.save_features("beta", &[sample_feature("2", 1.0, 1.0)]).await.unwrap();
+        store
+            .save_features("alpha", &[sample_feature("1", 0.0, 0.0)])
+            .await
+            .unwrap();
+        store
+            .save_features("beta", &[sample_feature("2", 1.0, 1.0)])
+            .await
+            .unwrap();
 
         let tables = store.list_tables().await.unwrap();
         assert_eq!(tables, vec!["alpha".to_string(), "beta".to_string()]);

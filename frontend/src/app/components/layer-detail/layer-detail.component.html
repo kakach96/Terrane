@@ -42,7 +42,8 @@
               *ngIf="styleNames.length > 0"
               [value]="currentStyleName"
               (selectionChange)="onStyleChange($event.value)"
-              class="style-select">
+              class="style-select"
+            >
               <mat-option *ngFor="let s of styleNames" [value]="s">{{ s }}</mat-option>
             </mat-select>
             <span *ngIf="styleNames.length === 0">{{ currentStyleName }}</span>
@@ -76,19 +77,19 @@
         <div class="bounds-grid">
           <div class="bounds-item">
             <span class="label">最小经度</span>
-            <span class="value mono">{{ displayBounds.minx | number:'1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds.minx | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item">
             <span class="label">最小纬度</span>
-            <span class="value mono">{{ displayBounds.miny | number:'1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds.miny | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item">
             <span class="label">最大经度</span>
-            <span class="value mono">{{ displayBounds.maxx | number:'1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds.maxx | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item">
             <span class="label">最大纬度</span>
-            <span class="value mono">{{ displayBounds.maxy | number:'1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds.maxy | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item crs">
             <span class="label">坐标系</span>
@@ -108,7 +109,12 @@
         <mat-card-title>要素类型</mat-card-title>
         <span class="feature-count">{{ features.length }} 个要素</span>
         <span class="spacer"></span>
-        <button mat-stroked-button color="primary" (click)="downloadGeoJson()" matTooltip="下载 GeoJSON">
+        <button
+          mat-stroked-button
+          color="primary"
+          (click)="downloadGeoJson()"
+          matTooltip="下载 GeoJSON"
+        >
           <mat-icon>download</mat-icon>
           GeoJSON
         </button>
@@ -127,7 +133,15 @@
         <div *ngIf="properties.length > 0">
           <div class="geom-types">
             <span *ngFor="let t of getGeometryTypes()" class="geom-chip">
-              <mat-icon>{{ t === 'Point' ? 'location_on' : t === 'LineString' ? 'timeline' : t === 'Polygon' ? 'polygon' : 'category' }}</mat-icon>
+              <mat-icon>{{
+                t === 'Point'
+                  ? 'location_on'
+                  : t === 'LineString'
+                    ? 'timeline'
+                    : t === 'Polygon'
+                      ? 'polygon'
+                      : 'category'
+              }}</mat-icon>
               {{ t }}
             </span>
           </div>
@@ -160,7 +174,7 @@
             </ng-container>
 
             <tr mat-header-row *matHeaderRowDef="['name', 'type', 'length', 'nullable']"></tr>
-            <tr mat-row *matRowDef="let row; columns: ['name', 'type', 'length', 'nullable'];"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['name', 'type', 'length', 'nullable']"></tr>
           </table>
         </div>
       </mat-card-content>
@@ -184,7 +198,10 @@
         <div class="preview-controls">
           <mat-form-field appearance="outline" class="preview-control">
             <mat-label>格式</mat-label>
-            <mat-select [value]="previewOptions.format" (selectionChange)="updatePreviewParam('format', $event.value)">
+            <mat-select
+              [value]="previewOptions.format"
+              (selectionChange)="updatePreviewParam('format', $event.value)"
+            >
               <mat-option *ngFor="let fmt of previewFormats" [value]="fmt.value">
                 {{ fmt.label }}
               </mat-option>
@@ -193,33 +210,58 @@
 
           <mat-form-field appearance="outline" class="preview-control" *ngIf="isStaticPreview">
             <mat-label>宽度</mat-label>
-            <input matInput type="number" [value]="previewOptions.width"
-                   (change)="updatePreviewParam('width', $any($event.target).value)">
+            <input
+              matInput
+              type="number"
+              [value]="previewOptions.width"
+              (change)="updatePreviewParam('width', $any($event.target).value)"
+            />
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="preview-control" *ngIf="isStaticPreview">
             <mat-label>高度</mat-label>
-            <input matInput type="number" [value]="previewOptions.height"
-                   (change)="updatePreviewParam('height', $any($event.target).value)">
+            <input
+              matInput
+              type="number"
+              [value]="previewOptions.height"
+              (change)="updatePreviewParam('height', $any($event.target).value)"
+            />
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="preview-control">
             <mat-label>坐标系</mat-label>
-            <mat-select [value]="previewOptions.crs" (selectionChange)="updatePreviewParam('crs', $event.value)">
+            <mat-select
+              [value]="previewOptions.crs"
+              (selectionChange)="updatePreviewParam('crs', $event.value)"
+            >
               <mat-option *ngFor="let crs of previewCrsOptions" [value]="crs">
                 {{ crs }}
               </mat-option>
             </mat-select>
           </mat-form-field>
 
-          <mat-checkbox *ngIf="isStaticPreview" [checked]="previewOptions.transparent"
-                        (change)="onTransparentChange($event)">
+          <mat-checkbox
+            *ngIf="isStaticPreview"
+            [checked]="previewOptions.transparent"
+            (change)="onTransparentChange($event)"
+          >
             透明背景
           </mat-checkbox>
         </div>
         <div class="preview-image-container">
-          <iframe *ngIf="!isStaticPreview" [src]="safePreviewUrl" class="preview-iframe" title="地图预览"></iframe>
-          <img *ngIf="isStaticPreview" [src]="previewUrl" alt="地图预览" class="preview-image" (error)="onPreviewError()">
+          <iframe
+            *ngIf="!isStaticPreview"
+            [src]="safePreviewUrl"
+            class="preview-iframe"
+            title="地图预览"
+          ></iframe>
+          <img
+            *ngIf="isStaticPreview"
+            [src]="previewUrl"
+            alt="地图预览"
+            class="preview-image"
+            (error)="onPreviewError()"
+          />
         </div>
       </mat-card-content>
     </mat-card>

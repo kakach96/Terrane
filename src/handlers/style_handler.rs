@@ -1,9 +1,9 @@
-use actix_web::{HttpRequest, HttpResponse, web};
-use serde::Deserialize;
-use crate::state::AppState;
-use crate::models::{Bounds, GeoJsonGeometry, CoordinateReferenceSystem};
-use crate::error::GeoServerError;
 use super::rest_handler::ApiResponse;
+use crate::error::GeoServerError;
+use crate::models::{Bounds, CoordinateReferenceSystem, GeoJsonGeometry};
+use crate::state::AppState;
+use actix_web::{web, HttpRequest, HttpResponse};
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateStyleRequest {
@@ -28,7 +28,8 @@ pub async fn get_layer_style(
 
     let style_name = {
         let layers = state.layers.read().await;
-        layers.iter()
+        layers
+            .iter()
             .find(|l| l.name == layer_name)
             .and_then(|l| l.styles.first().map(|s| s.name.clone()))
             .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?
@@ -36,10 +37,14 @@ pub async fn get_layer_style(
 
     let styles = state.styles.read().await;
     let meta = state.styles_meta.read().await;
-    let content = styles.get(&style_name)
+    let content = styles
+        .get(&style_name)
         .ok_or_else(|| GeoServerError::NotFound(format!("Style '{}' not found", style_name)))?;
 
-    let format = meta.get(&style_name).map(|m| &m.format).unwrap_or(&crate::models::style::StyleFormat::SLD);
+    let format = meta
+        .get(&style_name)
+        .map(|m| &m.format)
+        .unwrap_or(&crate::models::style::StyleFormat::SLD);
     let content_type = match format {
         crate::models::style::StyleFormat::SLD => "application/vnd.ogc.sld+xml",
         crate::models::style::StyleFormat::CSS => "text/css",
@@ -61,7 +66,8 @@ pub async fn put_layer_style(
 
     let style_name = {
         let layers = state.layers.read().await;
-        layers.iter()
+        layers
+            .iter()
             .find(|l| l.name == layer_name)
             .and_then(|l| l.styles.first().map(|s| s.name.clone()))
             .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?
@@ -73,40 +79,51 @@ pub async fn put_layer_style(
     styles.insert(style_name.clone(), body.clone());
 
     let mut meta = state.styles_meta.write().await;
-    meta.entry(style_name.clone()).and_modify(|m| { m.format = format.clone(); });
+    meta.entry(style_name.clone()).and_modify(|m| {
+        m.format = format.clone();
+    });
 
     // 持久化到存储
     if let Some(store) = &state.store {
         let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let _ = store.create_style(&crate::store::StyleRecord {
-            name: style_name.clone(),
-            title: style_name.clone(),
-            format: format.to_string(),
-            is_builtin: meta.get(&style_name).map(|m| m.is_builtin).unwrap_or(false),
-            content: body,
-            created: ts.clone(),
-            modified: ts,
-        }).await;
+        let _ = store
+            .create_style(&crate::store::StyleRecord {
+                name: style_name.clone(),
+                title: style_name.clone(),
+                format: format.to_string(),
+                is_builtin: meta.get(&style_name).map(|m| m.is_builtin).unwrap_or(false),
+                content: body,
+                created: ts.clone(),
+                modified: ts,
+            })
+            .await;
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "message": format!("Style '{}' updated", style_name),
-    }))))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "message": format!("Style '{}' updated", style_name),
+        }))),
+    )
 }
 
 pub async fn list_styles(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
     let styles = state.styles.read().await;
     let meta = state.styles_meta.read().await;
-    let result: Vec<serde_json::Value> = styles.keys().map(|name| {
-        let m = meta.get(name);
-        let format = m.map(|m| m.format.to_string()).unwrap_or_else(|| "SLD".to_string());
-        serde_json::json!({
-            "name": name,
-            "title": m.map(|m| m.title.as_str()).unwrap_or(name),
-            "is_builtin": m.map(|m| m.is_builtin).unwrap_or(false),
-            "format": format,
+    let result: Vec<serde_json::Value> = styles
+        .keys()
+        .map(|name| {
+            let m = meta.get(name);
+            let format = m
+                .map(|m| m.format.to_string())
+                .unwrap_or_else(|| "SLD".to_string());
+            serde_json::json!({
+                "name": name,
+                "title": m.map(|m| m.title.as_str()).unwrap_or(name),
+                "is_builtin": m.map(|m| m.is_builtin).unwrap_or(false),
+                "format": format,
+            })
         })
-    }).collect();
+        .collect();
     Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
 }
 
@@ -115,16 +132,23 @@ pub async fn create_style(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     if body.name.is_empty() {
-        return Err(GeoServerError::BadRequest("Style name is required".to_string()));
+        return Err(GeoServerError::BadRequest(
+            "Style name is required".to_string(),
+        ));
     }
     {
         let styles = state.styles.read().await;
         if styles.contains_key(&body.name) {
-            return Err(GeoServerError::Conflict(format!("Style '{}' already exists", body.name)));
+            return Err(GeoServerError::Conflict(format!(
+                "Style '{}' already exists",
+                body.name
+            )));
         }
     }
     let content = if body.content.trim().is_empty() {
-        return Err(GeoServerError::BadRequest("Style content is required".to_string()));
+        return Err(GeoServerError::BadRequest(
+            "Style content is required".to_string(),
+        ));
     } else {
         body.content.clone()
     };
@@ -140,7 +164,7 @@ pub async fn create_style(
             } else {
                 crate::models::style::detect_style_format(&body.content)
             }
-        }
+        },
     };
 
     state.add_style(&body.name, content.clone()).await;
@@ -157,21 +181,25 @@ pub async fn create_style(
     // 持久化到存储
     if let Some(store) = &state.store {
         let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let _ = store.create_style(&crate::store::StyleRecord {
-            name: body.name.clone(),
-            title,
-            format: format.to_string(),
-            is_builtin: false,
-            content,
-            created: ts.clone(),
-            modified: ts,
-        }).await;
+        let _ = store
+            .create_style(&crate::store::StyleRecord {
+                name: body.name.clone(),
+                title,
+                format: format.to_string(),
+                is_builtin: false,
+                content,
+                created: ts.clone(),
+                modified: ts,
+            })
+            .await;
     }
 
-    Ok(HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
-        "name": body.name,
-        "message": "Style created",
-    }))))
+    Ok(
+        HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
+            "name": body.name,
+            "message": "Style created",
+        }))),
+    )
 }
 
 pub async fn get_style_by_name(
@@ -179,21 +207,27 @@ pub async fn get_style_by_name(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let name = req.match_info().get("name").unwrap_or("");
-    let content = state.get_style(name).await
+    let content = state
+        .get_style(name)
+        .await
         .ok_or_else(|| GeoServerError::NotFound(format!("Style '{}' not found", name)))?;
 
     let meta = state.styles_meta.read().await;
     let m = meta.get(name);
 
-    let format = m.map(|m| m.format.to_string()).unwrap_or_else(|| "SLD".to_string());
+    let format = m
+        .map(|m| m.format.to_string())
+        .unwrap_or_else(|| "SLD".to_string());
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "name": name,
-        "title": m.map(|m| m.title.as_str()).unwrap_or(name),
-        "content": content,
-        "is_builtin": m.map(|m| m.is_builtin).unwrap_or(false),
-        "format": format,
-    }))))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "name": name,
+            "title": m.map(|m| m.title.as_str()).unwrap_or(name),
+            "content": content,
+            "is_builtin": m.map(|m| m.is_builtin).unwrap_or(false),
+            "format": format,
+        }))),
+    )
 }
 
 pub async fn update_style_by_name(
@@ -206,7 +240,10 @@ pub async fn update_style_by_name(
     {
         let styles = state.styles.read().await;
         if !styles.contains_key(name) {
-            return Err(GeoServerError::NotFound(format!("Style '{}' not found", name)));
+            return Err(GeoServerError::NotFound(format!(
+                "Style '{}' not found",
+                name
+            )));
         }
     }
 
@@ -220,28 +257,36 @@ pub async fn update_style_by_name(
         });
         if let Some(fmt) = detected {
             let mut meta = state.styles_meta.write().await;
-            meta.entry(name.to_string()).and_modify(|m| { m.format = fmt; });
+            meta.entry(name.to_string()).and_modify(|m| {
+                m.format = fmt;
+            });
         }
     }
     if let Some(title) = &body.title {
         let mut meta = state.styles_meta.write().await;
-        meta.entry(name.to_string()).and_modify(|m| { m.title = title.clone(); });
+        meta.entry(name.to_string()).and_modify(|m| {
+            m.title = title.clone();
+        });
     }
 
     // 持久化到存储
     if let Some(store) = &state.store {
-        let _ = store.update_style(
-            name,
-            body.title.clone(),
-            body.format.clone(),
-            body.content.clone(),
-            None,
-        ).await;
+        let _ = store
+            .update_style(
+                name,
+                body.title.clone(),
+                body.format.clone(),
+                body.content.clone(),
+                None,
+            )
+            .await;
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "message": format!("Style '{}' updated", name),
-    }))))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "message": format!("Style '{}' updated", name),
+        }))),
+    )
 }
 
 pub async fn delete_style_by_name(
@@ -253,7 +298,10 @@ pub async fn delete_style_by_name(
     {
         let styles = state.styles.read().await;
         if !styles.contains_key(name) {
-            return Err(GeoServerError::NotFound(format!("Style '{}' not found", name)));
+            return Err(GeoServerError::NotFound(format!(
+                "Style '{}' not found",
+                name
+            )));
         }
     }
 
@@ -271,18 +319,25 @@ pub async fn delete_style_by_name(
         let _ = store.delete_style(name).await;
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "message": format!("Style '{}' deleted", name),
-    }))))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "message": format!("Style '{}' deleted", name),
+        }))),
+    )
 }
 
 pub async fn list_layer_groups(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
     let groups = state.layer_groups.read().await;
-    let result: Vec<_> = groups.iter().map(|g| serde_json::json!({
-        "name": g.name,
-        "title": g.title,
-        "layers": g.layers,
-    })).collect();
+    let result: Vec<_> = groups
+        .iter()
+        .map(|g| {
+            serde_json::json!({
+                "name": g.name,
+                "title": g.title,
+                "layers": g.layers,
+            })
+        })
+        .collect();
     Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
 }
 
@@ -292,30 +347,49 @@ pub async fn get_layer_group(
 ) -> Result<HttpResponse, GeoServerError> {
     let name = req.match_info().get("name").unwrap_or("");
     let groups = state.layer_groups.read().await;
-    let group = groups.iter().find(|g| g.name == name)
+    let group = groups
+        .iter()
+        .find(|g| g.name == name)
         .ok_or_else(|| GeoServerError::NotFound(format!("Layer group '{}' not found", name)))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "name": group.name,
-        "title": group.title,
-        "layers": group.layers,
-        "styles": group.styles,
-    }))))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "name": group.name,
+            "title": group.title,
+            "layers": group.layers,
+            "styles": group.styles,
+        }))),
+    )
 }
 
 pub async fn create_layer_group(
     body: web::Json<serde_json::Value>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
-    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let title = body.get("title").and_then(|v| v.as_str()).unwrap_or(&name).to_string();
-    let layers: Vec<String> = body.get("layers")
+    let name = body
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let title = body
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&name)
+        .to_string();
+    let layers: Vec<String> = body
+        .get("layers")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
         .unwrap_or_default();
 
     if name.is_empty() {
-        return Err(GeoServerError::BadRequest("Layer group name is required".to_string()));
+        return Err(GeoServerError::BadRequest(
+            "Layer group name is required".to_string(),
+        ));
     }
 
     let group = crate::models::layer::LayerGroup {
@@ -333,20 +407,24 @@ pub async fn create_layer_group(
     // 持久化到存储
     if let Some(store) = &state.store {
         let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let _ = store.create_layer_group(&crate::store::LayerGroupRecord {
-            name: name.clone(),
-            title,
-            layers,
-            styles: vec![],
-            created: ts.clone(),
-            modified: ts,
-        }).await;
+        let _ = store
+            .create_layer_group(&crate::store::LayerGroupRecord {
+                name: name.clone(),
+                title,
+                layers,
+                styles: vec![],
+                created: ts.clone(),
+                modified: ts,
+            })
+            .await;
     }
 
-    Ok(HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
-        "name": name,
-        "message": "Layer group created",
-    }))))
+    Ok(
+        HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
+            "name": name,
+            "message": "Layer group created",
+        }))),
+    )
 }
 
 pub async fn delete_layer_group(
@@ -355,7 +433,9 @@ pub async fn delete_layer_group(
 ) -> Result<HttpResponse, GeoServerError> {
     let name = req.match_info().get("name").unwrap_or("");
     let mut groups = state.layer_groups.write().await;
-    let pos = groups.iter().position(|g| g.name == name)
+    let pos = groups
+        .iter()
+        .position(|g| g.name == name)
         .ok_or_else(|| GeoServerError::NotFound(format!("Layer group '{}' not found", name)))?;
     groups.remove(pos);
 
@@ -364,9 +444,11 @@ pub async fn delete_layer_group(
         let _ = store.delete_layer_group(name).await;
     }
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "message": format!("Layer group '{}' deleted", name),
-    }))))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "message": format!("Layer group '{}' deleted", name),
+        }))),
+    )
 }
 
 pub async fn get_tile(
@@ -374,16 +456,33 @@ pub async fn get_tile(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
-    let z: u32 = req.match_info().get("z").and_then(|v| v.parse().ok()).unwrap_or(0);
-    let x: u32 = req.match_info().get("x").and_then(|v| v.parse().ok()).unwrap_or(0);
-    let y: u32 = req.match_info().get("y").and_then(|v| v.parse().ok()).unwrap_or(0);
+    let z: u32 = req
+        .match_info()
+        .get("z")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let x: u32 = req
+        .match_info()
+        .get("x")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let y: u32 = req
+        .match_info()
+        .get("y")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
 
     // 获取 gridset 参数 (默认 EPSG:4326)
-    let gridset = req.query_string()
+    let gridset = req
+        .query_string()
         .split('&')
         .find_map(|pair| {
             let mut parts = pair.splitn(2, '=');
-            if parts.next()? == "gridset" { parts.next() } else { None }
+            if parts.next()? == "gridset" {
+                parts.next()
+            } else {
+                None
+            }
         })
         .unwrap_or("EPSG:4326");
 
@@ -432,8 +531,14 @@ pub async fn get_tile(
         let rules = get_style_rules(&styles_lock, &meta_lock, layer);
 
         let features = crate::handlers::features::query_layer_features(
-            state.get_ref(), &layer.name, None, None, None,
-        ).await.unwrap_or_default();
+            state.get_ref(),
+            &layer.name,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap_or_default();
         let scale_denom = calculate_tile_scale_denom(z);
         for feature in &features {
             let geom = if needs_reproject {
@@ -475,12 +580,16 @@ pub async fn clear_tile_cache(
 ) -> Result<HttpResponse, GeoServerError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
     if let Some(ref cache) = state.tile_cache {
-        let count = cache.clear_layer(layer_name).await
+        let count = cache
+            .clear_layer(layer_name)
+            .await
             .map_err(|e| GeoServerError::InternalError(format!("清除缓存失败: {}", e)))?;
-        Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-            "message": format!("已清除图层 '{}' 的 {} 个缓存瓦片", layer_name, count),
-            "cleared": count,
-        }))))
+        Ok(
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "message": format!("已清除图层 '{}' 的 {} 个缓存瓦片", layer_name, count),
+                "cleared": count,
+            }))),
+        )
     } else {
         Err(GeoServerError::InternalError("瓦片缓存未启用".to_string()))
     }
@@ -502,14 +611,16 @@ pub async fn get_tile_cache_stats(
             "cacheSizeMb": format!("{:.2} MB", disk_stats.cache_size_bytes as f64 / 1_048_576.0),
         }))))
     } else {
-        Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-            "enabled": false,
-            "hits": 0,
-            "misses": 0,
-            "hitRate": 0.0,
-            "totalTiles": 0,
-            "cacheSizeBytes": 0,
-        }))))
+        Ok(
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "enabled": false,
+                "hits": 0,
+                "misses": 0,
+                "hitRate": 0.0,
+                "totalTiles": 0,
+                "cacheSizeBytes": 0,
+            }))),
+        )
     }
 }
 
@@ -518,7 +629,12 @@ pub fn get_style_rules(
     meta: &std::collections::HashMap<String, crate::state::StyleMeta>,
     layer: &crate::models::Layer,
 ) -> Vec<crate::utils::sld_parser::ParsedRule> {
-    let style_name = layer.styles.first().map(|s| &s.name).cloned().unwrap_or_default();
+    let style_name = layer
+        .styles
+        .first()
+        .map(|s| &s.name)
+        .cloned()
+        .unwrap_or_default();
     let content = styles.get(&style_name);
     let format = meta.get(&style_name).map(|m| &m.format);
 
@@ -527,8 +643,10 @@ pub fn get_style_rules(
         (Some(c), None) => {
             let detected = crate::models::style::detect_style_format(c.as_str());
             parse_style_content(c.as_str(), &detected)
-        }
-        _ => crate::utils::sld_parser::parse_sld(&crate::utils::sld_parser::default_sld(&layer.name)),
+        },
+        _ => {
+            crate::utils::sld_parser::parse_sld(&crate::utils::sld_parser::default_sld(&layer.name))
+        },
     }
 }
 
@@ -539,7 +657,9 @@ pub fn parse_style_content(
     match format {
         crate::models::style::StyleFormat::CSS => crate::utils::css_parser::parse_css(content),
         crate::models::style::StyleFormat::YSLD => crate::utils::ysld_parser::parse_ysld(content),
-        crate::models::style::StyleFormat::MBStyle => crate::utils::mbstyle_parser::parse_mbstyle(content),
+        crate::models::style::StyleFormat::MBStyle => {
+            crate::utils::mbstyle_parser::parse_mbstyle(content)
+        },
         crate::models::style::StyleFormat::SLD => crate::utils::sld_parser::parse_sld(content),
     }
 }
@@ -563,37 +683,66 @@ pub fn reproject_geometry_helper(
         GeoJsonGeometry::Point { coordinates } => {
             if coordinates.len() >= 2 {
                 if let Ok((x, y)) = transformer.transform_point(coordinates[0], coordinates[1]) {
-                    return GeoJsonGeometry::Point { coordinates: vec![x, y] };
+                    return GeoJsonGeometry::Point {
+                        coordinates: vec![x, y],
+                    };
                 }
             }
             geom.clone()
-        }
+        },
         GeoJsonGeometry::LineString { coordinates } => {
-            let projected: Vec<Vec<f64>> = coordinates.iter()
+            let projected: Vec<Vec<f64>> = coordinates
+                .iter()
                 .filter_map(|c| {
                     if c.len() >= 2 {
-                        transformer.transform_point(c[0], c[1]).ok().map(|(x, y)| vec![x, y])
-                    } else { None }
+                        transformer
+                            .transform_point(c[0], c[1])
+                            .ok()
+                            .map(|(x, y)| vec![x, y])
+                    } else {
+                        None
+                    }
                 })
                 .collect();
             if projected.len() == coordinates.len() {
-                GeoJsonGeometry::LineString { coordinates: projected }
-            } else { geom.clone() }
-        }
+                GeoJsonGeometry::LineString {
+                    coordinates: projected,
+                }
+            } else {
+                geom.clone()
+            }
+        },
         GeoJsonGeometry::Polygon { coordinates } => {
-            let projected: Vec<Vec<Vec<f64>>> = coordinates.iter()
-                .map(|ring| ring.iter().filter_map(|c| {
-                    if c.len() >= 2 {
-                        transformer.transform_point(c[0], c[1]).ok().map(|(x, y)| vec![x, y])
-                    } else { None }
-                }).collect())
+            let projected: Vec<Vec<Vec<f64>>> = coordinates
+                .iter()
+                .map(|ring| {
+                    ring.iter()
+                        .filter_map(|c| {
+                            if c.len() >= 2 {
+                                transformer
+                                    .transform_point(c[0], c[1])
+                                    .ok()
+                                    .map(|(x, y)| vec![x, y])
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                })
                 .collect();
             if projected.len() == coordinates.len()
-                && projected.iter().zip(coordinates.iter()).all(|(p, o)| p.len() == o.len())
+                && projected
+                    .iter()
+                    .zip(coordinates.iter())
+                    .all(|(p, o)| p.len() == o.len())
             {
-                GeoJsonGeometry::Polygon { coordinates: projected }
-            } else { geom.clone() }
-        }
+                GeoJsonGeometry::Polygon {
+                    coordinates: projected,
+                }
+            } else {
+                geom.clone()
+            }
+        },
         _ => geom.clone(),
     }
 }

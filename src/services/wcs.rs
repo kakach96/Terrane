@@ -39,7 +39,11 @@ pub struct Subset {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SubsetType {
     #[serde(rename = "intervals")]
-    Intervals { min: f64, max: f64, resolution: Option<f64> },
+    Intervals {
+        min: f64,
+        max: f64,
+        resolution: Option<f64>,
+    },
     #[serde(rename = "position")]
     Position { value: f64 },
 }
@@ -176,10 +180,7 @@ impl WcsCapabilities {
                         }],
                     },
                 },
-                exception: vec![
-                    "XML".to_string(),
-                    "JSON".to_string(),
-                ],
+                exception: vec!["XML".to_string(), "JSON".to_string()],
             },
         }
     }
@@ -284,7 +285,9 @@ impl CoverageDescription {
                         name: "W/m**2".to_string(),
                         code: Some("nm".to_string()),
                     }),
-                    null_values: vec![NullValue { value: "-9999".to_string() }],
+                    null_values: vec![NullValue {
+                        value: "-9999".to_string(),
+                    }],
                 }],
             },
         }
@@ -311,21 +314,27 @@ impl CoverageDescription {
     /// 设置图像尺寸和波段数
     pub fn set_size(&mut self, width: u32, height: u32, band_count: usize) {
         self.range = Range {
-            field: (0..band_count).map(|i| Field {
-                name: format!("band_{}", i),
-                definition: "GridCoverage".to_string(),
-                description: Some(format!("{}x{} band {}", width, height, i)),
-                unit: Some(Unit {
-                    name: "digital_number".to_string(),
-                    code: Some("DN".to_string()),
-                }),
-                null_values: vec![NullValue { value: "0".to_string() }],
-            }).collect(),
+            field: (0..band_count)
+                .map(|i| Field {
+                    name: format!("band_{}", i),
+                    definition: "GridCoverage".to_string(),
+                    description: Some(format!("{}x{} band {}", width, height, i)),
+                    unit: Some(Unit {
+                        name: "digital_number".to_string(),
+                        code: Some("DN".to_string()),
+                    }),
+                    null_values: vec![NullValue {
+                        value: "0".to_string(),
+                    }],
+                })
+                .collect(),
         };
     }
 }
 
-pub fn parse_wcs_request(params: &[(String, String)]) -> Result<WcsRequest, crate::error::GeoServerError> {
+pub fn parse_wcs_request(
+    params: &[(String, String)],
+) -> Result<WcsRequest, crate::error::GeoServerError> {
     let mut service = None;
     let mut version = None;
     let mut request = None;
@@ -350,10 +359,17 @@ pub fn parse_wcs_request(params: &[(String, String)]) -> Result<WcsRequest, crat
                     "getcapabilities" => Some(WcsOperation::GetCapabilities),
                     "describecoverage" => Some(WcsOperation::DescribeCoverage),
                     "getcoverage" => Some(WcsOperation::GetCoverage),
-                    _ => return Err(crate::error::GeoServerError::BadRequest(format!("Unknown request: {}", value))),
+                    _ => {
+                        return Err(crate::error::GeoServerError::BadRequest(format!(
+                            "Unknown request: {}",
+                            value
+                        )))
+                    },
                 }
-            }
-            "COVERAGEID" | "COVERAGE_ID" => coverage_id = Some(value.split(',').map(|s| s.trim().to_string()).collect()),
+            },
+            "COVERAGEID" | "COVERAGE_ID" => {
+                coverage_id = Some(value.split(',').map(|s| s.trim().to_string()).collect())
+            },
             "OUTPUTFORMAT" | "FORMAT" => output_format = Some(value.clone()),
             "MEDIATYPE" => media_type = Some(value.clone()),
             "SUBSET" => {
@@ -364,26 +380,35 @@ pub fn parse_wcs_request(params: &[(String, String)]) -> Result<WcsRequest, crat
                 if let Some(ref mut s) = subsets {
                     s.push(parsed);
                 }
-            }
+            },
             "SUBSETTINGCRS" => subset_crs = Some(value.clone()),
             "INTERPOLATION" => interpolation = Some(value.clone()),
-            "AXISLABELS" => axis_labels = Some(value.split(',').map(|s| s.trim().to_string()).collect()),
+            "AXISLABELS" => {
+                axis_labels = Some(value.split(',').map(|s| s.trim().to_string()).collect())
+            },
             "STORE" => store = Some(value.to_lowercase() == "true"),
             "EXPIRATION" => expiration = value.parse().ok(),
             "SIZE" => {
-                size = Some(value.split(',')
-                    .filter_map(|s| s.trim().parse().ok())
-                    .collect());
-            }
-            _ => {}
+                size = Some(
+                    value
+                        .split(',')
+                        .filter_map(|s| s.trim().parse().ok())
+                        .collect(),
+                );
+            },
+            _ => {},
         }
     }
 
-    let request = request.ok_or_else(|| crate::error::GeoServerError::BadRequest("Missing REQUEST parameter".to_string()))?;
-    
+    let request = request.ok_or_else(|| {
+        crate::error::GeoServerError::BadRequest("Missing REQUEST parameter".to_string())
+    })?;
+
     if let Some(ref svc) = service {
         if svc.to_uppercase() != "WCS" {
-            return Err(crate::error::GeoServerError::BadRequest("Invalid service type".to_string()));
+            return Err(crate::error::GeoServerError::BadRequest(
+                "Invalid service type".to_string(),
+            ));
         }
     }
 
@@ -415,13 +440,17 @@ fn parse_subset(value: &str) -> Result<Subset, crate::error::GeoServerError> {
 
     if parts.is_empty() {
         return Err(crate::error::GeoServerError::BadRequest(
-            "Invalid SUBSET format: empty".to_string()
+            "Invalid SUBSET format: empty".to_string(),
         ));
     }
 
     let axis_label = parts[0].trim().to_string();
-    let crs = parts.get(3).map(|s| s.trim().to_string())
-        .or_else(|| parts.get(2).map(|s| s.trim().to_string()).filter(|s| s.to_uppercase().starts_with("EPSG:")));
+    let crs = parts.get(3).map(|s| s.trim().to_string()).or_else(|| {
+        parts
+            .get(2)
+            .map(|s| s.trim().to_string())
+            .filter(|s| s.to_uppercase().starts_with("EPSG:"))
+    });
 
     // 解析括号格式: axis(min,max) 或 axis(value)
     if axis_label.contains('(') && value.ends_with(')') {
@@ -436,7 +465,11 @@ fn parse_subset(value: &str) -> Result<Subset, crate::error::GeoServerError> {
                 return Ok(Subset {
                     axis_label: clean_axis,
                     crs,
-                    subset_type: SubsetType::Intervals { min, max, resolution },
+                    subset_type: SubsetType::Intervals {
+                        min,
+                        max,
+                        resolution,
+                    },
                 });
             }
             return Ok(Subset {
@@ -462,7 +495,9 @@ fn parse_subset(value: &str) -> Result<Subset, crate::error::GeoServerError> {
             } else if parts.len() >= 4 {
                 // 判断第四个值是 EPSG 还是 resolution
                 let fourth = parts[3].trim();
-                if !fourth.to_uppercase().starts_with("EPSG:") && !fourth.to_uppercase().starts_with("CRS:") {
+                if !fourth.to_uppercase().starts_with("EPSG:")
+                    && !fourth.to_uppercase().starts_with("CRS:")
+                {
                     fourth.parse::<f64>().ok()
                 } else {
                     None
@@ -474,7 +509,11 @@ fn parse_subset(value: &str) -> Result<Subset, crate::error::GeoServerError> {
             return Ok(Subset {
                 axis_label,
                 crs,
-                subset_type: SubsetType::Intervals { min, max, resolution },
+                subset_type: SubsetType::Intervals {
+                    min,
+                    max,
+                    resolution,
+                },
             });
         }
     }

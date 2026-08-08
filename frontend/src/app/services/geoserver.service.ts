@@ -35,11 +35,16 @@ import {
   LayerGroup,
   MonitorStats,
   RequestRecord,
-  AuditLogEntry
+  AuditLogEntry,
+  Store,
+  SqlViewParameter,
+  TileCacheStats,
+  TileCacheResult,
+  User,
 } from '../models/geoserver.models';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class GeoserverService {
   private readonly apiUrl = '/geoserver';
@@ -47,27 +52,32 @@ export class GeoserverService {
   constructor(private http: HttpClient) {}
 
   getLayers(): Observable<Layer[]> {
-    return this.http.get<ApiResponse<Layer[]>>(`${this.apiUrl}/layers`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<Layer[]>>(`${this.apiUrl}/layers`)
+      .pipe(map((response) => response.data || []));
   }
 
   getLayer(name: string): Observable<Layer> {
-    return this.http.get<ApiResponse<Layer>>(`${this.apiUrl}/layers/${name}`)
-      .pipe(map(response => response.data as Layer));
+    return this.http
+      .get<ApiResponse<Layer>>(`${this.apiUrl}/layers/${name}`)
+      .pipe(map((response) => response.data as Layer));
   }
 
   createLayer(layer: CreateLayerRequest): Observable<Layer> {
-    return this.http.post<ApiResponse<Layer>>(`${this.apiUrl}/layers`, layer)
-      .pipe(map(response => response.data as Layer));
+    return this.http
+      .post<ApiResponse<Layer>>(`${this.apiUrl}/layers`, layer)
+      .pipe(map((response) => response.data as Layer));
   }
 
   updateLayer(name: string, updates: UpdateLayerRequest): Observable<void> {
-    return this.http.put<ApiResponse<void>>(`${this.apiUrl}/layers/${name}`, updates)
+    return this.http
+      .put<ApiResponse<void>>(`${this.apiUrl}/layers/${name}`, updates)
       .pipe(map(() => void 0));
   }
 
   deleteLayer(name: string): Observable<void> {
-    return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/layers/${name}`)
+    return this.http
+      .delete<ApiResponse<void>>(`${this.apiUrl}/layers/${name}`)
       .pipe(map(() => void 0));
   }
 
@@ -87,8 +97,15 @@ export class GeoserverService {
     return this.http.delete<void>(`${this.apiUrl}/layers/${layerName}/features/${featureId}`);
   }
 
-  updateFeature(layerName: string, featureId: string, feature: CreateFeatureRequest): Observable<Feature> {
-    return this.http.put<Feature>(`${this.apiUrl}/layers/${layerName}/features/${featureId}`, feature);
+  updateFeature(
+    layerName: string,
+    featureId: string,
+    feature: CreateFeatureRequest,
+  ): Observable<Feature> {
+    return this.http.put<Feature>(
+      `${this.apiUrl}/layers/${layerName}/features/${featureId}`,
+      feature,
+    );
   }
 
   getPreviewUrl(layerName: string, options?: PreviewOptions): string {
@@ -114,11 +131,11 @@ export class GeoserverService {
       crs?: string;
       format?: string;
       transparent?: boolean;
-    }
+    },
   ): string {
-    const bounds: LayerBounds = (layer as any).native_bounds?.bounds || layer.bounds;
+    const bounds: LayerBounds = layer.native_bounds?.bounds || layer.bounds;
     if (!bounds) return '';
-    const srs = options?.crs || (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
+    const srs = options?.crs || layer.native_bounds?.crs || layer.srs || 'EPSG:4326';
     // 使用 WMS 1.1.1 避免 EPSG:4326 轴序问题
     const params = new URLSearchParams({
       service: 'WMS',
@@ -145,21 +162,19 @@ export class GeoserverService {
       format?: 'image/png' | 'image/jpeg';
       transparent?: boolean;
       styles?: string;
-    }
+    },
   ): string {
-    const crs = options?.crs || (layer as any).native_bounds?.crs || layer.srs || 'EPSG:4326';
+    const crs = options?.crs || layer.native_bounds?.crs || layer.srs || 'EPSG:4326';
 
     // 优先使用显式传入的 bbox，其次从图层中读取
     let bbox = options?.bbox;
     if (!bbox) {
-      const bounds: LayerBounds = (layer as any).native_bounds?.bounds || layer.bounds;
+      const bounds: LayerBounds = layer.native_bounds?.bounds || layer.bounds;
       if (!bounds) return '';
       bbox = `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`;
     }
 
-    const layerName = layer.name.includes(':') 
-      ? layer.name 
-      : `${layer.workspace}:${layer.name}`;
+    const layerName = layer.name.includes(':') ? layer.name : `${layer.workspace}:${layer.name}`;
 
     const params = new URLSearchParams({
       service: 'WMS',
@@ -183,184 +198,220 @@ export class GeoserverService {
 
   getDashboardStats(): Observable<DashboardStats> {
     return this.getLayers().pipe(
-      map(layers => ({
+      map((layers) => ({
         layerCount: layers.length,
         featureCount: 0,
-        activeLayerCount: layers.filter(l => l.enabled).length,
-        workspaceCount: new Set(layers.map(l => l.workspace)).size
-      }))
+        activeLayerCount: layers.filter((l) => l.enabled).length,
+        workspaceCount: new Set(layers.map((l) => l.workspace)).size,
+      })),
     );
   }
 
   getWorkspaces(): Observable<string[]> {
-    return this.getLayers().pipe(
-      map(layers => [...new Set(layers.map(l => l.workspace))])
-    );
+    return this.getLayers().pipe(map((layers) => [...new Set(layers.map((l) => l.workspace))]));
   }
 
   getAllWorkspaces(): Observable<Workspace[]> {
-    return this.http.get<ApiResponse<Workspace[]>>(`${this.apiUrl}/workspaces`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<Workspace[]>>(`${this.apiUrl}/workspaces`)
+      .pipe(map((response) => response.data || []));
   }
 
   getWorkspace(name: string): Observable<Workspace> {
-    return this.http.get<ApiResponse<Workspace>>(`${this.apiUrl}/workspaces/${name}`)
-      .pipe(map(response => response.data as Workspace));
+    return this.http
+      .get<ApiResponse<Workspace>>(`${this.apiUrl}/workspaces/${name}`)
+      .pipe(map((response) => response.data as Workspace));
   }
 
   createWorkspace(request: CreateWorkspaceRequest): Observable<Workspace> {
-    return this.http.post<ApiResponse<Workspace>>(`${this.apiUrl}/workspaces`, request)
-      .pipe(map(response => response.data as Workspace));
+    return this.http
+      .post<ApiResponse<Workspace>>(`${this.apiUrl}/workspaces`, request)
+      .pipe(map((response) => response.data as Workspace));
   }
 
   updateWorkspace(name: string, updates: UpdateWorkspaceRequest): Observable<void> {
-    return this.http.put<ApiResponse<void>>(`${this.apiUrl}/workspaces/${name}`, updates)
+    return this.http
+      .put<ApiResponse<void>>(`${this.apiUrl}/workspaces/${name}`, updates)
       .pipe(map(() => void 0));
   }
 
   deleteWorkspace(name: string): Observable<void> {
-    return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/workspaces/${name}`)
+    return this.http
+      .delete<ApiResponse<void>>(`${this.apiUrl}/workspaces/${name}`)
       .pipe(map(() => void 0));
   }
 
   // ---- 存储 (Stores) ----
 
-  getStores(): Observable<any[]> {
-    return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/stores`)
-      .pipe(map(response => response.data || []));
+  getStores(): Observable<Store[]> {
+    return this.http
+      .get<ApiResponse<Store[]>>(`${this.apiUrl}/stores`)
+      .pipe(map((response) => response.data || []));
   }
 
-  getStore(name: string): Observable<any> {
-    return this.http.get<ApiResponse<any>>(`${this.apiUrl}/stores/${name}`)
-      .pipe(map(response => response.data));
+  getStore(name: string): Observable<Store> {
+    return this.http
+      .get<ApiResponse<Store>>(`${this.apiUrl}/stores/${name}`)
+      .pipe(map((response) => response.data as Store));
   }
 
-  getWorkspaceStores(workspace: string): Observable<any[]> {
-    return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/workspaces/${workspace}/stores`)
-      .pipe(map(response => response.data || []));
+  getWorkspaceStores(workspace: string): Observable<Store[]> {
+    return this.http
+      .get<ApiResponse<Store[]>>(`${this.apiUrl}/workspaces/${workspace}/stores`)
+      .pipe(map((response) => response.data || []));
   }
 
   // ---- 瓦片缓存 (GeoWebCache) ----
 
-  getTileCacheStats(): Observable<any> {
-    return this.http.get<ApiResponse<any>>(`${this.apiUrl}/tiles/cache/stats`)
-      .pipe(map(response => response.data));
+  getTileCacheStats(): Observable<TileCacheStats> {
+    return this.http
+      .get<ApiResponse<TileCacheStats>>(`${this.apiUrl}/tiles/cache/stats`)
+      .pipe(map((response) => response.data as TileCacheStats));
   }
 
-  clearTileCache(layerName: string): Observable<any> {
-    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/tiles/cache/clear/${layerName}`)
-      .pipe(map(response => response.data));
+  clearTileCache(layerName: string): Observable<TileCacheResult> {
+    return this.http
+      .delete<ApiResponse<TileCacheResult>>(`${this.apiUrl}/tiles/cache/clear/${layerName}`)
+      .pipe(map((response) => response.data as TileCacheResult));
   }
 
   // ---- SQL 视图 ----
 
   getSqlViews(): Observable<SqlView[]> {
-    return this.http.get<ApiResponse<SqlView[]>>(`${this.apiUrl}/sql-views`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<SqlView[]>>(`${this.apiUrl}/sql-views`)
+      .pipe(map((response) => response.data || []));
   }
 
   getSqlView(name: string): Observable<SqlView> {
-    return this.http.get<ApiResponse<SqlView>>(`${this.apiUrl}/sql-views/${name}`)
-      .pipe(map(response => response.data as SqlView));
+    return this.http
+      .get<ApiResponse<SqlView>>(`${this.apiUrl}/sql-views/${name}`)
+      .pipe(map((response) => response.data as SqlView));
   }
 
-  createSqlView(request: CreateSqlViewRequest): Observable<any> {
-    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/sql-views`, request)
-      .pipe(map(response => response.data));
+  createSqlView(request: CreateSqlViewRequest): Observable<SqlView> {
+    return this.http
+      .post<ApiResponse<SqlView>>(`${this.apiUrl}/sql-views`, request)
+      .pipe(map((response) => response.data as SqlView));
   }
 
   updateSqlView(name: string, request: UpdateSqlViewRequest): Observable<void> {
-    return this.http.put<ApiResponse<void>>(`${this.apiUrl}/sql-views/${name}`, request)
+    return this.http
+      .put<ApiResponse<void>>(`${this.apiUrl}/sql-views/${name}`, request)
       .pipe(map(() => void 0));
   }
 
   deleteSqlView(name: string): Observable<void> {
-    return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/sql-views/${name}`)
+    return this.http
+      .delete<ApiResponse<void>>(`${this.apiUrl}/sql-views/${name}`)
       .pipe(map(() => void 0));
   }
 
-  previewSqlView(request: { sql: string; workspace: string; store: string; parameters?: any[] }): Observable<any> {
-    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/sql-views/preview`, request)
-      .pipe(map(response => response.data));
+  previewSqlView(request: {
+    sql: string;
+    workspace: string;
+    store: string;
+    parameters?: SqlViewParameter[];
+  }): Observable<Record<string, unknown>[]> {
+    return this.http
+      .post<ApiResponse<Record<string, unknown>[]>>(`${this.apiUrl}/sql-views/preview`, request)
+      .pipe(map((response) => response.data || []));
   }
 
   // ---- 命名空间 ----
 
   getNamespaces(): Observable<Namespace[]> {
-    return this.http.get<ApiResponse<Namespace[]>>(`${this.apiUrl}/namespaces`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<Namespace[]>>(`${this.apiUrl}/namespaces`)
+      .pipe(map((response) => response.data || []));
   }
 
   getNamespace(prefix: string): Observable<Namespace> {
-    return this.http.get<ApiResponse<Namespace>>(`${this.apiUrl}/namespaces/${prefix}`)
-      .pipe(map(response => response.data as Namespace));
+    return this.http
+      .get<ApiResponse<Namespace>>(`${this.apiUrl}/namespaces/${prefix}`)
+      .pipe(map((response) => response.data as Namespace));
   }
 
   createNamespace(request: CreateNamespaceRequest): Observable<Namespace> {
-    return this.http.post<ApiResponse<Namespace>>(`${this.apiUrl}/namespaces`, request)
-      .pipe(map(response => response.data as Namespace));
+    return this.http
+      .post<ApiResponse<Namespace>>(`${this.apiUrl}/namespaces`, request)
+      .pipe(map((response) => response.data as Namespace));
   }
 
   updateNamespace(prefix: string, updates: UpdateNamespaceRequest): Observable<void> {
-    return this.http.put<ApiResponse<void>>(`${this.apiUrl}/namespaces/${prefix}`, updates)
+    return this.http
+      .put<ApiResponse<void>>(`${this.apiUrl}/namespaces/${prefix}`, updates)
       .pipe(map(() => void 0));
   }
 
   deleteNamespace(prefix: string): Observable<void> {
-    return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/namespaces/${prefix}`)
+    return this.http
+      .delete<ApiResponse<void>>(`${this.apiUrl}/namespaces/${prefix}`)
       .pipe(map(() => void 0));
   }
 
   // ---- 权限 ----
 
   getPermissions(): Observable<Permission[]> {
-    return this.http.get<ApiResponse<Permission[]>>(`${this.apiUrl}/permissions`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<Permission[]>>(`${this.apiUrl}/permissions`)
+      .pipe(map((response) => response.data || []));
   }
 
-  createPermission(request: CreatePermissionRequest): Observable<any> {
-    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/permissions`, request)
-      .pipe(map(response => response.data));
+  createPermission(request: CreatePermissionRequest): Observable<void> {
+    return this.http
+      .post<ApiResponse<void>>(`${this.apiUrl}/permissions`, request)
+      .pipe(map(() => void 0));
   }
 
-  deletePermission(id: number): Observable<any> {
-    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/permissions/${id}`)
-      .pipe(map(response => response.data));
+  deletePermission(id: number): Observable<void> {
+    return this.http
+      .delete<ApiResponse<void>>(`${this.apiUrl}/permissions/${id}`)
+      .pipe(map(() => void 0));
   }
 
-  checkPermission(type: string, name: string, mode?: string): Observable<any> {
+  checkPermission(type: string, name: string, mode?: string): Observable<Record<string, unknown>> {
     const modeParam = mode ? `?mode=${mode}` : '';
-    return this.http.get<ApiResponse<any>>(`${this.apiUrl}/permissions/check/${type}/${name}${modeParam}`)
-      .pipe(map(response => response.data));
+    return this.http
+      .get<ApiResponse<Record<string, unknown>>>(
+        `${this.apiUrl}/permissions/check/${type}/${name}${modeParam}`,
+      )
+      .pipe(map((response) => response.data as Record<string, unknown>));
   }
 
   getServerStatus(): Observable<ServerStatus> {
-    return this.http.get<ApiResponse<ServerStatus>>(`${this.apiUrl}/server/status`)
-      .pipe(map(response => response.data as ServerStatus));
+    return this.http
+      .get<ApiResponse<ServerStatus>>(`${this.apiUrl}/server/status`)
+      .pipe(map((response) => response.data as ServerStatus));
   }
 
   getDataSources(): Observable<DataSource[]> {
-    return this.http.get<ApiResponse<DataSource[]>>(`${this.apiUrl}/data-sources`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<DataSource[]>>(`${this.apiUrl}/data-sources`)
+      .pipe(map((response) => response.data || []));
   }
 
   getDataSource(name: string): Observable<DataSource> {
-    return this.http.get<ApiResponse<DataSource>>(`${this.apiUrl}/data-sources/${name}`)
-      .pipe(map(response => response.data as DataSource));
+    return this.http
+      .get<ApiResponse<DataSource>>(`${this.apiUrl}/data-sources/${name}`)
+      .pipe(map((response) => response.data as DataSource));
   }
 
   createDataSource(request: CreateDataSourceRequest): Observable<DataSource> {
-    return this.http.post<ApiResponse<DataSource>>(`${this.apiUrl}/data-sources`, request)
-      .pipe(map(response => response.data as DataSource));
+    return this.http
+      .post<ApiResponse<DataSource>>(`${this.apiUrl}/data-sources`, request)
+      .pipe(map((response) => response.data as DataSource));
   }
 
   updateDataSource(name: string, request: UpdateDataSourceRequest): Observable<void> {
-    return this.http.put<ApiResponse<void>>(`${this.apiUrl}/data-sources/${name}`, request)
+    return this.http
+      .put<ApiResponse<void>>(`${this.apiUrl}/data-sources/${name}`, request)
       .pipe(map(() => void 0));
   }
 
   deleteDataSource(name: string): Observable<void> {
-    return this.http.delete<ApiResponse<void>>(`${this.apiUrl}/data-sources/${name}`)
+    return this.http
+      .delete<ApiResponse<void>>(`${this.apiUrl}/data-sources/${name}`)
       .pipe(map(() => void 0));
   }
 
@@ -373,48 +424,65 @@ export class GeoserverService {
   }
 
   getDataSourceTables(dataSourceName: string): Observable<string[]> {
-    return this.http.get<ApiResponse<string[]>>(`${this.apiUrl}/data-sources/${dataSourceName}/tables`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<string[]>>(`${this.apiUrl}/data-sources/${dataSourceName}/tables`)
+      .pipe(map((response) => response.data || []));
   }
 
   getStyles(): Observable<StyleInfo[]> {
-    return this.http.get<ApiResponse<StyleInfo[]>>(`${this.apiUrl}/styles`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<StyleInfo[]>>(`${this.apiUrl}/styles`)
+      .pipe(map((response) => response.data || []));
   }
 
   getStyle(name: string): Observable<StyleInfo> {
-    return this.http.get<ApiResponse<StyleInfo>>(`${this.apiUrl}/styles/${name}`)
-      .pipe(map(response => response.data as StyleInfo));
+    return this.http
+      .get<ApiResponse<StyleInfo>>(`${this.apiUrl}/styles/${name}`)
+      .pipe(map((response) => response.data as StyleInfo));
   }
 
-  createStyle(style: { name: string; title?: string; content: string; format?: string }): Observable<any> {
-    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/styles`, style)
-      .pipe(map(response => response.data));
+  createStyle(style: {
+    name: string;
+    title?: string;
+    content: string;
+    format?: string;
+  }): Observable<void> {
+    return this.http
+      .post<ApiResponse<void>>(`${this.apiUrl}/styles`, style)
+      .pipe(map(() => void 0));
   }
 
-  updateStyle(name: string, updates: { title?: string; content?: string; format?: string }): Observable<any> {
-    return this.http.put<ApiResponse<any>>(`${this.apiUrl}/styles/${name}`, updates)
-      .pipe(map(response => response.data));
+  updateStyle(
+    name: string,
+    updates: { title?: string; content?: string; format?: string },
+  ): Observable<void> {
+    return this.http
+      .put<ApiResponse<void>>(`${this.apiUrl}/styles/${name}`, updates)
+      .pipe(map(() => void 0));
   }
 
-  deleteStyle(name: string): Observable<any> {
-    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/styles/${name}`)
-      .pipe(map(response => response.data));
+  deleteStyle(name: string): Observable<void> {
+    return this.http
+      .delete<ApiResponse<void>>(`${this.apiUrl}/styles/${name}`)
+      .pipe(map(() => void 0));
   }
 
   getLayerStyle(layerName: string): Observable<string> {
     return this.http.get(`${this.apiUrl}/layers/${layerName}/style`, { responseType: 'text' });
   }
 
-  updateLayerStyle(layerName: string, sldContent: string): Observable<any> {
-    return this.http.put<ApiResponse<any>>(`${this.apiUrl}/layers/${layerName}/style`, sldContent, {
-      headers: { 'Content-Type': 'application/vnd.ogc.sld+xml' }
-    }).pipe(map(response => response.data));
+  updateLayerStyle(layerName: string, sldContent: string): Observable<void> {
+    return this.http
+      .put<ApiResponse<void>>(`${this.apiUrl}/layers/${layerName}/style`, sldContent, {
+        headers: { 'Content-Type': 'application/vnd.ogc.sld+xml' },
+      })
+      .pipe(map(() => void 0));
   }
 
   getLayerFeatureType(layerName: string): Observable<PropertyDef[]> {
-    return this.http.get<ApiResponse<PropertyDef[]>>(`${this.apiUrl}/layers/${layerName}/feature-type`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<PropertyDef[]>>(`${this.apiUrl}/layers/${layerName}/feature-type`)
+      .pipe(map((response) => response.data || []));
   }
 
   // ---- 文件上传 ----
@@ -424,7 +492,10 @@ export class GeoserverService {
     const formData = new FormData();
     formData.append('file', file);
     const params = name ? `?name=${encodeURIComponent(name)}` : '';
-    return this.http.post<ApiResponse<UploadResult>>(`${this.apiUrl}/data/upload/shapefile${params}`, formData);
+    return this.http.post<ApiResponse<UploadResult>>(
+      `${this.apiUrl}/data/upload/shapefile${params}`,
+      formData,
+    );
   }
 
   /** 上传 GeoTIFF (.tif/.tiff) */
@@ -432,41 +503,48 @@ export class GeoserverService {
     const formData = new FormData();
     formData.append('file', file);
     const params = name ? `?name=${encodeURIComponent(name)}` : '';
-    return this.http.post<ApiResponse<UploadResult>>(`${this.apiUrl}/data/upload/geotiff${params}`, formData);
+    return this.http.post<ApiResponse<UploadResult>>(
+      `${this.apiUrl}/data/upload/geotiff${params}`,
+      formData,
+    );
   }
 
   /** 上传 GeoJSON (JSON body) */
-  uploadGeoJson(geojson: any): Observable<ApiResponse<any>> {
-    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/data/upload`, geojson);
+  uploadGeoJson(geojson: unknown): Observable<ApiResponse<UploadResult>> {
+    return this.http.post<ApiResponse<UploadResult>>(`${this.apiUrl}/data/upload`, geojson);
   }
 
   // ---- 图层组 ----
 
   getLayerGroups(): Observable<LayerGroup[]> {
-    return this.http.get<ApiResponse<LayerGroup[]>>(`${this.apiUrl}/layer-groups`)
-      .pipe(map(response => response.data || []));
+    return this.http
+      .get<ApiResponse<LayerGroup[]>>(`${this.apiUrl}/layer-groups`)
+      .pipe(map((response) => response.data || []));
   }
 
   getLayerGroup(name: string): Observable<LayerGroup> {
-    return this.http.get<ApiResponse<LayerGroup>>(`${this.apiUrl}/layer-groups/${name}`)
-      .pipe(map(response => response.data as LayerGroup));
+    return this.http
+      .get<ApiResponse<LayerGroup>>(`${this.apiUrl}/layer-groups/${name}`)
+      .pipe(map((response) => response.data as LayerGroup));
   }
 
-  createLayerGroup(group: { name: string; title?: string; layers: string[] }): Observable<any> {
-    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/layer-groups`, group)
-      .pipe(map(response => response.data));
+  createLayerGroup(group: { name: string; title?: string; layers: string[] }): Observable<void> {
+    return this.http
+      .post<ApiResponse<void>>(`${this.apiUrl}/layer-groups`, group)
+      .pipe(map(() => void 0));
   }
 
-  deleteLayerGroup(name: string): Observable<any> {
-    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/layer-groups/${name}`)
-      .pipe(map(response => response.data));
+  deleteLayerGroup(name: string): Observable<void> {
+    return this.http
+      .delete<ApiResponse<void>>(`${this.apiUrl}/layer-groups/${name}`)
+      .pipe(map(() => void 0));
   }
 
   /** 导出图层要素为 GeoJSON */
   exportFeaturesGeoJson(layerName: string): Observable<Blob> {
     return this.http.get(`${this.apiUrl}/layers/${layerName}/features`, {
       params: { format: 'application/json' },
-      responseType: 'blob'
+      responseType: 'blob',
     });
   }
 
@@ -474,7 +552,7 @@ export class GeoserverService {
   exportFeaturesCsv(layerName: string): Observable<Blob> {
     return this.http.get(`${this.apiUrl}/layers/${layerName}/features`, {
       params: { format: 'text/csv' },
-      responseType: 'blob'
+      responseType: 'blob',
     });
   }
 
@@ -488,45 +566,52 @@ export class GeoserverService {
   /** 获取最近请求记录 */
   getRecentRequests(limit: number = 100): Observable<RequestRecord[]> {
     return this.http.get<RequestRecord[]>(`${this.apiUrl}/monitor/requests`, {
-      params: { limit: limit.toString() }
+      params: { limit: limit.toString() },
     });
   }
 
   /** 获取审计日志 */
   getAuditLogs(limit: number = 100, offset: number = 0): Observable<AuditLogEntry[]> {
     return this.http.get<AuditLogEntry[]>(`${this.apiUrl}/monitor/logs`, {
-      params: { limit: limit.toString(), offset: offset.toString() }
+      params: { limit: limit.toString(), offset: offset.toString() },
     });
   }
 
   /** 重置监控统计 */
-  resetMonitorStats(): Observable<any> {
-    return this.http.delete(`${this.apiUrl}/monitor/reset`);
+  resetMonitorStats(): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/monitor/reset`);
   }
 
   // ===== 用户管理 =====
 
   /** 列出所有用户 */
-  listUsers(): Observable<any[]> {
-    return this.http.get<ApiResponse<any[]>>(`${this.apiUrl}/auth/users`)
-      .pipe(map(r => r.data || []));
+  listUsers(): Observable<User[]> {
+    return this.http
+      .get<ApiResponse<User[]>>(`${this.apiUrl}/auth/users`)
+      .pipe(map((r) => r.data || []));
   }
 
   /** 创建用户 */
-  createUser(username: string, password: string, role: string): Observable<any> {
-    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/auth/users`, { username, password, role })
-      .pipe(map(r => r.data));
+  createUser(username: string, password: string, role: string): Observable<void> {
+    return this.http
+      .post<ApiResponse<void>>(`${this.apiUrl}/auth/users`, { username, password, role })
+      .pipe(map(() => void 0));
   }
 
   /** 删除用户 */
-  deleteUser(username: string): Observable<any> {
-    return this.http.delete<ApiResponse<any>>(`${this.apiUrl}/auth/users/${username}`)
-      .pipe(map(r => r.data));
+  deleteUser(username: string): Observable<void> {
+    return this.http
+      .delete<ApiResponse<void>>(`${this.apiUrl}/auth/users/${username}`)
+      .pipe(map(() => void 0));
   }
 
   /** 修改密码 */
-  changePassword(oldPassword: string, newPassword: string): Observable<any> {
-    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/auth/change-password`, { old_password: oldPassword, new_password: newPassword })
-      .pipe(map(r => r.data));
+  changePassword(oldPassword: string, newPassword: string): Observable<void> {
+    return this.http
+      .post<ApiResponse<void>>(`${this.apiUrl}/auth/change-password`, {
+        old_password: oldPassword,
+        new_password: newPassword,
+      })
+      .pipe(map(() => void 0));
   }
 }

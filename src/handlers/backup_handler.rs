@@ -1,11 +1,11 @@
 //! 备份/恢复处理器
 
-use actix_web::{HttpRequest, HttpResponse, web};
-use crate::state::AppState;
-use crate::error::GeoServerError;
-use crate::backup::{export_backup, import_backup, GeoServerBackup};
-use crate::handlers::auth_handler::require_auth;
 use super::rest_handler::ApiResponse;
+use crate::backup::{export_backup, import_backup, GeoServerBackup};
+use crate::error::GeoServerError;
+use crate::handlers::auth_handler::require_auth;
+use crate::state::AppState;
+use actix_web::{web, HttpRequest, HttpResponse};
 use tracing::info;
 
 /// 导出备份
@@ -22,7 +22,10 @@ pub async fn handle_export(
     info!("[Backup] 导出完成: {} 个实体", backup.workspaces.len());
     Ok(HttpResponse::Ok()
         .content_type("application/json")
-        .insert_header(("Content-Disposition", "attachment; filename=geoserver-backup.json"))
+        .insert_header((
+            "Content-Disposition",
+            "attachment; filename=geoserver-backup.json",
+        ))
         .json(ApiResponse::success(backup)))
 }
 
@@ -40,8 +43,10 @@ pub async fn handle_import(
         .map_err(|e| GeoServerError::InternalError(e))?;
 
     info!("[Backup] 导入完成: {}", report.summary());
-    Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "message": "恢复完成",
-        "report": report,
-    }))))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "message": "恢复完成",
+            "report": report,
+        }))),
+    )
 }

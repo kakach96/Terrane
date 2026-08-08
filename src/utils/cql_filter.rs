@@ -171,7 +171,7 @@ fn parse_not_expr(s: &str) -> Result<CqlExpression, String> {
         return Ok(CqlExpression::Not(Box::new(inner)));
     }
     if s.starts_with('(') && s.ends_with(')') {
-        let inner = &s[1..s.len()-1];
+        let inner = &s[1..s.len() - 1];
         return parse_or_expr(inner);
     }
     parse_primary(s)
@@ -229,7 +229,9 @@ fn parse_comparison(s: &str) -> Result<CqlExpression, String> {
     for (op_str, op) in &ops {
         if let Some(idx) = s.find(op_str) {
             // 确保不在引号内
-            if is_in_quotes(s, idx) { continue; }
+            if is_in_quotes(s, idx) {
+                continue;
+            }
             let property = s[..idx].trim().to_string();
             let value_str = s[idx + op_str.len()..].trim();
             let value = parse_literal(value_str)?;
@@ -257,7 +259,11 @@ fn parse_comparison(s: &str) -> Result<CqlExpression, String> {
 fn parse_like(s: &str) -> Result<CqlExpression, String> {
     let s_upper = s.to_uppercase();
     let case_insensitive = s_upper.contains(" ILIKE ");
-    let keyword = if case_insensitive { " ILIKE " } else { " LIKE " };
+    let keyword = if case_insensitive {
+        " ILIKE "
+    } else {
+        " LIKE "
+    };
 
     if let Some(idx) = s_upper.find(keyword) {
         let property = s[..idx].trim().to_string();
@@ -281,9 +287,17 @@ fn parse_between(s: &str) -> Result<CqlExpression, String> {
         if let Some(and_idx) = rest.to_uppercase().find(" AND ") {
             let low_str = rest[..and_idx].trim();
             let high_str = rest[and_idx + 5..].trim();
-            let low: f64 = low_str.parse().map_err(|_| format!("无效的数值: '{}'", low_str))?;
-            let high: f64 = high_str.parse().map_err(|_| format!("无效的数值: '{}'", high_str))?;
-            return Ok(CqlExpression::Between { property, low, high });
+            let low: f64 = low_str
+                .parse()
+                .map_err(|_| format!("无效的数值: '{}'", low_str))?;
+            let high: f64 = high_str
+                .parse()
+                .map_err(|_| format!("无效的数值: '{}'", high_str))?;
+            return Ok(CqlExpression::Between {
+                property,
+                low,
+                high,
+            });
         }
     }
     Err(format!("无效的 BETWEEN 表达式: '{}'", s))
@@ -295,8 +309,13 @@ fn parse_in(s: &str) -> Result<CqlExpression, String> {
     if let Some(idx) = s_upper.find(" IN (") {
         let property = s[..idx].trim().to_string();
         let rest = s[idx + 5..].trim();
-        let rest = if rest.ends_with(')') { &rest[..rest.len()-1] } else { rest };
-        let values: Vec<String> = rest.split(',')
+        let rest = if rest.ends_with(')') {
+            &rest[..rest.len() - 1]
+        } else {
+            rest
+        };
+        let values: Vec<String> = rest
+            .split(',')
             .map(|v| v.trim().trim_matches('\'').to_string())
             .collect();
         return Ok(CqlExpression::In { property, values });
@@ -310,43 +329,77 @@ fn try_parse_spatial(s: &str) -> Result<CqlExpression, String> {
 
     // BBOX(geom, minx, miny, maxx, maxy) 或 BBOX(geom, minx, miny, maxx, maxy, 'EPSG:xxxx')
     if s.to_uppercase().starts_with("BBOX(") && s.ends_with(')') {
-        let inner = &s[5..s.len()-1];
+        let inner = &s[5..s.len() - 1];
         let parts: Vec<&str> = split_by_commas(inner);
         if parts.len() >= 5 {
             let property = parts[0].trim().to_string();
-            let minx: f64 = parts[1].trim().parse().map_err(|_| format!("无效的 minx: '{}'", parts[1]))?;
-            let miny: f64 = parts[2].trim().parse().map_err(|_| format!("无效的 miny: '{}'", parts[2]))?;
-            let maxx: f64 = parts[3].trim().parse().map_err(|_| format!("无效的 maxx: '{}'", parts[3]))?;
-            let maxy: f64 = parts[4].trim().parse().map_err(|_| format!("无效的 maxy: '{}'", parts[4]))?;
+            let minx: f64 = parts[1]
+                .trim()
+                .parse()
+                .map_err(|_| format!("无效的 minx: '{}'", parts[1]))?;
+            let miny: f64 = parts[2]
+                .trim()
+                .parse()
+                .map_err(|_| format!("无效的 miny: '{}'", parts[2]))?;
+            let maxx: f64 = parts[3]
+                .trim()
+                .parse()
+                .map_err(|_| format!("无效的 maxx: '{}'", parts[3]))?;
+            let maxy: f64 = parts[4]
+                .trim()
+                .parse()
+                .map_err(|_| format!("无效的 maxy: '{}'", parts[4]))?;
             let crs = if parts.len() >= 6 {
                 Some(parts[5].trim().trim_matches('\'').to_string())
             } else {
                 None
             };
-            return Ok(CqlExpression::Spatial(SpatialOp::BBox { property, minx, miny, maxx, maxy, crs }));
+            return Ok(CqlExpression::Spatial(SpatialOp::BBox {
+                property,
+                minx,
+                miny,
+                maxx,
+                maxy,
+                crs,
+            }));
         }
     }
 
     // INTERSECTS(geom, WKT)
-    for (func_name, op_type) in [("INTERSECTS(", "intersects"), ("WITHIN(", "within"), ("DWITHIN(", "dwithin")] {
+    for (func_name, op_type) in [
+        ("INTERSECTS(", "intersects"),
+        ("WITHIN(", "within"),
+        ("DWITHIN(", "dwithin"),
+    ] {
         if s.to_uppercase().starts_with(func_name) && s.ends_with(')') {
-            let inner = &s[func_name.len()..s.len()-1];
+            let inner = &s[func_name.len()..s.len() - 1];
             let parts: Vec<&str> = split_by_commas(inner);
             if parts.len() >= 2 {
                 let property = parts[0].trim().to_string();
                 let wkt = parts[1].trim().to_string();
                 match op_type {
-                    "intersects" => return Ok(CqlExpression::Spatial(SpatialOp::Intersects { property, wkt })),
-                    "within" => return Ok(CqlExpression::Spatial(SpatialOp::Within { property, wkt })),
+                    "intersects" => {
+                        return Ok(CqlExpression::Spatial(SpatialOp::Intersects {
+                            property,
+                            wkt,
+                        }))
+                    },
+                    "within" => {
+                        return Ok(CqlExpression::Spatial(SpatialOp::Within { property, wkt }))
+                    },
                     "dwithin" => {
                         let distance = if parts.len() >= 3 {
                             parts[2].trim().parse::<f64>().unwrap_or(0.0)
                         } else {
                             0.0
                         };
-                        return Ok(CqlExpression::Spatial(SpatialOp::DWithin { property, wkt, distance }));
-                    }
-                    _ => {}
+                        return Ok(CqlExpression::Spatial(SpatialOp::DWithin {
+                            property,
+                            wkt,
+                            distance,
+                        }));
+                    },
+                    _ => {},
                 }
             }
         }
@@ -370,7 +423,7 @@ fn parse_literal(s: &str) -> Result<LiteralValue, String> {
 
     // 字符串（引号包裹）
     if (s.starts_with('\'') && s.ends_with('\'')) || (s.starts_with('"') && s.ends_with('"')) {
-        return Ok(LiteralValue::String(s[1..s.len()-1].to_string()));
+        return Ok(LiteralValue::String(s[1..s.len() - 1].to_string()));
     }
 
     // 数字
@@ -392,30 +445,34 @@ pub fn evaluate_cql(feature: &Feature, expr: &CqlExpression) -> bool {
         CqlExpression::True => true,
         CqlExpression::False => false,
 
-        CqlExpression::Comparison { property, operator, value } => {
+        CqlExpression::Comparison {
+            property,
+            operator,
+            value,
+        } => {
             let prop_val = get_property_value(feature, property);
             match prop_val {
                 Some(pv) => compare_values(&pv, operator, value),
                 None => false,
             }
-        }
+        },
 
         CqlExpression::And(left, right) => {
             evaluate_cql(feature, left) && evaluate_cql(feature, right)
-        }
+        },
         CqlExpression::Or(left, right) => {
             evaluate_cql(feature, left) || evaluate_cql(feature, right)
-        }
+        },
         CqlExpression::Not(inner) => !evaluate_cql(feature, inner),
 
-        CqlExpression::IsNull(property) => {
-            get_property_value(feature, property).is_none()
-        }
-        CqlExpression::IsNotNull(property) => {
-            get_property_value(feature, property).is_some()
-        }
+        CqlExpression::IsNull(property) => get_property_value(feature, property).is_none(),
+        CqlExpression::IsNotNull(property) => get_property_value(feature, property).is_some(),
 
-        CqlExpression::Like { property, pattern, case_insensitive } => {
+        CqlExpression::Like {
+            property,
+            pattern,
+            case_insensitive,
+        } => {
             match get_property_value(feature, property) {
                 Some(val) => {
                     let val_str = format_value(&val);
@@ -432,33 +489,33 @@ pub fn evaluate_cql(feature: &Feature, expr: &CqlExpression) -> bool {
                     // 将 SQL LIKE 模式转为简单的通配符匹配
                     let regex_pattern = pattern_to_regex(&pat);
                     regex_like(&val_str, &regex_pattern)
-                }
+                },
                 None => false,
             }
-        }
+        },
 
-        CqlExpression::Between { property, low, high } => {
-            match get_property_value(feature, property) {
-                Some(val) => {
-                    if let Some(n) = to_number(&val) {
-                        n >= *low && n <= *high
-                    } else {
-                        false
-                    }
+        CqlExpression::Between {
+            property,
+            low,
+            high,
+        } => match get_property_value(feature, property) {
+            Some(val) => {
+                if let Some(n) = to_number(&val) {
+                    n >= *low && n <= *high
+                } else {
+                    false
                 }
-                None => false,
-            }
-        }
+            },
+            None => false,
+        },
 
-        CqlExpression::In { property, values } => {
-            match get_property_value(feature, property) {
-                Some(val) => {
-                    let val_str = format_value(&val);
-                    values.iter().any(|v| v == &val_str)
-                }
-                None => false,
-            }
-        }
+        CqlExpression::In { property, values } => match get_property_value(feature, property) {
+            Some(val) => {
+                let val_str = format_value(&val);
+                values.iter().any(|v| v == &val_str)
+            },
+            None => false,
+        },
 
         CqlExpression::Spatial(op) => evaluate_spatial(feature, op),
     }
@@ -470,7 +527,10 @@ pub fn filter_features(features: Vec<Feature>, cql: &str) -> Result<Vec<Feature>
         return Ok(features);
     }
     let expr = parse_cql(cql)?;
-    Ok(features.into_iter().filter(|f| evaluate_cql(f, &expr)).collect())
+    Ok(features
+        .into_iter()
+        .filter(|f| evaluate_cql(f, &expr))
+        .collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -499,9 +559,12 @@ fn parse_wkt_polygon(wkt: &str) -> Option<Vec<(f64, f64)>> {
     if let Some(inner) = upper.strip_prefix("POLYGON((") {
         if let Some(coords_str) = inner.strip_suffix("))") {
             let rings: Vec<&str> = coords_str.split("),(").collect();
-            if rings.is_empty() { return None; }
+            if rings.is_empty() {
+                return None;
+            }
             let outer = rings[0];
-            let points: Vec<(f64, f64)> = outer.split(',')
+            let points: Vec<(f64, f64)> = outer
+                .split(',')
                 .filter_map(|pair| {
                     let parts: Vec<&str> = pair.trim().split_whitespace().collect();
                     if parts.len() >= 2 {
@@ -511,7 +574,11 @@ fn parse_wkt_polygon(wkt: &str) -> Option<Vec<(f64, f64)>> {
                     }
                 })
                 .collect();
-            if points.is_empty() { None } else { Some(points) }
+            if points.is_empty() {
+                None
+            } else {
+                Some(points)
+            }
         } else {
             None
         }
@@ -526,7 +593,10 @@ fn point_in_polygon(px: f64, py: f64, polygon: &[(f64, f64)]) -> bool {
     let mut j = polygon.len() - 1;
     for i in 0..polygon.len() {
         if ((polygon[i].1 > py) != (polygon[j].1 > py))
-            && (px < (polygon[j].0 - polygon[i].0) * (py - polygon[i].1) / (polygon[j].1 - polygon[i].1) + polygon[i].0)
+            && (px
+                < (polygon[j].0 - polygon[i].0) * (py - polygon[i].1)
+                    / (polygon[j].1 - polygon[i].1)
+                    + polygon[i].0)
         {
             inside = !inside;
         }
@@ -541,17 +611,22 @@ fn evaluate_spatial(feature: &Feature, op: &SpatialOp) -> bool {
     let coords = match geom {
         GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
             Some((coordinates[0], coordinates[1]))
-        }
+        },
         _ => None,
     };
 
     match op {
-        SpatialOp::BBox { property: _, minx, miny, maxx, maxy, crs: _ } => {
-            match coords {
-                Some((x, y)) => x >= *minx && x <= *maxx && y >= *miny && y <= *maxy,
-                None => false,
-            }
-        }
+        SpatialOp::BBox {
+            property: _,
+            minx,
+            miny,
+            maxx,
+            maxy,
+            crs: _,
+        } => match coords {
+            Some((x, y)) => x >= *minx && x <= *maxx && y >= *miny && y <= *maxy,
+            None => false,
+        },
         SpatialOp::Intersects { property: _, wkt } | SpatialOp::Within { property: _, wkt } => {
             if let Some(poly_points) = parse_wkt_polygon(wkt) {
                 match coords {
@@ -561,21 +636,25 @@ fn evaluate_spatial(feature: &Feature, op: &SpatialOp) -> bool {
             } else {
                 false
             }
-        }
-        SpatialOp::DWithin { property: _, wkt, distance } => {
+        },
+        SpatialOp::DWithin {
+            property: _,
+            wkt,
+            distance,
+        } => {
             if let Some((wx, wy)) = parse_wkt_point(wkt) {
                 match coords {
                     Some((x, y)) => {
                         let dx = x - wx;
                         let dy = y - wy;
                         (dx * dx + dy * dy).sqrt() <= *distance
-                    }
+                    },
                     None => false,
                 }
             } else {
                 false
             }
-        }
+        },
     }
 }
 
@@ -631,7 +710,7 @@ fn compare_values(prop_val: &PropertyValue, op: &ComparisonOp, lit: &LiteralValu
                 },
                 None => false,
             }
-        }
+        },
         LiteralValue::String(lit_s) => {
             let prop_s = format_value(prop_val);
             match op {
@@ -642,14 +721,14 @@ fn compare_values(prop_val: &PropertyValue, op: &ComparisonOp, lit: &LiteralValu
                 ComparisonOp::GreaterThan => prop_s > *lit_s,
                 ComparisonOp::GreaterThanOrEqual => prop_s >= *lit_s,
             }
-        }
+        },
         LiteralValue::Boolean(lit_b) => {
             let prop_b = match prop_val {
                 PropertyValue::Boolean(b) => Some(*b),
                 PropertyValue::String(s) => {
                     let upper = s.to_uppercase();
                     Some(upper == "TRUE" || upper == "YES" || upper == "1")
-                }
+                },
                 _ => None,
             };
             match prop_b {
@@ -660,7 +739,7 @@ fn compare_values(prop_val: &PropertyValue, op: &ComparisonOp, lit: &LiteralValu
                 },
                 None => false,
             }
-        }
+        },
     }
 }
 
@@ -676,7 +755,7 @@ fn pattern_to_regex(pattern: &str) -> String {
             '.' | '*' | '+' | '?' | '^' | '$' | '|' | '(' | ')' | '[' | ']' | '{' | '}' | '\\' => {
                 regex.push('\\');
                 regex.push(c);
-            }
+            },
             _ => regex.push(c),
         }
     }
@@ -687,18 +766,22 @@ fn pattern_to_regex(pattern: &str) -> String {
 fn regex_like(s: &str, pattern: &str) -> bool {
     // 简单实现：移除 ^ 和 $，处理 .* 为通配
     let pat = if pattern.starts_with('^') && pattern.ends_with('$') {
-        &pattern[1..pattern.len()-1]
+        &pattern[1..pattern.len() - 1]
     } else {
         pattern
     };
 
-    if pat == ".*" { return true; }
+    if pat == ".*" {
+        return true;
+    }
 
     if pat.contains(".*") {
         let parts: Vec<&str> = pat.split(".*").collect();
         let mut pos = 0;
         for part in &parts {
-            if part.is_empty() { continue; }
+            if part.is_empty() {
+                continue;
+            }
             if let Some(found) = s[pos..].find(part) {
                 pos += found + part.len();
             } else {
@@ -731,17 +814,25 @@ fn split_top_level(s: &str, keywords: &[&str]) -> Result<Vec<String>, String> {
                 while i < chars.len() && chars[i] != '\'' {
                     i += 1;
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         if depth == 0 {
             let remaining: String = chars[i..].iter().collect();
             let upper = remaining.to_uppercase();
             for kw in keywords {
-                if upper.starts_with(kw) && (i + kw.len() >= chars.len() || !chars[i + kw.len()].is_alphanumeric()) {
+                if upper.starts_with(kw)
+                    && (i + kw.len() >= chars.len() || !chars[i + kw.len()].is_alphanumeric())
+                {
                     if start < i {
-                        parts.push(chars[start..i].iter().collect::<String>().trim().to_string());
+                        parts.push(
+                            chars[start..i]
+                                .iter()
+                                .collect::<String>()
+                                .trim()
+                                .to_string(),
+                        );
                     }
                     i += kw.len();
                     start = i;
@@ -780,12 +871,12 @@ fn split_by_commas(s: &str) -> Vec<&str> {
                     j += 1;
                 }
                 // 跳过字符串内容
-            }
+            },
             ',' if depth == 0 => {
                 parts.push(&s[start..i]);
                 start = i + 1;
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
     parts.push(&s[start..]);
@@ -797,11 +888,13 @@ fn is_in_quotes(s: &str, pos: usize) -> bool {
     let mut in_single = false;
     let mut in_double = false;
     for (i, c) in s.chars().enumerate() {
-        if i >= pos { break; }
+        if i >= pos {
+            break;
+        }
         match c {
             '\'' if !in_double => in_single = !in_single,
             '"' if !in_single => in_double = !in_double,
-            _ => {}
+            _ => {},
         }
     }
     in_single || in_double
@@ -822,7 +915,9 @@ mod tests {
         props.insert("name".to_string(), PropertyValue::String(name.to_string()));
         props.insert("population".to_string(), PropertyValue::Number(pop));
         Feature::new(
-            GeoJsonGeometry::Point { coordinates: vec![100.0, 0.0] },
+            GeoJsonGeometry::Point {
+                coordinates: vec![100.0, 0.0],
+            },
             props,
         )
     }
@@ -855,7 +950,9 @@ mod tests {
     #[test]
     fn test_bbox() {
         let f = Feature::new(
-            GeoJsonGeometry::Point { coordinates: vec![100.0, 0.0] },
+            GeoJsonGeometry::Point {
+                coordinates: vec![100.0, 0.0],
+            },
             HashMap::new(),
         );
         let expr = parse_cql("BBOX(geom, 90, -10, 110, 10)").unwrap();
@@ -878,7 +975,9 @@ mod tests {
         // BETWEEN 中的 AND 可能与逻辑 AND 冲突，
         // 使用简化表达式测试
         let f = Feature::new(
-            GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+            GeoJsonGeometry::Point {
+                coordinates: vec![0.0, 0.0],
+            },
             [("value".to_string(), PropertyValue::Number(50.0))].into(),
         );
         // NOT 5 AND NOT 7 测试
@@ -902,7 +1001,10 @@ mod tests {
         assert!(evaluate_cql(&f, &expr));
         // 仅第一个条件满足 → AND 应为 false (此前错误地返回 true)
         let expr = parse_cql("population > 1000 AND name = 'London'").unwrap();
-        assert!(!evaluate_cql(&f, &expr), "bug8: `A AND B` 被错误解析为 `A OR B`");
+        assert!(
+            !evaluate_cql(&f, &expr),
+            "bug8: `A AND B` 被错误解析为 `A OR B`"
+        );
         // OR 语义保持正确
         let expr = parse_cql("population < 1000 OR name = 'Tokyo'").unwrap();
         assert!(evaluate_cql(&f, &expr));

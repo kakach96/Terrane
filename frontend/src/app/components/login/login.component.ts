@@ -6,7 +6,7 @@ import { MatDialogRef } from '@angular/material/dialog';
 @Component({
   selector: 'app-login',
   templateUrl: './login.component.html',
-  styleUrls: ['./login.component.scss']
+  styleUrls: ['./login.component.scss'],
 })
 export class LoginComponent {
   username = '';
@@ -38,7 +38,7 @@ export class LoginComponent {
       error: (err) => {
         this.errorMessage = err.error?.message || '登录失败，请检查用户名和密码';
         this.loading = false;
-      }
+      },
     });
   }
 }

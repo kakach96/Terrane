@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use crate::models::{Bounds, Feature, GeoJsonGeometry};
-use crate::utils::cql_filter::{parse_cql, CqlExpression, evaluate_cql};
+use crate::utils::cql_filter::{evaluate_cql, parse_cql, CqlExpression};
+use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,10 +194,7 @@ impl WfsCapabilities {
                             "application/json".to_string(),
                             "application/geojson".to_string(),
                         ],
-                        result_type: vec![
-                            "results".to_string(),
-                            "hits".to_string(),
-                        ],
+                        result_type: vec!["results".to_string(), "hits".to_string()],
                         dcp_type: vec![WfsDcpType {
                             http: WfsHttpMetadata {
                                 get: Some(WfsOnlineResource {
@@ -210,10 +207,7 @@ impl WfsCapabilities {
                         }],
                     },
                 },
-                exception: vec![
-                    "XML".to_string(),
-                    "JSON".to_string(),
-                ],
+                exception: vec!["XML".to_string(), "JSON".to_string()],
             },
         }
     }
@@ -261,16 +255,14 @@ impl DescribeFeatureTypeResponse {
                 max_occurs: Some("1".to_string()),
             })
             .collect();
-        
+
         DescribeFeatureTypeResponse {
             schema: FeatureTypeSchema {
                 target_namespace: "http://geoserver.org/".to_string(),
                 element_form_default: "qualified".to_string(),
                 complex_type: vec![ComplexType {
                     name: format!("{}Type", type_name),
-                    sequence: SequenceElement {
-                        element: elements,
-                    },
+                    sequence: SequenceElement { element: elements },
                 }],
             },
         }
@@ -347,7 +339,9 @@ impl TransactionResponse {
     }
 }
 
-pub fn parse_wfs_request(params: &[(String, String)]) -> Result<WfsRequest, crate::error::GeoServerError> {
+pub fn parse_wfs_request(
+    params: &[(String, String)],
+) -> Result<WfsRequest, crate::error::GeoServerError> {
     let mut service = None;
     let mut version = None;
     let mut request = None;
@@ -376,13 +370,22 @@ pub fn parse_wfs_request(params: &[(String, String)]) -> Result<WfsRequest, crat
                     "lockfeature" => Some(WfsOperation::LockFeature),
                     "getpropertyvalue" => Some(WfsOperation::GetPropertyValue),
                     "transaction" => Some(WfsOperation::Transaction),
-                    _ => return Err(crate::error::GeoServerError::BadRequest(format!("Unknown request: {}", value))),
+                    _ => {
+                        return Err(crate::error::GeoServerError::BadRequest(format!(
+                            "Unknown request: {}",
+                            value
+                        )))
+                    },
                 }
-            }
-            "TYPENAME" | "TYPENAMES" => type_names = Some(value.split(',').map(|s| s.trim().to_string()).collect()),
+            },
+            "TYPENAME" | "TYPENAMES" => {
+                type_names = Some(value.split(',').map(|s| s.trim().to_string()).collect())
+            },
             "OUTPUTFORMAT" => output_format = Some(value.clone()),
             "RESULTTYPE" => result_type = Some(value.clone()),
-            "PROPERTYNAME" => property_name = Some(value.split(',').map(|s| s.trim().to_string()).collect()),
+            "PROPERTYNAME" => {
+                property_name = Some(value.split(',').map(|s| s.trim().to_string()).collect())
+            },
             "MAXFEATURES" | "MAXFEATURE" => max_features = value.parse().ok(),
             "STARTINDEX" => start_index = value.parse().ok(),
             "SRSNAME" => srs_name = Some(value.clone()),
@@ -392,9 +395,10 @@ pub fn parse_wfs_request(params: &[(String, String)]) -> Result<WfsRequest, crat
                     crate::error::GeoServerError::BadRequest(format!("Invalid CQL_FILTER: {}", e))
                 })?;
                 filter = Some(Filter::Cql(Box::new(expr)));
-            }
+            },
             "BBOX" => {
-                let parts: Vec<f64> = value.split(',')
+                let parts: Vec<f64> = value
+                    .split(',')
                     .filter_map(|s| s.trim().parse().ok())
                     .collect();
                 if parts.len() >= 4 {
@@ -403,21 +407,33 @@ pub fn parse_wfs_request(params: &[(String, String)]) -> Result<WfsRequest, crat
                         miny: parts[1],
                         maxx: parts[2],
                         maxy: parts[3],
-                        srs: if parts.len() >= 5 { Some(parts[4].to_string()) } else { None },
+                        srs: if parts.len() >= 5 {
+                            Some(parts[4].to_string())
+                        } else {
+                            None
+                        },
                     });
                 }
-            }
-            "FEATUREID" | "FEATURE_ID" => feature_id = Some(value.split(',').map(|s| s.trim().to_string()).collect()),
-            "GMLOBJECTID" => gml_object_id = Some(value.split(',').map(|s| s.trim().to_string()).collect()),
-            _ => {}
+            },
+            "FEATUREID" | "FEATURE_ID" => {
+                feature_id = Some(value.split(',').map(|s| s.trim().to_string()).collect())
+            },
+            "GMLOBJECTID" => {
+                gml_object_id = Some(value.split(',').map(|s| s.trim().to_string()).collect())
+            },
+            _ => {},
         }
     }
 
-    let request = request.ok_or_else(|| crate::error::GeoServerError::BadRequest("Missing REQUEST parameter".to_string()))?;
-    
+    let request = request.ok_or_else(|| {
+        crate::error::GeoServerError::BadRequest("Missing REQUEST parameter".to_string())
+    })?;
+
     if let Some(ref svc) = service {
         if svc.to_uppercase() != "WFS" {
-            return Err(crate::error::GeoServerError::BadRequest("Invalid service type".to_string()));
+            return Err(crate::error::GeoServerError::BadRequest(
+                "Invalid service type".to_string(),
+            ));
         }
     }
 
@@ -469,7 +485,10 @@ struct XmlNode {
 
 impl XmlNode {
     fn attr(&self, key: &str) -> Option<&str> {
-        self.attrs.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+        self.attrs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
     }
 }
 
@@ -481,8 +500,8 @@ fn xml_local_name(raw: &[u8]) -> String {
 
 /// 将 XML 字符串解析为节点树
 fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
-    use quick_xml::Reader;
     use quick_xml::events::Event;
+    use quick_xml::Reader;
 
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
@@ -516,29 +535,57 @@ fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
             Ok(Event::Start(ref e)) => {
                 flush_text(&mut stack, &mut text_buf);
                 let name = xml_local_name(e.name().as_ref());
-                let attrs = e.attributes().filter_map(|a| a.ok())
-                    .map(|a| (xml_local_name(a.key.as_ref()), String::from_utf8_lossy(&a.value).to_string()))
+                let attrs = e
+                    .attributes()
+                    .filter_map(|a| a.ok())
+                    .map(|a| {
+                        (
+                            xml_local_name(a.key.as_ref()),
+                            String::from_utf8_lossy(&a.value).to_string(),
+                        )
+                    })
                     .collect();
-                stack.push(XmlNode { name, attrs, text: String::new(), children: vec![] });
-            }
+                stack.push(XmlNode {
+                    name,
+                    attrs,
+                    text: String::new(),
+                    children: vec![],
+                });
+            },
             Ok(Event::Empty(ref e)) => {
                 flush_text(&mut stack, &mut text_buf);
                 let name = xml_local_name(e.name().as_ref());
-                let attrs = e.attributes().filter_map(|a| a.ok())
-                    .map(|a| (xml_local_name(a.key.as_ref()), String::from_utf8_lossy(&a.value).to_string()))
+                let attrs = e
+                    .attributes()
+                    .filter_map(|a| a.ok())
+                    .map(|a| {
+                        (
+                            xml_local_name(a.key.as_ref()),
+                            String::from_utf8_lossy(&a.value).to_string(),
+                        )
+                    })
                     .collect();
-                attach(&mut stack, &mut roots, XmlNode { name, attrs, text: String::new(), children: vec![] });
-            }
+                attach(
+                    &mut stack,
+                    &mut roots,
+                    XmlNode {
+                        name,
+                        attrs,
+                        text: String::new(),
+                        children: vec![],
+                    },
+                );
+            },
             Ok(Event::Text(ref e)) => {
                 text_buf.push_str(String::from_utf8_lossy(e.as_ref()).trim());
-            }
+            },
             Ok(Event::End(_)) => {
                 flush_text(&mut stack, &mut text_buf);
                 if let Some(node) = stack.pop() {
                     attach(&mut stack, &mut roots, node);
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
     Ok(roots)
@@ -548,13 +595,17 @@ fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
 fn node_to_filter(node: &XmlNode) -> Result<Filter, String> {
     match node.name.as_str() {
         "Filter" => {
-            let child = node.children.first()
+            let child = node
+                .children
+                .first()
                 .ok_or_else(|| "empty <Filter> element".to_string())?;
             node_to_filter(child)
-        }
+        },
         "And" | "Or" => {
             let is_and = node.name == "And";
-            let children: Vec<Filter> = node.children.iter()
+            let children: Vec<Filter> = node
+                .children
+                .iter()
                 .map(node_to_filter)
                 .collect::<Result<_, _>>()?;
             if children.is_empty() {
@@ -569,12 +620,14 @@ fn node_to_filter(node: &XmlNode) -> Result<Filter, String> {
                     Filter::Or(Box::new(acc), Box::new(f))
                 }
             }))
-        }
+        },
         "Not" => {
-            let child = node.children.first()
+            let child = node
+                .children
+                .first()
                 .ok_or_else(|| "empty <Not> element".to_string())?;
             Ok(Filter::Not(Box::new(node_to_filter(child)?)))
-        }
+        },
         "PropertyIsEqualTo" => comparison_filter(node, CompareOp::Equal),
         "PropertyIsNotEqualTo" => comparison_filter(node, CompareOp::NotEqual),
         "PropertyIsLessThan" => comparison_filter(node, CompareOp::LessThan),
@@ -585,14 +638,16 @@ fn node_to_filter(node: &XmlNode) -> Result<Filter, String> {
             let prop = child_text(node, "PropertyName")?;
             let pat = child_text(node, "Literal")?;
             Ok(Filter::PropertyIsLike(PropertyName(prop), Literal(pat)))
-        }
+        },
         "PropertyIsNull" => {
             let prop = child_text(node, "PropertyName")?;
             Ok(Filter::PropertyIsNull(PropertyName(prop)))
-        }
+        },
         "PropertyIsBetween" => {
             let prop = child_text(node, "PropertyName")?;
-            let lits: Vec<String> = node.children.iter()
+            let lits: Vec<String> = node
+                .children
+                .iter()
                 .filter(|c| c.name == "Literal")
                 .map(|c| c.text.trim().to_string())
                 .collect();
@@ -604,28 +659,36 @@ fn node_to_filter(node: &XmlNode) -> Result<Filter, String> {
                 Literal(lits[0].clone()),
                 Literal(lits[1].clone()),
             ))
-        }
+        },
         "BBOX" => {
             let prop = child_text(node, "PropertyName")?;
             let (minx, miny, maxx, maxy) = parse_bbox_corners(node)?;
-            Ok(Filter::BBox(PropertyName(prop), Bbox {
-                minx, miny, maxx, maxy, srs: None,
-            }))
-        }
+            Ok(Filter::BBox(
+                PropertyName(prop),
+                Bbox {
+                    minx,
+                    miny,
+                    maxx,
+                    maxy,
+                    srs: None,
+                },
+            ))
+        },
         "FeatureId" => {
             let fid = node.attr("fid").unwrap_or("").to_string();
             if fid.is_empty() {
                 return Err("<FeatureId> 缺少 fid 属性".to_string());
             }
             Ok(Filter::FeatureId(vec![fid]))
-        }
+        },
         other => Err(format!("不支持的 OGC Filter 元素: {}", other)),
     }
 }
 
 /// 获取指定名称子元素的文本内容
 fn child_text(node: &XmlNode, name: &str) -> Result<String, String> {
-    node.children.iter()
+    node.children
+        .iter()
         .find(|c| c.name == name)
         .map(|c| c.text.trim().to_string())
         .ok_or_else(|| format!("<{}> 缺少 <{}> 子元素", node.name, name))
@@ -640,19 +703,29 @@ fn comparison_filter(node: &XmlNode, op: CompareOp) -> Result<Filter, String> {
         CompareOp::NotEqual => Filter::PropertyIsNotEqualTo(PropertyName(prop), Literal(lit)),
         CompareOp::LessThan => Filter::PropertyIsLessThan(PropertyName(prop), Literal(lit)),
         CompareOp::GreaterThan => Filter::PropertyIsGreaterThan(PropertyName(prop), Literal(lit)),
-        CompareOp::LessThanOrEqual => Filter::PropertyIsLessThanOrEqualTo(PropertyName(prop), Literal(lit)),
-        CompareOp::GreaterThanOrEqual => Filter::PropertyIsGreaterThanOrEqualTo(PropertyName(prop), Literal(lit)),
+        CompareOp::LessThanOrEqual => {
+            Filter::PropertyIsLessThanOrEqualTo(PropertyName(prop), Literal(lit))
+        },
+        CompareOp::GreaterThanOrEqual => {
+            Filter::PropertyIsGreaterThanOrEqualTo(PropertyName(prop), Literal(lit))
+        },
     })
 }
 
 /// 从 BBOX 节点的 Envelope (lowerCorner/upperCorner) 提取角点
 fn parse_bbox_corners(node: &XmlNode) -> Result<(f64, f64, f64, f64), String> {
-    let envelope = node.children.iter().find(|c| c.name == "Envelope")
+    let envelope = node
+        .children
+        .iter()
+        .find(|c| c.name == "Envelope")
         .ok_or_else(|| "<BBOX> 缺少 <Envelope>".to_string())?;
     let lower = child_text(envelope, "lowerCorner")?;
     let upper = child_text(envelope, "upperCorner")?;
     let parse_pair = |s: &str| -> Result<(f64, f64), String> {
-        let parts: Vec<f64> = s.split_whitespace().filter_map(|p| p.parse().ok()).collect();
+        let parts: Vec<f64> = s
+            .split_whitespace()
+            .filter_map(|p| p.parse().ok())
+            .collect();
         if parts.len() >= 2 {
             Ok((parts[0], parts[1]))
         } else {
@@ -665,9 +738,11 @@ fn parse_bbox_corners(node: &XmlNode) -> Result<(f64, f64, f64, f64), String> {
 }
 
 fn parse_ogc_filter_xml(xml: &str) -> Result<Filter, crate::error::GeoServerError> {
-    let roots = parse_xml_nodes(xml)
-        .map_err(|e| crate::error::GeoServerError::BadRequest(format!("Invalid FILTER XML: {}", e)))?;
-    let node = roots.first()
+    let roots = parse_xml_nodes(xml).map_err(|e| {
+        crate::error::GeoServerError::BadRequest(format!("Invalid FILTER XML: {}", e))
+    })?;
+    let node = roots
+        .first()
         .ok_or_else(|| crate::error::GeoServerError::BadRequest("Empty FILTER XML".to_string()))?;
     node_to_filter(node)
         .map_err(|e| crate::error::GeoServerError::BadRequest(format!("Invalid FILTER XML: {}", e)))
@@ -746,40 +821,41 @@ pub fn validate_filter(feature: &Feature, filter: &Filter) -> bool {
         Filter::Not(f) => !validate_filter(feature, f),
         Filter::PropertyIsEqualTo(prop, lit) => {
             compare_property(feature, &prop.0, &lit.0, CompareOp::Equal)
-        }
+        },
         Filter::PropertyIsNotEqualTo(prop, lit) => {
             compare_property(feature, &prop.0, &lit.0, CompareOp::NotEqual)
-        }
+        },
         Filter::PropertyIsLessThan(prop, lit) => {
             compare_property(feature, &prop.0, &lit.0, CompareOp::LessThan)
-        }
+        },
         Filter::PropertyIsGreaterThan(prop, lit) => {
             compare_property(feature, &prop.0, &lit.0, CompareOp::GreaterThan)
-        }
+        },
         Filter::PropertyIsLessThanOrEqualTo(prop, lit) => {
             compare_property(feature, &prop.0, &lit.0, CompareOp::LessThanOrEqual)
-        }
+        },
         Filter::PropertyIsGreaterThanOrEqualTo(prop, lit) => {
             compare_property(feature, &prop.0, &lit.0, CompareOp::GreaterThanOrEqual)
-        }
-        Filter::PropertyIsLike(prop, lit) => {
-            match feature.properties.get(&prop.0) {
-                Some(val) => wildcard_match(&val.to_string(), &lit.0),
-                None => false,
-            }
-        }
+        },
+        Filter::PropertyIsLike(prop, lit) => match feature.properties.get(&prop.0) {
+            Some(val) => wildcard_match(&val.to_string(), &lit.0),
+            None => false,
+        },
         Filter::PropertyIsNull(prop) => {
             !feature.properties.contains_key(&prop.0)
-                || matches!(feature.properties.get(&prop.0), Some(crate::models::PropertyValue::Null))
-        }
-        Filter::PropertyIsBetween(prop, low, high) => {
-            feature.properties.get(&prop.0)
-                .and_then(|v| v.to_string().parse::<f64>().ok())
-                .zip(low.0.parse::<f64>().ok())
-                .zip(high.0.parse::<f64>().ok())
-                .map(|((v, l), h)| v >= l && v <= h)
-                .unwrap_or(false)
-        }
+                || matches!(
+                    feature.properties.get(&prop.0),
+                    Some(crate::models::PropertyValue::Null)
+                )
+        },
+        Filter::PropertyIsBetween(prop, low, high) => feature
+            .properties
+            .get(&prop.0)
+            .and_then(|v| v.to_string().parse::<f64>().ok())
+            .zip(low.0.parse::<f64>().ok())
+            .zip(high.0.parse::<f64>().ok())
+            .map(|((v, l), h)| v >= l && v <= h)
+            .unwrap_or(false),
         Filter::BBox(_, bbox) => {
             let bounds = bbox.to_bounds();
             match &feature.geometry {
@@ -789,10 +865,10 @@ pub fn validate_filter(feature: &Feature, filter: &Filter) -> bool {
                     } else {
                         false
                     }
-                }
+                },
                 _ => true,
             }
-        }
+        },
         Filter::FeatureId(ids) => ids.contains(&feature.id),
         Filter::Cql(expr) => evaluate_cql(feature, expr),
     }
@@ -803,9 +879,11 @@ pub fn validate_filter(feature: &Feature, filter: &Filter) -> bool {
 /// 支持 WFS 2.0 Transaction 格式：
 /// - wfs:Insert / wfs:Update / wfs:Delete
 #[allow(unused_assignments, unused_variables)]
-pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate::error::GeoServerError> {
-    use quick_xml::Reader;
+pub fn parse_transaction_xml(
+    xml_text: &str,
+) -> Result<TransactionRequest, crate::error::GeoServerError> {
     use quick_xml::events::Event;
+    use quick_xml::Reader;
 
     let mut reader = Reader::from_str(xml_text);
     reader.trim_text(true);
@@ -842,7 +920,10 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref())
-                    .split(':').last().unwrap_or("").to_string();
+                    .split(':')
+                    .last()
+                    .unwrap_or("")
+                    .to_string();
                 text_content.clear();
 
                 match tag.as_str() {
@@ -852,7 +933,7 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                             type_name: String::new(),
                             features: Vec::new(),
                         });
-                    }
+                    },
                     "Update" => {
                         in_update = true;
                         current_update = Some(UpdateElement {
@@ -860,46 +941,51 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                             filter: None,
                             properties: Vec::new(),
                         });
-                    }
+                    },
                     "Delete" => {
                         in_delete = true;
                         current_delete = Some(DeleteElement {
                             type_name: String::new(),
                             filter: Filter::FeatureId(vec![]),
                         });
-                    }
+                    },
                     "TypeName" | "Typename" | "TYPENAME" => {
                         text_content.clear();
-                    }
+                    },
                     "Feature" | "feature" if in_insert => {
                         in_feature = true;
                         current_feature = Some(Feature::new(
-                            GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+                            GeoJsonGeometry::Point {
+                                coordinates: vec![0.0, 0.0],
+                            },
                             std::collections::HashMap::new(),
                         ));
-                    }
+                    },
                     "Property" | "property" if in_update => {
                         in_property = true;
                         current_property = Some(PropertyElement {
                             name: String::new(),
                             value: String::new(),
                         });
-                    }
+                    },
                     "Name" | "name" if in_property => {
                         in_name = true;
                         text_content.clear();
-                    }
+                    },
                     "Value" | "value" if in_property => {
                         in_value = true;
                         text_content.clear();
-                    }
-                    "Point" | "point" => {}
+                    },
+                    "Point" | "point" => {},
                     "FeatureId" | "featureId" | "FEATUREID" if in_delete => {
                         // Collect ogc:FeatureId fid attributes into the Delete filter
                         for attr in e.attributes().with_checks(false) {
                             if let Ok(a) = attr {
                                 let key = String::from_utf8_lossy(a.key.as_ref())
-                                    .split(':').last().unwrap_or("").to_lowercase();
+                                    .split(':')
+                                    .last()
+                                    .unwrap_or("")
+                                    .to_lowercase();
                                 if key == "fid" {
                                     let fid = String::from_utf8_lossy(a.value.as_ref()).to_string();
                                     if let Some(ref mut delete) = current_delete {
@@ -910,28 +996,31 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                                 }
                             }
                         }
-                    }
+                    },
                     "LineString" | "linestring" => {
                         in_linestring = true;
-                    }
+                    },
                     "Polygon" | "polygon" => {
                         in_polygon = true;
-                    }
+                    },
                     "exterior" | "Exterior" => {
                         in_exterior = true;
-                    }
-                    "LinearRing" | "linearring" => {}
+                    },
+                    "LinearRing" | "linearring" => {},
                     "pos" | "Pos" => in_pos = true,
                     "posList" | "PosList" => in_poslist = true,
-                    _ => {}
+                    _ => {},
                 }
-            }
+            },
             Ok(Event::Text(ref e)) => {
                 text_content = e.unescape().unwrap_or_default().to_string();
-            }
+            },
             Ok(Event::End(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref())
-                    .split(':').last().unwrap_or("").to_string();
+                    .split(':')
+                    .last()
+                    .unwrap_or("")
+                    .to_string();
 
                 match tag.as_str() {
                     "Insert" => {
@@ -939,19 +1028,19 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                             transaction.inserts.push(insert);
                         }
                         in_insert = false;
-                    }
+                    },
                     "Update" => {
                         if let Some(update) = current_update.take() {
                             transaction.updates.push(update);
                         }
                         in_update = false;
-                    }
+                    },
                     "Delete" => {
                         if let Some(delete) = current_delete.take() {
                             transaction.deletes.push(delete);
                         }
                         in_delete = false;
-                    }
+                    },
                     "TypeName" | "Typename" | "TYPENAME" => {
                         let name = text_content.trim().to_string();
                         if let Some(ref mut insert) = current_insert {
@@ -963,7 +1052,7 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                         if let Some(ref mut delete) = current_delete {
                             delete.type_name = name.clone();
                         }
-                    }
+                    },
                     "Feature" | "feature" if in_insert => {
                         if let Some(feature) = current_feature.take() {
                             if let Some(ref mut insert) = current_insert {
@@ -971,7 +1060,7 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                             }
                         }
                         in_feature = false;
-                    }
+                    },
                     "Property" | "property" if in_update => {
                         if let Some(prop) = current_property.take() {
                             if let Some(ref mut update) = current_update {
@@ -979,21 +1068,22 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                             }
                         }
                         in_property = false;
-                    }
+                    },
                     "Name" | "name" if in_name => {
                         if let Some(ref mut prop) = current_property {
                             prop.name = text_content.trim().to_string();
                         }
                         in_name = false;
-                    }
+                    },
                     "Value" | "value" if in_value => {
                         if let Some(ref mut prop) = current_property {
                             prop.value = text_content.trim().to_string();
                         }
                         in_value = false;
-                    }
+                    },
                     "pos" | "Pos" => {
-                        let coords: Vec<f64> = text_content.split_whitespace()
+                        let coords: Vec<f64> = text_content
+                            .split_whitespace()
                             .filter_map(|v| v.parse().ok())
                             .collect();
                         if coords.len() >= 2 {
@@ -1004,12 +1094,14 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                             }
                         }
                         in_pos = false;
-                    }
+                    },
                     "posList" | "PosList" => {
-                        let coords: Vec<f64> = text_content.split_whitespace()
+                        let coords: Vec<f64> = text_content
+                            .split_whitespace()
                             .filter_map(|v| v.parse().ok())
                             .collect();
-                        let points: Vec<Vec<f64>> = coords.chunks(2)
+                        let points: Vec<Vec<f64>> = coords
+                            .chunks(2)
                             .filter(|c| c.len() == 2)
                             .map(|c| vec![c[0], c[1]])
                             .collect();
@@ -1017,27 +1109,31 @@ pub fn parse_transaction_xml(xml_text: &str) -> Result<TransactionRequest, crate
                         if let Some(ref mut feature) = current_feature {
                             if in_linestring || (in_polygon && in_exterior) {
                                 feature.geometry = if in_polygon {
-                                    GeoJsonGeometry::Polygon { coordinates: vec![points] }
+                                    GeoJsonGeometry::Polygon {
+                                        coordinates: vec![points],
+                                    }
                                 } else {
-                                    GeoJsonGeometry::LineString { coordinates: points }
+                                    GeoJsonGeometry::LineString {
+                                        coordinates: points,
+                                    }
                                 };
                             }
                         }
                         in_poslist = false;
-                    }
+                    },
                     "LineString" | "linestring" => in_linestring = false,
                     "Polygon" | "polygon" => in_polygon = false,
                     "exterior" | "Exterior" => in_exterior = false,
-                    _ => {}
+                    _ => {},
                 }
                 text_content.clear();
-            }
+            },
             Ok(Event::Eof) => break,
             Err(e) => {
                 warn!("[WFS-T] XML 解析警告: {}", e);
                 break;
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 

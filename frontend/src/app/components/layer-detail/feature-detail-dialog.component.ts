@@ -9,13 +9,7 @@ import { CommonModule } from '@angular/common';
 @Component({
   selector: 'app-feature-detail-dialog',
   standalone: true,
-  imports: [
-    CommonModule,
-    MatDialogModule,
-    MatButtonModule,
-    MatIconModule,
-    MatChipsModule
-  ],
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatChipsModule],
   template: `
     <h2 mat-dialog-title>要素详情</h2>
     <mat-dialog-content>
@@ -54,97 +48,99 @@ import { CommonModule } from '@angular/common';
       <button mat-button mat-dialog-close>关闭</button>
     </mat-dialog-actions>
   `,
-  styles: [`
-    mat-dialog-content {
-      min-width: 500px;
-      max-width: 700px;
-    }
-
-    .feature-detail {
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
-
-    .detail-section {
-      h3 {
-        font-size: 14px;
-        font-weight: 600;
-        color: rgba(0, 0, 0, 0.6);
-        margin-bottom: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-    }
-
-    .info-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 12px;
-
-      .label {
-        font-size: 13px;
-        font-weight: 600;
-        color: rgba(0, 0, 0, 0.6);
-        min-width: 80px;
+  styles: [
+    `
+      mat-dialog-content {
+        min-width: 500px;
+        max-width: 700px;
       }
 
-      .value {
-        font-size: 14px;
-        color: rgba(0, 0, 0, 0.87);
+      .feature-detail {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
 
-        &.mono {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 12px;
+      .detail-section {
+        h3 {
+          font-size: 14px;
+          font-weight: 600;
+          color: rgba(0, 0, 0, 0.6);
+          margin-bottom: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
       }
-    }
 
-    .geometry-display {
-      background: #f5f5f5;
-      padding: 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      line-height: 1.6;
-      max-height: 200px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
-    }
+      .info-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
 
-    .properties-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-    }
+        .label {
+          font-size: 13px;
+          font-weight: 600;
+          color: rgba(0, 0, 0, 0.6);
+          min-width: 80px;
+        }
 
-    .property-item {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 12px;
-      background: #f9f9f9;
-      border-radius: 6px;
+        .value {
+          font-size: 14px;
+          color: rgba(0, 0, 0, 0.87);
 
-      .property-key {
-        font-size: 11px;
-        font-weight: 600;
-        color: rgba(0, 0, 0, 0.6);
-        text-transform: uppercase;
+          &.mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+          }
+        }
       }
 
-      .property-value {
-        font-size: 14px;
-        color: rgba(0, 0, 0, 0.87);
+      .geometry-display {
+        background: #f5f5f5;
+        padding: 16px;
+        border-radius: 8px;
+        font-size: 12px;
+        line-height: 1.6;
+        max-height: 200px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
       }
-    }
-  `]
+
+      .properties-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+
+      .property-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 12px;
+        background: #f9f9f9;
+        border-radius: 6px;
+
+        .property-key {
+          font-size: 11px;
+          font-weight: 600;
+          color: rgba(0, 0, 0, 0.6);
+          text-transform: uppercase;
+        }
+
+        .property-value {
+          font-size: 14px;
+          color: rgba(0, 0, 0, 0.87);
+        }
+      }
+    `,
+  ],
 })
 export class FeatureDetailDialogComponent {
   constructor(
     public dialogRef: MatDialogRef<FeatureDetailDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public feature: Feature
+    @Inject(MAT_DIALOG_DATA) public feature: Feature,
   ) {}
 
   get propertyKeys(): string[] {
@@ -155,7 +151,7 @@ export class FeatureDetailDialogComponent {
     return this.propertyKeys.length > 0;
   }
 
-  formatGeometry(geometry: any): string {
+  formatGeometry(geometry: unknown): string {
     return JSON.stringify(geometry, null, 2);
   }
 }

@@ -1,8 +1,8 @@
-use actix_web::{HttpRequest, HttpResponse, web};
-use crate::services::wfs::{self, WfsRequest, WfsCapabilities, DescribeFeatureTypeResponse};
-use crate::state::AppState;
 use crate::error::GeoServerError;
 use crate::models::{Feature, PropertyValue};
+use crate::services::wfs::{self, DescribeFeatureTypeResponse, WfsCapabilities, WfsRequest};
+use crate::state::AppState;
+use actix_web::{web, HttpRequest, HttpResponse};
 use quick_xml::se::to_string;
 use tracing::info;
 
@@ -17,11 +17,17 @@ pub async fn handle_wfs_request(
 
     match wfs_request.request {
         wfs::WfsOperation::GetCapabilities => handle_get_capabilities(&state, &wfs_request).await,
-        wfs::WfsOperation::DescribeFeatureType => handle_describe_feature_type(&state, &wfs_request).await,
+        wfs::WfsOperation::DescribeFeatureType => {
+            handle_describe_feature_type(&state, &wfs_request).await
+        },
         wfs::WfsOperation::GetFeature => handle_get_feature(&state, &wfs_request).await,
-        wfs::WfsOperation::GetFeatureWithLock => handle_get_feature_with_lock(&state, &wfs_request).await,
+        wfs::WfsOperation::GetFeatureWithLock => {
+            handle_get_feature_with_lock(&state, &wfs_request).await
+        },
         wfs::WfsOperation::Transaction => handle_transaction(&state, &wfs_request).await,
-        _ => Err(GeoServerError::BadRequest("Operation not implemented".to_string())),
+        _ => Err(GeoServerError::BadRequest(
+            "Operation not implemented".to_string(),
+        )),
     }
 }
 
@@ -32,7 +38,8 @@ pub async fn handle_wfs_post_request(
     body: String,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
-    let content_type = req.headers()
+    let content_type = req
+        .headers()
         .get("Content-Type")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
@@ -43,7 +50,8 @@ pub async fn handle_wfs_post_request(
     }
 
     // 否则尝试按 KVP 解析 POST body
-    let params: Vec<(String, String)> = body.split('&')
+    let params: Vec<(String, String)> = body
+        .split('&')
         .filter_map(|pair| {
             let mut parts = pair.splitn(2, '=');
             let k = parts.next()?.to_string();
@@ -56,16 +64,23 @@ pub async fn handle_wfs_post_request(
 
     match wfs_request.request {
         wfs::WfsOperation::GetCapabilities => handle_get_capabilities(&state, &wfs_request).await,
-        wfs::WfsOperation::DescribeFeatureType => handle_describe_feature_type(&state, &wfs_request).await,
+        wfs::WfsOperation::DescribeFeatureType => {
+            handle_describe_feature_type(&state, &wfs_request).await
+        },
         wfs::WfsOperation::GetFeature => handle_get_feature(&state, &wfs_request).await,
         wfs::WfsOperation::Transaction => handle_transaction(&state, &wfs_request).await,
-        _ => Err(GeoServerError::BadRequest("Operation not implemented".to_string())),
+        _ => Err(GeoServerError::BadRequest(
+            "Operation not implemented".to_string(),
+        )),
     }
 }
 
 // ---- Transaction XML 处理核心 ----
 
-async fn handle_transaction_xml(state: &AppState, xml: &str) -> Result<HttpResponse, GeoServerError> {
+async fn handle_transaction_xml(
+    state: &AppState,
+    xml: &str,
+) -> Result<HttpResponse, GeoServerError> {
     info!("[WFS-T] 收到 Transaction 请求, 长度={}", xml.len());
 
     let transaction = wfs::parse_transaction_xml(xml)?;
@@ -79,14 +94,17 @@ async fn handle_transaction_xml(state: &AppState, xml: &str) -> Result<HttpRespo
     for insert_op in &transaction.inserts {
         for feature in &insert_op.features {
             let layer_name = &insert_op.type_name;
-            let mut new_feature = Feature::new(feature.geometry.clone(), feature.properties.clone());
+            let mut new_feature =
+                Feature::new(feature.geometry.clone(), feature.properties.clone());
             new_feature.id = feature.id.clone();
 
             state.add_feature(layer_name, new_feature.clone()).await;
 
             // 持久化到矢量数据存储（如可用）
             if let Some(bstore) = &state.vector_store {
-                let _ = bstore.save_features(layer_name, &[new_feature.clone()]).await;
+                let _ = bstore
+                    .save_features(layer_name, &[new_feature.clone()])
+                    .await;
             }
 
             insert_results.push(new_feature.id.clone());
@@ -102,7 +120,11 @@ async fn handle_transaction_xml(state: &AppState, xml: &str) -> Result<HttpRespo
 
             if let Some(existing) = features_lock.get_mut(layer_name) {
                 for feature in existing.iter_mut() {
-                    if update_op.filter.as_ref().map_or(true, |f| wfs::validate_filter(feature, f)) {
+                    if update_op
+                        .filter
+                        .as_ref()
+                        .map_or(true, |f| wfs::validate_filter(feature, f))
+                    {
                         for prop in &update_op.properties {
                             feature.properties.insert(
                                 prop.name.clone(),
@@ -146,10 +168,13 @@ async fn handle_transaction_xml(state: &AppState, xml: &str) -> Result<HttpRespo
         }
     }
 
-    info!("[WFS-T] Transaction 完成: inserted={}, updated={}, deleted={}",
-           total_inserted, total_updated, total_deleted);
+    info!(
+        "[WFS-T] Transaction 完成: inserted={}, updated={}, deleted={}",
+        total_inserted, total_updated, total_deleted
+    );
 
-    let insert_xml: String = insert_results.iter()
+    let insert_xml: String = insert_results
+        .iter()
         .map(|id| format!("            <wfs:Feature>wfs:{}</wfs:Feature>", id))
         .collect::<Vec<_>>()
         .join("\n");
@@ -171,19 +196,24 @@ async fn handle_transaction_xml(state: &AppState, xml: &str) -> Result<HttpRespo
         total_inserted, total_updated, total_deleted, insert_xml
     );
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/xml")
-        .body(xml))
+    Ok(HttpResponse::Ok().content_type("application/xml").body(xml))
 }
 
 // ---- 原有操作处理函数保持不变 ----
 
-async fn handle_get_capabilities(state: &AppState, _request: &WfsRequest) -> Result<HttpResponse, GeoServerError> {
-    let base_url = format!("http://{}:{}", state.config.server.host, state.config.server.port);
+async fn handle_get_capabilities(
+    state: &AppState,
+    _request: &WfsRequest,
+) -> Result<HttpResponse, GeoServerError> {
+    let base_url = format!(
+        "http://{}:{}",
+        state.config.server.host, state.config.server.port
+    );
     let capabilities = WfsCapabilities::new(&base_url);
 
-    let xml = to_string(&capabilities)
-        .map_err(|e| GeoServerError::ServiceError(format!("Failed to serialize capabilities: {}", e)))?;
+    let xml = to_string(&capabilities).map_err(|e| {
+        GeoServerError::ServiceError(format!("Failed to serialize capabilities: {}", e))
+    })?;
 
     let xml = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -191,17 +221,21 @@ async fn handle_get_capabilities(state: &AppState, _request: &WfsRequest) -> Res
         xml
     );
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/xml")
-        .body(xml))
+    Ok(HttpResponse::Ok().content_type("application/xml").body(xml))
 }
 
-async fn handle_describe_feature_type(_state: &AppState, request: &WfsRequest) -> Result<HttpResponse, GeoServerError> {
-    let type_names = request.type_names.as_ref()
+async fn handle_describe_feature_type(
+    _state: &AppState,
+    request: &WfsRequest,
+) -> Result<HttpResponse, GeoServerError> {
+    let type_names = request
+        .type_names
+        .as_ref()
         .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
 
-    let type_name = type_names.first()
-        .ok_or_else(|| GeoServerError::BadRequest("At least one TYPENAME is required".to_string()))?;
+    let type_name = type_names.first().ok_or_else(|| {
+        GeoServerError::BadRequest("At least one TYPENAME is required".to_string())
+    })?;
 
     let properties: Vec<(&str, &str)> = vec![
         ("id", "xsd:string"),
@@ -211,8 +245,9 @@ async fn handle_describe_feature_type(_state: &AppState, request: &WfsRequest) -
 
     let response = DescribeFeatureTypeResponse::new(type_name, properties);
 
-    let xml = to_string(&response)
-        .map_err(|e| GeoServerError::ServiceError(format!("Failed to serialize response: {}", e)))?;
+    let xml = to_string(&response).map_err(|e| {
+        GeoServerError::ServiceError(format!("Failed to serialize response: {}", e))
+    })?;
 
     let xml = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -222,16 +257,22 @@ async fn handle_describe_feature_type(_state: &AppState, request: &WfsRequest) -
         xml
     );
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/xml")
-        .body(xml))
+    Ok(HttpResponse::Ok().content_type("application/xml").body(xml))
 }
 
-async fn handle_get_feature(state: &AppState, request: &WfsRequest) -> Result<HttpResponse, GeoServerError> {
-    let type_names = request.type_names.as_ref()
+async fn handle_get_feature(
+    state: &AppState,
+    request: &WfsRequest,
+) -> Result<HttpResponse, GeoServerError> {
+    let type_names = request
+        .type_names
+        .as_ref()
         .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
 
-    let output_format = request.output_format.as_deref().unwrap_or("text/xml; subtype=gml/3.1.1");
+    let output_format = request
+        .output_format
+        .as_deref()
+        .unwrap_or("text/xml; subtype=gml/3.1.1");
 
     let mut all_features = Vec::new();
 
@@ -245,17 +286,15 @@ async fn handle_get_feature(state: &AppState, request: &WfsRequest) -> Result<Ht
 
             if let Some(ref bbox) = request.bbox {
                 let bounds = bbox.to_bounds();
-                filtered_features.retain(|f| {
-                    match &f.geometry {
-                        crate::models::GeoJsonGeometry::Point { coordinates } => {
-                            if coordinates.len() >= 2 {
-                                bounds.contains(coordinates[0], coordinates[1])
-                            } else {
-                                false
-                            }
+                filtered_features.retain(|f| match &f.geometry {
+                    crate::models::GeoJsonGeometry::Point { coordinates } => {
+                        if coordinates.len() >= 2 {
+                            bounds.contains(coordinates[0], coordinates[1])
+                        } else {
+                            false
                         }
-                        _ => true,
-                    }
+                    },
+                    _ => true,
                 });
             }
 
@@ -269,7 +308,10 @@ async fn handle_get_feature(state: &AppState, request: &WfsRequest) -> Result<Ht
 
             if let Some(start_index) = request.start_index {
                 if (start_index as usize) < filtered_features.len() {
-                    filtered_features = filtered_features.into_iter().skip(start_index as usize).collect();
+                    filtered_features = filtered_features
+                        .into_iter()
+                        .skip(start_index as usize)
+                        .collect();
                 } else {
                     filtered_features.clear();
                 }
@@ -302,25 +344,38 @@ async fn handle_get_feature(state: &AppState, request: &WfsRequest) -> Result<Ht
 
     // GML 输出
     let (gml, content_type) = if output_format.contains("gml/2") {
-        (generate_gml2_response(&response), "application/gml+xml; version=2.1.2")
+        (
+            generate_gml2_response(&response),
+            "application/gml+xml; version=2.1.2",
+        )
     } else if output_format.contains("gml/3.2") {
-        (generate_gml32_response(&response), "application/gml+xml; version=3.2")
+        (
+            generate_gml32_response(&response),
+            "application/gml+xml; version=3.2",
+        )
     } else {
         // 默认 GML 3.1.1
-        (generate_gml_response(&response, output_format), "application/gml+xml; version=3.1")
+        (
+            generate_gml_response(&response, output_format),
+            "application/gml+xml; version=3.1",
+        )
     };
 
-    Ok(HttpResponse::Ok()
-        .content_type(content_type)
-        .body(gml))
+    Ok(HttpResponse::Ok().content_type(content_type).body(gml))
 }
 
-async fn handle_get_feature_with_lock(state: &AppState, request: &WfsRequest) -> Result<HttpResponse, GeoServerError> {
+async fn handle_get_feature_with_lock(
+    state: &AppState,
+    request: &WfsRequest,
+) -> Result<HttpResponse, GeoServerError> {
     let response = handle_get_feature(state, request).await?;
     Ok(response)
 }
 
-async fn handle_transaction(_state: &AppState, _request: &WfsRequest) -> Result<HttpResponse, GeoServerError> {
+async fn handle_transaction(
+    _state: &AppState,
+    _request: &WfsRequest,
+) -> Result<HttpResponse, GeoServerError> {
     // GET 方式的 Transaction 不支持操作体，返回空结果
     let xml = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -334,16 +389,18 @@ async fn handle_transaction(_state: &AppState, _request: &WfsRequest) -> Result<
 </wfs:TransactionResponse>"#
     );
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/xml")
-        .body(xml))
+    Ok(HttpResponse::Ok().content_type("application/xml").body(xml))
 }
 
 // ---- GML 序列化辅助函数 ----
 
 fn generate_gml_response(collection: &crate::models::FeatureCollection, format: &str) -> String {
-    let gml_version = if format.contains("3.2") { "3.2" } else { "3.1.1" };
-    
+    let gml_version = if format.contains("3.2") {
+        "3.2"
+    } else {
+        "3.1.1"
+    };
+
     let mut features_xml = String::new();
     for feature in &collection.features {
         features_xml.push_str(&format!(
@@ -362,7 +419,7 @@ fn generate_gml_response(collection: &crate::models::FeatureCollection, format: 
             properties = properties_to_gml(&feature.properties)
         ));
     }
-    
+
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/{gml_version}"
@@ -381,40 +438,51 @@ fn geometry_to_gml(geometry: &crate::models::GeoJsonGeometry, _version: &str) ->
     match geometry {
         crate::models::GeoJsonGeometry::Point { coordinates } => {
             if coordinates.len() >= 2 {
-                format!(r#"<gml:Point srsName="EPSG:4326"><gml:pos>{} {}</gml:pos></gml:Point>"#,
-                    coordinates[0], coordinates[1])
+                format!(
+                    r#"<gml:Point srsName="EPSG:4326"><gml:pos>{} {}</gml:pos></gml:Point>"#,
+                    coordinates[0], coordinates[1]
+                )
             } else {
                 String::new()
             }
-        }
+        },
         crate::models::GeoJsonGeometry::LineString { coordinates } => {
-            let points: Vec<String> = coordinates.iter()
+            let points: Vec<String> = coordinates
+                .iter()
                 .filter(|c| c.len() >= 2)
                 .map(|c| format!("{} {}", c[0], c[1]))
                 .collect();
-            format!(r#"<gml:LineString srsName="EPSG:4326"><gml:posList>{}</gml:posList></gml:LineString>"#,
-                points.join(" "))
-        }
+            format!(
+                r#"<gml:LineString srsName="EPSG:4326"><gml:posList>{}</gml:posList></gml:LineString>"#,
+                points.join(" ")
+            )
+        },
         crate::models::GeoJsonGeometry::Polygon { coordinates } => {
             if let Some(exterior) = coordinates.first() {
-                let points: Vec<String> = exterior.iter()
+                let points: Vec<String> = exterior
+                    .iter()
                     .filter(|c| c.len() >= 2)
                     .map(|c| format!("{} {}", c[0], c[1]))
                     .collect();
-                format!(r#"<gml:Polygon srsName="EPSG:4326"><gml:exterior><gml:LinearRing><gml:posList>{}</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon>"#,
-                    points.join(" "))
+                format!(
+                    r#"<gml:Polygon srsName="EPSG:4326"><gml:exterior><gml:LinearRing><gml:posList>{}</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon>"#,
+                    points.join(" ")
+                )
             } else {
                 String::new()
             }
-        }
+        },
         _ => String::new(),
     }
 }
 
-fn properties_to_gml(properties: &std::collections::HashMap<String, crate::models::PropertyValue>) -> String {
+fn properties_to_gml(
+    properties: &std::collections::HashMap<String, crate::models::PropertyValue>,
+) -> String {
     let mut xml = String::new();
     for (key, value) in properties {
-        xml.push_str(&format!("                <feature:{}>{}</feature:{}>\n",
+        xml.push_str(&format!(
+            "                <feature:{}>{}</feature:{}>\n",
             key,
             escape_xml(&value.to_string()),
             key
@@ -452,7 +520,7 @@ fn generate_csv_response(collection: &crate::models::FeatureCollection) -> Strin
                     } else {
                         s
                     }
-                }
+                },
                 None => String::new(),
             };
             row.push(val);
@@ -500,9 +568,11 @@ fn generate_gml2_response(collection: &crate::models::FeatureCollection) -> Stri
 fn geometry_to_gml2(geometry: &crate::models::GeoJsonGeometry) -> String {
     match geometry {
         crate::models::GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
-            format!(r#"<gml:Point srsName="EPSG:4326"><gml:coordinates>{},{},0</gml:coordinates></gml:Point>"#,
-                coordinates[0], coordinates[1])
-        }
+            format!(
+                r#"<gml:Point srsName="EPSG:4326"><gml:coordinates>{},{},0</gml:coordinates></gml:Point>"#,
+                coordinates[0], coordinates[1]
+            )
+        },
         _ => String::new(),
     }
 }

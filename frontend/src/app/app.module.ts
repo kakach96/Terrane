@@ -32,7 +32,6 @@ import { AppComponent } from './app.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { LayersComponent } from './components/layers/layers.component';
 import { LayerDetailComponent } from './components/layer-detail/layer-detail.component';
-import { FeatureDetailDialogComponent } from './components/layer-detail/feature-detail-dialog.component';
 import { LayerCreateComponent } from './components/layer-create/layer-create.component';
 import { PreviewComponent } from './components/preview/preview.component';
 import { ConfirmDialogComponent } from './shared/components/confirm-dialog.component';
@@ -100,11 +99,9 @@ const routes: Routes = [
     LoginComponent,
     MonitorComponent,
     UsersComponent,
-    PermissionsComponent
+    PermissionsComponent,
   ],
-  providers: [
-    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }
-  ],
+  providers: [{ provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }],
   imports: [
     BrowserModule,
     BrowserAnimationsModule,
@@ -135,6 +132,6 @@ const routes: Routes = [
     MatCheckboxModule,
     MatButtonToggleModule,
   ],
-  bootstrap: [AppComponent]
+  bootstrap: [AppComponent],
 })
-export class AppModule { }
+export class AppModule {}

@@ -3,12 +3,16 @@ import { MatDialog } from '@angular/material/dialog';
 import { WorkspaceDialogComponent } from './workspace-dialog.component';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
-import { Workspace, CreateWorkspaceRequest, UpdateWorkspaceRequest } from '../../models/geoserver.models';
+import {
+  Workspace,
+  CreateWorkspaceRequest,
+  UpdateWorkspaceRequest,
+} from '../../models/geoserver.models';
 
 @Component({
   selector: 'app-workspaces',
   templateUrl: './workspaces.component.html',
-  styleUrls: ['./workspaces.component.scss']
+  styleUrls: ['./workspaces.component.scss'],
 })
 export class WorkspacesComponent implements OnInit {
   workspaces: Workspace[] = [];
@@ -18,7 +22,7 @@ export class WorkspacesComponent implements OnInit {
   constructor(
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {
@@ -36,21 +40,39 @@ export class WorkspacesComponent implements OnInit {
         console.error('Failed to load workspaces:', error);
         this.workspaces = this.getDefaultWorkspaces();
         this.loading = false;
-      }
+      },
     });
   }
 
   getDefaultWorkspaces(): Workspace[] {
     return [
-      { name: 'default', title: '默认工作空间', enabled: true, layerCount: 5, description: '系统默认工作空间' },
-      { name: 'demo', title: '演示工作空间', enabled: true, layerCount: 3, description: '用于演示目的的工作空间' },
-      { name: 'test', title: '测试工作空间', enabled: false, layerCount: 0, description: '用于测试的工作空间' }
+      {
+        name: 'default',
+        title: '默认工作空间',
+        enabled: true,
+        layerCount: 5,
+        description: '系统默认工作空间',
+      },
+      {
+        name: 'demo',
+        title: '演示工作空间',
+        enabled: true,
+        layerCount: 3,
+        description: '用于演示目的的工作空间',
+      },
+      {
+        name: 'test',
+        title: '测试工作空间',
+        enabled: false,
+        layerCount: 0,
+        description: '用于测试的工作空间',
+      },
     ];
   }
 
   openCreateDialog(): void {
     const dialogRef = this.dialog.open(WorkspaceDialogComponent, {
-      width: '480px'
+      width: '480px',
     });
 
     dialogRef.afterClosed().subscribe((result: CreateWorkspaceRequest) => {
@@ -63,7 +85,7 @@ export class WorkspacesComponent implements OnInit {
   openEditDialog(workspace: Workspace): void {
     const dialogRef = this.dialog.open(WorkspaceDialogComponent, {
       width: '480px',
-      data: { workspace }
+      data: { workspace },
     });
 
     dialogRef.afterClosed().subscribe((result: UpdateWorkspaceRequest) => {
@@ -85,7 +107,7 @@ export class WorkspacesComponent implements OnInit {
         console.error('Failed to create workspace:', error);
         this.notificationService.error('创建失败');
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -93,7 +115,7 @@ export class WorkspacesComponent implements OnInit {
     this.loading = true;
     this.geoserverService.updateWorkspace(name, request).subscribe({
       next: () => {
-        const index = this.workspaces.findIndex(w => w.name === name);
+        const index = this.workspaces.findIndex((w) => w.name === name);
         if (index !== -1) {
           this.workspaces[index] = { ...this.workspaces[index], ...request };
         }
@@ -104,7 +126,7 @@ export class WorkspacesComponent implements OnInit {
         console.error('Failed to update workspace:', error);
         this.notificationService.error('更新失败');
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -114,23 +136,25 @@ export class WorkspacesComponent implements OnInit {
       return;
     }
 
-    this.notificationService.confirm('确认删除', `确定要删除工作空间 "${workspace.name}" 吗？`).subscribe((confirmed) => {
-      if (confirmed) {
-        this.loading = true;
-        this.geoserverService.deleteWorkspace(workspace.name).subscribe({
-          next: () => {
-            this.workspaces = this.workspaces.filter(w => w.name !== workspace.name);
-            this.notificationService.success('工作空间删除成功');
-            this.loading = false;
-          },
-          error: (error) => {
-            console.error('Failed to delete workspace:', error);
-            this.notificationService.error('删除失败');
-            this.loading = false;
-          }
-        });
-      }
-    });
+    this.notificationService
+      .confirm('确认删除', `确定要删除工作空间 "${workspace.name}" 吗？`)
+      .subscribe((confirmed) => {
+        if (confirmed) {
+          this.loading = true;
+          this.geoserverService.deleteWorkspace(workspace.name).subscribe({
+            next: () => {
+              this.workspaces = this.workspaces.filter((w) => w.name !== workspace.name);
+              this.notificationService.success('工作空间删除成功');
+              this.loading = false;
+            },
+            error: (error) => {
+              console.error('Failed to delete workspace:', error);
+              this.notificationService.error('删除失败');
+              this.loading = false;
+            },
+          });
+        }
+      });
   }
 
   toggleStatus(workspace: Workspace): void {
@@ -146,7 +170,7 @@ export class WorkspacesComponent implements OnInit {
         console.error('Failed to update workspace status:', error);
         this.notificationService.error('操作失败');
         this.loading = false;
-      }
+      },
     });
   }
 }

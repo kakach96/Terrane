@@ -62,21 +62,20 @@
         <div *ngIf="loading" class="loading-container">
           <mat-spinner diameter="40"></mat-spinner>
         </div>
-        
+
         <div *ngIf="!loading && recentLayers.length === 0" class="empty-state">
           <mat-icon class="empty-icon">layers_clear</mat-icon>
           <p>暂无图层</p>
-          <a mat-raised-button color="primary" routerLink="/layers/create">
-            创建第一个图层
-          </a>
+          <a mat-raised-button color="primary" routerLink="/layers/create"> 创建第一个图层 </a>
         </div>
 
         <div *ngIf="!loading && recentLayers.length > 0" class="layers-list">
-          <div 
-            *ngFor="let layer of recentLayers" 
+          <div
+            *ngFor="let layer of recentLayers"
             class="layer-item"
             [routerLink]="['/layers', layer.name]"
-            matRipple>
+            matRipple
+          >
             <div class="layer-info">
               <div class="layer-name">{{ layer.name }}</div>
               <div class="layer-meta">
@@ -104,17 +103,17 @@
             <mat-icon>add_circle</mat-icon>
             <span>创建图层</span>
           </button>
-          
+
           <button mat-stroked-button class="action-btn" routerLink="/layers">
             <mat-icon>layers</mat-icon>
             <span>管理图层</span>
           </button>
-          
+
           <button mat-stroked-button class="action-btn" routerLink="/layers">
             <mat-icon>upload_file</mat-icon>
             <span>导入数据</span>
           </button>
-          
+
           <button mat-stroked-button class="action-btn">
             <mat-icon>download</mat-icon>
             <span>导出数据</span>

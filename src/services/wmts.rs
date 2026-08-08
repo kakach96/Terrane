@@ -7,9 +7,9 @@
 //! - GetTile — 返回瓦片图像 (复用底层 /tiles 端点)
 //! - GetFeatureInfo — 获取要素信息
 
-use serde::Serialize;
-use crate::models::Layer;
 use crate::error::GeoServerError;
+use crate::models::Layer;
+use serde::Serialize;
 
 // ---------------------------------------------------------------------------
 // WMTS 请求定义
@@ -30,9 +30,9 @@ pub enum WmtsOperation {
         style: String,
         format: String,
         tile_matrix_set: String,
-        tile_matrix: String,  // zoom level as string
-        tile_row: u32,         // y
-        tile_col: u32,         // x
+        tile_matrix: String, // zoom level as string
+        tile_row: u32,       // y
+        tile_col: u32,       // x
     },
     GetFeatureInfo {
         layer: String,
@@ -347,7 +347,7 @@ pub fn parse_wmts_request(params: &[(String, String)]) -> Result<WmtsRequest, Ge
             "I" => i = value.parse().unwrap_or(0),
             "J" => j = value.parse().unwrap_or(0),
             "INFOFORMAT" => info_format = value.clone(),
-            _ => {}
+            _ => {},
         }
     }
 
@@ -373,7 +373,12 @@ pub fn parse_wmts_request(params: &[(String, String)]) -> Result<WmtsRequest, Ge
             j,
             info_format,
         },
-        _ => return Err(GeoServerError::BadRequest(format!("Unsupported WMTS operation: {}", request))),
+        _ => {
+            return Err(GeoServerError::BadRequest(format!(
+                "Unsupported WMTS operation: {}",
+                request
+            )))
+        },
     };
 
     Ok(WmtsRequest {
@@ -461,21 +466,33 @@ pub fn build_capabilities(
         },
     };
 
-    let xml = quick_xml::se::to_string(&capabilities)
-        .map_err(|e| GeoServerError::ServiceError(format!("WMTS Capabilities serialization failed: {}", e)))?;
+    let xml = quick_xml::se::to_string(&capabilities).map_err(|e| {
+        GeoServerError::ServiceError(format!("WMTS Capabilities serialization failed: {}", e))
+    })?;
 
-    Ok(format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>{}"#,
-        xml
-    ))
+    Ok(format!(r#"<?xml version="1.0" encoding="UTF-8"?>{}"#, xml))
 }
 
 fn build_tile_matrix_sets() -> Vec<TileMatrixSet> {
     vec![
         // EPSG:4326 Gridset
-        build_tile_matrix_set("EPSG:4326", "Global CRS84 Scale Set", -180.0, -90.0, 180.0, 90.0),
+        build_tile_matrix_set(
+            "EPSG:4326",
+            "Global CRS84 Scale Set",
+            -180.0,
+            -90.0,
+            180.0,
+            90.0,
+        ),
         // EPSG:3857 Gridset
-        build_tile_matrix_set("EPSG:3857", "Google Maps Compatible", -20037508.34, -20037508.34, 20037508.34, 20037508.34),
+        build_tile_matrix_set(
+            "EPSG:3857",
+            "Google Maps Compatible",
+            -20037508.34,
+            -20037508.34,
+            20037508.34,
+            20037508.34,
+        ),
     ]
 }
 
@@ -500,7 +517,7 @@ fn build_tile_matrix_set(
         let n = 2.0_f64.powi(z as i32);
         let (matrix_width, matrix_height) = match id {
             "EPSG:4326" => (n as u32 * 2, n as u32), // 2x1 顶层
-            "EPSG:3857" => (n as u32, n as u32),      // 1x1 顶层
+            "EPSG:3857" => (n as u32, n as u32),     // 1x1 顶层
             _ => (n as u32, n as u32),
         };
 
@@ -539,60 +556,78 @@ fn build_tile_matrix_set(
 }
 
 fn build_wmts_layers(layers: &[Layer], base_url: &str, api_context: &str) -> Vec<WmtsLayer> {
-    let tile_template = format!("{}{}/wmts/{{layer}}/{{TileMatrixSet}}/{{TileMatrix}}/{{TileCol}}/{{TileRow}}.png", base_url, api_context);
+    let tile_template = format!(
+        "{}{}/wmts/{{layer}}/{{TileMatrixSet}}/{{TileMatrix}}/{{TileCol}}/{{TileRow}}.png",
+        base_url, api_context
+    );
     let feature_info_template = format!("{}{}/wmts/{{layer}}/{{TileMatrixSet}}/{{TileMatrix}}/{{TileRow}}/{{TileCol}}/{{J}}/{{I}}.json", base_url, api_context);
 
-    layers.iter().map(|layer| {
-        let bounds = &layer.native_bounds;
-        WmtsLayer {
-            title: layer.title.clone(),
-            abstract_text: layer.abstract_text.clone().unwrap_or_default(),
-            identifier: layer.name.clone(),
-            bounding_box: WmtsBoundingBox {
-                crs: bounds.crs.to_epsg(),
-                minx: bounds.bounds.minx,
-                miny: bounds.bounds.miny,
-                maxx: bounds.bounds.maxx,
-                maxy: bounds.bounds.maxy,
-            },
-            styles: vec![WmtsStyle {
-                identifier: "default".to_string(),
-                title: "Default Style".to_string(),
-                abstract_text: "Default layer style".to_string(),
-                legend_url: None,
-            }],
-            formats: vec![
-                "image/png".to_string(),
-                "image/jpeg".to_string(),
-            ],
-            tile_matrix_set_links: vec![
-                TileMatrixSetLink { tile_matrix_set: "EPSG:4326".to_string() },
-                TileMatrixSetLink { tile_matrix_set: "EPSG:3857".to_string() },
-            ],
-            resource_urls: vec![
-                ResourceUrl {
-                    format: "image/png".to_string(),
-                    resource_type: "tile".to_string(),
-                    template_url: tile_template.clone(),
+    layers
+        .iter()
+        .map(|layer| {
+            let bounds = &layer.native_bounds;
+            WmtsLayer {
+                title: layer.title.clone(),
+                abstract_text: layer.abstract_text.clone().unwrap_or_default(),
+                identifier: layer.name.clone(),
+                bounding_box: WmtsBoundingBox {
+                    crs: bounds.crs.to_epsg(),
+                    minx: bounds.bounds.minx,
+                    miny: bounds.bounds.miny,
+                    maxx: bounds.bounds.maxx,
+                    maxy: bounds.bounds.maxy,
                 },
-                ResourceUrl {
-                    format: "application/json".to_string(),
-                    resource_type: "FeatureInfo".to_string(),
-                    template_url: feature_info_template.clone(),
-                },
-            ],
-        }
-    }).collect()
+                styles: vec![WmtsStyle {
+                    identifier: "default".to_string(),
+                    title: "Default Style".to_string(),
+                    abstract_text: "Default layer style".to_string(),
+                    legend_url: None,
+                }],
+                formats: vec!["image/png".to_string(), "image/jpeg".to_string()],
+                tile_matrix_set_links: vec![
+                    TileMatrixSetLink {
+                        tile_matrix_set: "EPSG:4326".to_string(),
+                    },
+                    TileMatrixSetLink {
+                        tile_matrix_set: "EPSG:3857".to_string(),
+                    },
+                ],
+                resource_urls: vec![
+                    ResourceUrl {
+                        format: "image/png".to_string(),
+                        resource_type: "tile".to_string(),
+                        template_url: tile_template.clone(),
+                    },
+                    ResourceUrl {
+                        format: "application/json".to_string(),
+                        resource_type: "FeatureInfo".to_string(),
+                        template_url: feature_info_template.clone(),
+                    },
+                ],
+            }
+        })
+        .collect()
 }
 
 /// 从 WMTS GetTile 请求参数生成瓦片 URL (复用现有 /tiles 端点)
-pub fn get_tile_url(internal_base: &str, layer: &str, _style: &str, _format: &str,
-                    _tile_matrix_set: &str, tile_matrix: &str, tile_row: u32, tile_col: u32) -> String {
+pub fn get_tile_url(
+    internal_base: &str,
+    layer: &str,
+    _style: &str,
+    _format: &str,
+    _tile_matrix_set: &str,
+    tile_matrix: &str,
+    tile_row: u32,
+    tile_col: u32,
+) -> String {
     // 解析 zoom level
     let z = if let Some(idx) = tile_matrix.find(':') {
         &tile_matrix[idx + 1..]
     } else {
         tile_matrix
     };
-    format!("{}/tiles/{}/{}/{}/{}", internal_base, layer, z, tile_col, tile_row)
+    format!(
+        "{}/tiles/{}/{}/{}/{}",
+        internal_base, layer, z, tile_col, tile_row
+    )
 }

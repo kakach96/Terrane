@@ -48,22 +48,30 @@
 
     &.layers {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      mat-icon { color: white; }
+      mat-icon {
+        color: white;
+      }
     }
 
     &.features {
       background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      mat-icon { color: white; }
+      mat-icon {
+        color: white;
+      }
     }
 
     &.active {
       background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-      mat-icon { color: white; }
+      mat-icon {
+        color: white;
+      }
     }
 
     &.workspaces {
       background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-      mat-icon { color: white; }
+      mat-icon {
+        color: white;
+      }
     }
   }
 
@@ -186,12 +194,12 @@
 
   mat-chip {
     font-size: 12px;
-    
+
     &.enabled {
       background: #e8f5e9;
       color: #2e7d32;
     }
-    
+
     &:not(.enabled) {
       background: #ffebee;
       color: #c62828;
@@ -212,7 +220,7 @@
     flex-direction: column;
     gap: 8px;
     border-radius: 12px;
-    
+
     mat-icon {
       font-size: 28px;
       width: 28px;

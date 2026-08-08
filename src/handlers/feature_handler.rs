@@ -1,9 +1,9 @@
-use actix_web::{HttpRequest, HttpResponse, web};
-use serde::Deserialize;
-use crate::state::AppState;
-use crate::models::{Feature, GeoJsonGeometry, Bounds};
-use crate::error::GeoServerError;
 use super::rest_handler::ApiResponse;
+use crate::error::GeoServerError;
+use crate::models::{Bounds, Feature, GeoJsonGeometry};
+use crate::state::AppState;
+use actix_web::{web, HttpRequest, HttpResponse};
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct FeatureQuery {
@@ -47,7 +47,8 @@ pub async fn get_layer_features(
         bounds.as_ref(),
         query.limit.map(|l| l as u64),
         query.offset.map(|o| o as u64),
-    ).await?;
+    )
+    .await?;
 
     let format = query.format.as_deref().unwrap_or("application/json");
 
@@ -56,9 +57,12 @@ pub async fn get_layer_features(
             let csv_content = features_to_csv(&features);
             Ok(HttpResponse::Ok()
                 .content_type("text/csv; charset=utf-8")
-                .append_header(("Content-Disposition", format!("attachment; filename=\"{}.csv\"", layer_name)))
+                .append_header((
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{}.csv\"", layer_name),
+                ))
                 .body(csv_content))
-        }
+        },
         _ => {
             let response = serde_json::json!({
                 "type": "FeatureCollection",
@@ -68,7 +72,7 @@ pub async fn get_layer_features(
             Ok(HttpResponse::Ok()
                 .content_type("application/json")
                 .json(response))
-        }
+        },
     }
 }
 
@@ -79,7 +83,8 @@ pub async fn create_feature(
 ) -> Result<HttpResponse, GeoServerError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
-    let properties: std::collections::HashMap<String, crate::models::PropertyValue> = body.properties
+    let properties: std::collections::HashMap<String, crate::models::PropertyValue> = body
+        .properties
         .iter()
         .map(|(k, v)| {
             let value = match v {
@@ -92,7 +97,7 @@ pub async fn create_feature(
                     } else {
                         crate::models::PropertyValue::String(n.to_string())
                     }
-                }
+                },
                 serde_json::Value::Bool(b) => crate::models::PropertyValue::Boolean(*b),
                 serde_json::Value::Null => crate::models::PropertyValue::Null,
                 _ => crate::models::PropertyValue::String(v.to_string()),
@@ -107,7 +112,13 @@ pub async fn create_feature(
 
     // 持久化到矢量数据存储 (集群一致性)
     if let Some(bstore) = &state.vector_store {
-        let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
+        let all = state
+            .features
+            .read()
+            .await
+            .get(layer_name)
+            .cloned()
+            .unwrap_or_default();
         let _ = bstore.save_features(layer_name, &all).await;
     }
 
@@ -126,9 +137,10 @@ pub async fn get_feature(
     let layer_name = req.match_info().get("layer").unwrap_or("");
     let feature_id = req.match_info().get("feature").unwrap_or("");
 
-    let features = crate::handlers::features::query_layer_features(
-        &state, layer_name, None, None, None,
-    ).await.unwrap_or_default();
+    let features =
+        crate::handlers::features::query_layer_features(&state, layer_name, None, None, None)
+            .await
+            .unwrap_or_default();
 
     if let Some(feature) = features.iter().find(|f| f.id == feature_id) {
         return Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -139,7 +151,10 @@ pub async fn get_feature(
         })));
     }
 
-    Err(GeoServerError::NotFound(format!("Feature '{}' not found", feature_id)))
+    Err(GeoServerError::NotFound(format!(
+        "Feature '{}' not found",
+        feature_id
+    )))
 }
 
 pub async fn delete_feature(
@@ -166,16 +181,27 @@ pub async fn delete_feature(
     if removed {
         // 持久化到矢量数据存储 (集群一致性)
         if let Some(bstore) = &state.vector_store {
-            let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
+            let all = state
+                .features
+                .read()
+                .await
+                .get(layer_name)
+                .cloned()
+                .unwrap_or_default();
             let _ = bstore.save_features(layer_name, &all).await;
         }
-        return Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-            "deleted": true,
-            "feature_id": feature_id,
-        }))));
+        return Ok(
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "deleted": true,
+                "feature_id": feature_id,
+            }))),
+        );
     }
 
-    Err(GeoServerError::NotFound(format!("Feature '{}' not found", feature_id)))
+    Err(GeoServerError::NotFound(format!(
+        "Feature '{}' not found",
+        feature_id
+    )))
 }
 
 pub async fn update_feature(
@@ -197,7 +223,9 @@ pub async fn update_feature(
                 if let Some(new_properties) = &body.properties {
                     for (key, value) in new_properties {
                         let prop_value = match value {
-                            serde_json::Value::String(s) => crate::models::PropertyValue::String(s.clone()),
+                            serde_json::Value::String(s) => {
+                                crate::models::PropertyValue::String(s.clone())
+                            },
                             serde_json::Value::Number(n) => {
                                 if let Some(i) = n.as_i64() {
                                     crate::models::PropertyValue::Integer(i)
@@ -206,7 +234,7 @@ pub async fn update_feature(
                                 } else {
                                     crate::models::PropertyValue::String(n.to_string())
                                 }
-                            }
+                            },
                             serde_json::Value::Bool(b) => crate::models::PropertyValue::Boolean(*b),
                             serde_json::Value::Null => crate::models::PropertyValue::Null,
                             _ => crate::models::PropertyValue::String(value.to_string()),
@@ -226,7 +254,13 @@ pub async fn update_feature(
     if let Some(updated_feature) = updated {
         // 持久化到矢量数据存储 (集群一致性)
         if let Some(bstore) = &state.vector_store {
-            let all = state.features.read().await.get(layer_name).cloned().unwrap_or_default();
+            let all = state
+                .features
+                .read()
+                .await
+                .get(layer_name)
+                .cloned()
+                .unwrap_or_default();
             let _ = bstore.save_features(layer_name, &all).await;
         }
         return Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -237,7 +271,10 @@ pub async fn update_feature(
         })));
     }
 
-    Err(GeoServerError::NotFound(format!("Feature '{}' not found", feature_id)))
+    Err(GeoServerError::NotFound(format!(
+        "Feature '{}' not found",
+        feature_id
+    )))
 }
 
 /// 将 Feature 列表转换为 CSV 字符串
@@ -283,12 +320,13 @@ fn features_to_csv(features: &[Feature]) -> String {
                 Some(PropertyValue::Array(arr)) => {
                     let vals: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
                     csv.push_str(&escape_csv_field(&format!("[{}]", vals.join(";"))));
-                }
+                },
                 Some(PropertyValue::Object(obj)) => {
-                    let vals: Vec<String> = obj.iter().map(|(k, v)| format!("{}:{}", k, v)).collect();
+                    let vals: Vec<String> =
+                        obj.iter().map(|(k, v)| format!("{}:{}", k, v)).collect();
                     csv.push_str(&escape_csv_field(&format!("{{{}}}", vals.join(";"))));
-                }
-                None => {}
+                },
+                None => {},
             }
         }
         csv.push('\n');
@@ -313,25 +351,29 @@ fn geometry_to_wkt(geom: &crate::models::GeoJsonGeometry) -> String {
             } else {
                 "POINT EMPTY".to_string()
             }
-        }
+        },
         crate::models::GeoJsonGeometry::MultiPoint { coordinates } => {
-            let pts: Vec<String> = coordinates.iter()
+            let pts: Vec<String> = coordinates
+                .iter()
                 .filter(|c| c.len() >= 2)
                 .map(|c| format!("{} {}", c[0], c[1]))
                 .collect();
             format!("MULTIPOINT ({})", pts.join(", "))
-        }
+        },
         crate::models::GeoJsonGeometry::LineString { coordinates } => {
-            let pts: Vec<String> = coordinates.iter()
+            let pts: Vec<String> = coordinates
+                .iter()
                 .filter(|c| c.len() >= 2)
                 .map(|c| format!("{} {}", c[0], c[1]))
                 .collect();
             format!("LINESTRING ({})", pts.join(", "))
-        }
+        },
         crate::models::GeoJsonGeometry::MultiLineString { coordinates } => {
-            let lines: Vec<String> = coordinates.iter()
+            let lines: Vec<String> = coordinates
+                .iter()
                 .map(|line| {
-                    let pts: Vec<String> = line.iter()
+                    let pts: Vec<String> = line
+                        .iter()
                         .filter(|c| c.len() >= 2)
                         .map(|c| format!("{} {}", c[0], c[1]))
                         .collect();
@@ -339,11 +381,13 @@ fn geometry_to_wkt(geom: &crate::models::GeoJsonGeometry) -> String {
                 })
                 .collect();
             format!("MULTILINESTRING ({})", lines.join(", "))
-        }
+        },
         crate::models::GeoJsonGeometry::Polygon { coordinates } => {
-            let rings: Vec<String> = coordinates.iter()
+            let rings: Vec<String> = coordinates
+                .iter()
                 .map(|ring| {
-                    let pts: Vec<String> = ring.iter()
+                    let pts: Vec<String> = ring
+                        .iter()
                         .filter(|c| c.len() >= 2)
                         .map(|c| format!("{} {}", c[0], c[1]))
                         .collect();
@@ -351,13 +395,16 @@ fn geometry_to_wkt(geom: &crate::models::GeoJsonGeometry) -> String {
                 })
                 .collect();
             format!("POLYGON ({})", rings.join(", "))
-        }
+        },
         crate::models::GeoJsonGeometry::MultiPolygon { coordinates } => {
-            let polys: Vec<String> = coordinates.iter()
+            let polys: Vec<String> = coordinates
+                .iter()
                 .map(|poly| {
-                    let rings: Vec<String> = poly.iter()
+                    let rings: Vec<String> = poly
+                        .iter()
                         .map(|ring| {
-                            let pts: Vec<String> = ring.iter()
+                            let pts: Vec<String> = ring
+                                .iter()
                                 .filter(|c| c.len() >= 2)
                                 .map(|c| format!("{} {}", c[0], c[1]))
                                 .collect();
@@ -368,10 +415,10 @@ fn geometry_to_wkt(geom: &crate::models::GeoJsonGeometry) -> String {
                 })
                 .collect();
             format!("MULTIPOLYGON ({})", polys.join(", "))
-        }
+        },
         crate::models::GeoJsonGeometry::GeometryCollection { geometries } => {
             let geoms: Vec<String> = geometries.iter().map(|g| geometry_to_wkt(g)).collect();
             format!("GEOMETRYCOLLECTION ({})", geoms.join(", "))
-        }
+        },
     }
 }

@@ -89,8 +89,8 @@ impl super::RasterStore for LocalRasterStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::RasterStore;
+    use super::*;
     use std::path::PathBuf;
 
     fn temp_dir(tag: &str) -> PathBuf {
@@ -102,7 +102,10 @@ mod tests {
         let dir = temp_dir("rt");
         let store = LocalRasterStore::new(dir.clone());
         store.put("cov1", b"tiff-bytes").await.unwrap();
-        assert_eq!(store.get("cov1").await.unwrap(), Some(b"tiff-bytes".to_vec()));
+        assert_eq!(
+            store.get("cov1").await.unwrap(),
+            Some(b"tiff-bytes".to_vec())
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -111,7 +114,11 @@ mod tests {
         let dir = temp_dir("ext");
         let store = LocalRasterStore::new(dir.clone());
         let p = store.local_path("cov1").unwrap();
-        assert!(p.to_string_lossy().ends_with("cov1.tif"), "无扩展名的 key 应补 .tif, 实际: {:?}", p);
+        assert!(
+            p.to_string_lossy().ends_with("cov1.tif"),
+            "无扩展名的 key 应补 .tif, 实际: {:?}",
+            p
+        );
 
         // 已有扩展名则保留
         store.put("cov2.tif", b"x").await.unwrap();
@@ -138,7 +145,11 @@ mod tests {
 
         let mut keys = store.list().await.unwrap();
         keys.sort();
-        assert_eq!(keys, vec!["a.tif".to_string(), "b.tiff".to_string()], "仅 .tif/.tiff 应列出");
+        assert_eq!(
+            keys,
+            vec!["a.tif".to_string(), "b.tiff".to_string()],
+            "仅 .tif/.tiff 应列出"
+        );
 
         store.delete("a.tif").await.unwrap();
         assert!(store.get("a.tif").await.unwrap().is_none());

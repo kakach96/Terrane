@@ -5,10 +5,10 @@
 //! - GetTile (重定向到内部 /tiles 端点)
 //! - GetFeatureInfo (JSON)
 
-use actix_web::{HttpRequest, HttpResponse, web};
+use crate::error::GeoServerError;
 use crate::services::wmts::{self, WmtsOperation};
 use crate::state::AppState;
-use crate::error::GeoServerError;
+use actix_web::{web, HttpRequest, HttpResponse};
 
 /// WMTS 主入口: GET /wmts?SERVICE=WMTS&REQUEST=...
 pub async fn handle_wmts_request(
@@ -20,35 +20,82 @@ pub async fn handle_wmts_request(
     let wmts_request = wmts::parse_wmts_request(params)?;
 
     match wmts_request.request {
-        WmtsOperation::GetCapabilities => {
-            handle_get_capabilities(&state, &req).await
-        }
-        WmtsOperation::GetTile { layer, style, format, tile_matrix_set, tile_matrix, tile_row, tile_col } => {
-            handle_get_tile(&state, &layer, &style, &format, &tile_matrix_set, &tile_matrix, tile_row, tile_col).await
-        }
-        WmtsOperation::GetFeatureInfo { layer, style, tile_matrix_set, tile_matrix, tile_row, tile_col, i, j, info_format } => {
-            handle_get_feature_info(&state, &layer, &style, &tile_matrix_set, &tile_matrix, tile_row, tile_col, i, j, &info_format).await
-        }
+        WmtsOperation::GetCapabilities => handle_get_capabilities(&state, &req).await,
+        WmtsOperation::GetTile {
+            layer,
+            style,
+            format,
+            tile_matrix_set,
+            tile_matrix,
+            tile_row,
+            tile_col,
+        } => {
+            handle_get_tile(
+                &state,
+                &layer,
+                &style,
+                &format,
+                &tile_matrix_set,
+                &tile_matrix,
+                tile_row,
+                tile_col,
+            )
+            .await
+        },
+        WmtsOperation::GetFeatureInfo {
+            layer,
+            style,
+            tile_matrix_set,
+            tile_matrix,
+            tile_row,
+            tile_col,
+            i,
+            j,
+            info_format,
+        } => {
+            handle_get_feature_info(
+                &state,
+                &layer,
+                &style,
+                &tile_matrix_set,
+                &tile_matrix,
+                tile_row,
+                tile_col,
+                i,
+                j,
+                &info_format,
+            )
+            .await
+        },
     }
 }
 
 /// GetCapabilities — 返回 WMTS 能力文档 XML
-async fn handle_get_capabilities(state: &AppState, req: &HttpRequest) -> Result<HttpResponse, GeoServerError> {
-    let _host = req.headers()
+async fn handle_get_capabilities(
+    state: &AppState,
+    req: &HttpRequest,
+) -> Result<HttpResponse, GeoServerError> {
+    let _host = req
+        .headers()
         .get("Host")
         .and_then(|v| v.to_str().ok())
         .unwrap_or(&state.config.server.host);
 
-    let scheme = if state.config.server.port == 443 { "https" } else { "http" };
-    let base_url = format!("{}://{}:{}", scheme, state.config.server.host, state.config.server.port);
+    let scheme = if state.config.server.port == 443 {
+        "https"
+    } else {
+        "http"
+    };
+    let base_url = format!(
+        "{}://{}:{}",
+        scheme, state.config.server.host, state.config.server.port
+    );
 
     let layers = state.layers.read().await;
     let xml = wmts::build_capabilities(&base_url, &layers, &state.config.server.api_context)?;
     drop(layers);
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/xml")
-        .body(xml))
+    Ok(HttpResponse::Ok().content_type("application/xml").body(xml))
 }
 
 /// GetTile — 返回瓦片图像
@@ -84,9 +131,9 @@ async fn handle_get_tile(
     }
 
     // 2. 渲染瓦片（复用现有逻辑）
-    use crate::models::Bounds;
-    use crate::utils::rendering::{MapRenderer, RenderOptions, RenderFormat};
     use crate::handlers::features;
+    use crate::models::Bounds;
+    use crate::utils::rendering::{MapRenderer, RenderFormat, RenderOptions};
 
     let tile_size = 256u32;
 
@@ -103,7 +150,7 @@ async fn handle_get_tile(
             let miny = sin_lat(tile_row as f64 + 1.0).max(-85.0511);
             let maxy = sin_lat(tile_row as f64).min(85.0511);
             Bounds::new(minx, miny, maxx, maxy)
-        }
+        },
         _ => {
             let n = 2.0_f64.powi(z as i32);
             let minx = (tile_col as f64 / n) * 360.0 - 180.0;
@@ -111,7 +158,7 @@ async fn handle_get_tile(
             let miny = (tile_row as f64 / n) * 180.0 - 90.0;
             let maxy = ((tile_row + 1) as f64 / n) * 180.0 - 90.0;
             Bounds::new(minx, miny, maxx, maxy)
-        }
+        },
     };
 
     let options = RenderOptions {
@@ -129,16 +176,18 @@ async fn handle_get_tile(
     let mut render_items = Vec::new();
 
     if let Some(layer_obj) = layers_lock.iter().find(|l| l.name == layer) {
-        use crate::handlers::style_handler::{get_style_rules, calculate_tile_scale_denom, reproject_geometry_helper};
+        use crate::handlers::style_handler::{
+            calculate_tile_scale_denom, get_style_rules, reproject_geometry_helper,
+        };
         use crate::utils::sld_parser;
 
         let layer_crs = layer_obj.srs.to_epsg();
         let needs_reproject = layer_crs != "EPSG:4326";
         let rules = get_style_rules(&styles_lock, &meta_lock, layer_obj);
 
-        let features = features::query_layer_features(
-            state, layer, None, None, None,
-        ).await.unwrap_or_default();
+        let features = features::query_layer_features(state, layer, None, None, None)
+            .await
+            .unwrap_or_default();
         let scale_denom = calculate_tile_scale_denom(z);
         for feature in &features {
             let geom = if needs_reproject {
@@ -162,7 +211,9 @@ async fn handle_get_tile(
 
     // 3. 写入缓存
     if let Some(ref cache) = state.tile_cache {
-        cache.put(layer, gridset, z, tile_col, tile_row, &tile_data).await;
+        cache
+            .put(layer, gridset, z, tile_col, tile_row, &tile_data)
+            .await;
     }
 
     Ok(HttpResponse::Ok()
@@ -180,11 +231,28 @@ pub async fn handle_wmts_rest_tile(
     let layer = req.match_info().get("layer").unwrap_or("");
     let tile_matrix_set = req.match_info().get("tileMatrixSet").unwrap_or("EPSG:4326");
     let tile_matrix = req.match_info().get("tileMatrix").unwrap_or("0");
-    let tile_col: u32 = req.match_info().get("tileCol").and_then(|v| v.parse().ok()).unwrap_or(0);
-    let tile_row: u32 = req.match_info().get("tileRow").and_then(|v| v.parse().ok()).unwrap_or(0);
+    let tile_col: u32 = req
+        .match_info()
+        .get("tileCol")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let tile_row: u32 = req
+        .match_info()
+        .get("tileRow")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
 
-    handle_get_tile(state.get_ref(), layer, "default", "image/png",
-                    tile_matrix_set, tile_matrix, tile_row, tile_col).await
+    handle_get_tile(
+        state.get_ref(),
+        layer,
+        "default",
+        "image/png",
+        tile_matrix_set,
+        tile_matrix,
+        tile_row,
+        tile_col,
+    )
+    .await
 }
 
 /// GetFeatureInfo — 返回要素信息
@@ -201,9 +269,8 @@ async fn handle_get_feature_info(
     _info_format: &str,
 ) -> Result<HttpResponse, GeoServerError> {
     // 简化实现: 返回图层要素列表的 JSON
-    let features = crate::handlers::features::query_layer_features(
-        state, layer, None, Some(10), None,
-    ).await?;
+    let features =
+        crate::handlers::features::query_layer_features(state, layer, None, Some(10), None).await?;
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")

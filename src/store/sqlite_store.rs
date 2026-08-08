@@ -1,9 +1,9 @@
-use std::sync::{Arc, Mutex};
-use rusqlite::{Connection, Result as SqlResult, params};
-use chrono::Utc;
-use crate::models::{DataSource, DataSourceType, DataSourceConnection};
-use crate::models::sql_view::SqlView;
 use crate::handlers::CreateWorkspaceRequest;
+use crate::models::sql_view::SqlView;
+use crate::models::{DataSource, DataSourceConnection, DataSourceType};
+use chrono::Utc;
+use rusqlite::{params, Connection, Result as SqlResult};
+use std::sync::{Arc, Mutex};
 // 导入并重新导出共享类型，保持 `sqlite_store::Layer` 等旧路径兼容
 pub use super::types::{
     AuditLogRecord, Layer, LayerGroupRecord, NamespaceRecord, SessionRecord, StyleRecord, Workspace,
@@ -11,10 +11,14 @@ pub use super::types::{
 
 fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
     conn.query_row(
-        &format!("SELECT COUNT(*) FROM pragma_table_info('{}') WHERE name='{}'", table, column),
+        &format!(
+            "SELECT COUNT(*) FROM pragma_table_info('{}') WHERE name='{}'",
+            table, column
+        ),
         [],
         |row| row.get::<_, i32>(0).map(|c| c > 0),
-    ).unwrap_or(false)
+    )
+    .unwrap_or(false)
 }
 
 fn parse_ds_type(type_str: &str) -> DataSourceType {
@@ -87,10 +91,7 @@ impl SqliteStore {
 
         // 检查并添加 file_path 列（支持 shapefile/geotiff 文件型数据源）
         if !column_exists(conn, "data_sources", "file_path") {
-            conn.execute(
-                "ALTER TABLE data_sources ADD COLUMN file_path TEXT",
-                [],
-            )?;
+            conn.execute("ALTER TABLE data_sources ADD COLUMN file_path TEXT", [])?;
         }
 
         // 检查并添加 file_storage_type 列
@@ -123,10 +124,7 @@ impl SqliteStore {
 
         // 检查并添加 native_name 列（向后兼容）
         if !column_exists(conn, "layers", "native_name") {
-            conn.execute(
-                "ALTER TABLE layers ADD COLUMN native_name TEXT",
-                [],
-            )?;
+            conn.execute("ALTER TABLE layers ADD COLUMN native_name TEXT", [])?;
         }
 
         // 要素存储表（用于 GeoJSON 上传持久化）
@@ -272,9 +270,9 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT name, title, description, enabled, layer_count, created, modified 
-             FROM workspaces WHERE name = ?"
+             FROM workspaces WHERE name = ?",
         )?;
-        
+
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
             Ok(Some(Workspace {
@@ -295,9 +293,9 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT name, title, description, enabled, layer_count, created, modified 
-             FROM workspaces ORDER BY name"
+             FROM workspaces ORDER BY name",
         )?;
-        
+
         let rows = stmt.query_map([], |row| {
             Ok(Workspace {
                 name: row.get(0)?,
@@ -309,16 +307,19 @@ impl SqliteStore {
                 modified: row.get(6)?,
             })
         })?;
-        
+
         rows.collect()
     }
 
     pub async fn create_workspace(&self, request: &CreateWorkspaceRequest) -> SqlResult<Workspace> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let title = request.title.clone().unwrap_or_else(|| request.name.clone());
+        let title = request
+            .title
+            .clone()
+            .unwrap_or_else(|| request.name.clone());
         let description = request.description.clone().unwrap_or_default();
         let conn = self.conn.lock().unwrap();
-        
+
         conn.execute(
             "INSERT INTO workspaces (name, title, description, enabled, layer_count, created, modified)
              VALUES (?, ?, ?, 1, 0, ?, ?)",
@@ -330,7 +331,7 @@ impl SqliteStore {
                 now
             ],
         )?;
-        
+
         Ok(Workspace {
             name: request.name.clone(),
             title,
@@ -342,13 +343,19 @@ impl SqliteStore {
         })
     }
 
-    pub async fn update_workspace(&self, name: &str, title: Option<String>, description: Option<String>, enabled: Option<bool>) -> SqlResult<()> {
+    pub async fn update_workspace(
+        &self,
+        name: &str,
+        title: Option<String>,
+        description: Option<String>,
+        enabled: Option<bool>,
+    ) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
-        
+
         let mut updates: Vec<String> = vec!["modified = ?".to_string()];
         let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now.clone())];
-        
+
         if let Some(t) = title {
             updates.push(format!("title = ?"));
             values.push(Box::new(t));
@@ -361,11 +368,15 @@ impl SqliteStore {
             updates.push(format!("enabled = ?"));
             values.push(Box::new(e as i32));
         }
-        
-        let query = format!("UPDATE workspaces SET {} WHERE name = ?", updates.join(", "));
-        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+
+        let query = format!(
+            "UPDATE workspaces SET {} WHERE name = ?",
+            updates.join(", ")
+        );
+        let mut params: Vec<&dyn rusqlite::types::ToSql> =
+            values.iter().map(|v| v.as_ref()).collect();
         params.push(&name);
-        
+
         conn.execute(&query, params.as_slice())?;
         Ok(())
     }
@@ -384,7 +395,7 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT prefix, uri, isolated, workspace, created, modified
-             FROM namespaces WHERE prefix = ?"
+             FROM namespaces WHERE prefix = ?",
         )?;
         let mut rows = stmt.query([prefix])?;
         if let Some(row) = rows.next()? {
@@ -405,7 +416,7 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT prefix, uri, isolated, workspace, created, modified
-             FROM namespaces ORDER BY prefix"
+             FROM namespaces ORDER BY prefix",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(NamespaceRecord {
@@ -420,7 +431,13 @@ impl SqliteStore {
         rows.collect()
     }
 
-    pub async fn create_namespace(&self, prefix: &str, uri: &str, workspace: Option<&str>, isolated: bool) -> SqlResult<NamespaceRecord> {
+    pub async fn create_namespace(
+        &self,
+        prefix: &str,
+        uri: &str,
+        workspace: Option<&str>,
+        isolated: bool,
+    ) -> SqlResult<NamespaceRecord> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -438,7 +455,13 @@ impl SqliteStore {
         })
     }
 
-    pub async fn update_namespace(&self, prefix: &str, uri: Option<String>, isolated: Option<bool>, workspace: Option<String>) -> SqlResult<()> {
+    pub async fn update_namespace(
+        &self,
+        prefix: &str,
+        uri: Option<String>,
+        isolated: Option<bool>,
+        workspace: Option<String>,
+    ) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
 
@@ -458,8 +481,12 @@ impl SqliteStore {
             values.push(Box::new(w.clone()));
         }
 
-        let query = format!("UPDATE namespaces SET {} WHERE prefix = ?", updates.join(", "));
-        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        let query = format!(
+            "UPDATE namespaces SET {} WHERE prefix = ?",
+            updates.join(", ")
+        );
+        let mut params: Vec<&dyn rusqlite::types::ToSql> =
+            values.iter().map(|v| v.as_ref()).collect();
         params.push(&prefix);
         conn.execute(&query, params.as_slice())?;
         Ok(())
@@ -472,27 +499,33 @@ impl SqliteStore {
     }
 
     /// 从行中读取 DataSource（支持多种 schema 版本）
-    fn row_to_data_source(row: &rusqlite::Row, has_schema: bool, has_file: bool) -> rusqlite::Result<DataSource> {
+    fn row_to_data_source(
+        row: &rusqlite::Row,
+        has_schema: bool,
+        has_file: bool,
+    ) -> rusqlite::Result<DataSource> {
         let host: Option<String> = row.get(4)?;
         let port: Option<u16> = row.get(5)?;
         let db: Option<String> = row.get(6)?;
 
         let schema = if has_schema {
-            row.get::<_, Option<String>>(7)?.unwrap_or_else(|| "public".to_string())
+            row.get::<_, Option<String>>(7)?
+                .unwrap_or_else(|| "public".to_string())
         } else {
             "public".to_string()
         };
 
-        let (user_idx, pass_idx, file_path_idx, file_storage_idx, created_idx, modified_idx) = if has_file {
-            // name,type,workspace,enabled,host,port,db,schema,user,pass,file_path,file_storage,created,modified
-            (8, 9, 10, 11, 12, 13)
-        } else if has_schema {
-            // name,type,workspace,enabled,host,port,db,schema,user,pass,created,modified
-            (8, 9, 10, 11, 12, 13) // file columns at end (dummy), will be None
-        } else {
-            // name,type,workspace,enabled,host,port,db,user,pass,created,modified
-            (7, 8, 99, 99, 9, 10) // file_path/storage idx unused
-        };
+        let (user_idx, pass_idx, file_path_idx, file_storage_idx, created_idx, modified_idx) =
+            if has_file {
+                // name,type,workspace,enabled,host,port,db,schema,user,pass,file_path,file_storage,created,modified
+                (8, 9, 10, 11, 12, 13)
+            } else if has_schema {
+                // name,type,workspace,enabled,host,port,db,schema,user,pass,created,modified
+                (8, 9, 10, 11, 12, 13) // file columns at end (dummy), will be None
+            } else {
+                // name,type,workspace,enabled,host,port,db,user,pass,created,modified
+                (7, 8, 99, 99, 9, 10) // file_path/storage idx unused
+            };
 
         let username: Option<String> = if has_schema || has_file {
             row.get(user_idx)?
@@ -703,8 +736,12 @@ impl SqliteStore {
             }
         }
 
-        let query = format!("UPDATE data_sources SET {} WHERE name = ?", updates.join(", "));
-        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        let query = format!(
+            "UPDATE data_sources SET {} WHERE name = ?",
+            updates.join(", ")
+        );
+        let mut params: Vec<&dyn rusqlite::types::ToSql> =
+            values.iter().map(|v| v.as_ref()).collect();
         params.push(&name);
 
         conn.execute(&query, params.as_slice())?;
@@ -875,7 +912,14 @@ impl SqliteStore {
         })
     }
 
-    pub async fn update_layer(&self, name: &str, title: Option<String>, abstract_text: Option<String>, native_name: Option<String>, enabled: Option<bool>) -> SqlResult<()> {
+    pub async fn update_layer(
+        &self,
+        name: &str,
+        title: Option<String>,
+        abstract_text: Option<String>,
+        native_name: Option<String>,
+        enabled: Option<bool>,
+    ) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
 
@@ -900,7 +944,8 @@ impl SqliteStore {
         }
 
         let query = format!("UPDATE layers SET {} WHERE name = ?", updates.join(", "));
-        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        let mut params: Vec<&dyn rusqlite::types::ToSql> =
+            values.iter().map(|v| v.as_ref()).collect();
         params.push(&name);
 
         conn.execute(&query, params.as_slice())?;
@@ -928,10 +973,10 @@ impl SqliteStore {
 
         let mut count = 0;
         for feature in features {
-            let geometry = serde_json::to_string(&feature.geometry)
-                .unwrap_or_else(|_| "{}".to_string());
-            let properties = serde_json::to_string(&feature.properties)
-                .unwrap_or_else(|_| "{}".to_string());
+            let geometry =
+                serde_json::to_string(&feature.geometry).unwrap_or_else(|_| "{}".to_string());
+            let properties =
+                serde_json::to_string(&feature.properties).unwrap_or_else(|_| "{}".to_string());
 
             conn.execute(
                 "INSERT OR REPLACE INTO features (layer_name, feature_id, geometry, properties)
@@ -945,10 +990,7 @@ impl SqliteStore {
     }
 
     /// 加载指定图层的所有要素
-    pub async fn load_features(
-        &self,
-        layer_name: &str,
-    ) -> SqlResult<Vec<crate::models::Feature>> {
+    pub async fn load_features(&self, layer_name: &str) -> SqlResult<Vec<crate::models::Feature>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT feature_id, geometry, properties FROM features WHERE layer_name = ? ORDER BY feature_id"
@@ -959,8 +1001,11 @@ impl SqliteStore {
             let geometry_str: String = row.get(1)?;
             let properties_str: Option<String> = row.get(2)?;
 
-            let geometry = serde_json::from_str(&geometry_str)
-                .unwrap_or(crate::models::GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] });
+            let geometry = serde_json::from_str(&geometry_str).unwrap_or(
+                crate::models::GeoJsonGeometry::Point {
+                    coordinates: vec![0.0, 0.0],
+                },
+            );
             let properties = properties_str
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or_default();
@@ -981,9 +1026,8 @@ impl SqliteStore {
     /// 列出 features 表中已有的图层名 (metadata 数据源表列表使用)
     pub async fn list_feature_layers(&self) -> SqlResult<Vec<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT DISTINCT layer_name FROM features ORDER BY layer_name"
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT DISTINCT layer_name FROM features ORDER BY layer_name")?;
         let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
         let mut out = Vec::new();
         for r in rows {
@@ -996,7 +1040,10 @@ impl SqliteStore {
     // SQL 视图 (SQL Views)
     // ========================================================================
 
-    pub async fn get_sql_view(&self, name: &str) -> SqlResult<Option<crate::models::sql_view::SqlView>> {
+    pub async fn get_sql_view(
+        &self,
+        name: &str,
+    ) -> SqlResult<Option<crate::models::sql_view::SqlView>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT name, sql, workspace, store, geometry_column, geometry_type, crs, parameters, description, created, modified
@@ -1005,7 +1052,8 @@ impl SqliteStore {
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
             let params_str: String = row.get(7)?;
-            let parameters: Vec<crate::models::sql_view::SqlViewParameter> = serde_json::from_str(&params_str).unwrap_or_default();
+            let parameters: Vec<crate::models::sql_view::SqlViewParameter> =
+                serde_json::from_str(&params_str).unwrap_or_default();
             Ok(Some(crate::models::sql_view::SqlView {
                 name: row.get(0)?,
                 sql: row.get(1)?,
@@ -1032,7 +1080,8 @@ impl SqliteStore {
         )?;
         let rows = stmt.query_map([], |row| {
             let params_str: String = row.get(7)?;
-            let parameters: Vec<crate::models::sql_view::SqlViewParameter> = serde_json::from_str(&params_str).unwrap_or_default();
+            let parameters: Vec<crate::models::sql_view::SqlViewParameter> =
+                serde_json::from_str(&params_str).unwrap_or_default();
             Ok(crate::models::sql_view::SqlView {
                 name: row.get(0)?,
                 sql: row.get(1)?,
@@ -1052,7 +1101,8 @@ impl SqliteStore {
 
     pub async fn create_sql_view(&self, view: &crate::models::sql_view::SqlView) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let params_json = serde_json::to_string(&view.parameters).unwrap_or_else(|_| "[]".to_string());
+        let params_json =
+            serde_json::to_string(&view.parameters).unwrap_or_else(|_| "[]".to_string());
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO sql_views (name, sql, workspace, store, geometry_column, geometry_type, crs, parameters, description, created, modified)
@@ -1066,10 +1116,16 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub async fn update_sql_view(&self, name: &str, sql: Option<String>, geometry_column: Option<String>,
-                                  geometry_type: Option<String>, crs: Option<String>,
-                                  parameters: Option<Vec<crate::models::sql_view::SqlViewParameter>>,
-                                  description: Option<String>) -> SqlResult<()> {
+    pub async fn update_sql_view(
+        &self,
+        name: &str,
+        sql: Option<String>,
+        geometry_column: Option<String>,
+        geometry_type: Option<String>,
+        crs: Option<String>,
+        parameters: Option<Vec<crate::models::sql_view::SqlViewParameter>>,
+        description: Option<String>,
+    ) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
 
@@ -1103,7 +1159,8 @@ impl SqliteStore {
         }
 
         let query = format!("UPDATE sql_views SET {} WHERE name = ?", updates.join(", "));
-        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        let mut params: Vec<&dyn rusqlite::types::ToSql> =
+            values.iter().map(|v| v.as_ref()).collect();
         params.push(&name);
         conn.execute(&query, params.as_slice())?;
         Ok(())
@@ -1123,7 +1180,7 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT username, password_hash, salt, role, enabled, created, modified
-             FROM users WHERE username = ?"
+             FROM users WHERE username = ?",
         )?;
         let mut rows = stmt.query([username])?;
         if let Some(row) = rows.next()? {
@@ -1152,7 +1209,7 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT username, password_hash, salt, role, enabled, created, modified
-             FROM users ORDER BY username"
+             FROM users ORDER BY username",
         )?;
         let rows = stmt.query_map([], |row| {
             let role_str: String = row.get(3)?;
@@ -1175,20 +1232,38 @@ impl SqliteStore {
         rows.collect()
     }
 
-    pub async fn create_user(&self, username: &str, password_hash: &str, salt: &str,
-                              role: &crate::auth::UserRole, enabled: bool) -> SqlResult<()> {
+    pub async fn create_user(
+        &self,
+        username: &str,
+        password_hash: &str,
+        salt: &str,
+        role: &crate::auth::UserRole,
+        enabled: bool,
+    ) -> SqlResult<()> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO users (username, password_hash, salt, role, enabled, created, modified)
              VALUES (?, ?, ?, ?, ?, ?, ?)",
-            rusqlite::params![username, password_hash, salt, role.to_string(), enabled as i32, now, now],
+            rusqlite::params![
+                username,
+                password_hash,
+                salt,
+                role.to_string(),
+                enabled as i32,
+                now,
+                now
+            ],
         )?;
         Ok(())
     }
 
-    pub async fn update_user(&self, username: &str, role: Option<&crate::auth::UserRole>,
-                              enabled: Option<bool>) -> SqlResult<()> {
+    pub async fn update_user(
+        &self,
+        username: &str,
+        role: Option<&crate::auth::UserRole>,
+        enabled: Option<bool>,
+    ) -> SqlResult<()> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
         let mut updates = vec!["modified = ?".to_string()];
@@ -1204,7 +1279,8 @@ impl SqliteStore {
         }
 
         let query = format!("UPDATE users SET {} WHERE username = ?", updates.join(", "));
-        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        let mut params: Vec<&dyn rusqlite::types::ToSql> =
+            values.iter().map(|v| v.as_ref()).collect();
         params.push(&username);
         conn.execute(&query, params.as_slice())?;
         Ok(())
@@ -1217,9 +1293,14 @@ impl SqliteStore {
     }
 
     /// 记录审计日志
-    pub async fn audit_log(&self, username: &str, action: &str,
-                           resource: Option<&str>, detail: Option<&str>,
-                           ip_address: Option<&str>) -> SqlResult<()> {
+    pub async fn audit_log(
+        &self,
+        username: &str,
+        action: &str,
+        resource: Option<&str>,
+        detail: Option<&str>,
+        ip_address: Option<&str>,
+    ) -> SqlResult<()> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -1231,11 +1312,15 @@ impl SqliteStore {
     }
 
     /// 查询审计日志
-    pub async fn get_audit_logs(&self, limit: usize, offset: usize) -> SqlResult<Vec<AuditLogRecord>> {
+    pub async fn get_audit_logs(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> SqlResult<Vec<AuditLogRecord>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, username, action, resource, detail, ip_address, timestamp
-             FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?"
+             FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?",
         )?;
         let rows = stmt.query_map(rusqlite::params![limit as i64, offset as i64], |row| {
             Ok(AuditLogRecord {
@@ -1263,7 +1348,7 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, username, role, resource_type, resource_name, access_mode, effect, priority
-             FROM permissions ORDER BY priority DESC, resource_type, resource_name"
+             FROM permissions ORDER BY priority DESC, resource_type, resource_name",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(crate::models::permission::Permission {
@@ -1272,15 +1357,24 @@ impl SqliteStore {
                 role: row.get(2)?,
                 resource_type: row.get(3)?,
                 resource_name: row.get(4)?,
-                access_mode: row.get::<_, String>(5)?.parse().unwrap_or(crate::models::permission::AccessMode::Read),
-                effect: row.get::<_, String>(6)?.parse().unwrap_or(crate::models::permission::Effect::Allow),
+                access_mode: row
+                    .get::<_, String>(5)?
+                    .parse()
+                    .unwrap_or(crate::models::permission::AccessMode::Read),
+                effect: row
+                    .get::<_, String>(6)?
+                    .parse()
+                    .unwrap_or(crate::models::permission::Effect::Allow),
                 priority: row.get(7)?,
             })
         })?;
         rows.collect()
     }
 
-    pub async fn create_permission(&self, p: &crate::models::permission::Permission) -> SqlResult<i64> {
+    pub async fn create_permission(
+        &self,
+        p: &crate::models::permission::Permission,
+    ) -> SqlResult<i64> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO permissions (username, role, resource_type, resource_name, access_mode, effect, priority)
@@ -1317,11 +1411,13 @@ impl SqliteStore {
                      AND (access_mode = ?5 OR access_mode = 'admin')
                    ORDER BY priority DESC LIMIT 1";
 
-        let result = conn.query_row(sql, rusqlite::params![username, role, resource_type, resource_name, required_mode],
+        let result = conn.query_row(
+            sql,
+            rusqlite::params![username, role, resource_type, resource_name, required_mode],
             |row| {
                 let effect: String = row.get(0)?;
                 Ok(effect == "allow")
-            }
+            },
         );
 
         match result {
@@ -1329,7 +1425,7 @@ impl SqliteStore {
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 // 没有匹配规则时，admin 默认有权限，其他人默认无权限
                 Ok(role == "admin")
-            }
+            },
             Err(e) => Err(e),
         }
     }
@@ -1342,15 +1438,24 @@ impl SqliteStore {
 #[async_trait::async_trait]
 impl super::Store for SqliteStore {
     async fn get_workspace(&self, name: &str) -> Result<Option<Workspace>, super::StoreError> {
-        SqliteStore::get_workspace(self, name).await.map_err(super::StoreError::from)
+        SqliteStore::get_workspace(self, name)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn get_all_workspaces(&self) -> Result<Vec<Workspace>, super::StoreError> {
-        SqliteStore::get_all_workspaces(self).await.map_err(super::StoreError::from)
+        SqliteStore::get_all_workspaces(self)
+            .await
+            .map_err(super::StoreError::from)
     }
 
-    async fn create_workspace(&self, request: &CreateWorkspaceRequest) -> Result<Workspace, super::StoreError> {
-        SqliteStore::create_workspace(self, request).await.map_err(super::StoreError::from)
+    async fn create_workspace(
+        &self,
+        request: &CreateWorkspaceRequest,
+    ) -> Result<Workspace, super::StoreError> {
+        SqliteStore::create_workspace(self, request)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn update_workspace(
@@ -1360,20 +1465,30 @@ impl super::Store for SqliteStore {
         description: Option<String>,
         enabled: Option<bool>,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::update_workspace(self, name, title, description, enabled).await
+        SqliteStore::update_workspace(self, name, title, description, enabled)
+            .await
             .map_err(super::StoreError::from)
     }
 
     async fn delete_workspace(&self, name: &str) -> Result<(), super::StoreError> {
-        SqliteStore::delete_workspace(self, name).await.map_err(super::StoreError::from)
+        SqliteStore::delete_workspace(self, name)
+            .await
+            .map_err(super::StoreError::from)
     }
 
-    async fn get_namespace(&self, prefix: &str) -> Result<Option<NamespaceRecord>, super::StoreError> {
-        SqliteStore::get_namespace(self, prefix).await.map_err(super::StoreError::from)
+    async fn get_namespace(
+        &self,
+        prefix: &str,
+    ) -> Result<Option<NamespaceRecord>, super::StoreError> {
+        SqliteStore::get_namespace(self, prefix)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn get_all_namespaces(&self) -> Result<Vec<NamespaceRecord>, super::StoreError> {
-        SqliteStore::get_all_namespaces(self).await.map_err(super::StoreError::from)
+        SqliteStore::get_all_namespaces(self)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn create_namespace(
@@ -1383,7 +1498,8 @@ impl super::Store for SqliteStore {
         workspace: Option<&str>,
         isolated: bool,
     ) -> Result<NamespaceRecord, super::StoreError> {
-        SqliteStore::create_namespace(self, prefix, uri, workspace, isolated).await
+        SqliteStore::create_namespace(self, prefix, uri, workspace, isolated)
+            .await
             .map_err(super::StoreError::from)
     }
 
@@ -1394,20 +1510,27 @@ impl super::Store for SqliteStore {
         isolated: Option<bool>,
         workspace: Option<String>,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::update_namespace(self, prefix, uri, isolated, workspace).await
+        SqliteStore::update_namespace(self, prefix, uri, isolated, workspace)
+            .await
             .map_err(super::StoreError::from)
     }
 
     async fn delete_namespace(&self, prefix: &str) -> Result<(), super::StoreError> {
-        SqliteStore::delete_namespace(self, prefix).await.map_err(super::StoreError::from)
+        SqliteStore::delete_namespace(self, prefix)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn get_data_source(&self, name: &str) -> Result<Option<DataSource>, super::StoreError> {
-        SqliteStore::get_data_source(self, name).await.map_err(super::StoreError::from)
+        SqliteStore::get_data_source(self, name)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn get_all_data_sources(&self) -> Result<Vec<DataSource>, super::StoreError> {
-        SqliteStore::get_all_data_sources(self).await.map_err(super::StoreError::from)
+        SqliteStore::get_all_data_sources(self)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn create_data_source(
@@ -1418,8 +1541,16 @@ impl super::Store for SqliteStore {
         enabled: bool,
         connection: &DataSourceConnection,
     ) -> Result<DataSource, super::StoreError> {
-        SqliteStore::create_data_source(self, name, data_source_type, workspace, enabled, connection).await
-            .map_err(super::StoreError::from)
+        SqliteStore::create_data_source(
+            self,
+            name,
+            data_source_type,
+            workspace,
+            enabled,
+            connection,
+        )
+        .await
+        .map_err(super::StoreError::from)
     }
 
     async fn update_data_source(
@@ -1430,24 +1561,40 @@ impl super::Store for SqliteStore {
         enabled: Option<bool>,
         connection: Option<DataSourceConnection>,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::update_data_source(self, name, data_source_type, workspace, enabled, connection).await
-            .map_err(super::StoreError::from)
+        SqliteStore::update_data_source(
+            self,
+            name,
+            data_source_type,
+            workspace,
+            enabled,
+            connection,
+        )
+        .await
+        .map_err(super::StoreError::from)
     }
 
     async fn delete_data_source(&self, name: &str) -> Result<(), super::StoreError> {
-        SqliteStore::delete_data_source(self, name).await.map_err(super::StoreError::from)
+        SqliteStore::delete_data_source(self, name)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn get_layer(&self, name: &str) -> Result<Option<Layer>, super::StoreError> {
-        SqliteStore::get_layer(self, name).await.map_err(super::StoreError::from)
+        SqliteStore::get_layer(self, name)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn get_all_layers(&self) -> Result<Vec<Layer>, super::StoreError> {
-        SqliteStore::get_all_layers(self).await.map_err(super::StoreError::from)
+        SqliteStore::get_all_layers(self)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn create_layer(&self, layer: &Layer) -> Result<Layer, super::StoreError> {
-        SqliteStore::create_layer(self, layer).await.map_err(super::StoreError::from)
+        SqliteStore::create_layer(self, layer)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn update_layer(
@@ -1458,24 +1605,33 @@ impl super::Store for SqliteStore {
         native_name: Option<String>,
         enabled: Option<bool>,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::update_layer(self, name, title, abstract_text, native_name, enabled).await
+        SqliteStore::update_layer(self, name, title, abstract_text, native_name, enabled)
+            .await
             .map_err(super::StoreError::from)
     }
 
     async fn delete_layer(&self, name: &str) -> Result<(), super::StoreError> {
-        SqliteStore::delete_layer(self, name).await.map_err(super::StoreError::from)
+        SqliteStore::delete_layer(self, name)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn get_sql_view(&self, name: &str) -> Result<Option<SqlView>, super::StoreError> {
-        SqliteStore::get_sql_view(self, name).await.map_err(super::StoreError::from)
+        SqliteStore::get_sql_view(self, name)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn get_all_sql_views(&self) -> Result<Vec<SqlView>, super::StoreError> {
-        SqliteStore::get_all_sql_views(self).await.map_err(super::StoreError::from)
+        SqliteStore::get_all_sql_views(self)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn create_sql_view(&self, view: &SqlView) -> Result<(), super::StoreError> {
-        SqliteStore::create_sql_view(self, view).await.map_err(super::StoreError::from)
+        SqliteStore::create_sql_view(self, view)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn update_sql_view(
@@ -1488,20 +1644,39 @@ impl super::Store for SqliteStore {
         parameters: Option<Vec<crate::models::sql_view::SqlViewParameter>>,
         description: Option<String>,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::update_sql_view(self, name, sql, geometry_column, geometry_type, crs, parameters, description)
-            .await.map_err(super::StoreError::from)
+        SqliteStore::update_sql_view(
+            self,
+            name,
+            sql,
+            geometry_column,
+            geometry_type,
+            crs,
+            parameters,
+            description,
+        )
+        .await
+        .map_err(super::StoreError::from)
     }
 
     async fn delete_sql_view(&self, name: &str) -> Result<(), super::StoreError> {
-        SqliteStore::delete_sql_view(self, name).await.map_err(super::StoreError::from)
+        SqliteStore::delete_sql_view(self, name)
+            .await
+            .map_err(super::StoreError::from)
     }
 
-    async fn get_user(&self, username: &str) -> Result<Option<crate::auth::User>, super::StoreError> {
-        SqliteStore::get_user(self, username).await.map_err(super::StoreError::from)
+    async fn get_user(
+        &self,
+        username: &str,
+    ) -> Result<Option<crate::auth::User>, super::StoreError> {
+        SqliteStore::get_user(self, username)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn get_all_users(&self) -> Result<Vec<crate::auth::User>, super::StoreError> {
-        SqliteStore::get_all_users(self).await.map_err(super::StoreError::from)
+        SqliteStore::get_all_users(self)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn create_user(
@@ -1512,7 +1687,8 @@ impl super::Store for SqliteStore {
         role: &crate::auth::UserRole,
         enabled: bool,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::create_user(self, username, password_hash, salt, role, enabled).await
+        SqliteStore::create_user(self, username, password_hash, salt, role, enabled)
+            .await
             .map_err(super::StoreError::from)
     }
 
@@ -1522,11 +1698,15 @@ impl super::Store for SqliteStore {
         role: Option<&crate::auth::UserRole>,
         enabled: Option<bool>,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::update_user(self, username, role, enabled).await.map_err(super::StoreError::from)
+        SqliteStore::update_user(self, username, role, enabled)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn delete_user(&self, username: &str) -> Result<(), super::StoreError> {
-        SqliteStore::delete_user(self, username).await.map_err(super::StoreError::from)
+        SqliteStore::delete_user(self, username)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn audit_log(
@@ -1537,24 +1717,42 @@ impl super::Store for SqliteStore {
         detail: Option<&str>,
         ip_address: Option<&str>,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::audit_log(self, username, action, resource, detail, ip_address).await
+        SqliteStore::audit_log(self, username, action, resource, detail, ip_address)
+            .await
             .map_err(super::StoreError::from)
     }
 
-    async fn get_audit_logs(&self, limit: usize, offset: usize) -> Result<Vec<AuditLogRecord>, super::StoreError> {
-        SqliteStore::get_audit_logs(self, limit, offset).await.map_err(super::StoreError::from)
+    async fn get_audit_logs(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<AuditLogRecord>, super::StoreError> {
+        SqliteStore::get_audit_logs(self, limit, offset)
+            .await
+            .map_err(super::StoreError::from)
     }
 
-    async fn get_permissions(&self) -> Result<Vec<crate::models::permission::Permission>, super::StoreError> {
-        SqliteStore::get_permissions(self).await.map_err(super::StoreError::from)
+    async fn get_permissions(
+        &self,
+    ) -> Result<Vec<crate::models::permission::Permission>, super::StoreError> {
+        SqliteStore::get_permissions(self)
+            .await
+            .map_err(super::StoreError::from)
     }
 
-    async fn create_permission(&self, p: &crate::models::permission::Permission) -> Result<i64, super::StoreError> {
-        SqliteStore::create_permission(self, p).await.map_err(super::StoreError::from)
+    async fn create_permission(
+        &self,
+        p: &crate::models::permission::Permission,
+    ) -> Result<i64, super::StoreError> {
+        SqliteStore::create_permission(self, p)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn delete_permission(&self, id: i64) -> Result<(), super::StoreError> {
-        SqliteStore::delete_permission(self, id).await.map_err(super::StoreError::from)
+        SqliteStore::delete_permission(self, id)
+            .await
+            .map_err(super::StoreError::from)
     }
 
     async fn check_permission(
@@ -1565,8 +1763,16 @@ impl super::Store for SqliteStore {
         resource_name: &str,
         required_mode: &str,
     ) -> Result<bool, super::StoreError> {
-        SqliteStore::check_permission(self, username, role, resource_type, resource_name, required_mode)
-            .await.map_err(super::StoreError::from)
+        SqliteStore::check_permission(
+            self,
+            username,
+            role,
+            resource_type,
+            resource_name,
+            required_mode,
+        )
+        .await
+        .map_err(super::StoreError::from)
     }
 
     // ---- 样式 ----
@@ -1575,7 +1781,7 @@ impl super::Store for SqliteStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT name, title, format, is_builtin, content, created, modified
-             FROM styles ORDER BY name"
+             FROM styles ORDER BY name",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(StyleRecord {
@@ -1588,14 +1794,15 @@ impl super::Store for SqliteStore {
                 modified: row.get(6)?,
             })
         })?;
-        rows.collect::<rusqlite::Result<Vec<StyleRecord>>>().map_err(super::StoreError::from)
+        rows.collect::<rusqlite::Result<Vec<StyleRecord>>>()
+            .map_err(super::StoreError::from)
     }
 
     async fn get_style(&self, name: &str) -> Result<Option<StyleRecord>, super::StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT name, title, format, is_builtin, content, created, modified
-             FROM styles WHERE name = ?"
+             FROM styles WHERE name = ?",
         )?;
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
@@ -1652,7 +1859,8 @@ impl super::Store for SqliteStore {
             values.push(Box::new(b as i32));
         }
         let query = format!("UPDATE styles SET {} WHERE name = ?", updates.join(", "));
-        let mut params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        let mut params: Vec<&dyn rusqlite::types::ToSql> =
+            values.iter().map(|v| v.as_ref()).collect();
         params.push(&name);
         conn.execute(&query, params.as_slice())?;
         Ok(())
@@ -1670,7 +1878,7 @@ impl super::Store for SqliteStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT name, title, layers, styles, created, modified
-             FROM layer_groups ORDER BY name"
+             FROM layer_groups ORDER BY name",
         )?;
         let rows = stmt.query_map([], |row| {
             let layers_json: String = row.get(2)?;
@@ -1684,14 +1892,18 @@ impl super::Store for SqliteStore {
                 modified: row.get(5)?,
             })
         })?;
-        rows.collect::<rusqlite::Result<Vec<LayerGroupRecord>>>().map_err(super::StoreError::from)
+        rows.collect::<rusqlite::Result<Vec<LayerGroupRecord>>>()
+            .map_err(super::StoreError::from)
     }
 
-    async fn get_layer_group(&self, name: &str) -> Result<Option<LayerGroupRecord>, super::StoreError> {
+    async fn get_layer_group(
+        &self,
+        name: &str,
+    ) -> Result<Option<LayerGroupRecord>, super::StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT name, title, layers, styles, created, modified
-             FROM layer_groups WHERE name = ?"
+             FROM layer_groups WHERE name = ?",
         )?;
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
@@ -1717,7 +1929,14 @@ impl super::Store for SqliteStore {
         conn.execute(
             "INSERT OR REPLACE INTO layer_groups (name, title, layers, styles, created, modified)
              VALUES (?, ?, ?, ?, ?, ?)",
-            params![group.name, group.title, layers_json, styles_json, group.created, group.modified],
+            params![
+                group.name,
+                group.title,
+                layers_json,
+                styles_json,
+                group.created,
+                group.modified
+            ],
         )?;
         Ok(())
     }
@@ -1803,13 +2022,14 @@ mod tests {
     #[actix_rt::test]
     async fn test_workspace_crud() {
         let store = new_store().await;
-        store.create_workspace(&CreateWorkspaceRequest {
-            name: "ws1".into(),
-            title: Some("WS1".into()),
-            description: None,
-        })
-        .await
-        .unwrap();
+        store
+            .create_workspace(&CreateWorkspaceRequest {
+                name: "ws1".into(),
+                title: Some("WS1".into()),
+                description: None,
+            })
+            .await
+            .unwrap();
 
         let got = store.get_workspace("ws1").await.unwrap().unwrap();
         assert_eq!(got.name, "ws1");
@@ -1825,7 +2045,10 @@ mod tests {
     #[actix_rt::test]
     async fn test_namespace_crud() {
         let store = new_store().await;
-        store.create_namespace("ns1", "http://example.com/ns1", None, false).await.unwrap();
+        store
+            .create_namespace("ns1", "http://example.com/ns1", None, false)
+            .await
+            .unwrap();
         let got = store.get_namespace("ns1").await.unwrap().unwrap();
         assert_eq!(got.prefix, "ns1");
         assert_eq!(got.uri, "http://example.com/ns1");
@@ -1845,7 +2068,10 @@ mod tests {
             abstract_text: None,
             native_name: Some("world".into()),
             enabled: true,
-            minx: -180.0, miny: -90.0, maxx: 180.0, maxy: 90.0,
+            minx: -180.0,
+            miny: -90.0,
+            maxx: 180.0,
+            maxy: 90.0,
             created: String::new(),
             modified: String::new(),
         };
@@ -1854,7 +2080,9 @@ mod tests {
         assert_eq!(got.title, "World");
 
         let feature = Feature::new(
-            GeoJsonGeometry::Point { coordinates: vec![10.0, 20.0] },
+            GeoJsonGeometry::Point {
+                coordinates: vec![10.0, 20.0],
+            },
             std::collections::HashMap::new(),
         );
         store.save_features("world", &[feature]).await.unwrap();
@@ -1887,7 +2115,9 @@ mod tests {
         let id = store.create_permission(&perm).await.unwrap();
         assert!(id > 0);
         let perms = store.get_permissions().await.unwrap();
-        assert!(perms.iter().any(|p| p.id == Some(id) && p.resource_name == "world"));
+        assert!(perms
+            .iter()
+            .any(|p| p.id == Some(id) && p.resource_name == "world"));
 
         let allowed = store
             .check_permission("alice", "user", "layer", "world", "read")
@@ -1954,7 +2184,11 @@ mod tests {
             .unwrap();
         let got = store.get_style("s1").await.unwrap().unwrap();
         assert_eq!(got.title, "S1 v2");
-        assert!(got.content.contains("v2"), "内容应已更新, 实际: {}", got.content);
+        assert!(
+            got.content.contains("v2"),
+            "内容应已更新, 实际: {}",
+            got.content
+        );
 
         let all = store.get_all_styles().await.unwrap();
         assert!(all.iter().any(|s| s.name == "s1"));
@@ -1995,7 +2229,13 @@ mod tests {
     async fn test_audit_logs() {
         let store = new_store().await;
         store
-            .audit_log("alice", "login", Some("auth"), Some("login success"), Some("127.0.0.1"))
+            .audit_log(
+                "alice",
+                "login",
+                Some("auth"),
+                Some("login success"),
+                Some("127.0.0.1"),
+            )
             .await
             .unwrap();
         store

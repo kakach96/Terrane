@@ -2,8 +2,8 @@
 //!
 //! 支持从 Shapefile、GeoTIFF、PostGIS 数据源自动计算边界
 
-use crate::models::{Bounds, DataSourceType, DataSource, CoordinateReferenceSystem};
 use crate::error::GeoServerError;
+use crate::models::{Bounds, CoordinateReferenceSystem, DataSource, DataSourceType};
 use tracing::info;
 
 /// 图层边界计算结果
@@ -33,7 +33,7 @@ pub async fn compute_layer_bounds(
             } else {
                 Ok(None)
             }
-        }
+        },
         DataSourceType::Geopackage => compute_geopackage_bounds(ds),
         DataSourceType::WorldImage => compute_worldimage_bounds(ds),
         DataSourceType::CascadedWms => Ok(None),
@@ -44,7 +44,9 @@ pub async fn compute_layer_bounds(
 
 /// 从 Shapefile 计算边界
 fn compute_shapefile_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
-    let file_path = ds.connection.as_ref()
+    let file_path = ds
+        .connection
+        .as_ref()
         .and_then(|c| c.file_path.as_ref())
         .ok_or_else(|| GeoServerError::BadRequest("Shapefile 数据源缺少文件路径".to_string()))?;
 
@@ -53,22 +55,27 @@ fn compute_shapefile_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, G
     match crate::utils::shapefile::read_shapefile(file_path) {
         Ok(result) => {
             let crs = result.crs.unwrap_or(CoordinateReferenceSystem::EPSG4326);
-            info!("[Bounds] Shapefile 边界: {:?}, CRS: {:?}", result.bounds, crs);
+            info!(
+                "[Bounds] Shapefile 边界: {:?}, CRS: {:?}",
+                result.bounds, crs
+            );
             Ok(Some(ComputedBounds {
                 bounds: result.bounds,
                 crs,
             }))
-        }
+        },
         Err(e) => {
             info!("[Bounds] Shapefile 读取失败(将使用默认边界): {}", e);
             Ok(None)
-        }
+        },
     }
 }
 
 /// 从 GeoTIFF 计算边界
 fn compute_geotiff_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
-    let file_path = ds.connection.as_ref()
+    let file_path = ds
+        .connection
+        .as_ref()
         .and_then(|c| c.file_path.as_ref())
         .ok_or_else(|| GeoServerError::BadRequest("GeoTIFF 数据源缺少文件路径".to_string()))?;
 
@@ -77,7 +84,8 @@ fn compute_geotiff_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, Geo
     match crate::utils::geotiff::read_geotiff(file_path) {
         Ok(coverage) => {
             if let Some(bounds) = coverage.bounds {
-                let crs = coverage.crs
+                let crs = coverage
+                    .crs
                     .map(|c| CoordinateReferenceSystem::from_epsg(&c))
                     .unwrap_or(CoordinateReferenceSystem::EPSG4326);
                 info!("[Bounds] GeoTIFF 边界: {:?}, CRS: {:?}", bounds, crs);
@@ -86,11 +94,11 @@ fn compute_geotiff_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, Geo
                 info!("[Bounds] GeoTIFF 无地理标签，使用默认边界");
                 Ok(None)
             }
-        }
+        },
         Err(e) => {
             info!("[Bounds] GeoTIFF 读取失败(将使用默认边界): {}", e);
             Ok(None)
-        }
+        },
     }
 }
 
@@ -110,8 +118,16 @@ async fn compute_postgis_bounds(
         Err(_) => return Ok(None),
     };
 
-    let schema = conn.schema.as_deref()
-        .map(|s| if s.is_empty() || s == "public" { "public" } else { s })
+    let schema = conn
+        .schema
+        .as_deref()
+        .map(|s| {
+            if s.is_empty() || s == "public" {
+                "public"
+            } else {
+                s
+            }
+        })
         .unwrap_or("public");
 
     // 获取几何列名
@@ -142,11 +158,11 @@ async fn compute_postgis_bounds(
                 }
             }
             Ok(None)
-        }
+        },
         Err(e) => {
             info!("[Bounds] PostGIS ST_Extent 查询失败: {}", e);
             Ok(None)
-        }
+        },
     }
 }
 
@@ -157,15 +173,21 @@ fn parse_postgis_extent(ext: &str) -> Option<Bounds> {
     if !ext.starts_with("BOX(") || !ext.ends_with(')') {
         return None;
     }
-    let inner = &ext[4..ext.len()-1];
+    let inner = &ext[4..ext.len() - 1];
     let parts: Vec<&str> = inner.split(',').collect();
     if parts.len() != 2 {
         return None;
     }
-    let min: Vec<f64> = parts[0].trim().split_whitespace()
-        .filter_map(|s| s.parse().ok()).collect();
-    let max: Vec<f64> = parts[1].trim().split_whitespace()
-        .filter_map(|s| s.parse().ok()).collect();
+    let min: Vec<f64> = parts[0]
+        .trim()
+        .split_whitespace()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    let max: Vec<f64> = parts[1]
+        .trim()
+        .split_whitespace()
+        .filter_map(|s| s.parse().ok())
+        .collect();
     if min.len() >= 2 && max.len() >= 2 {
         Some(Bounds::new(min[0], min[1], max[0], max[1]))
     } else {
@@ -175,7 +197,9 @@ fn parse_postgis_extent(ext: &str) -> Option<Bounds> {
 
 /// 从 GeoPackage 计算边界
 fn compute_geopackage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
-    let file_path = ds.connection.as_ref()
+    let file_path = ds
+        .connection
+        .as_ref()
         .and_then(|c| c.file_path.as_ref())
         .ok_or_else(|| GeoServerError::BadRequest("GeoPackage 数据源缺少文件路径".to_string()))?;
 
@@ -186,7 +210,7 @@ fn compute_geopackage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, 
         Err(e) => {
             info!("[Bounds] GeoPackage 读取失败: {}", e);
             return Ok(None);
-        }
+        },
     };
 
     if layers.is_empty() {
@@ -195,25 +219,34 @@ fn compute_geopackage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, 
     }
 
     // 读取第一个图层的数据以获取边界
-    match crate::utils::geopackage::read_geopackage_layer_features(file_path, &layers[0].table_name, Some(1000)) {
+    match crate::utils::geopackage::read_geopackage_layer_features(
+        file_path,
+        &layers[0].table_name,
+        Some(1000),
+    ) {
         Ok(result) => {
             let crs = CoordinateReferenceSystem::from_epsg(&result.crs);
-            info!("[Bounds] GeoPackage 边界: {:?}, CRS: {}", result.bounds, result.crs);
+            info!(
+                "[Bounds] GeoPackage 边界: {:?}, CRS: {}",
+                result.bounds, result.crs
+            );
             Ok(Some(ComputedBounds {
                 bounds: result.bounds,
                 crs,
             }))
-        }
+        },
         Err(e) => {
             info!("[Bounds] GeoPackage 要素读取失败: {}", e);
             Ok(None)
-        }
+        },
     }
 }
 
 /// 从 WorldImage 计算边界
 fn compute_worldimage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
-    let file_path = ds.connection.as_ref()
+    let file_path = ds
+        .connection
+        .as_ref()
         .and_then(|c| c.file_path.as_ref())
         .ok_or_else(|| GeoServerError::BadRequest("WorldImage 数据源缺少文件路径".to_string()))?;
 
@@ -227,17 +260,19 @@ fn compute_worldimage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, 
                 bounds: meta.bounds,
                 crs,
             }))
-        }
+        },
         Err(e) => {
             info!("[Bounds] WorldImage 读取失败: {}", e);
             Ok(None)
-        }
+        },
     }
 }
 
 /// 从 ArcGrid 计算边界
 fn compute_arcgrid_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
-    let file_path = ds.connection.as_ref()
+    let file_path = ds
+        .connection
+        .as_ref()
         .and_then(|c| c.file_path.as_ref())
         .ok_or_else(|| GeoServerError::BadRequest("ArcGrid 数据源缺少文件路径".to_string()))?;
 
@@ -248,11 +283,11 @@ fn compute_arcgrid_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, Geo
             let crs = CoordinateReferenceSystem::EPSG4326;
             info!("[Bounds] ArcGrid 边界: {:?}", bounds);
             Ok(Some(ComputedBounds { bounds, crs }))
-        }
+        },
         Err(e) => {
             info!("[Bounds] ArcGrid 读取失败: {}", e);
             Ok(None)
-        }
+        },
     }
 }
 
@@ -278,6 +313,6 @@ async fn get_postgis_geom_column(
                 Ok(Some(row)) => row.get::<_, String>(0).into(),
                 _ => Some("geom".to_string()),
             }
-        }
+        },
     }
 }

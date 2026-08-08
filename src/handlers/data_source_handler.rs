@@ -1,10 +1,12 @@
-use actix_web::{HttpRequest, HttpResponse, web};
-use crate::state::AppState;
-use crate::models::{DataSource, DataSourceType, DataSourceConnection, METADATA_DATA_SOURCE,
-                    CreateDataSourceRequest, UpdateDataSourceRequest};
-use crate::error::GeoServerError;
-use std::time::Instant;
 use super::rest_handler::ApiResponse;
+use crate::error::GeoServerError;
+use crate::models::{
+    CreateDataSourceRequest, DataSource, DataSourceConnection, DataSourceType,
+    UpdateDataSourceRequest, METADATA_DATA_SOURCE,
+};
+use crate::state::AppState;
+use actix_web::{web, HttpRequest, HttpResponse};
+use std::time::Instant;
 
 /// 当矢量数据复用元数据存储 (vector.kind = "metadata") 时,
 /// 构造内置 metadata 数据源的 JSON 表示（内置默认选项, 不可编辑/删除）。
@@ -60,17 +62,20 @@ pub async fn list_data_sources(state: web::Data<AppState>) -> Result<HttpRespons
     if let Some(store) = &state.store {
         match store.get_all_data_sources().await {
             Ok(data_sources) => {
-                let mut result: Vec<_> = data_sources.iter()
-                    .map(|ds| serde_json::json!({
-                        "name": ds.name,
-                        "type": format!("{}", ds.data_source_type).to_lowercase(),
-                        "workspace": ds.workspace,
-                        "enabled": ds.enabled,
-                        "connection": ds.connection,
-                        "created": ds.created,
-                        "modified": ds.modified,
-                        "builtin": false,
-                    }))
+                let mut result: Vec<_> = data_sources
+                    .iter()
+                    .map(|ds| {
+                        serde_json::json!({
+                            "name": ds.name,
+                            "type": format!("{}", ds.data_source_type).to_lowercase(),
+                            "workspace": ds.workspace,
+                            "enabled": ds.enabled,
+                            "connection": ds.connection,
+                            "created": ds.created,
+                            "modified": ds.modified,
+                            "builtin": false,
+                        })
+                    })
                     .collect();
 
                 // 业务数据复用元数据存储时, 注入内置 metadata 数据源作为默认选项
@@ -79,14 +84,18 @@ pub async fn list_data_sources(state: web::Data<AppState>) -> Result<HttpRespons
                 }
 
                 Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
-            }
+            },
             Err(e) => {
                 eprintln!("Failed to list data sources: {}", e);
-                Err(GeoServerError::InternalError("Failed to list data sources".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to list data sources".to_string(),
+                ))
+            },
         }
     } else {
-        Err(GeoServerError::InternalError("Database not available".to_string()))
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
     }
 }
 
@@ -105,8 +114,8 @@ pub async fn get_data_source(
 
     if let Some(store) = &state.store {
         match store.get_data_source(name).await {
-            Ok(Some(ds)) => {
-                Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            Ok(Some(ds)) => Ok(
+                HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                     "name": ds.name,
                     "type": format!("{}", ds.data_source_type).to_lowercase(),
                     "workspace": ds.workspace,
@@ -115,16 +124,23 @@ pub async fn get_data_source(
                     "created": ds.created,
                     "modified": ds.modified,
                     "builtin": false,
-                }))))
-            }
-            Ok(None) => Err(GeoServerError::NotFound(format!("Data source '{}' not found", name))),
+                }))),
+            ),
+            Ok(None) => Err(GeoServerError::NotFound(format!(
+                "Data source '{}' not found",
+                name
+            ))),
             Err(e) => {
                 eprintln!("Failed to get data source: {}", e);
-                Err(GeoServerError::InternalError("Failed to get data source".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to get data source".to_string(),
+                ))
+            },
         }
     } else {
-        Err(GeoServerError::InternalError("Database not available".to_string()))
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
     }
 }
 
@@ -133,25 +149,34 @@ pub async fn create_data_source(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     if is_builtin_metadata(&body.name) {
-        return Err(GeoServerError::Conflict(format!("Data source '{}' is a built-in data source", body.name)));
+        return Err(GeoServerError::Conflict(format!(
+            "Data source '{}' is a built-in data source",
+            body.name
+        )));
     }
     if let Some(store) = &state.store {
         match store.get_data_source(&body.name).await {
             Ok(Some(_)) => {
-                return Err(GeoServerError::Conflict(format!("Data source '{}' already exists", body.name)));
-            }
-            _ => {}
+                return Err(GeoServerError::Conflict(format!(
+                    "Data source '{}' already exists",
+                    body.name
+                )));
+            },
+            _ => {},
         }
 
-        match store.create_data_source(
-            &body.name,
-            &body.data_source_type,
-            body.workspace.clone(),
-            body.enabled.unwrap_or(true),
-            &body.connection,
-        ).await {
-            Ok(ds) => {
-                Ok(HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
+        match store
+            .create_data_source(
+                &body.name,
+                &body.data_source_type,
+                body.workspace.clone(),
+                body.enabled.unwrap_or(true),
+                &body.connection,
+            )
+            .await
+        {
+            Ok(ds) => Ok(
+                HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
                     "name": ds.name,
                     "type": format!("{}", ds.data_source_type).to_lowercase(),
                     "workspace": ds.workspace,
@@ -160,15 +185,19 @@ pub async fn create_data_source(
                     "created": ds.created,
                     "modified": ds.modified,
                     "message": "Data source created",
-                }))))
-            }
+                }))),
+            ),
             Err(e) => {
                 eprintln!("Failed to create data source: {}", e);
-                Err(GeoServerError::InternalError("Failed to create data source".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to create data source".to_string(),
+                ))
+            },
         }
     } else {
-        Err(GeoServerError::InternalError("Database not available".to_string()))
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
     }
 }
 
@@ -180,29 +209,39 @@ pub async fn update_data_source(
     let name = req.match_info().get("name").unwrap_or("");
 
     if is_builtin_metadata(name) {
-        return Err(GeoServerError::BadRequest(format!("Data source '{}' is a built-in data source and cannot be modified", name)));
+        return Err(GeoServerError::BadRequest(format!(
+            "Data source '{}' is a built-in data source and cannot be modified",
+            name
+        )));
     }
 
     if let Some(store) = &state.store {
-        match store.update_data_source(
-            name,
-            body.data_source_type.clone(),
-            body.workspace.clone(),
-            body.enabled,
-            body.connection.clone(),
-        ).await {
-            Ok(_) => {
-                Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+        match store
+            .update_data_source(
+                name,
+                body.data_source_type.clone(),
+                body.workspace.clone(),
+                body.enabled,
+                body.connection.clone(),
+            )
+            .await
+        {
+            Ok(_) => Ok(
+                HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                     "message": format!("Data source '{}' updated", name),
-                }))))
-            }
+                }))),
+            ),
             Err(e) => {
                 eprintln!("Failed to update data source: {}", e);
-                Err(GeoServerError::InternalError("Failed to update data source".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to update data source".to_string(),
+                ))
+            },
         }
     } else {
-        Err(GeoServerError::InternalError("Database not available".to_string()))
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
     }
 }
 
@@ -213,23 +252,30 @@ pub async fn delete_data_source(
     let name = req.match_info().get("name").unwrap_or("");
 
     if is_builtin_metadata(name) {
-        return Err(GeoServerError::BadRequest(format!("Data source '{}' is a built-in data source and cannot be deleted", name)));
+        return Err(GeoServerError::BadRequest(format!(
+            "Data source '{}' is a built-in data source and cannot be deleted",
+            name
+        )));
     }
 
     if let Some(store) = &state.store {
         match store.delete_data_source(name).await {
-            Ok(_) => {
-                Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            Ok(_) => Ok(
+                HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                     "message": format!("Data source '{}' deleted", name),
-                }))))
-            }
+                }))),
+            ),
             Err(e) => {
                 eprintln!("Failed to delete data source: {}", e);
-                Err(GeoServerError::InternalError("Failed to delete data source".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to delete data source".to_string(),
+                ))
+            },
         }
     } else {
-        Err(GeoServerError::InternalError("Database not available".to_string()))
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
     }
 }
 
@@ -265,9 +311,12 @@ pub async fn test_data_source_connection(
             let result = test_postgis_connection(&ds).await;
             return Ok(HttpResponse::Ok().json(result));
         } else {
-            eprintln!("[test_data_source_connection] metadata 数据源连接测试仅支持 postgres 元数据存储");
+            eprintln!(
+                "[test_data_source_connection] metadata 数据源连接测试仅支持 postgres 元数据存储"
+            );
             return Err(GeoServerError::BadRequest(
-                "Metadata data source connection test only supports postgres metadata store".to_string(),
+                "Metadata data source connection test only supports postgres metadata store"
+                    .to_string(),
             ));
         }
     }
@@ -277,15 +326,22 @@ pub async fn test_data_source_connection(
             Ok(Some(ds)) => {
                 let result = test_postgis_connection(&ds).await;
                 Ok(HttpResponse::Ok().json(result))
-            }
-            Ok(None) => Err(GeoServerError::NotFound(format!("Data source '{}' not found", name))),
+            },
+            Ok(None) => Err(GeoServerError::NotFound(format!(
+                "Data source '{}' not found",
+                name
+            ))),
             Err(e) => {
                 eprintln!("Failed to get data source: {}", e);
-                Err(GeoServerError::InternalError("Failed to get data source".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to get data source".to_string(),
+                ))
+            },
         }
     } else {
-        Err(GeoServerError::InternalError("Database not available".to_string()))
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
     }
 }
 
@@ -310,10 +366,12 @@ pub async fn test_connection(
 async fn test_postgis_connection(ds: &DataSource) -> serde_json::Value {
     let conn_info = match &ds.connection {
         Some(c) => c,
-        None => return serde_json::json!({
-            "success": false,
-            "message": "No connection configuration",
-        }),
+        None => {
+            return serde_json::json!({
+                "success": false,
+                "message": "No connection configuration",
+            })
+        },
     };
 
     let pg_host = conn_info.host.as_deref().unwrap_or("localhost");
@@ -322,12 +380,18 @@ async fn test_postgis_connection(ds: &DataSource) -> serde_json::Value {
     let pg_user = conn_info.username.as_deref().unwrap_or("postgres");
 
     match tokio_postgres::connect(
-        &format!("host={} port={} dbname={} user={} password={}",
-            pg_host, pg_port, pg_db,
+        &format!(
+            "host={} port={} dbname={} user={} password={}",
+            pg_host,
+            pg_port,
+            pg_db,
             pg_user,
-            conn_info.password.as_deref().unwrap_or("")),
+            conn_info.password.as_deref().unwrap_or("")
+        ),
         tokio_postgres::NoTls,
-    ).await {
+    )
+    .await
+    {
         Ok((client, connection)) => {
             tokio::spawn(connection);
             match client.query_one("SELECT 1", &[]).await {
@@ -340,7 +404,7 @@ async fn test_postgis_connection(ds: &DataSource) -> serde_json::Value {
                     "message": format!("Query failed: {}", e),
                 }),
             }
-        }
+        },
         Err(e) => serde_json::json!({
             "success": false,
             "message": format!("Connection failed: {}", e),
@@ -362,15 +426,20 @@ pub async fn get_data_source_tables(
             if let Some(bstore) = &state.vector_store {
                 match bstore.list_tables().await {
                     Ok(tables) => {
-                        tracing::debug!("[get_data_source_tables] 内置 metadata 数据源, 矢量表: {:?}", tables);
+                        tracing::debug!(
+                            "[get_data_source_tables] 内置 metadata 数据源, 矢量表: {:?}",
+                            tables
+                        );
                         return Ok(HttpResponse::Ok().json(ApiResponse::success(tables)));
-                    }
+                    },
                     Err(e) => {
                         eprintln!("Failed to list vector tables: {}", e);
-                    }
+                    },
                 }
             }
-            return Err(GeoServerError::InternalError("Vector store not available".to_string()));
+            return Err(GeoServerError::InternalError(
+                "Vector store not available".to_string(),
+            ));
         }
     }
 
@@ -379,31 +448,49 @@ pub async fn get_data_source_tables(
         match store.get_data_source(name).await {
             Ok(Some(data_source)) => {
                 let elapsed_get_ds = t1.elapsed();
-                tracing::debug!("[get_data_source_tables] get_data_source 耗时: {:?}", elapsed_get_ds);
+                tracing::debug!(
+                    "[get_data_source_tables] get_data_source 耗时: {:?}",
+                    elapsed_get_ds
+                );
 
                 if data_source.data_source_type == DataSourceType::Geopackage {
                     // GeoPackage: 列出文件中的要素表
-                    let file_path = data_source.connection.as_ref()
+                    let file_path = data_source
+                        .connection
+                        .as_ref()
                         .and_then(|c| c.file_path.clone())
-                        .ok_or_else(|| GeoServerError::BadRequest(
-                            "GeoPackage data source has no file path".to_string()
-                        ))?;
+                        .ok_or_else(|| {
+                            GeoServerError::BadRequest(
+                                "GeoPackage data source has no file path".to_string(),
+                            )
+                        })?;
                     let tables = crate::utils::geopackage::read_geopackage_layers(&file_path)
-                        .map(|layers| layers.iter().map(|l| l.table_name.clone()).collect::<Vec<String>>())
+                        .map(|layers| {
+                            layers
+                                .iter()
+                                .map(|l| l.table_name.clone())
+                                .collect::<Vec<String>>()
+                        })
                         .unwrap_or_default();
                     return Ok(HttpResponse::Ok().json(ApiResponse::success(tables)));
                 }
 
                 if data_source.data_source_type != DataSourceType::Postgis {
                     tracing::debug!("[get_data_source_tables] 非 PostGIS/GeoPackage 数据源, 跳过");
-                    return Err(GeoServerError::BadRequest("Only PostGIS and GeoPackage data sources support table listing".to_string()));
+                    return Err(GeoServerError::BadRequest(
+                        "Only PostGIS and GeoPackage data sources support table listing"
+                            .to_string(),
+                    ));
                 }
 
                 if let Some(conn_info) = &data_source.connection {
                     let t2 = Instant::now();
                     let pool = state.get_pg_pool(&data_source.name, conn_info);
                     let elapsed_get_pool = t2.elapsed();
-                    tracing::debug!("[get_data_source_tables] get_pg_pool 耗时: {:?}", elapsed_get_pool);
+                    tracing::debug!(
+                        "[get_data_source_tables] get_pg_pool 耗时: {:?}",
+                        elapsed_get_pool
+                    );
 
                     let t3 = Instant::now();
                     let tables = list_postgis_tables_from_pool(&pool, conn_info).await;
@@ -416,22 +503,31 @@ pub async fn get_data_source_tables(
                     Ok(HttpResponse::Ok().json(ApiResponse::success(tables)))
                 } else {
                     tracing::debug!("[get_data_source_tables] 数据源无连接配置");
-                    Err(GeoServerError::BadRequest("Data source has no connection configuration".to_string()))
+                    Err(GeoServerError::BadRequest(
+                        "Data source has no connection configuration".to_string(),
+                    ))
                 }
-            }
+            },
             Ok(None) => {
                 tracing::debug!("[get_data_source_tables] 数据源 '{}' 未找到", name);
-                Err(GeoServerError::NotFound(format!("Data source '{}' not found", name)))
-            }
+                Err(GeoServerError::NotFound(format!(
+                    "Data source '{}' not found",
+                    name
+                )))
+            },
             Err(e) => {
                 tracing::debug!("[get_data_source_tables] 获取数据源失败: {}", e);
                 eprintln!("Failed to get data source: {}", e);
-                Err(GeoServerError::InternalError("Failed to get data source".to_string()))
-            }
+                Err(GeoServerError::InternalError(
+                    "Failed to get data source".to_string(),
+                ))
+            },
         }
     } else {
         tracing::debug!("[get_data_source_tables] 数据库不可用");
-        Err(GeoServerError::InternalError("Database not available".to_string()))
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
     }
 }
 
@@ -445,15 +541,30 @@ async fn list_postgis_tables_from_pool(
     let client = match pool.get().await {
         Ok(c) => c,
         Err(e) => {
-            tracing::debug!("[list_postgis_tables_from_pool] pool.get() 失败: {}, 耗时: {:?}", e, t1.elapsed());
+            tracing::debug!(
+                "[list_postgis_tables_from_pool] pool.get() 失败: {}, 耗时: {:?}",
+                e,
+                t1.elapsed()
+            );
             eprintln!("Failed to get PG client from pool: {}", e);
             return vec![];
-        }
+        },
     };
-    tracing::debug!("[list_postgis_tables_from_pool] pool.get() 耗时: {:?}", t1.elapsed());
+    tracing::debug!(
+        "[list_postgis_tables_from_pool] pool.get() 耗时: {:?}",
+        t1.elapsed()
+    );
 
-    let schema_val = conn.schema.as_deref()
-        .map(|s| if s.is_empty() || s == "public" { "public" } else { s })
+    let schema_val = conn
+        .schema
+        .as_deref()
+        .map(|s| {
+            if s.is_empty() || s == "public" {
+                "public"
+            } else {
+                s
+            }
+        })
         .unwrap_or("public");
     let schema_filter = format!("AND n.nspname = '{}'", schema_val);
 
@@ -473,18 +584,27 @@ async fn list_postgis_tables_from_pool(
     match client.query(&query, &[]).await {
         Ok(rows) => {
             let elapsed_query = t2.elapsed();
-            let tables: Vec<String> = rows.iter()
-                .map(|row| row.get::<_, String>(0))
-                .collect();
-            tracing::debug!("[list_postgis_tables_from_pool] client.query 执行耗时: {:?}, 返回 {} 行", elapsed_query, tables.len());
-            tracing::debug!("[list_postgis_tables_from_pool] 总耗时: {:?}", start.elapsed());
+            let tables: Vec<String> = rows.iter().map(|row| row.get::<_, String>(0)).collect();
+            tracing::debug!(
+                "[list_postgis_tables_from_pool] client.query 执行耗时: {:?}, 返回 {} 行",
+                elapsed_query,
+                tables.len()
+            );
+            tracing::debug!(
+                "[list_postgis_tables_from_pool] 总耗时: {:?}",
+                start.elapsed()
+            );
             tables
-        }
+        },
         Err(e) => {
-            tracing::debug!("[list_postgis_tables_from_pool] 查询失败: {}, 耗时: {:?}", e, t2.elapsed());
+            tracing::debug!(
+                "[list_postgis_tables_from_pool] 查询失败: {}, 耗时: {:?}",
+                e,
+                t2.elapsed()
+            );
             eprintln!("Failed to query tables: {}", e);
             vec![]
-        }
+        },
     }
 }
 
@@ -495,48 +615,59 @@ pub async fn get_layer_feature_type(
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     if let Some(store) = &state.store {
-        let layer = store.get_layer(layer_name).await
+        let layer = store
+            .get_layer(layer_name)
+            .await
             .map_err(|e| {
                 eprintln!("Failed to get layer: {}", e);
                 GeoServerError::InternalError("Failed to get layer".to_string())
             })?
             .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
-        let data_source = store.get_data_source(&layer.store).await
+        let data_source = store
+            .get_data_source(&layer.store)
+            .await
             .map_err(|e| {
                 eprintln!("Failed to get data source: {}", e);
                 GeoServerError::InternalError("Failed to get data source".to_string())
             })?
-            .ok_or_else(|| GeoServerError::NotFound(format!("Data source '{}' not found", layer.store)))?;
+            .ok_or_else(|| {
+                GeoServerError::NotFound(format!("Data source '{}' not found", layer.store))
+            })?;
 
         if data_source.data_source_type == DataSourceType::Postgis {
-            let table_name = layer.native_name
-                .as_ref()
-                .ok_or_else(|| GeoServerError::BadRequest(
-                    "Layer has no native table name configured".to_string()
-                ))?;
+            let table_name = layer.native_name.as_ref().ok_or_else(|| {
+                GeoServerError::BadRequest("Layer has no native table name configured".to_string())
+            })?;
 
             if let Some(conn_info) = &data_source.connection {
                 let pool = state.get_pg_pool(&data_source.name, conn_info);
                 let columns = get_postgis_table_columns(&pool, conn_info, table_name).await;
                 Ok(HttpResponse::Ok().json(ApiResponse::success(columns)))
             } else {
-                Err(GeoServerError::BadRequest("Data source has no connection configuration".to_string()))
+                Err(GeoServerError::BadRequest(
+                    "Data source has no connection configuration".to_string(),
+                ))
             }
         } else if data_source.data_source_type == DataSourceType::Geopackage {
             // GeoPackage: 从 .gpkg 文件的要素表读取列定义
-            let table_name = layer.native_name
+            let table_name = layer.native_name.as_ref().ok_or_else(|| {
+                GeoServerError::BadRequest("Layer has no native table name configured".to_string())
+            })?;
+            let file_path = data_source
+                .connection
                 .as_ref()
-                .ok_or_else(|| GeoServerError::BadRequest(
-                    "Layer has no native table name configured".to_string()
-                ))?;
-            let file_path = data_source.connection.as_ref()
                 .and_then(|c| c.file_path.clone())
-                .ok_or_else(|| GeoServerError::BadRequest(
-                    "GeoPackage data source has no file path".to_string()
-                ))?;
-            let columns = get_geopackage_table_columns(&file_path, table_name).await
-                .map_err(|e| GeoServerError::BadRequest(format!("Failed to read GeoPackage: {}", e)))?;
+                .ok_or_else(|| {
+                    GeoServerError::BadRequest(
+                        "GeoPackage data source has no file path".to_string(),
+                    )
+                })?;
+            let columns = get_geopackage_table_columns(&file_path, table_name)
+                .await
+                .map_err(|e| {
+                    GeoServerError::BadRequest(format!("Failed to read GeoPackage: {}", e))
+                })?;
             Ok(HttpResponse::Ok().json(ApiResponse::success(columns)))
         } else {
             Err(GeoServerError::BadRequest(
@@ -544,7 +675,9 @@ pub async fn get_layer_feature_type(
             ))
         }
     } else {
-        Err(GeoServerError::InternalError("Database not available".to_string()))
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
     }
 }
 
@@ -558,11 +691,19 @@ async fn get_postgis_table_columns(
         Err(e) => {
             eprintln!("Failed to get PG client from pool: {}", e);
             return vec![];
-        }
+        },
     };
 
-    let schema_val = conn.schema.as_deref()
-        .map(|s| if s.is_empty() || s == "public" { "public" } else { s })
+    let schema_val = conn
+        .schema
+        .as_deref()
+        .map(|s| {
+            if s.is_empty() || s == "public" {
+                "public"
+            } else {
+                s
+            }
+        })
         .unwrap_or("public");
     let schema_filter = format!("'{}'", schema_val.replace('\'', "''"));
 
@@ -575,8 +716,9 @@ async fn get_postgis_table_columns(
     );
 
     match client.query(&query, &[&table_name]).await {
-        Ok(rows) => {
-            rows.iter().map(|row| {
+        Ok(rows) => rows
+            .iter()
+            .map(|row| {
                 let col_name: String = row.get(0);
                 let data_type: String = row.get(1);
                 let max_length: Option<i32> = row.get(2);
@@ -587,12 +729,12 @@ async fn get_postgis_table_columns(
                     "length": max_length,
                     "nullable": is_nullable == "YES",
                 })
-            }).collect()
-        }
+            })
+            .collect(),
         Err(e) => {
             eprintln!("Failed to query table columns: {}", e);
             vec![]
-        }
+        },
     }
 }
 
@@ -605,13 +747,16 @@ async fn get_geopackage_table_columns(
         .map_err(|e| format!("无法打开 GeoPackage '{}': {}", file_path, e))?;
     let qn = table_name.replace('"', "\"\"");
     let pragma = format!("PRAGMA table_info(\"{}\")", qn);
-    let mut stmt = conn.prepare(&pragma)
+    let mut stmt = conn
+        .prepare(&pragma)
         .map_err(|e| format!("查询 GeoPackage 表 '{}' 列失败: {}", table_name, e))?;
-    let rows = stmt.query_map([], |row| {
-        let name: String = row.get(1)?;
-        let ty: String = row.get(2).unwrap_or_default();
-        Ok((name, ty))
-    }).map_err(|e| format!("查询结果错误: {}", e))?;
+    let rows = stmt
+        .query_map([], |row| {
+            let name: String = row.get(1)?;
+            let ty: String = row.get(2).unwrap_or_default();
+            Ok((name, ty))
+        })
+        .map_err(|e| format!("查询结果错误: {}", e))?;
 
     let mut cols = Vec::new();
     for row in rows {

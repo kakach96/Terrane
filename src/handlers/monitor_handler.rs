@@ -3,10 +3,10 @@
 //! 提供服务器请求统计、性能监控、审计日志查询。
 //! 端点: GET /monitor/stats, GET /monitor/requests, GET /monitor/logs
 
-use actix_web::{HttpRequest, HttpResponse, web};
-use serde::Serialize;
-use crate::state::{AppState, EndpointStats, RequestRecord};
 use crate::error::GeoServerError;
+use crate::state::{AppState, EndpointStats, RequestRecord};
+use actix_web::{web, HttpRequest, HttpResponse};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
@@ -55,9 +55,7 @@ pub struct AuditLogEntry {
 }
 
 /// 获取监控统计
-pub async fn get_monitor_stats(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+pub async fn get_monitor_stats(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
     let uptime = state.start_time.elapsed().as_secs();
     let total_reqs = state.request_count.load(Ordering::Relaxed);
     let total_errs = state.error_count.load(Ordering::Relaxed);
@@ -79,9 +77,12 @@ pub async fn get_monitor_stats(
     // 系统信息
     let system = SystemInfo {
         version: "1.0.0".to_string(),
-        rust_version: format!("{}.{}.{}", 
+        rust_version: format!(
+            "{}.{}.{}",
             std::env::var("CARGO_PKG_RUST_VERSION").unwrap_or_else(|_| "1.75".to_string()),
-            "", ""),
+            "",
+            ""
+        ),
         os: std::env::consts::OS.to_string(),
         hostname: hostname(),
         cpu_cores: num_cpus() as u32,
@@ -107,7 +108,8 @@ pub async fn get_recent_requests(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let query = req.query_string();
-    let limit: usize = query.split('&')
+    let limit: usize = query
+        .split('&')
         .find(|p| p.starts_with("limit="))
         .and_then(|p| p.split('=').nth(1))
         .and_then(|v| v.parse().ok())
@@ -126,28 +128,35 @@ pub async fn get_audit_logs(
 ) -> Result<HttpResponse, GeoServerError> {
     if let Some(ref store) = state.store {
         let query = req.query_string();
-        let limit: usize = query.split('&')
+        let limit: usize = query
+            .split('&')
             .find(|p| p.starts_with("limit="))
             .and_then(|p| p.split('=').nth(1))
             .and_then(|v| v.parse().ok())
             .unwrap_or(100);
-        let offset: usize = query.split('&')
+        let offset: usize = query
+            .split('&')
             .find(|p| p.starts_with("offset="))
             .and_then(|p| p.split('=').nth(1))
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
 
-        let logs = store.get_audit_logs(limit, offset).await
+        let logs = store
+            .get_audit_logs(limit, offset)
+            .await
             .map_err(|e| GeoServerError::InternalError(format!("读取审计日志失败: {}", e)))?;
 
-        let entries: Vec<AuditLogEntry> = logs.into_iter().map(|log| AuditLogEntry {
-            id: log.id,
-            timestamp: log.created_at,
-            action: log.action,
-            username: log.username,
-            resource: log.resource,
-            detail: log.detail,
-        }).collect();
+        let entries: Vec<AuditLogEntry> = logs
+            .into_iter()
+            .map(|log| AuditLogEntry {
+                id: log.id,
+                timestamp: log.created_at,
+                action: log.action,
+                username: log.username,
+                resource: log.resource,
+                detail: log.detail,
+            })
+            .collect();
 
         Ok(HttpResponse::Ok().json(entries))
     } else {
@@ -173,7 +182,13 @@ pub async fn reset_monitor_stats(
 // ==================== Prometheus /metrics ====================
 
 /// 追加一行带 HELP/TYPE 声明的 Prometheus 指标。
-fn push_metric(out: &mut String, name: &str, help: &str, kind: &str, value: impl std::fmt::Display) {
+fn push_metric(
+    out: &mut String,
+    name: &str,
+    help: &str,
+    kind: &str,
+    value: impl std::fmt::Display,
+) {
     out.push_str("# HELP ");
     out.push_str(name);
     out.push(' ');
@@ -191,7 +206,12 @@ fn push_metric(out: &mut String, name: &str, help: &str, kind: &str, value: impl
 }
 
 /// 追加一行带 label 的 Prometheus 指标 (label 值做转义)。
-fn push_metric_labeled(out: &mut String, name: &str, labels: &[(&str, &str)], value: impl std::fmt::Display) {
+fn push_metric_labeled(
+    out: &mut String,
+    name: &str,
+    labels: &[(&str, &str)],
+    value: impl std::fmt::Display,
+) {
     out.push_str(name);
     out.push('{');
     for (i, (k, v)) in labels.iter().enumerate() {
@@ -233,51 +253,140 @@ pub async fn get_metrics(state: web::Data<AppState>) -> Result<HttpResponse, Geo
     let rps = state.recent_request_count.load(Ordering::Relaxed) as f64 / 300.0;
 
     // ---- 基础计数 ----
-    push_metric(&mut out, "terrane_uptime_seconds", "Server uptime in seconds", "gauge", uptime);
-    push_metric(&mut out, "terrane_requests_total", "Total number of HTTP requests handled", "counter", total_reqs);
-    push_metric(&mut out, "terrane_errors_total", "Total number of HTTP requests that ended in error", "counter", total_errs);
-    push_metric(&mut out, "terrane_error_rate_percent", "Percentage of requests that ended in error", "gauge", format!("{:.4}", error_rate));
-    push_metric(&mut out, "terrane_requests_per_second", "Requests per second averaged over the last 5 minutes", "gauge", format!("{:.4}", rps));
+    push_metric(
+        &mut out,
+        "terrane_uptime_seconds",
+        "Server uptime in seconds",
+        "gauge",
+        uptime,
+    );
+    push_metric(
+        &mut out,
+        "terrane_requests_total",
+        "Total number of HTTP requests handled",
+        "counter",
+        total_reqs,
+    );
+    push_metric(
+        &mut out,
+        "terrane_errors_total",
+        "Total number of HTTP requests that ended in error",
+        "counter",
+        total_errs,
+    );
+    push_metric(
+        &mut out,
+        "terrane_error_rate_percent",
+        "Percentage of requests that ended in error",
+        "gauge",
+        format!("{:.4}", error_rate),
+    );
+    push_metric(
+        &mut out,
+        "terrane_requests_per_second",
+        "Requests per second averaged over the last 5 minutes",
+        "gauge",
+        format!("{:.4}", rps),
+    );
 
     // ---- 方法 / 状态码 / 端点分布 ----
     {
         let methods = state.method_stats.read().await;
         for (m, c) in methods.iter() {
-            push_metric_labeled(&mut out, "terrane_method_requests_total", &[("method", m)], *c);
+            push_metric_labeled(
+                &mut out,
+                "terrane_method_requests_total",
+                &[("method", m)],
+                *c,
+            );
         }
     }
     {
         let status_codes = state.status_code_stats.read().await;
         for (s, c) in status_codes.iter() {
-            push_metric_labeled(&mut out, "terrane_http_status_total", &[("status", &s.to_string())], *c);
+            push_metric_labeled(
+                &mut out,
+                "terrane_http_status_total",
+                &[("status", &s.to_string())],
+                *c,
+            );
         }
     }
     {
         let endpoints = state.endpoint_stats.read().await;
         for (ep, stats) in endpoints.iter() {
-            push_metric_labeled(&mut out, "terrane_endpoint_requests_total", &[("endpoint", ep)], stats.count);
-            push_metric_labeled(&mut out, "terrane_endpoint_errors_total", &[("endpoint", ep)], stats.error_count);
-            push_metric_labeled(&mut out, "terrane_endpoint_duration_avg_ms", &[("endpoint", ep)], format!("{:.4}", stats.avg_duration_ms));
+            push_metric_labeled(
+                &mut out,
+                "terrane_endpoint_requests_total",
+                &[("endpoint", ep)],
+                stats.count,
+            );
+            push_metric_labeled(
+                &mut out,
+                "terrane_endpoint_errors_total",
+                &[("endpoint", ep)],
+                stats.error_count,
+            );
+            push_metric_labeled(
+                &mut out,
+                "terrane_endpoint_duration_avg_ms",
+                &[("endpoint", ep)],
+                format!("{:.4}", stats.avg_duration_ms),
+            );
         }
     }
 
     // ---- 瓦片缓存 (GeoWebCache) ----
     if let Some(ref cache) = state.tile_cache {
         let st = cache.stats();
-        push_metric(&mut out, "terrane_tile_cache_hits_total", "Number of tile cache hits", "counter", st.hits);
-        push_metric(&mut out, "terrane_tile_cache_misses_total", "Number of tile cache misses", "counter", st.misses);
-        push_metric(&mut out, "terrane_tile_cache_hit_rate", "Tile cache hit rate (0..1)", "gauge", format!("{:.4}", cache.hit_rate()));
+        push_metric(
+            &mut out,
+            "terrane_tile_cache_hits_total",
+            "Number of tile cache hits",
+            "counter",
+            st.hits,
+        );
+        push_metric(
+            &mut out,
+            "terrane_tile_cache_misses_total",
+            "Number of tile cache misses",
+            "counter",
+            st.misses,
+        );
+        push_metric(
+            &mut out,
+            "terrane_tile_cache_hit_rate",
+            "Tile cache hit rate (0..1)",
+            "gauge",
+            format!("{:.4}", cache.hit_rate()),
+        );
     }
 
     // ---- PostgreSQL 连接池水位 (deadpool) ----
     {
         let pools = state.pg_pools.lock().unwrap();
-        push_metric(&mut out, "terrane_pg_pool_count", "Number of cached PostgreSQL connection pools", "gauge", pools.len());
+        push_metric(
+            &mut out,
+            "terrane_pg_pool_count",
+            "Number of cached PostgreSQL connection pools",
+            "gauge",
+            pools.len(),
+        );
         for (name, pool) in pools.iter() {
             let st = pool.status();
             push_metric_labeled(&mut out, "terrane_pg_pool_size", &[("pool", name)], st.size);
-            push_metric_labeled(&mut out, "terrane_pg_pool_available", &[("pool", name)], st.available);
-            push_metric_labeled(&mut out, "terrane_pg_pool_max", &[("pool", name)], st.max_size);
+            push_metric_labeled(
+                &mut out,
+                "terrane_pg_pool_available",
+                &[("pool", name)],
+                st.available,
+            );
+            push_metric_labeled(
+                &mut out,
+                "terrane_pg_pool_max",
+                &[("pool", name)],
+                st.max_size,
+            );
         }
     }
 
@@ -285,15 +394,42 @@ pub async fn get_metrics(state: web::Data<AppState>) -> Result<HttpResponse, Geo
     {
         let mut sys = sysinfo::System::new();
         sys.refresh_memory();
-        push_metric(&mut out, "terrane_system_cpu_cores", "Number of logical CPU cores", "gauge", num_cpus());
-        push_metric(&mut out, "terrane_system_memory_total_bytes", "Total system memory in bytes", "gauge", sys.total_memory());
-        push_metric(&mut out, "terrane_system_memory_used_bytes", "Used system memory in bytes", "gauge", sys.used_memory());
+        push_metric(
+            &mut out,
+            "terrane_system_cpu_cores",
+            "Number of logical CPU cores",
+            "gauge",
+            num_cpus(),
+        );
+        push_metric(
+            &mut out,
+            "terrane_system_memory_total_bytes",
+            "Total system memory in bytes",
+            "gauge",
+            sys.total_memory(),
+        );
+        push_metric(
+            &mut out,
+            "terrane_system_memory_used_bytes",
+            "Used system memory in bytes",
+            "gauge",
+            sys.used_memory(),
+        );
         let used_percent = if sys.total_memory() > 0 {
-            format!("{:.2}", (sys.used_memory() as f64 / sys.total_memory() as f64) * 100.0)
+            format!(
+                "{:.2}",
+                (sys.used_memory() as f64 / sys.total_memory() as f64) * 100.0
+            )
         } else {
             "0".to_string()
         };
-        push_metric(&mut out, "terrane_system_memory_used_percent", "Used system memory percent", "gauge", used_percent);
+        push_metric(
+            &mut out,
+            "terrane_system_memory_used_percent",
+            "Used system memory percent",
+            "gauge",
+            used_percent,
+        );
     }
 
     Ok(HttpResponse::Ok()

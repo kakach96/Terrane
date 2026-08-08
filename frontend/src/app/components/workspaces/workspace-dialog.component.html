@@ -3,7 +3,7 @@
   <form [formGroup]="form" (ngSubmit)="onSubmit()">
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>名称</mat-label>
-      <input matInput formControlName="name" placeholder="输入工作空间名称">
+      <input matInput formControlName="name" placeholder="输入工作空间名称" />
       <mat-hint>只能包含字母、数字、下划线和连字符</mat-hint>
       <mat-error *ngIf="name?.invalid">
         <span *ngIf="name?.errors?.['required']">名称不能为空</span>
@@ -13,12 +13,17 @@
 
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>标题</mat-label>
-      <input matInput formControlName="title" placeholder="输入工作空间标题">
+      <input matInput formControlName="title" placeholder="输入工作空间标题" />
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>描述</mat-label>
-      <textarea matInput formControlName="description" placeholder="输入工作空间描述" rows="3"></textarea>
+      <textarea
+        matInput
+        formControlName="description"
+        placeholder="输入工作空间描述"
+        rows="3"
+      ></textarea>
     </mat-form-field>
   </form>
 </mat-dialog-content>

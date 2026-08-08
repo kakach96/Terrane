@@ -41,7 +41,10 @@
   gap: 24px;
 }
 
-.info-card, .bounds-card, .preview-card, .feature-type-card {
+.info-card,
+.bounds-card,
+.preview-card,
+.feature-type-card {
   border-radius: var(--radius-lg);
 
   mat-card-header {

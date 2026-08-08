@@ -3,12 +3,16 @@ import { MatDialog } from '@angular/material/dialog';
 import { NamespaceDialogComponent } from './namespace-dialog.component';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
-import { Namespace, CreateNamespaceRequest, UpdateNamespaceRequest } from '../../models/geoserver.models';
+import {
+  Namespace,
+  CreateNamespaceRequest,
+  UpdateNamespaceRequest,
+} from '../../models/geoserver.models';
 
 @Component({
   selector: 'app-namespaces',
   templateUrl: './namespaces.component.html',
-  styleUrls: ['./namespaces.component.scss']
+  styleUrls: ['./namespaces.component.scss'],
 })
 export class NamespacesComponent implements OnInit {
   namespaces: Namespace[] = [];
@@ -18,7 +22,7 @@ export class NamespacesComponent implements OnInit {
   constructor(
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {
@@ -35,13 +39,13 @@ export class NamespacesComponent implements OnInit {
       error: (error) => {
         console.error('Failed to load namespaces:', error);
         this.loading = false;
-      }
+      },
     });
   }
 
   openCreateDialog(): void {
     const dialogRef = this.dialog.open(NamespaceDialogComponent, {
-      width: '520px'
+      width: '520px',
     });
 
     dialogRef.afterClosed().subscribe((result: CreateNamespaceRequest) => {
@@ -54,7 +58,7 @@ export class NamespacesComponent implements OnInit {
   openEditDialog(ns: Namespace): void {
     const dialogRef = this.dialog.open(NamespaceDialogComponent, {
       width: '520px',
-      data: { namespace: ns }
+      data: { namespace: ns },
     });
 
     dialogRef.afterClosed().subscribe((result: UpdateNamespaceRequest) => {
@@ -76,7 +80,7 @@ export class NamespacesComponent implements OnInit {
         console.error('Failed to create namespace:', error);
         this.notificationService.error('创建失败');
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -84,7 +88,7 @@ export class NamespacesComponent implements OnInit {
     this.loading = true;
     this.geoserverService.updateNamespace(prefix, request).subscribe({
       next: () => {
-        const index = this.namespaces.findIndex(n => n.prefix === prefix);
+        const index = this.namespaces.findIndex((n) => n.prefix === prefix);
         if (index !== -1) {
           this.namespaces[index] = { ...this.namespaces[index], ...request };
         }
@@ -95,28 +99,30 @@ export class NamespacesComponent implements OnInit {
         console.error('Failed to update namespace:', error);
         this.notificationService.error('更新失败');
         this.loading = false;
-      }
+      },
     });
   }
 
   deleteNamespace(ns: Namespace): void {
-    this.notificationService.confirm('确认删除', `确定要删除命名空间 "${ns.prefix}" 吗？`).subscribe((confirmed) => {
-      if (confirmed) {
-        this.loading = true;
-        this.geoserverService.deleteNamespace(ns.prefix).subscribe({
-          next: () => {
-            this.namespaces = this.namespaces.filter(n => n.prefix !== ns.prefix);
-            this.notificationService.success('命名空间删除成功');
-            this.loading = false;
-          },
-          error: (error) => {
-            console.error('Failed to delete namespace:', error);
-            this.notificationService.error('删除失败');
-            this.loading = false;
-          }
-        });
-      }
-    });
+    this.notificationService
+      .confirm('确认删除', `确定要删除命名空间 "${ns.prefix}" 吗？`)
+      .subscribe((confirmed) => {
+        if (confirmed) {
+          this.loading = true;
+          this.geoserverService.deleteNamespace(ns.prefix).subscribe({
+            next: () => {
+              this.namespaces = this.namespaces.filter((n) => n.prefix !== ns.prefix);
+              this.notificationService.success('命名空间删除成功');
+              this.loading = false;
+            },
+            error: (error) => {
+              console.error('Failed to delete namespace:', error);
+              this.notificationService.error('删除失败');
+              this.loading = false;
+            },
+          });
+        }
+      });
   }
 
   toggleIsolated(ns: Namespace): void {
@@ -132,7 +138,7 @@ export class NamespacesComponent implements OnInit {
         console.error('Failed to update namespace:', error);
         this.notificationService.error('操作失败');
         this.loading = false;
-      }
+      },
     });
   }
 }

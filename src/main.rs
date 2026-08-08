@@ -1,27 +1,27 @@
 #![allow(dead_code)]
 
-use actix_web::{web, App, HttpServer, middleware, HttpResponse};
-use actix_files::Files;
 use actix_cors::Cors;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use tracing_subscriber::fmt::time::FormatTime;
-use tracing_subscriber::fmt::format::Writer;
+use actix_files::Files;
+use actix_web::{middleware, web, App, HttpResponse, HttpServer};
+use chrono::{Datelike, Local, Timelike};
 use clap::Parser;
 use tokio::fs;
 use tokio::signal;
-use chrono::{Local, Datelike, Timelike};
+use tracing_subscriber::fmt::format::Writer;
+use tracing_subscriber::fmt::time::FormatTime;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod config;
-mod error;
-mod models;
-mod services;
-mod handlers;
-mod utils;
-mod state;
-mod routes;
-mod store;
 mod auth;
 mod backup;
+mod config;
+mod error;
+mod handlers;
+mod models;
+mod routes;
+mod services;
+mod state;
+mod store;
+mod utils;
 
 use config::GeoServerConfig;
 use state::AppState;
@@ -51,10 +51,10 @@ impl FormatTime for FriendlyTimeFormat {
 struct Args {
     #[arg(long, default_value = "terrane")]
     config: String,
-    
+
     #[arg(long)]
     host: Option<String>,
-    
+
     #[arg(short, long)]
     port: Option<u16>,
 }
@@ -70,7 +70,7 @@ fn init_tracing(default_level: &str) {
                 .with_level(true)
                 .with_target(true)
                 .with_thread_ids(true)
-                .with_thread_names(true)
+                .with_thread_names(true),
         )
         .init();
 }
@@ -80,7 +80,10 @@ fn load_config(config_path: &str) -> GeoServerConfig {
     GeoServerConfig::load_from_file(config_path).unwrap_or_else(|e| {
         // 注意: load_config 在 init_tracing 之前调用, tracing::warn! 不生效,
         // 因此必须同时输出到 stderr, 否则配置错误会被静默吞掉
-        let msg = format!("Failed to load config '{}': {}. Using defaults.", config_path, e);
+        let msg = format!(
+            "Failed to load config '{}': {}. Using defaults.",
+            config_path, e
+        );
         eprintln!("[config] WARNING: {}", msg);
         tracing::warn!("{}", msg);
         GeoServerConfig::default()
@@ -108,7 +111,9 @@ async fn serve_index() -> HttpResponse {
 /// 容器平台 (K8s/Docker) 向进程发送 SIGTERM 进行滚动更新/缩容, 需要优雅排空。
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]
@@ -155,8 +160,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         // CORS 中间件
         let cors_middleware = if cors_config.enabled {
-            let has_specific_origins = cors_config.allowed_origins.iter()
-                .any(|o| o != "*");
+            let has_specific_origins = cors_config.allowed_origins.iter().any(|o| o != "*");
             let mut cors = if has_specific_origins {
                 let mut c = Cors::default();
                 for origin in &cors_config.allowed_origins {
@@ -188,10 +192,12 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .configure(|svc| routes::configure_routes(svc, &api_context))
-            .service(Files::new("/", &static_dir_str)
-                .index_file("index.html")
-                .use_etag(false)
-                .use_last_modified(false))
+            .service(
+                Files::new("/", &static_dir_str)
+                    .index_file("index.html")
+                    .use_etag(false)
+                    .use_last_modified(false),
+            )
             .default_service(web::route().to(serve_index))
     })
     .bind((host.as_str(), port))?

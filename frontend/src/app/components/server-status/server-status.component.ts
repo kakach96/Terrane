@@ -5,7 +5,7 @@ import { ServerStatus } from '../../models/geoserver.models';
 @Component({
   selector: 'app-server-status',
   templateUrl: './server-status.component.html',
-  styleUrls: ['./server-status.component.scss']
+  styleUrls: ['./server-status.component.scss'],
 })
 export class ServerStatusComponent implements OnInit {
   status: ServerStatus = {
@@ -16,7 +16,7 @@ export class ServerStatusComponent implements OnInit {
     errors: 0,
     layerCount: 0,
     enabledLayers: 0,
-    workspaceCount: 0
+    workspaceCount: 0,
   };
   loading = false;
 
@@ -36,7 +36,7 @@ export class ServerStatusComponent implements OnInit {
       error: (error) => {
         console.error('Failed to load server status:', error);
         this.loading = false;
-      }
+      },
     });
   }
 }

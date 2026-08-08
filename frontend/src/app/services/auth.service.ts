@@ -32,13 +32,16 @@ export class AuthService {
   }
 
   login(username: string, password: string): Observable<AuthUser> {
-    return this.http.post<ApiResponse<any>>(`${this.apiUrl}/login`, { username, password })
-      .pipe(map(res => res.data as AuthUser))
-      .pipe(tap(user => {
-        localStorage.setItem('geoserver_user', JSON.stringify(user));
-        localStorage.setItem('geoserver_token', user.token);
-        this.currentUserSubject.next(user);
-      }));
+    return this.http
+      .post<ApiResponse<AuthUser>>(`${this.apiUrl}/login`, { username, password })
+      .pipe(map((res) => res.data as AuthUser))
+      .pipe(
+        tap((user) => {
+          localStorage.setItem('geoserver_user', JSON.stringify(user));
+          localStorage.setItem('geoserver_token', user.token);
+          this.currentUserSubject.next(user);
+        }),
+      );
   }
 
   logout(): void {
@@ -47,7 +50,7 @@ export class AuthService {
     if (token) {
       this.http.post(`${this.apiUrl}/logout`, {}).subscribe({
         next: () => {},
-        error: () => {}
+        error: () => {},
       });
     }
     localStorage.removeItem('geoserver_user');

@@ -2,185 +2,250 @@ use actix_web::web;
 
 pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
     cfg
-    // ---- 云原生探针 / 监控 (固定根路径, 与 api_context 解耦, 便于容器/K8s 探针配置) ----
-    .route("/health/live", web::get().to(crate::handlers::health_live))
-    .route("/health/ready", web::get().to(crate::handlers::health_ready))
-    .route("/metrics", web::get().to(crate::handlers::get_metrics))
-    .service(
-        web::scope("/wms")
-            .route("", web::get().to(crate::handlers::handle_wms_request))
-    )
-    .service(
-        web::scope("/wmts")
-            .route("", web::get().to(crate::handlers::handle_wmts_request))
-    )
-    .service(
-        web::scope("/wfs")
-            .route("", web::get().to(crate::handlers::handle_wfs_request))
-            .route("", web::post().to(crate::handlers::handle_wfs_post_request))
-    )
-    .service(
-        web::scope("/wcs")
-            .route("", web::get().to(crate::handlers::handle_wcs_request))
-    )
-    .service(
-        web::scope(api_context)
-            .route("/health", web::get().to(crate::handlers::health_check))
-            .service(
-                web::resource("/layers")
-                    .route(web::get().to(crate::handlers::list_layers))
-                    .route(web::post().to(crate::handlers::create_layer))
-            )
-            .service(
-                web::resource("/layers/{layer}")
-                    .route(web::get().to(crate::handlers::get_layer))
-                    .route(web::put().to(crate::handlers::update_layer))
-                    .route(web::delete().to(crate::handlers::delete_layer))
-            )
-            .service(
-                web::resource("/layers/{layer}/preview")
-                    .route(web::get().to(crate::handlers::preview_layer))
-            )
-            .service(
-                web::resource("/layers/{layer}/feature-type")
-                    .route(web::get().to(crate::handlers::get_layer_feature_type))
-            )
-            .service(
-                web::resource("/layers/{layer}/features")
-                    .route(web::get().to(crate::handlers::get_layer_features))
-                    .route(web::post().to(crate::handlers::create_feature))
-            )
-            .service(
-                web::resource("/layers/{layer}/features/{feature}")
-                    .route(web::get().to(crate::handlers::get_feature))
-                    .route(web::put().to(crate::handlers::update_feature))
-                    .route(web::delete().to(crate::handlers::delete_feature))
-            )
-            .service(
-                web::resource("/workspaces")
-                    .route(web::get().to(crate::handlers::list_workspaces))
-                    .route(web::post().to(crate::handlers::create_workspace))
-            )
-            .service(
-                web::resource("/workspaces/{workspace}")
-                    .route(web::get().to(crate::handlers::get_workspace))
-                    .route(web::put().to(crate::handlers::update_workspace))
-                    .route(web::delete().to(crate::handlers::delete_workspace))
-            )
-            .service(
-                web::resource("/namespaces")
-                    .route(web::get().to(crate::handlers::list_namespaces))
-                    .route(web::post().to(crate::handlers::create_namespace))
-            )
-            .service(
-                web::resource("/namespaces/{prefix}")
-                    .route(web::get().to(crate::handlers::get_namespace))
-                    .route(web::put().to(crate::handlers::update_namespace))
-                    .route(web::delete().to(crate::handlers::delete_namespace))
-            )
-            .route("/server/status", web::get().to(crate::handlers::get_server_status))
-            .route("/data/upload", web::post().to(crate::handlers::upload_geojson))
-            .route("/data/upload/shapefile", web::post().to(crate::handlers::upload_handler::upload_shapefile))
-            .route("/data/upload/geotiff", web::post().to(crate::handlers::upload_handler::upload_geotiff))
-            .service(
-                web::resource("/data-sources")
-                    .route(web::get().to(crate::handlers::list_data_sources))
-                    .route(web::post().to(crate::handlers::create_data_source))
-            )
-            .route("/data-sources/test", web::post().to(crate::handlers::test_connection))
-            .route("/data-sources/{name}/tables", web::get().to(crate::handlers::get_data_source_tables))
-            .service(
-                web::resource("/data-sources/{name}")
-                    .route(web::get().to(crate::handlers::get_data_source))
-                    .route(web::put().to(crate::handlers::update_data_source))
-                    .route(web::delete().to(crate::handlers::delete_data_source))
-            )
-            .route("/data-sources/{name}/test", web::post().to(crate::handlers::test_data_source_connection))
-            .service(
-                web::resource("/stores")
-                    .route(web::get().to(crate::handlers::list_stores))
-            )
-            .service(
-                web::resource("/stores/{name}")
-                    .route(web::get().to(crate::handlers::get_store))
-            )
-            .service(
-                web::resource("/workspaces/{workspace}/stores")
-                    .route(web::get().to(crate::handlers::list_workspace_stores))
-            )
-            .service(
-                web::resource("/workspaces/{workspace}/stores/{name}")
-                    .route(web::get().to(crate::handlers::get_workspace_store))
-            )
-            .service(
-                web::resource("/layers/{layer}/style")
-                    .route(web::get().to(crate::handlers::get_layer_style))
-                    .route(web::put().to(crate::handlers::put_layer_style))
-            )
-            .service(
-                web::resource("/styles")
-                    .route(web::get().to(crate::handlers::list_styles))
-                    .route(web::post().to(crate::handlers::create_style))
-            )
-            .service(
-                web::resource("/styles/{name}")
-                    .route(web::get().to(crate::handlers::get_style_by_name))
-                    .route(web::put().to(crate::handlers::update_style_by_name))
-                    .route(web::delete().to(crate::handlers::delete_style_by_name))
-            )
-            .service(
-                web::resource("/layer-groups")
-                    .route(web::get().to(crate::handlers::list_layer_groups))
-                    .route(web::post().to(crate::handlers::create_layer_group))
-            )
-            .service(
-                web::resource("/layer-groups/{name}")
-                    .route(web::get().to(crate::handlers::get_layer_group))
-                    .route(web::delete().to(crate::handlers::delete_layer_group))
-            )
-            .route("/tiles/{layer}/{z}/{x}/{y}", web::get().to(crate::handlers::get_tile))
-            // WMTS RESTful 瓦片模板: /wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}
-            .route("/wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}", web::get().to(crate::handlers::handle_wmts_rest_tile))
-            .route("/tiles/cache/clear/{layer}", web::delete().to(crate::handlers::clear_tile_cache))
-            .route("/tiles/cache/stats", web::get().to(crate::handlers::get_tile_cache_stats))
-            // 认证
-            .route("/auth/login", web::post().to(crate::handlers::login))
-            .route("/auth/logout", web::post().to(crate::handlers::logout))
-            .route("/auth/verify", web::get().to(crate::handlers::verify))
-            .route("/auth/change-password", web::post().to(crate::handlers::change_password))
-            .route("/auth/users", web::get().to(crate::handlers::list_users))
-            .route("/auth/users", web::post().to(crate::handlers::create_user))
-            .route("/auth/users/{username}", web::delete().to(crate::handlers::delete_user))
-            // 权限
-            .service(
-                web::resource("/permissions")
-                    .route(web::get().to(crate::handlers::list_permissions))
-                    .route(web::post().to(crate::handlers::create_permission))
-            )
-            .route("/permissions/{id}", web::delete().to(crate::handlers::delete_permission))
-            .route("/permissions/check/{type}/{name}", web::get().to(crate::handlers::check_permission_handler))
-            // 矢量瓦片 (MVT)
-            .route("/tiles/{layer}/{z}/{x}/{y}.pbf", web::get().to(crate::handlers::handle_mvt_tile))
-            .route("/mvt/{layer}/{z}/{x}/{y}", web::get().to(crate::handlers::handle_mvt_tile))
-            // 监控
-            .route("/monitor/stats", web::get().to(crate::handlers::get_monitor_stats))
-            .route("/monitor/requests", web::get().to(crate::handlers::get_recent_requests))
-            .route("/monitor/logs", web::get().to(crate::handlers::get_audit_logs))
-            .route("/monitor/reset", web::delete().to(crate::handlers::reset_monitor_stats))
-            // 备份/恢复
-            .route("/backup/export", web::get().to(crate::handlers::handle_export))
-            .route("/backup/import", web::post().to(crate::handlers::handle_import))
-            .service(
-                web::resource("/sql-views")
-                    .route(web::get().to(crate::handlers::list_sql_views))
-                    .route(web::post().to(crate::handlers::create_sql_view))
-            )
-            .route("/sql-views/preview", web::post().to(crate::handlers::preview_sql_view))
-            .service(
-                web::resource("/sql-views/{name}")
-                    .route(web::get().to(crate::handlers::get_sql_view))
-                    .route(web::put().to(crate::handlers::update_sql_view))
-                    .route(web::delete().to(crate::handlers::delete_sql_view))
-            )
-    );
+        // ---- 云原生探针 / 监控 (固定根路径, 与 api_context 解耦, 便于容器/K8s 探针配置) ----
+        .route("/health/live", web::get().to(crate::handlers::health_live))
+        .route(
+            "/health/ready",
+            web::get().to(crate::handlers::health_ready),
+        )
+        .route("/metrics", web::get().to(crate::handlers::get_metrics))
+        .service(web::scope("/wms").route("", web::get().to(crate::handlers::handle_wms_request)))
+        .service(web::scope("/wmts").route("", web::get().to(crate::handlers::handle_wmts_request)))
+        .service(
+            web::scope("/wfs")
+                .route("", web::get().to(crate::handlers::handle_wfs_request))
+                .route("", web::post().to(crate::handlers::handle_wfs_post_request)),
+        )
+        .service(web::scope("/wcs").route("", web::get().to(crate::handlers::handle_wcs_request)))
+        .service(
+            web::scope(api_context)
+                .route("/health", web::get().to(crate::handlers::health_check))
+                .service(
+                    web::resource("/layers")
+                        .route(web::get().to(crate::handlers::list_layers))
+                        .route(web::post().to(crate::handlers::create_layer)),
+                )
+                .service(
+                    web::resource("/layers/{layer}")
+                        .route(web::get().to(crate::handlers::get_layer))
+                        .route(web::put().to(crate::handlers::update_layer))
+                        .route(web::delete().to(crate::handlers::delete_layer)),
+                )
+                .service(
+                    web::resource("/layers/{layer}/preview")
+                        .route(web::get().to(crate::handlers::preview_layer)),
+                )
+                .service(
+                    web::resource("/layers/{layer}/feature-type")
+                        .route(web::get().to(crate::handlers::get_layer_feature_type)),
+                )
+                .service(
+                    web::resource("/layers/{layer}/features")
+                        .route(web::get().to(crate::handlers::get_layer_features))
+                        .route(web::post().to(crate::handlers::create_feature)),
+                )
+                .service(
+                    web::resource("/layers/{layer}/features/{feature}")
+                        .route(web::get().to(crate::handlers::get_feature))
+                        .route(web::put().to(crate::handlers::update_feature))
+                        .route(web::delete().to(crate::handlers::delete_feature)),
+                )
+                .service(
+                    web::resource("/workspaces")
+                        .route(web::get().to(crate::handlers::list_workspaces))
+                        .route(web::post().to(crate::handlers::create_workspace)),
+                )
+                .service(
+                    web::resource("/workspaces/{workspace}")
+                        .route(web::get().to(crate::handlers::get_workspace))
+                        .route(web::put().to(crate::handlers::update_workspace))
+                        .route(web::delete().to(crate::handlers::delete_workspace)),
+                )
+                .service(
+                    web::resource("/namespaces")
+                        .route(web::get().to(crate::handlers::list_namespaces))
+                        .route(web::post().to(crate::handlers::create_namespace)),
+                )
+                .service(
+                    web::resource("/namespaces/{prefix}")
+                        .route(web::get().to(crate::handlers::get_namespace))
+                        .route(web::put().to(crate::handlers::update_namespace))
+                        .route(web::delete().to(crate::handlers::delete_namespace)),
+                )
+                .route(
+                    "/server/status",
+                    web::get().to(crate::handlers::get_server_status),
+                )
+                .route(
+                    "/data/upload",
+                    web::post().to(crate::handlers::upload_geojson),
+                )
+                .route(
+                    "/data/upload/shapefile",
+                    web::post().to(crate::handlers::upload_handler::upload_shapefile),
+                )
+                .route(
+                    "/data/upload/geotiff",
+                    web::post().to(crate::handlers::upload_handler::upload_geotiff),
+                )
+                .service(
+                    web::resource("/data-sources")
+                        .route(web::get().to(crate::handlers::list_data_sources))
+                        .route(web::post().to(crate::handlers::create_data_source)),
+                )
+                .route(
+                    "/data-sources/test",
+                    web::post().to(crate::handlers::test_connection),
+                )
+                .route(
+                    "/data-sources/{name}/tables",
+                    web::get().to(crate::handlers::get_data_source_tables),
+                )
+                .service(
+                    web::resource("/data-sources/{name}")
+                        .route(web::get().to(crate::handlers::get_data_source))
+                        .route(web::put().to(crate::handlers::update_data_source))
+                        .route(web::delete().to(crate::handlers::delete_data_source)),
+                )
+                .route(
+                    "/data-sources/{name}/test",
+                    web::post().to(crate::handlers::test_data_source_connection),
+                )
+                .service(
+                    web::resource("/stores").route(web::get().to(crate::handlers::list_stores)),
+                )
+                .service(
+                    web::resource("/stores/{name}")
+                        .route(web::get().to(crate::handlers::get_store)),
+                )
+                .service(
+                    web::resource("/workspaces/{workspace}/stores")
+                        .route(web::get().to(crate::handlers::list_workspace_stores)),
+                )
+                .service(
+                    web::resource("/workspaces/{workspace}/stores/{name}")
+                        .route(web::get().to(crate::handlers::get_workspace_store)),
+                )
+                .service(
+                    web::resource("/layers/{layer}/style")
+                        .route(web::get().to(crate::handlers::get_layer_style))
+                        .route(web::put().to(crate::handlers::put_layer_style)),
+                )
+                .service(
+                    web::resource("/styles")
+                        .route(web::get().to(crate::handlers::list_styles))
+                        .route(web::post().to(crate::handlers::create_style)),
+                )
+                .service(
+                    web::resource("/styles/{name}")
+                        .route(web::get().to(crate::handlers::get_style_by_name))
+                        .route(web::put().to(crate::handlers::update_style_by_name))
+                        .route(web::delete().to(crate::handlers::delete_style_by_name)),
+                )
+                .service(
+                    web::resource("/layer-groups")
+                        .route(web::get().to(crate::handlers::list_layer_groups))
+                        .route(web::post().to(crate::handlers::create_layer_group)),
+                )
+                .service(
+                    web::resource("/layer-groups/{name}")
+                        .route(web::get().to(crate::handlers::get_layer_group))
+                        .route(web::delete().to(crate::handlers::delete_layer_group)),
+                )
+                .route(
+                    "/tiles/{layer}/{z}/{x}/{y}",
+                    web::get().to(crate::handlers::get_tile),
+                )
+                // WMTS RESTful 瓦片模板: /wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}
+                .route(
+                    "/wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}",
+                    web::get().to(crate::handlers::handle_wmts_rest_tile),
+                )
+                .route(
+                    "/tiles/cache/clear/{layer}",
+                    web::delete().to(crate::handlers::clear_tile_cache),
+                )
+                .route(
+                    "/tiles/cache/stats",
+                    web::get().to(crate::handlers::get_tile_cache_stats),
+                )
+                // 认证
+                .route("/auth/login", web::post().to(crate::handlers::login))
+                .route("/auth/logout", web::post().to(crate::handlers::logout))
+                .route("/auth/verify", web::get().to(crate::handlers::verify))
+                .route(
+                    "/auth/change-password",
+                    web::post().to(crate::handlers::change_password),
+                )
+                .route("/auth/users", web::get().to(crate::handlers::list_users))
+                .route("/auth/users", web::post().to(crate::handlers::create_user))
+                .route(
+                    "/auth/users/{username}",
+                    web::delete().to(crate::handlers::delete_user),
+                )
+                // 权限
+                .service(
+                    web::resource("/permissions")
+                        .route(web::get().to(crate::handlers::list_permissions))
+                        .route(web::post().to(crate::handlers::create_permission)),
+                )
+                .route(
+                    "/permissions/{id}",
+                    web::delete().to(crate::handlers::delete_permission),
+                )
+                .route(
+                    "/permissions/check/{type}/{name}",
+                    web::get().to(crate::handlers::check_permission_handler),
+                )
+                // 矢量瓦片 (MVT)
+                .route(
+                    "/tiles/{layer}/{z}/{x}/{y}.pbf",
+                    web::get().to(crate::handlers::handle_mvt_tile),
+                )
+                .route(
+                    "/mvt/{layer}/{z}/{x}/{y}",
+                    web::get().to(crate::handlers::handle_mvt_tile),
+                )
+                // 监控
+                .route(
+                    "/monitor/stats",
+                    web::get().to(crate::handlers::get_monitor_stats),
+                )
+                .route(
+                    "/monitor/requests",
+                    web::get().to(crate::handlers::get_recent_requests),
+                )
+                .route(
+                    "/monitor/logs",
+                    web::get().to(crate::handlers::get_audit_logs),
+                )
+                .route(
+                    "/monitor/reset",
+                    web::delete().to(crate::handlers::reset_monitor_stats),
+                )
+                // 备份/恢复
+                .route(
+                    "/backup/export",
+                    web::get().to(crate::handlers::handle_export),
+                )
+                .route(
+                    "/backup/import",
+                    web::post().to(crate::handlers::handle_import),
+                )
+                .service(
+                    web::resource("/sql-views")
+                        .route(web::get().to(crate::handlers::list_sql_views))
+                        .route(web::post().to(crate::handlers::create_sql_view)),
+                )
+                .route(
+                    "/sql-views/preview",
+                    web::post().to(crate::handlers::preview_sql_view),
+                )
+                .service(
+                    web::resource("/sql-views/{name}")
+                        .route(web::get().to(crate::handlers::get_sql_view))
+                        .route(web::put().to(crate::handlers::update_sql_view))
+                        .route(web::delete().to(crate::handlers::delete_sql_view)),
+                ),
+        );
 }

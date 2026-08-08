@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::bounds::{BoundingBox, CoordinateReferenceSystem};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

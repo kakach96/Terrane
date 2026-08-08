@@ -1,21 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
-
-interface Store {
-  name: string;
-  type: 'DataStore' | 'CoverageStore';
-  workspace: string | null;
-  enabled: boolean;
-  connection?: any;
-  created?: string;
-  modified?: string;
-}
+import { Store } from '../../models/geoserver.models';
 
 @Component({
   selector: 'app-stores',
   templateUrl: './stores.component.html',
-  styleUrls: ['./stores.component.scss']
+  styleUrls: ['./stores.component.scss'],
 })
 export class StoresComponent implements OnInit {
   stores: Store[] = [];
@@ -34,7 +25,7 @@ export class StoresComponent implements OnInit {
 
   get filteredStores(): Store[] {
     if (this.filterType === 'all') return this.stores;
-    return this.stores.filter(s => s.type === this.filterType);
+    return this.stores.filter((s) => s.type === this.filterType);
   }
 
   loadStores(): void {
@@ -47,7 +38,7 @@ export class StoresComponent implements OnInit {
       error: (error) => {
         console.error('Failed to load stores:', error);
         this.loading = false;
-      }
+      },
     });
   }
 

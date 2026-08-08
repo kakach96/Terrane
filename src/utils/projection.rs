@@ -25,7 +25,13 @@ impl ProjectionTransformer {
             .map(|coords| (coords[0], coords[1]))
     }
 
-    pub fn transform_bounds(&self, minx: f64, miny: f64, maxx: f64, maxy: f64) -> Result<(f64, f64, f64, f64), String> {
+    pub fn transform_bounds(
+        &self,
+        minx: f64,
+        miny: f64,
+        maxx: f64,
+        maxy: f64,
+    ) -> Result<(f64, f64, f64, f64), String> {
         let (x1, y1) = self.transform_point(minx, miny)?;
         let (x2, y2) = self.transform_point(maxx, maxy)?;
         Ok((x1.min(x2), y1.min(y2), x1.max(x2), y1.max(y2)))
@@ -122,7 +128,9 @@ mod tests {
             CoordinateReferenceSystem::EPSG4326,
             CoordinateReferenceSystem::EPSG4326,
         );
-        let result = transformer.transform_bounds(-180.0, -90.0, 180.0, 90.0).unwrap();
+        let result = transformer
+            .transform_bounds(-180.0, -90.0, 180.0, 90.0)
+            .unwrap();
         assert!((result.0 - (-180.0)).abs() < 0.001);
         assert!((result.1 - (-90.0)).abs() < 0.001);
         assert!((result.2 - 180.0).abs() < 0.001);

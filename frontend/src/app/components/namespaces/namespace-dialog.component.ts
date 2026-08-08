@@ -10,48 +10,60 @@ import { Namespace } from '../../models/geoserver.models';
       <div class="dialog-form">
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>前缀 (Prefix)</mat-label>
-          <input matInput [(ngModel)]="formData.prefix" [disabled]="isEdit" required
-                 placeholder="例如: default, ogc, custom">
+          <input
+            matInput
+            [(ngModel)]="formData.prefix"
+            [disabled]="isEdit"
+            required
+            placeholder="例如: default, ogc, custom"
+          />
           <mat-hint>命名空间前缀，创建后不可修改</mat-hint>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>URI</mat-label>
-          <input matInput [(ngModel)]="formData.uri" required
-                 placeholder="例如: http://geoserver.org/default">
+          <input
+            matInput
+            [(ngModel)]="formData.uri"
+            required
+            placeholder="例如: http://geoserver.org/default"
+          />
           <mat-hint>命名空间唯一标识 URI</mat-hint>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>关联工作空间 (可选)</mat-label>
-          <input matInput [(ngModel)]="formData.workspace"
-                 placeholder="关联的工作空间名称">
+          <input matInput [(ngModel)]="formData.workspace" placeholder="关联的工作空间名称" />
         </mat-form-field>
 
-        <mat-checkbox [(ngModel)]="formData.isolated">
-          隔离命名空间 (Isolated)
-        </mat-checkbox>
+        <mat-checkbox [(ngModel)]="formData.isolated"> 隔离命名空间 (Isolated) </mat-checkbox>
       </div>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close>取消</button>
-      <button mat-raised-button color="primary" (click)="onSubmit()"
-              [disabled]="!formData.prefix || !formData.uri">
+      <button
+        mat-raised-button
+        color="primary"
+        (click)="onSubmit()"
+        [disabled]="!formData.prefix || !formData.uri"
+      >
         {{ isEdit ? '更新' : '创建' }}
       </button>
     </mat-dialog-actions>
   `,
-  styles: [`
-    .dialog-form {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding: 8px 0;
-    }
-    .full-width {
-      width: 100%;
-    }
-  `]
+  styles: [
+    `
+      .dialog-form {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 8px 0;
+      }
+      .full-width {
+        width: 100%;
+      }
+    `,
+  ],
 })
 export class NamespaceDialogComponent implements OnInit {
   isEdit = false;
@@ -59,12 +71,12 @@ export class NamespaceDialogComponent implements OnInit {
     prefix: '',
     uri: '',
     workspace: '',
-    isolated: false
+    isolated: false,
   };
 
   constructor(
     public dialogRef: MatDialogRef<NamespaceDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { namespace?: Namespace }
+    @Inject(MAT_DIALOG_DATA) public data: { namespace?: Namespace },
   ) {}
 
   ngOnInit(): void {
@@ -85,14 +97,14 @@ export class NamespaceDialogComponent implements OnInit {
       this.dialogRef.close({
         uri: this.formData.uri,
         isolated: this.formData.isolated,
-        workspace: this.formData.workspace || undefined
+        workspace: this.formData.workspace || undefined,
       });
     } else {
       this.dialogRef.close({
         prefix: this.formData.prefix,
         uri: this.formData.uri,
         isolated: this.formData.isolated,
-        workspace: this.formData.workspace || undefined
+        workspace: this.formData.workspace || undefined,
       });
     }
   }

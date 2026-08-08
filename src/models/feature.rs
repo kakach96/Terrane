@@ -1,5 +1,5 @@
+use geo::{Coord, Geometry, LineString, Point, Polygon};
 use serde::{Deserialize, Serialize};
-use geo::{Coord, Geometry, Point, LineString, Polygon};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -19,21 +19,43 @@ impl Feature {
         }
     }
 
-    pub fn with_id(id: String, geometry: GeoJsonGeometry, properties: HashMap<String, PropertyValue>) -> Self {
-        Feature { id, geometry, properties }
+    pub fn with_id(
+        id: String,
+        geometry: GeoJsonGeometry,
+        properties: HashMap<String, PropertyValue>,
+    ) -> Self {
+        Feature {
+            id,
+            geometry,
+            properties,
+        }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum GeoJsonGeometry {
-    Point { coordinates: Vec<f64> },
-    LineString { coordinates: Vec<Vec<f64>> },
-    Polygon { coordinates: Vec<Vec<Vec<f64>>> },
-    MultiPoint { coordinates: Vec<Vec<f64>> },
-    MultiLineString { coordinates: Vec<Vec<Vec<f64>>> },
-    MultiPolygon { coordinates: Vec<Vec<Vec<Vec<f64>>>> },
-    GeometryCollection { geometries: Vec<GeoJsonGeometry> },
+    Point {
+        coordinates: Vec<f64>,
+    },
+    LineString {
+        coordinates: Vec<Vec<f64>>,
+    },
+    Polygon {
+        coordinates: Vec<Vec<Vec<f64>>>,
+    },
+    MultiPoint {
+        coordinates: Vec<Vec<f64>>,
+    },
+    MultiLineString {
+        coordinates: Vec<Vec<Vec<f64>>>,
+    },
+    MultiPolygon {
+        coordinates: Vec<Vec<Vec<Vec<f64>>>>,
+    },
+    GeometryCollection {
+        geometries: Vec<GeoJsonGeometry>,
+    },
 }
 
 impl GeoJsonGeometry {
@@ -45,18 +67,21 @@ impl GeoJsonGeometry {
                 } else {
                     Geometry::Point(Point::new(0.0, 0.0))
                 }
-            }
+            },
             GeoJsonGeometry::LineString { coordinates } => {
-                let points: Vec<Coord<f64>> = coordinates.iter()
+                let points: Vec<Coord<f64>> = coordinates
+                    .iter()
                     .filter(|c| c.len() >= 2)
                     .map(|c| Coord { x: c[0], y: c[1] })
                     .collect();
                 Geometry::LineString(LineString::new(points))
-            }
+            },
             GeoJsonGeometry::Polygon { coordinates } => {
-                let rings: Vec<LineString<f64>> = coordinates.iter()
+                let rings: Vec<LineString<f64>> = coordinates
+                    .iter()
                     .map(|ring| {
-                        let points: Vec<Coord<f64>> = ring.iter()
+                        let points: Vec<Coord<f64>> = ring
+                            .iter()
                             .filter(|c| c.len() >= 2)
                             .map(|c| Coord { x: c[0], y: c[1] })
                             .collect();
@@ -68,7 +93,7 @@ impl GeoJsonGeometry {
                 } else {
                     Geometry::Polygon(Polygon::new(LineString::new(vec![]), vec![]))
                 }
-            }
+            },
             _ => Geometry::Point(Point::new(0.0, 0.0)),
         }
     }
@@ -109,7 +134,10 @@ pub struct FeatureCollection {
 impl FeatureCollection {
     pub fn new(features: Vec<Feature>) -> Self {
         let total_count = features.len();
-        FeatureCollection { features, total_count }
+        FeatureCollection {
+            features,
+            total_count,
+        }
     }
 
     pub fn empty() -> Self {

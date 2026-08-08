@@ -69,8 +69,12 @@
         </mat-select>
       </mat-form-field>
 
-      <button mat-raised-button color="primary" (click)="clearLayerCache()"
-              [disabled]="!selectedLayer || loading">
+      <button
+        mat-raised-button
+        color="primary"
+        (click)="clearLayerCache()"
+        [disabled]="!selectedLayer || loading"
+      >
         <mat-icon>cleaning_services</mat-icon>
         清除选定图层缓存
       </button>
@@ -87,12 +91,17 @@
 <mat-card class="layers-card">
   <mat-card-header>
     <mat-card-title>瓦片服务</mat-card-title>
-    <mat-card-subtitle>通过 /tiles/&#123;layer&#125;/&#123;z&#125;/&#123;x&#125;/&#123;y&#125; 访问瓦片，支持 gridset 参数</mat-card-subtitle>
+    <mat-card-subtitle
+      >通过 /tiles/&#123;layer&#125;/&#123;z&#125;/&#123;x&#125;/&#123;y&#125; 访问瓦片，支持
+      gridset 参数</mat-card-subtitle
+    >
   </mat-card-header>
   <mat-card-content>
     <div class="endpoint-info">
       <h3>瓦片 URL 格式</h3>
-      <code>/tiles/&#123;layer&#125;/&#123;z&#125;/&#123;x&#125;/&#123;y&#125;?gridset=EPSG:4326</code>
+      <code
+        >/tiles/&#123;layer&#125;/&#123;z&#125;/&#123;x&#125;/&#123;y&#125;?gridset=EPSG:4326</code
+      >
       <h3>支持的 Gridset</h3>
       <ul>
         <li><code>EPSG:4326</code> — 全球地理坐标系</li>
@@ -107,11 +116,15 @@
         </li>
         <li>
           <strong>GetTile</strong> —
-          <code>/wmts?SERVICE=WMTS&amp;REQUEST=GetTile&amp;LAYER=...&amp;TILEMATRIXSET=...&amp;TILEMATRIX=...&amp;TILEROW=...&amp;TILECOL=...</code>
+          <code
+            >/wmts?SERVICE=WMTS&amp;REQUEST=GetTile&amp;LAYER=...&amp;TILEMATRIXSET=...&amp;TILEMATRIX=...&amp;TILEROW=...&amp;TILECOL=...</code
+          >
         </li>
         <li>
           <strong>RESTful</strong> —
-          <code>/wmts/&#123;layer&#125;/&#123;tileMatrixSet&#125;/&#123;tileMatrix&#125;/&#123;tileCol&#125;/&#123;tileRow&#125;</code>
+          <code
+            >/wmts/&#123;layer&#125;/&#123;tileMatrixSet&#125;/&#123;tileMatrix&#125;/&#123;tileCol&#125;/&#123;tileRow&#125;</code
+          >
         </li>
         <li>
           <strong>GetFeatureInfo</strong> —

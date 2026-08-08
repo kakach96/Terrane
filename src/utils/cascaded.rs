@@ -38,7 +38,10 @@ pub fn extract_cascaded_config(
     Some(CascadedWmsConfig {
         get_map_url: format!("{}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap", base_url),
         capabilities_url: Some(format!("{}?SERVICE=WMS&REQUEST=GetCapabilities", base_url)),
-        feature_info_url: Some(format!("{}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo", base_url)),
+        feature_info_url: Some(format!(
+            "{}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo",
+            base_url
+        )),
         remote_layer: remote_layer.to_string(),
         timeout_secs: 10,
         extra_params: HashMap::new(),
@@ -86,7 +89,8 @@ pub async fn fetch_cascaded_map(
         .build()
         .map_err(|e| format!("HTTP 客户端创建失败: {}", e))?;
 
-    let response = client.get(&url)
+    let response = client
+        .get(&url)
         .send()
         .await
         .map_err(|e| format!("外部 WMS 请求失败: {}", e))?;
@@ -103,12 +107,17 @@ pub async fn fetch_cascaded_map(
         .unwrap_or("image/png")
         .to_string();
 
-    let bytes = response.bytes()
+    let bytes = response
+        .bytes()
         .await
         .map_err(|e| format!("读取响应失败: {}", e))?
         .to_vec();
 
-    info!("[Cascaded] 外部 WMS 响应: {} bytes, Content-Type: {}", bytes.len(), content_type);
+    info!(
+        "[Cascaded] 外部 WMS 响应: {} bytes, Content-Type: {}",
+        bytes.len(),
+        content_type
+    );
     Ok((bytes, content_type))
 }
 
@@ -117,7 +126,12 @@ mod tests {
     use super::*;
     use crate::models::DataSourceConnection;
 
-    fn conn_with(host: Option<&str>, port: Option<u16>, database: Option<&str>, schema: Option<&str>) -> DataSourceConnection {
+    fn conn_with(
+        host: Option<&str>,
+        port: Option<u16>,
+        database: Option<&str>,
+        schema: Option<&str>,
+    ) -> DataSourceConnection {
         DataSourceConnection {
             host: host.map(String::from),
             port,
@@ -132,12 +146,23 @@ mod tests {
 
     #[test]
     fn test_extract_cascaded_config_defaults() {
-        let conn = conn_with(Some("example.com"), Some(8080), Some("/geoserver/wms"), Some("remote_layer"));
+        let conn = conn_with(
+            Some("example.com"),
+            Some(8080),
+            Some("/geoserver/wms"),
+            Some("remote_layer"),
+        );
         let cfg = extract_cascaded_config(&conn).expect("应能提取级联配置");
 
-        assert!(cfg.get_map_url.contains("http://example.com:8080/geoserver/wms"));
+        assert!(cfg
+            .get_map_url
+            .contains("http://example.com:8080/geoserver/wms"));
         assert!(cfg.get_map_url.contains("REQUEST=GetMap"));
-        assert!(cfg.capabilities_url.as_deref().unwrap().contains("REQUEST=GetCapabilities"));
+        assert!(cfg
+            .capabilities_url
+            .as_deref()
+            .unwrap()
+            .contains("REQUEST=GetCapabilities"));
         assert_eq!(cfg.remote_layer, "remote_layer");
         assert_eq!(cfg.timeout_secs, 10);
     }
@@ -146,7 +171,9 @@ mod tests {
     fn test_extract_cascaded_config_https() {
         let conn = conn_with(Some("secure.example.com"), Some(443), None, Some("world"));
         let cfg = extract_cascaded_config(&conn).unwrap();
-        assert!(cfg.get_map_url.starts_with("https://secure.example.com:443/wms"));
+        assert!(cfg
+            .get_map_url
+            .starts_with("https://secure.example.com:443/wms"));
         assert_eq!(cfg.remote_layer, "world");
     }
 
@@ -155,7 +182,9 @@ mod tests {
         // 未指定端口时默认 80, database 缺省 /wms
         let conn = conn_with(Some("plain.example.com"), None, None, None);
         let cfg = extract_cascaded_config(&conn).unwrap();
-        assert!(cfg.get_map_url.starts_with("http://plain.example.com:80/wms"));
+        assert!(cfg
+            .get_map_url
+            .starts_with("http://plain.example.com:80/wms"));
         assert_eq!(cfg.remote_layer, "layer");
     }
 

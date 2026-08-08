@@ -1,5 +1,5 @@
 <div class="login-header">
-  <img src="assets/terrane.svg" alt="Terrane" class="logo-img">
+  <img src="assets/terrane.svg" alt="Terrane" class="logo-img" />
   <span class="logo-text">Terrane</span>
 </div>
 
@@ -7,16 +7,27 @@
   <form (ngSubmit)="onSubmit()" #loginForm="ngForm">
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>用户名</mat-label>
-      <input matInput [(ngModel)]="username" name="username" required
-             placeholder="admin" autocomplete="username">
+      <input
+        matInput
+        [(ngModel)]="username"
+        name="username"
+        required
+        placeholder="admin"
+        autocomplete="username"
+      />
       <mat-icon matPrefix>person</mat-icon>
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>密码</mat-label>
-      <input matInput [(ngModel)]="password" name="password"
-             [type]="showPassword ? 'text' : 'password'" required
-             autocomplete="current-password">
+      <input
+        matInput
+        [(ngModel)]="password"
+        name="password"
+        [type]="showPassword ? 'text' : 'password'"
+        required
+        autocomplete="current-password"
+      />
       <mat-icon matPrefix>lock</mat-icon>
       <button mat-icon-button matSuffix (click)="showPassword = !showPassword" type="button">
         <mat-icon>{{ showPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
@@ -28,8 +39,13 @@
     </div>
 
     <div class="login-actions">
-      <button mat-raised-button color="primary" class="login-btn"
-              type="submit" [disabled]="loading">
+      <button
+        mat-raised-button
+        color="primary"
+        class="login-btn"
+        type="submit"
+        [disabled]="loading"
+      >
         <mat-spinner diameter="20" *ngIf="loading" class="spinner"></mat-spinner>
         <span *ngIf="!loading">登 录</span>
       </button>

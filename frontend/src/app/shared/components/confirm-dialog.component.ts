@@ -17,12 +17,12 @@ export interface ConfirmDialogData {
       <button mat-button (click)="onCancel()">取消</button>
       <button mat-raised-button color="warn" (click)="onConfirm()">确认</button>
     </mat-dialog-actions>
-  `
+  `,
 })
 export class ConfirmDialogComponent {
   constructor(
     public dialogRef: MatDialogRef<ConfirmDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: ConfirmDialogData
+    @Inject(MAT_DIALOG_DATA) public data: ConfirmDialogData,
   ) {}
 
   onCancel(): void {

@@ -5,13 +5,15 @@
 //! (本地磁盘, 未来可扩展 Redis/S3)。
 //! 缓存路径: `<cache_dir>/<layer>/<gridset>/<zoom>/<x>/<y>.png`
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use crate::config::CacheConfig;
+use crate::store::cache::{
+    build_tile_cache_backend, TileCacheBackend, TileCacheKey, TileCacheStats,
+};
 use crate::store::StoreError;
-use crate::store::cache::{TileCacheBackend, TileCacheKey, TileCacheStats, build_tile_cache_backend};
 
 // ---------------------------------------------------------------------------
 // Gridset 定义
@@ -43,7 +45,7 @@ impl Gridset {
     /// 获取该 Gridset 的顶层瓦片数 (1x1, 2x1, 或 2x2)
     pub fn top_level_tiles(&self) -> (u32, u32) {
         match self {
-            Gridset::Epsg4326 => (2, 1),  // 全球分 2x1
+            Gridset::Epsg4326 => (2, 1),                       // 全球分 2x1
             Gridset::Epsg3857 | Gridset::Epsg900913 => (1, 1), // 全球分 1x1
         }
     }
@@ -71,7 +73,7 @@ impl Gridset {
                 let miny = (y as f64 / n) * 180.0 - 90.0;
                 let maxy = ((y + 1) as f64 / n) * 180.0 - 90.0;
                 Some((minx, miny, maxx, maxy))
-            }
+            },
             Gridset::Epsg3857 | Gridset::Epsg900913 => {
                 let minx = (x as f64 / n) * 360.0 - 180.0;
                 let maxx = ((x + 1) as f64 / n) * 360.0 - 180.0;
@@ -82,7 +84,7 @@ impl Gridset {
                 let miny = sin_lat(y as f64 + 1.0).max(-85.0511);
                 let maxy = sin_lat(y as f64).min(85.0511);
                 Some((minx, miny, maxx, maxy))
-            }
+            },
         }
     }
 }
@@ -159,11 +161,11 @@ impl TileCache {
             Some(data) => {
                 self.hits.fetch_add(1, Ordering::Relaxed);
                 Some(data)
-            }
+            },
             None => {
                 self.misses.fetch_add(1, Ordering::Relaxed);
                 None
-            }
+            },
         }
     }
 
@@ -215,7 +217,11 @@ impl TileCache {
         let hits = self.hits.load(Ordering::Relaxed) as f64;
         let misses = self.misses.load(Ordering::Relaxed) as f64;
         let total = hits + misses;
-        if total > 0.0 { hits / total } else { 0.0 }
+        if total > 0.0 {
+            hits / total
+        } else {
+            0.0
+        }
     }
 }
 
@@ -250,29 +256,29 @@ mod tests {
     fn test_tile_bounds_epsg4326_z0() {
         // z=0, n=2^0=1, 瓦片覆盖全球
         let bounds = Gridset::Epsg4326.tile_bounds(0, 0, 0).unwrap();
-        assert!((bounds.0 - (-180.0)).abs() < 0.001);  // minx
-        assert!((bounds.1 - (-90.0)).abs() < 0.001);   // miny
-        assert!((bounds.2 - 180.0).abs() < 0.001);     // maxx = 全球
-        assert!((bounds.3 - 90.0).abs() < 0.001);      // maxy
+        assert!((bounds.0 - (-180.0)).abs() < 0.001); // minx
+        assert!((bounds.1 - (-90.0)).abs() < 0.001); // miny
+        assert!((bounds.2 - 180.0).abs() < 0.001); // maxx = 全球
+        assert!((bounds.3 - 90.0).abs() < 0.001); // maxy
     }
 
     #[test]
     fn test_tile_bounds_epsg4326_z1() {
         // z=1, x=1, y=0 (右上角)
         let bounds = Gridset::Epsg4326.tile_bounds(1, 1, 0).unwrap();
-        assert_eq!(bounds.0, 0.0);     // minx
-        assert_eq!(bounds.1, -90.0);   // miny
-        assert_eq!(bounds.2, 180.0);   // maxx
-        assert_eq!(bounds.3, 0.0);     // maxy
+        assert_eq!(bounds.0, 0.0); // minx
+        assert_eq!(bounds.1, -90.0); // miny
+        assert_eq!(bounds.2, 180.0); // maxx
+        assert_eq!(bounds.3, 0.0); // maxy
     }
 
     #[test]
     fn test_tile_bounds_epsg3857_z0() {
         let bounds = Gridset::Epsg3857.tile_bounds(0, 0, 0).unwrap();
-        assert!(bounds.0 < -100.0);    // 应该在 -180 附近
-        assert!(bounds.1 <= -85.0);    // 应该在 -85.0511 附近
-        assert!(bounds.2 > 100.0);     // 应该在 180 附近
-        assert!(bounds.3 >= 85.0);     // 应该在 85.0511 附近
+        assert!(bounds.0 < -100.0); // 应该在 -180 附近
+        assert!(bounds.1 <= -85.0); // 应该在 -85.0511 附近
+        assert!(bounds.2 > 100.0); // 应该在 180 附近
+        assert!(bounds.3 >= 85.0); // 应该在 85.0511 附近
     }
 
     #[test]
@@ -297,9 +303,20 @@ mod tests {
 
         // put 一个瓦片, 验证落在 <dir>/test_layer/EPSG_4326/5/10/15.png
         // (gridset 中的 ':' 在文件系统路径中被消毒为 '_', 兼容 Windows)
-        cache.put("test_layer", "EPSG:4326", 5, 10, 15, b"tile-bytes").await;
-        let expected = dir.join("test_layer").join("EPSG_4326").join("5").join("10").join("15.png");
-        assert!(expected.exists(), "tile file should exist at {:?}", expected);
+        cache
+            .put("test_layer", "EPSG:4326", 5, 10, 15, b"tile-bytes")
+            .await;
+        let expected = dir
+            .join("test_layer")
+            .join("EPSG_4326")
+            .join("5")
+            .join("10")
+            .join("15.png");
+        assert!(
+            expected.exists(),
+            "tile file should exist at {:?}",
+            expected
+        );
 
         let got = cache.get("test_layer", "EPSG:4326", 5, 10, 15).await;
         assert_eq!(got.as_deref(), Some(&b"tile-bytes"[..]));

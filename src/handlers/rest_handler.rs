@@ -1,6 +1,6 @@
-use actix_web::{HttpResponse, web};
-use serde::{Deserialize, Serialize};
 use crate::state::AppState;
+use actix_web::{web, HttpResponse};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
@@ -60,7 +60,7 @@ pub async fn health_ready(state: web::Data<AppState>) -> HttpResponse {
                     "status": "error",
                     "detail": format!("query failed: {}", e)
                 }));
-            }
+            },
         }
     } else {
         ready = false;
@@ -82,10 +82,12 @@ pub async fn health_ready(state: web::Data<AppState>) -> HttpResponse {
                     "status": "error",
                     "detail": format!("query failed: {}", e)
                 }));
-            }
+            },
         }
     } else {
-        checks.push(serde_json::json!({"name": "vector_store", "status": "ok", "detail": "not configured"}));
+        checks.push(
+            serde_json::json!({"name": "vector_store", "status": "ok", "detail": "not configured"}),
+        );
     }
 
     // 3. 瓦片缓存目录 (可选) — 已配置但不可用时不阻塞就绪, 仅记录
@@ -114,9 +116,13 @@ pub async fn health_ready(state: web::Data<AppState>) -> HttpResponse {
     }
 }
 
-pub async fn get_server_status(state: web::Data<AppState>) -> Result<HttpResponse, crate::error::GeoServerError> {
+pub async fn get_server_status(
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, crate::error::GeoServerError> {
     let uptime = state.get_uptime();
-    let request_count = state.request_count.load(std::sync::atomic::Ordering::Relaxed);
+    let request_count = state
+        .request_count
+        .load(std::sync::atomic::Ordering::Relaxed);
     let error_count = state.error_count.load(std::sync::atomic::Ordering::Relaxed);
 
     let memory_info = match sysinfo::System::new_all() {
@@ -124,17 +130,27 @@ pub async fn get_server_status(state: web::Data<AppState>) -> Result<HttpRespons
             s.refresh_memory();
             let total = s.total_memory();
             let used = s.used_memory();
-            let percent = if total > 0 { (used as f64 / total as f64) * 100.0 } else { 0.0 };
+            let percent = if total > 0 {
+                (used as f64 / total as f64) * 100.0
+            } else {
+                0.0
+            };
             serde_json::json!({
                 "used": used,
                 "total": total,
                 "percent": percent,
             })
-        }
+        },
     };
 
     let layer_count = state.layers.read().await.len();
-    let enabled_count = state.layers.read().await.iter().filter(|l| l.enabled).count();
+    let enabled_count = state
+        .layers
+        .read()
+        .await
+        .iter()
+        .filter(|l| l.enabled)
+        .count();
     let workspace_count = {
         if let Some(store) = &state.store {
             match store.get_all_workspaces().await {

@@ -60,7 +60,7 @@ impl SessionCache for LocalSessionCache {
                 // Expired -> evict and treat as a miss.
                 inner.remove(jti);
                 None
-            }
+            },
             None => None,
         }
     }

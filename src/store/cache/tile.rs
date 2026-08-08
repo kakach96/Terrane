@@ -31,7 +31,10 @@ pub struct TileCacheKey {
 impl TileCacheKey {
     /// Canonical string form of the key (used by non-disk backends later).
     pub fn as_string(&self) -> String {
-        format!("tile:{}:{}:{}:{}:{}", self.layer, self.gridset, self.z, self.x, self.y)
+        format!(
+            "tile:{}:{}:{}:{}:{}",
+            self.layer, self.gridset, self.z, self.x, self.y
+        )
     }
 }
 
@@ -123,7 +126,10 @@ impl TileCacheBackend for LocalTileCacheBackend {
                         if elapsed.as_secs() > self.config.expire_after_secs {
                             tracing::debug!(
                                 "[GWC] EXPIRED layer={} z={} x={} y={}",
-                                key.layer, key.z, key.x, key.y
+                                key.layer,
+                                key.z,
+                                key.x,
+                                key.y
                             );
                             let path_clone = path.clone();
                             tokio::spawn(async move {
@@ -141,10 +147,14 @@ impl TileCacheBackend for LocalTileCacheBackend {
             Err(e) => {
                 tracing::warn!(
                     "[GWC] READ_ERROR layer={} z={} x={} y={}: {}",
-                    key.layer, key.z, key.x, key.y, e
+                    key.layer,
+                    key.z,
+                    key.x,
+                    key.y,
+                    e
                 );
                 None
-            }
+            },
         }
     }
 
@@ -161,7 +171,11 @@ impl TileCacheBackend for LocalTileCacheBackend {
         if let Err(e) = fs::write(&path, data).await {
             tracing::warn!(
                 "[GWC] WRITE_ERROR layer={} z={} x={} y={}: {}",
-                key.layer, key.z, key.x, key.y, e
+                key.layer,
+                key.z,
+                key.x,
+                key.y,
+                e
             );
         }
     }
@@ -275,7 +289,8 @@ mod tests {
     use crate::config::CacheConfig;
 
     fn test_config(tag: &str) -> CacheConfig {
-        let dir = std::env::temp_dir().join(format!("terrane-tile-test-{}-{}", tag, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("terrane-tile-test-{}-{}", tag, std::process::id()));
         CacheConfig {
             kind: "local".to_string(),
             cache_dir: dir.clone(),
@@ -316,7 +331,11 @@ mod tests {
         let backend = LocalTileCacheBackend::new(test_config("path"));
         let p = backend.tile_path(&sample_key());
         let s = p.to_string_lossy().to_string();
-        assert!(s.contains("EPSG_4326"), "gridset 中的 ':' 应消毒为 '_', 实际: {}", s);
+        assert!(
+            s.contains("EPSG_4326"),
+            "gridset 中的 ':' 应消毒为 '_', 实际: {}",
+            s
+        );
         assert!(!s.contains("EPSG:4326"), "路径中不应含 ':'");
         assert!(s.ends_with("0.png"));
     }
@@ -327,8 +346,20 @@ mod tests {
         backend.init().await.unwrap();
 
         let k1 = sample_key();
-        let k2 = TileCacheKey { layer: "world".into(), gridset: "EPSG:4326".into(), z: 1, x: 1, y: 1 };
-        let k3 = TileCacheKey { layer: "ocean".into(), gridset: "EPSG:4326".into(), z: 0, x: 0, y: 0 };
+        let k2 = TileCacheKey {
+            layer: "world".into(),
+            gridset: "EPSG:4326".into(),
+            z: 1,
+            x: 1,
+            y: 1,
+        };
+        let k3 = TileCacheKey {
+            layer: "ocean".into(),
+            gridset: "EPSG:4326".into(),
+            z: 0,
+            x: 0,
+            y: 0,
+        };
         backend.put(&k1, b"a").await;
         backend.put(&k2, b"b").await;
         backend.put(&k3, b"c").await;

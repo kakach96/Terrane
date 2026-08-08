@@ -1,6 +1,6 @@
-use crate::state::AppState;
-use crate::models::{Feature, GeoJsonGeometry, Bounds, DataSourceType, METADATA_DATA_SOURCE};
 use crate::error::GeoServerError;
+use crate::models::{Bounds, DataSourceType, Feature, GeoJsonGeometry, METADATA_DATA_SOURCE};
+use crate::state::AppState;
 use crate::utils::wkb;
 use tracing::info;
 
@@ -15,14 +15,22 @@ pub async fn query_layer_features(
         let layers = state.layers.read().await;
         layers.iter().find(|l| l.name == layer_name).cloned()
     };
-    let layer = layer.ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+    let layer = layer
+        .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
     // 内置 metadata 数据源: 业务数据从业务存储读取
     if layer.store == METADATA_DATA_SOURCE {
         if let Some(bstore) = &state.vector_store {
-            info!("[Features] 图层 '{}' 使用内置 metadata 数据源, 从矢量存储读取", layer_name);
-            let all = bstore.load_features(layer_name).await
-                .map_err(|e| GeoServerError::InternalError(format!("Failed to load features from vector store: {}", e)))?;
+            info!(
+                "[Features] 图层 '{}' 使用内置 metadata 数据源, 从矢量存储读取",
+                layer_name
+            );
+            let all = bstore.load_features(layer_name).await.map_err(|e| {
+                GeoServerError::InternalError(format!(
+                    "Failed to load features from vector store: {}",
+                    e
+                ))
+            })?;
             let mut filtered = filter_features(all, bbox);
             if let Some(o) = offset {
                 filtered = filtered.into_iter().skip(o as usize).collect();
@@ -35,7 +43,9 @@ pub async fn query_layer_features(
     }
 
     let data_source = if let Some(store) = &state.store {
-        store.get_data_source(&layer.store).await
+        store
+            .get_data_source(&layer.store)
+            .await
             .map_err(|e| GeoServerError::InternalError(format!("DB error: {}", e)))?
     } else {
         None
@@ -47,38 +57,53 @@ pub async fn query_layer_features(
                 if let Some(ref conn) = ds.connection {
                     if let Some(ref native_name) = layer.native_name {
                         let pool = state.get_pg_pool(&ds.name, conn);
-                        return query_postgis_features(&pool, conn, native_name, bbox, limit, offset).await;
+                        return query_postgis_features(
+                            &pool,
+                            conn,
+                            native_name,
+                            bbox,
+                            limit,
+                            offset,
+                        )
+                        .await;
                     }
                 }
-            }
+            },
             DataSourceType::Shapefile => {
                 return query_shapefile_features(ds, bbox, limit, offset);
-            }
+            },
             DataSourceType::Geotiff => {
                 // GeoTIFF 是栅格格式，通过 WCS 访问，不支持矢量要素查询
                 info!("[Features] GeoTIFF 数据源 '{}' 不返回矢量要素", ds.name);
                 return Ok(Vec::new());
-            }
+            },
             DataSourceType::Geopackage => {
                 return query_geopackage_features(ds, bbox, limit, offset);
-            }
+            },
             DataSourceType::WorldImage => {
                 info!("[Features] WorldImage 是栅格格式，通过 WCS 访问");
                 return Ok(Vec::new());
-            }
+            },
             DataSourceType::CascadedWms => {
                 info!("[Features] CascadedWms 是级联服务，通过 WMS 代理访问");
                 return Ok(Vec::new());
-            }
+            },
             DataSourceType::ArcGrid => {
                 info!("[Features] ArcGrid 是栅格格式，通过 WCS 访问");
                 return Ok(Vec::new());
-            }
+            },
             DataSourceType::Metadata => {
                 if let Some(bstore) = &state.vector_store {
-                    info!("[Features] 图层 '{}' 使用 metadata 数据源, 从矢量存储读取", layer_name);
-                    let all = bstore.load_features(layer_name).await
-                        .map_err(|e| GeoServerError::InternalError(format!("Failed to load features from vector store: {}", e)))?;
+                    info!(
+                        "[Features] 图层 '{}' 使用 metadata 数据源, 从矢量存储读取",
+                        layer_name
+                    );
+                    let all = bstore.load_features(layer_name).await.map_err(|e| {
+                        GeoServerError::InternalError(format!(
+                            "Failed to load features from vector store: {}",
+                            e
+                        ))
+                    })?;
                     let mut filtered = filter_features(all, bbox);
                     if let Some(o) = offset {
                         filtered = filtered.into_iter().skip(o as usize).collect();
@@ -88,7 +113,7 @@ pub async fn query_layer_features(
                     }
                     return Ok(filtered);
                 }
-            }
+            },
         }
     }
 
@@ -112,7 +137,9 @@ fn query_shapefile_features(
     limit: Option<u64>,
     offset: Option<u64>,
 ) -> Result<Vec<Feature>, GeoServerError> {
-    let file_path = ds.connection.as_ref()
+    let file_path = ds
+        .connection
+        .as_ref()
         .and_then(|c| c.file_path.as_ref())
         .ok_or_else(|| GeoServerError::BadRequest("Shapefile 数据源缺少文件路径".to_string()))?;
 
@@ -147,7 +174,10 @@ fn query_shapefile_features(
 
 fn filter_features(features: Vec<Feature>, bbox: Option<&Bounds>) -> Vec<Feature> {
     match bbox {
-        Some(b) => features.into_iter().filter(|f| feature_in_bbox(f, b)).collect(),
+        Some(b) => features
+            .into_iter()
+            .filter(|f| feature_in_bbox(f, b))
+            .collect(),
         None => features,
     }
 }
@@ -161,7 +191,7 @@ fn feature_in_bbox(feature: &Feature, bounds: &Bounds) -> bool {
             } else {
                 true
             }
-        }
+        },
         _ => true,
     }
 }
@@ -174,22 +204,30 @@ async fn query_postgis_features(
     limit: Option<u64>,
     _offset: Option<u64>,
 ) -> Result<Vec<Feature>, GeoServerError> {
-    let client = pool.get().await
+    let client = pool
+        .get()
+        .await
         .map_err(|e| GeoServerError::InternalError(format!("Pool error: {}", e)))?;
 
-    let schema = conn.schema.as_deref()
-        .map(|s| if s.is_empty() || s == "public" { "public" } else { s })
+    let schema = conn
+        .schema
+        .as_deref()
+        .map(|s| {
+            if s.is_empty() || s == "public" {
+                "public"
+            } else {
+                s
+            }
+        })
         .unwrap_or("public")
         .to_string();
 
     let cols = get_table_columns(&client, &schema, native_name).await;
-    let geom_col = get_geometry_column(&client, &schema, native_name).await
+    let geom_col = get_geometry_column(&client, &schema, native_name)
+        .await
         .unwrap_or_else(|| "geom".to_string());
 
-    let non_geom_cols: Vec<String> = cols.iter()
-        .filter(|c| *c != &geom_col)
-        .cloned()
-        .collect();
+    let non_geom_cols: Vec<String> = cols.iter().filter(|c| *c != &geom_col).cloned().collect();
 
     let raw_names: Vec<&str> = non_geom_cols.iter().map(|c| c.as_str()).collect();
     let col_list = raw_names.join(", ");
@@ -198,7 +236,11 @@ async fn query_postgis_features(
         "SELECT {} as _id, ST_AsGeoJSON({}) as _geometry, {} FROM \"{}\".\"{}\"",
         get_id_expr(&client, &schema, native_name).await,
         geom_col,
-        if col_list.is_empty() { "1 as _dummy".to_string() } else { col_list },
+        if col_list.is_empty() {
+            "1 as _dummy".to_string()
+        } else {
+            col_list
+        },
         schema,
         native_name,
     );
@@ -214,7 +256,9 @@ async fn query_postgis_features(
         sql.push_str(&format!(" LIMIT {}", limit_val));
     }
 
-    let rows = client.query(&sql, &[]).await
+    let rows = client
+        .query(&sql, &[])
+        .await
         .map_err(|e| GeoServerError::InternalError(format!("PostGIS query error: {}", e)))?;
 
     let mut features = Vec::with_capacity(rows.len());
@@ -225,10 +269,12 @@ async fn query_postgis_features(
         let (id, properties) = match wkb::parse_postgres_row(row, &non_geom_cols, &geom_col) {
             Ok((id, _, props)) => (id, props),
             Err(_) => {
-                let id: String = row.try_get("_id").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
+                let id: String = row
+                    .try_get("_id")
+                    .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
                 let props = std::collections::HashMap::new();
                 (id, props)
-            }
+            },
         };
         features.push(Feature::with_id(id, geometry, properties));
     }
@@ -273,7 +319,9 @@ fn query_geopackage_features(
     limit: Option<u64>,
     offset: Option<u64>,
 ) -> Result<Vec<Feature>, GeoServerError> {
-    let file_path = ds.connection.as_ref()
+    let file_path = ds
+        .connection
+        .as_ref()
         .and_then(|c| c.file_path.as_ref())
         .ok_or_else(|| GeoServerError::BadRequest("GeoPackage 数据源缺少文件路径".to_string()))?;
 
@@ -284,14 +332,19 @@ fn query_geopackage_features(
         .map_err(|e| GeoServerError::InternalError(format!("读取 GeoPackage 失败: {}", e)))?;
 
     if layers.is_empty() {
-        return Err(GeoServerError::NotFound("GeoPackage 中没有找到图层".to_string()));
+        return Err(GeoServerError::NotFound(
+            "GeoPackage 中没有找到图层".to_string(),
+        ));
     }
 
     // 使用第一个图层
     let first_layer = &layers[0];
     let result = crate::utils::geopackage::read_geopackage_layer_features(
-        file_path, &first_layer.table_name, limit,
-    ).map_err(|e| GeoServerError::InternalError(format!("读取要素失败: {}", e)))?;
+        file_path,
+        &first_layer.table_name,
+        limit,
+    )
+    .map_err(|e| GeoServerError::InternalError(format!("读取要素失败: {}", e)))?;
 
     let mut features = result.features;
 
@@ -314,11 +367,7 @@ fn query_geopackage_features(
     Ok(features)
 }
 
-async fn get_id_expr(
-    client: &tokio_postgres::Client,
-    schema: &str,
-    table: &str,
-) -> String {
+async fn get_id_expr(client: &tokio_postgres::Client, schema: &str, table: &str) -> String {
     let sql = format!(
         "SELECT column_name FROM information_schema.columns
          WHERE table_schema = $1 AND table_name = $2

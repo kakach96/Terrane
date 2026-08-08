@@ -3,10 +3,10 @@
 //! 使用 `image` crate 读取 GeoTIFF 文件，提取栅格数据和元数据
 //! 支持: TIFF/GeoTIFF 图像读取、波段信息提取、基础地理配准
 
-use std::path::Path;
+use image::{ColorType, DynamicImage, ImageFormat, RgbaImage};
 use std::io::BufReader;
-use image::{RgbaImage, DynamicImage, ColorType, ImageFormat};
-use tracing::{info, warn, debug};
+use std::path::Path;
+use tracing::{debug, info, warn};
 
 use crate::models::Bounds;
 
@@ -56,14 +56,14 @@ pub fn read_geotiff<P: AsRef<Path>>(path: P) -> Result<CoverageData, String> {
     let path = path.as_ref();
     info!("[GeoTIFF] 开始读取: {:?}", path);
 
-    let name = path.file_stem()
+    let name = path
+        .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
         .to_string();
 
     // 使用 image crate 读取 TIFF
-    let img = image::open(path)
-        .map_err(|e| format!("无法打开 GeoTIFF '{:?}': {}", path, e))?;
+    let img = image::open(path).map_err(|e| format!("无法打开 GeoTIFF '{:?}': {}", path, e))?;
 
     let (width, height) = (img.width(), img.height());
     let color_type = format!("{:?}", img.color());
@@ -74,17 +74,20 @@ pub fn read_geotiff<P: AsRef<Path>>(path: P) -> Result<CoverageData, String> {
         _ => {
             warn!("[GeoTIFF] 未知颜色类型 {:?}, 假设 3 波段", img.color());
             3
-        }
+        },
     };
 
     // 转为 RGBA
     let rgba = img.to_rgba8();
 
     // 尝试读取 GeoTIFF 标签（地理配准信息）
-    let (bounds, crs, pixel_scale_x, pixel_scale_y, tie_point_x, tie_point_y) = read_geotiff_tags(path);
+    let (bounds, crs, pixel_scale_x, pixel_scale_y, tie_point_x, tie_point_y) =
+        read_geotiff_tags(path);
 
-    info!("[GeoTIFF] 读取完成: {}x{}, {} 波段, color={}, bounds={:?}, crs={:?}",
-          width, height, band_count, color_type, bounds, crs);
+    info!(
+        "[GeoTIFF] 读取完成: {}x{}, {} 波段, color={}, bounds={:?}, crs={:?}",
+        width, height, band_count, color_type, bounds, crs
+    );
 
     Ok(CoverageData {
         name,
@@ -112,12 +115,11 @@ pub fn read_geotiff_metadata<P: AsRef<Path>>(path: P) -> Result<GeoTiffMetadata,
         .with_guessed_format()
         .map_err(|e| format!("格式检测失败: {}", e))?;
 
-    let (width, height) = reader.into_dimensions()
+    let (width, height) = reader
+        .into_dimensions()
         .map_err(|e| format!("无法读取图像尺寸: {}", e))?;
 
-    let file_size = std::fs::metadata(path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
 
     let (bounds, crs, ..) = read_geotiff_tags(path);
 
@@ -136,7 +138,16 @@ pub fn read_geotiff_metadata<P: AsRef<Path>>(path: P) -> Result<GeoTiffMetadata,
 ///
 /// 使用 `tiff` crate 读取 TIFF 标签中的 GEOTIFF 地理配准信息。
 /// 由于 `image` crate 不暴露原生 TIFF 标签，我们在此用 `tiff` crate 直接读取文件。
-fn read_geotiff_tags(path: &Path) -> (Option<Bounds>, Option<String>, Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
+fn read_geotiff_tags(
+    path: &Path,
+) -> (
+    Option<Bounds>,
+    Option<String>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+) {
     // 尝试使用 tiff crate（如果可用）读取地理标签
     // 如果 tiff crate 不在依赖中，回退到仅返回 None
     // 目前使用简化的方法：检查文件扩展名，尝试解析已知格式
@@ -158,48 +169,78 @@ fn read_geotiff_tags(path: &Path) -> (Option<Bounds>, Option<String>, Option<f64
 }
 
 /// 尝试使用 tiff crate 读取原生 TIFF 标签
-fn try_read_geotiff_tags_native(path: &Path) -> Result<(Option<Bounds>, Option<String>, Option<f64>, Option<f64>, Option<f64>, Option<f64>), String> {
+fn try_read_geotiff_tags_native(
+    path: &Path,
+) -> Result<
+    (
+        Option<Bounds>,
+        Option<String>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+    ),
+    String,
+> {
     use std::fs::File;
-    use tiff::tags::Tag;
-    use tiff::decoder::Decoder;
     use tiff::decoder::ifd::Value;
+    use tiff::decoder::Decoder;
+    use tiff::tags::Tag;
 
     let file = File::open(path).map_err(|e| format!("{:?}", e))?;
     let mut reader = BufReader::new(file);
-    let mut decoder = Decoder::new(&mut reader)
-        .map_err(|e| format!("{:?}", e))?;
+    let mut decoder = Decoder::new(&mut reader).map_err(|e| format!("{:?}", e))?;
 
-    let (img_width, img_height) = decoder.dimensions()
-        .map_err(|e| format!("{:?}", e))?;
+    let (img_width, img_height) = decoder.dimensions().map_err(|e| format!("{:?}", e))?;
 
     // 读取 ModelTiepointTag (33922) — GeoTIFF 私有标签。
     // 注意: tiff crate 的 Tag 枚举为这些标签定义了具名变体
     // (Tag::ModelTiepointTag / Tag::ModelPixelScaleTag), 解码器存入 IFD 时
     // 用的是具名变体, 必须用具名变体查询 (Tag::Unknown 永远查不到 → bug7)。
-    let model_tiepoint = decoder.get_tag(Tag::ModelTiepointTag).ok().and_then(|v| match v {
-        Value::Double(v) => Some(vec![v]),
-        Value::List(items) => {
-            let nums: Vec<f64> = items.iter().filter_map(|item| match item {
-                Value::Double(d) => Some(*d),
-                _ => None,
-            }).collect();
-            if nums.len() >= 6 { Some(nums) } else { None }
-        }
-        _ => None,
-    });
+    let model_tiepoint = decoder
+        .get_tag(Tag::ModelTiepointTag)
+        .ok()
+        .and_then(|v| match v {
+            Value::Double(v) => Some(vec![v]),
+            Value::List(items) => {
+                let nums: Vec<f64> = items
+                    .iter()
+                    .filter_map(|item| match item {
+                        Value::Double(d) => Some(*d),
+                        _ => None,
+                    })
+                    .collect();
+                if nums.len() >= 6 {
+                    Some(nums)
+                } else {
+                    None
+                }
+            },
+            _ => None,
+        });
 
     // ModelPixelScaleTag (33550)
-    let model_pixel_scale = decoder.get_tag(Tag::ModelPixelScaleTag).ok().and_then(|v| match v {
-        Value::Double(v) => Some(vec![v]),
-        Value::List(items) => {
-            let nums: Vec<f64> = items.iter().filter_map(|item| match item {
-                Value::Double(d) => Some(*d),
-                _ => None,
-            }).collect();
-            if nums.len() >= 3 { Some(nums) } else { None }
-        }
-        _ => None,
-    });
+    let model_pixel_scale = decoder
+        .get_tag(Tag::ModelPixelScaleTag)
+        .ok()
+        .and_then(|v| match v {
+            Value::Double(v) => Some(vec![v]),
+            Value::List(items) => {
+                let nums: Vec<f64> = items
+                    .iter()
+                    .filter_map(|item| match item {
+                        Value::Double(d) => Some(*d),
+                        _ => None,
+                    })
+                    .collect();
+                if nums.len() >= 3 {
+                    Some(nums)
+                } else {
+                    None
+                }
+            },
+            _ => None,
+        });
 
     let bounds = match (&model_tiepoint, &model_pixel_scale) {
         (Some(tp), Some(ps)) if tp.len() >= 6 && ps.len() >= 3 => {
@@ -216,11 +257,13 @@ fn try_read_geotiff_tags_native(path: &Path) -> Result<(Option<Bounds>, Option<S
                 tie_x + w * scale_x,
                 tie_y,
             ))
-        }
+        },
         _ => None,
     };
 
-    let pscale_x = model_pixel_scale.as_ref().and_then(|ps| ps.first().copied());
+    let pscale_x = model_pixel_scale
+        .as_ref()
+        .and_then(|ps| ps.first().copied());
     let pscale_y = model_pixel_scale.as_ref().and_then(|ps| ps.get(1).copied());
     let tie_x = model_tiepoint.as_ref().and_then(|tp| tp.get(3).copied());
     let tie_y = model_tiepoint.as_ref().and_then(|tp| tp.get(4).copied());
@@ -229,7 +272,16 @@ fn try_read_geotiff_tags_native(path: &Path) -> Result<(Option<Bounds>, Option<S
 }
 
 /// 回退方案：从原始字节中搜索 GeoTIFF 标签
-fn try_read_tags_from_bytes(_path: &Path) -> Option<(Option<Bounds>, Option<String>, Option<f64>, Option<f64>, Option<f64>, Option<f64>)> {
+fn try_read_tags_from_bytes(
+    _path: &Path,
+) -> Option<(
+    Option<Bounds>,
+    Option<String>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+)> {
     // 这是一个简化的回退实现
     // 实际生产环境中建议使用 proj / gdal 等专业库读取 GeoTIFF 标签
     None
@@ -245,8 +297,11 @@ pub fn crop_coverage(data: &CoverageData, bounds: &Bounds) -> Option<RgbaImage> 
     let data_bounds = data.bounds.as_ref().unwrap();
 
     // 检查是否相交
-    if bounds.minx >= data_bounds.maxx || bounds.maxx <= data_bounds.minx ||
-       bounds.miny >= data_bounds.maxy || bounds.maxy <= data_bounds.miny {
+    if bounds.minx >= data_bounds.maxx
+        || bounds.maxx <= data_bounds.minx
+        || bounds.miny >= data_bounds.maxy
+        || bounds.maxy <= data_bounds.miny
+    {
         return None; // 不相交
     }
 
@@ -259,8 +314,10 @@ pub fn crop_coverage(data: &CoverageData, bounds: &Bounds) -> Option<RgbaImage> 
 
     let px = ((bounds.minx.max(data_bounds.minx) - data_bounds.minx) * x_ratio) as u32;
     let py = ((data_bounds.maxy - bounds.maxy.min(data_bounds.maxy)) * y_ratio) as u32;
-    let pw = ((bounds.maxx.min(data_bounds.maxx) - bounds.minx.max(data_bounds.minx)) * x_ratio) as u32;
-    let ph = ((bounds.maxy.min(data_bounds.maxy) - bounds.miny.max(data_bounds.miny)) * y_ratio) as u32;
+    let pw =
+        ((bounds.maxx.min(data_bounds.maxx) - bounds.minx.max(data_bounds.minx)) * x_ratio) as u32;
+    let ph =
+        ((bounds.maxy.min(data_bounds.maxy) - bounds.miny.max(data_bounds.miny)) * y_ratio) as u32;
 
     if pw == 0 || ph == 0 {
         return None;
@@ -276,24 +333,27 @@ pub fn encode_coverage(data: &CoverageData, format: &str) -> Result<Vec<u8>, Str
 
     match format {
         "image/png" | "png" => {
-            data.rgba_image.write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Png)
+            data.rgba_image
+                .write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Png)
                 .map_err(|e| format!("PNG 编码失败: {}", e))?;
-        }
+        },
         "image/jpeg" | "image/jpg" | "jpeg" | "jpg" => {
             // JPEG 不支持透明度，先转为 RGB
             let rgb = DynamicImage::ImageRgba8(data.rgba_image.clone()).to_rgb8();
             rgb.write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Jpeg)
                 .map_err(|e| format!("JPEG 编码失败: {}", e))?;
-        }
+        },
         "image/tiff" | "image/tif" | "tiff" | "tif" => {
-            data.rgba_image.write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Tiff)
+            data.rgba_image
+                .write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Tiff)
                 .map_err(|e| format!("TIFF 编码失败: {}", e))?;
-        }
+        },
         _ => {
             // 默认输出 PNG
-            data.rgba_image.write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Png)
+            data.rgba_image
+                .write_to(&mut std::io::Cursor::new(&mut buf), ImageFormat::Png)
                 .map_err(|e| format!("PNG 编码失败: {}", e))?;
-        }
+        },
     }
 
     Ok(buf)
@@ -302,7 +362,10 @@ pub fn encode_coverage(data: &CoverageData, format: &str) -> Result<Vec<u8>, Str
 /// 判断文件是否为支持的栅格格式
 pub fn is_supported_raster_format<P: AsRef<Path>>(path: P) -> bool {
     match path.as_ref().extension().and_then(|e| e.to_str()) {
-        Some(ext) => matches!(ext.to_lowercase().as_str(), "tif" | "tiff" | "png" | "jpg" | "jpeg"),
+        Some(ext) => matches!(
+            ext.to_lowercase().as_str(),
+            "tif" | "tiff" | "png" | "jpg" | "jpeg"
+        ),
         None => false,
     }
 }
@@ -355,8 +418,14 @@ mod tests {
         let mut image_enc = tiff.new_image::<colortype::RGB8>(8, 8).unwrap();
         let pixel_scale: &[f64] = &[1.0, 1.0, 0.0];
         let tiepoint: &[f64] = &[0.0, 0.0, 0.0, 0.0, 8.0, 0.0];
-        image_enc.encoder().write_tag(Tag::ModelPixelScaleTag, pixel_scale).unwrap();
-        image_enc.encoder().write_tag(Tag::ModelTiepointTag, tiepoint).unwrap();
+        image_enc
+            .encoder()
+            .write_tag(Tag::ModelPixelScaleTag, pixel_scale)
+            .unwrap();
+        image_enc
+            .encoder()
+            .write_tag(Tag::ModelTiepointTag, tiepoint)
+            .unwrap();
         let mut data = Vec::with_capacity(8 * 8 * 3);
         for _ in 0..64 {
             data.extend_from_slice(&[10, 20, 30]);
@@ -377,10 +446,26 @@ mod tests {
         // read_geotiff_metadata: 边界 + 尺寸
         let meta = read_geotiff_metadata(&path).unwrap();
         let b = meta.bounds.expect("GeoTIFF 应读到地理边界 (bug7 守护)");
-        assert!((b.minx - 0.0).abs() < 1e-6, "minx 应为 0.0, 实际: {}", b.minx);
-        assert!((b.miny - 0.0).abs() < 1e-6, "miny 应为 0.0, 实际: {}", b.miny);
-        assert!((b.maxx - 8.0).abs() < 1e-6, "maxx 应为 8.0, 实际: {}", b.maxx);
-        assert!((b.maxy - 8.0).abs() < 1e-6, "maxy 应为 8.0, 实际: {}", b.maxy);
+        assert!(
+            (b.minx - 0.0).abs() < 1e-6,
+            "minx 应为 0.0, 实际: {}",
+            b.minx
+        );
+        assert!(
+            (b.miny - 0.0).abs() < 1e-6,
+            "miny 应为 0.0, 实际: {}",
+            b.miny
+        );
+        assert!(
+            (b.maxx - 8.0).abs() < 1e-6,
+            "maxx 应为 8.0, 实际: {}",
+            b.maxx
+        );
+        assert!(
+            (b.maxy - 8.0).abs() < 1e-6,
+            "maxy 应为 8.0, 实际: {}",
+            b.maxy
+        );
         assert_eq!(meta.width, 8);
         assert_eq!(meta.height, 8);
 

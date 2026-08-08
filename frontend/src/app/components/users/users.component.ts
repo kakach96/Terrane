@@ -2,14 +2,15 @@ import { Component, OnInit } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { GeoserverService } from '../../services/geoserver.service';
 import { AuthService } from '../../services/auth.service';
+import { User } from '../../models/geoserver.models';
 
 @Component({
   selector: 'app-users',
   templateUrl: './users.component.html',
-  styleUrls: ['./users.component.scss']
+  styleUrls: ['./users.component.scss'],
 })
 export class UsersComponent implements OnInit {
-  users: any[] = [];
+  users: User[] = [];
   loading = false;
   error = '';
 
@@ -45,7 +46,7 @@ export class UsersComponent implements OnInit {
       error: () => {
         this.error = '加载用户列表失败';
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -60,7 +61,7 @@ export class UsersComponent implements OnInit {
         this.newRole = 'user';
         this.loadUsers();
       },
-      error: (e) => this.snackBar.open(e.error?.message || '创建失败', '关闭', { duration: 5000 })
+      error: (e) => this.snackBar.open(e.error?.message || '创建失败', '关闭', { duration: 5000 }),
     });
   }
 
@@ -75,7 +76,7 @@ export class UsersComponent implements OnInit {
         this.snackBar.open('用户已删除', '关闭', { duration: 3000 });
         this.loadUsers();
       },
-      error: (e) => this.snackBar.open(e.error?.message || '删除失败', '关闭', { duration: 5000 })
+      error: (e) => this.snackBar.open(e.error?.message || '删除失败', '关闭', { duration: 5000 }),
     });
   }
 
@@ -92,16 +93,20 @@ export class UsersComponent implements OnInit {
         this.newPassword1 = '';
         this.newPassword2 = '';
       },
-      error: (e) => this.snackBar.open(e.error?.message || '修改失败', '关闭', { duration: 5000 })
+      error: (e) => this.snackBar.open(e.error?.message || '修改失败', '关闭', { duration: 5000 }),
     });
   }
 
   getRoleColor(role: string): string {
     switch (role) {
-      case 'admin': return 'warn';
-      case 'manager': return 'primary';
-      case 'user': return 'accent';
-      default: return '';
+      case 'admin':
+        return 'warn';
+      case 'manager':
+        return 'primary';
+      case 'user':
+        return 'accent';
+      default:
+        return '';
     }
   }
 }

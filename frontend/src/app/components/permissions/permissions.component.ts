@@ -6,7 +6,7 @@ import { Permission, CreatePermissionRequest } from '../../models/geoserver.mode
 @Component({
   selector: 'app-permissions',
   templateUrl: './permissions.component.html',
-  styleUrls: ['./permissions.component.scss']
+  styleUrls: ['./permissions.component.scss'],
 })
 export class PermissionsComponent implements OnInit {
   permissions: Permission[] = [];
@@ -50,7 +50,7 @@ export class PermissionsComponent implements OnInit {
       error: () => {
         this.error = '加载权限列表失败';
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -66,7 +66,7 @@ export class PermissionsComponent implements OnInit {
         this.resetForm();
         this.loadPermissions();
       },
-      error: (e) => this.snackBar.open(e.error?.message || '创建失败', '关闭', { duration: 5000 })
+      error: (e) => this.snackBar.open(e.error?.message || '创建失败', '关闭', { duration: 5000 }),
     });
   }
 
@@ -79,7 +79,7 @@ export class PermissionsComponent implements OnInit {
         this.snackBar.open('权限已删除', '关闭', { duration: 3000 });
         this.loadPermissions();
       },
-      error: (e) => this.snackBar.open(e.error?.message || '删除失败', '关闭', { duration: 5000 })
+      error: (e) => this.snackBar.open(e.error?.message || '删除失败', '关闭', { duration: 5000 }),
     });
   }
 

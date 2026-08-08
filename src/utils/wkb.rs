@@ -3,12 +3,16 @@ use std::collections::HashMap;
 
 pub fn parse_wkb_geometry(wkb: &[u8]) -> GeoJsonGeometry {
     if wkb.is_empty() {
-        return GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] };
+        return GeoJsonGeometry::Point {
+            coordinates: vec![0.0, 0.0],
+        };
     }
 
     match wkb[0] {
         0x01 | 0x00 => parse_ewkb_geometry(wkb),
-        _ => GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+        _ => GeoJsonGeometry::Point {
+            coordinates: vec![0.0, 0.0],
+        },
     }
 }
 
@@ -26,11 +30,25 @@ pub fn geometry_to_wkb(geom: &GeoJsonGeometry) -> Vec<u8> {
         v
     }
 
-    fn coord_x(c: &[f64]) -> f64 { if c.len() >= 2 { c[0] } else { 0.0 } }
-    fn coord_y(c: &[f64]) -> f64 { if c.len() >= 2 { c[1] } else { 0.0 } }
+    fn coord_x(c: &[f64]) -> f64 {
+        if c.len() >= 2 {
+            c[0]
+        } else {
+            0.0
+        }
+    }
+    fn coord_y(c: &[f64]) -> f64 {
+        if c.len() >= 2 {
+            c[1]
+        } else {
+            0.0
+        }
+    }
 
     match geom {
-        GeoJsonGeometry::Point { coordinates } => point_wkb(coord_x(coordinates), coord_y(coordinates)),
+        GeoJsonGeometry::Point { coordinates } => {
+            point_wkb(coord_x(coordinates), coord_y(coordinates))
+        },
         GeoJsonGeometry::MultiPoint { coordinates } => {
             let mut v = Vec::new();
             v.push(0x01);
@@ -40,7 +58,7 @@ pub fn geometry_to_wkb(geom: &GeoJsonGeometry) -> Vec<u8> {
                 v.extend_from_slice(&point_wkb(coord_x(c), coord_y(c)));
             }
             v
-        }
+        },
         GeoJsonGeometry::LineString { coordinates } => {
             let mut v = Vec::new();
             v.push(0x01);
@@ -51,7 +69,7 @@ pub fn geometry_to_wkb(geom: &GeoJsonGeometry) -> Vec<u8> {
                 v.extend_from_slice(&coord_y(c).to_le_bytes());
             }
             v
-        }
+        },
         GeoJsonGeometry::MultiLineString { coordinates } => {
             let mut v = Vec::new();
             v.push(0x01);
@@ -63,7 +81,7 @@ pub fn geometry_to_wkb(geom: &GeoJsonGeometry) -> Vec<u8> {
                 }));
             }
             v
-        }
+        },
         GeoJsonGeometry::Polygon { coordinates } => {
             let mut v = Vec::new();
             v.push(0x01);
@@ -77,7 +95,7 @@ pub fn geometry_to_wkb(geom: &GeoJsonGeometry) -> Vec<u8> {
                 }
             }
             v
-        }
+        },
         GeoJsonGeometry::MultiPolygon { coordinates } => {
             let mut v = Vec::new();
             v.push(0x01);
@@ -89,7 +107,7 @@ pub fn geometry_to_wkb(geom: &GeoJsonGeometry) -> Vec<u8> {
                 }));
             }
             v
-        }
+        },
         GeoJsonGeometry::GeometryCollection { geometries } => {
             let mut v = Vec::new();
             v.push(0x01);
@@ -99,7 +117,7 @@ pub fn geometry_to_wkb(geom: &GeoJsonGeometry) -> Vec<u8> {
                 v.extend_from_slice(&geometry_to_wkb(g));
             }
             v
-        }
+        },
     }
 }
 
@@ -137,7 +155,9 @@ impl<'a> WkbReader<'a> {
     fn read_f64(&mut self, little: bool) -> Option<f64> {
         let slice = self.buf.get(self.pos..self.pos + 8)?;
         self.pos += 8;
-        let arr = [slice[0], slice[1], slice[2], slice[3], slice[4], slice[5], slice[6], slice[7]];
+        let arr = [
+            slice[0], slice[1], slice[2], slice[3], slice[4], slice[5], slice[6], slice[7],
+        ];
         Some(if little {
             f64::from_le_bytes(arr)
         } else {
@@ -166,7 +186,9 @@ impl<'a> WkbReader<'a> {
     fn read_point(&mut self, little: bool) -> Option<GeoJsonGeometry> {
         let x = self.read_f64(little)?;
         let y = self.read_f64(little)?;
-        Some(GeoJsonGeometry::Point { coordinates: vec![x, y] })
+        Some(GeoJsonGeometry::Point {
+            coordinates: vec![x, y],
+        })
     }
 
     fn read_linestring(&mut self, little: bool) -> Option<GeoJsonGeometry> {
@@ -177,7 +199,9 @@ impl<'a> WkbReader<'a> {
             let y = self.read_f64(little)?;
             coords.push(vec![x, y]);
         }
-        Some(GeoJsonGeometry::LineString { coordinates: coords })
+        Some(GeoJsonGeometry::LineString {
+            coordinates: coords,
+        })
     }
 
     fn read_polygon(&mut self, little: bool) -> Option<GeoJsonGeometry> {
@@ -207,7 +231,9 @@ impl<'a> WkbReader<'a> {
                 return None;
             }
         }
-        Some(GeoJsonGeometry::MultiPoint { coordinates: coords })
+        Some(GeoJsonGeometry::MultiPoint {
+            coordinates: coords,
+        })
     }
 
     fn read_multilinestring(&mut self, little: bool) -> Option<GeoJsonGeometry> {
@@ -250,8 +276,11 @@ impl<'a> WkbReader<'a> {
 
 fn parse_ewkb_geometry(wkb: &[u8]) -> GeoJsonGeometry {
     let mut reader = WkbReader::new(wkb);
-    reader.read_geometry()
-        .unwrap_or_else(|| GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] })
+    reader
+        .read_geometry()
+        .unwrap_or_else(|| GeoJsonGeometry::Point {
+            coordinates: vec![0.0, 0.0],
+        })
 }
 
 pub fn parse_geojson_geometry(geojson: &str) -> GeoJsonGeometry {
@@ -277,10 +306,14 @@ pub fn parse_geojson_geometry(geojson: &str) -> GeoJsonGeometry {
             "MultiPolygon" => GeoJsonGeometry::MultiPolygon {
                 coordinates: extract_coords_4d(coords),
             },
-            _ => GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+            _ => GeoJsonGeometry::Point {
+                coordinates: vec![0.0, 0.0],
+            },
         }
     } else {
-        GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] }
+        GeoJsonGeometry::Point {
+            coordinates: vec![0.0, 0.0],
+        }
     }
 }
 
@@ -294,7 +327,10 @@ fn extract_coords_2d(v: Option<&serde_json::Value>) -> Vec<Vec<f64>> {
     v.and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|c| c.as_array().map(|a| a.iter().filter_map(|n| n.as_f64()).collect()))
+                .filter_map(|c| {
+                    c.as_array()
+                        .map(|a| a.iter().filter_map(|n| n.as_f64()).collect())
+                })
                 .collect()
         })
         .unwrap_or_default()
@@ -307,7 +343,10 @@ fn extract_coords_3d(v: Option<&serde_json::Value>) -> Vec<Vec<Vec<f64>>> {
                 .filter_map(|ring| {
                     ring.as_array().map(|a| {
                         a.iter()
-                            .filter_map(|c| c.as_array().map(|ca| ca.iter().filter_map(|n| n.as_f64()).collect()))
+                            .filter_map(|c| {
+                                c.as_array()
+                                    .map(|ca| ca.iter().filter_map(|n| n.as_f64()).collect())
+                            })
                             .collect()
                     })
                 })
@@ -326,7 +365,11 @@ fn extract_coords_4d(v: Option<&serde_json::Value>) -> Vec<Vec<Vec<Vec<f64>>>> {
                             .filter_map(|ring| {
                                 ring.as_array().map(|ra| {
                                     ra.iter()
-                                        .filter_map(|c| c.as_array().map(|ca| ca.iter().filter_map(|n| n.as_f64()).collect()))
+                                        .filter_map(|c| {
+                                            c.as_array().map(|ca| {
+                                                ca.iter().filter_map(|n| n.as_f64()).collect()
+                                            })
+                                        })
                                         .collect()
                                 })
                             })
@@ -343,7 +386,9 @@ pub fn parse_postgres_row(
     non_geom_cols: &[String],
     _geom_col: &str,
 ) -> Result<(String, GeoJsonGeometry, HashMap<String, PropertyValue>), tokio_postgres::Error> {
-    let id: String = row.try_get("_id").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
+    let id: String = row
+        .try_get("_id")
+        .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
     let geojson_str: String = row.try_get("_geometry").unwrap_or_default();
     let geometry = parse_geojson_geometry(&geojson_str);
     let mut properties = HashMap::new();
@@ -371,13 +416,19 @@ mod tests {
     #[test]
     fn test_geometry_to_wkb_roundtrip_basic() {
         let cases = vec![
-            GeoJsonGeometry::Point { coordinates: vec![10.5, -20.25] },
+            GeoJsonGeometry::Point {
+                coordinates: vec![10.5, -20.25],
+            },
             GeoJsonGeometry::LineString {
                 coordinates: vec![vec![0.0, 0.0], vec![1.5, 2.5], vec![3.0, -4.0]],
             },
             GeoJsonGeometry::Polygon {
                 coordinates: vec![vec![
-                    vec![0.0, 0.0], vec![4.0, 0.0], vec![4.0, 4.0], vec![0.0, 4.0], vec![0.0, 0.0],
+                    vec![0.0, 0.0],
+                    vec![4.0, 0.0],
+                    vec![4.0, 4.0],
+                    vec![0.0, 4.0],
+                    vec![0.0, 0.0],
                 ]],
             },
         ];
@@ -385,8 +436,10 @@ mod tests {
             let wkb = geometry_to_wkb(&geom);
             let parsed = parse_wkb_geometry(&wkb);
             assert_eq!(
-                format!("{:?}", parsed), format!("{:?}", geom),
-                "WKB 往返应保持几何不变, wkb={:?}", wkb
+                format!("{:?}", parsed),
+                format!("{:?}", geom),
+                "WKB 往返应保持几何不变, wkb={:?}",
+                wkb
             );
         }
     }
@@ -407,16 +460,26 @@ mod tests {
             GeoJsonGeometry::MultiPolygon {
                 coordinates: vec![
                     vec![vec![
-                        vec![0.0, 0.0], vec![4.0, 0.0], vec![4.0, 4.0], vec![0.0, 4.0], vec![0.0, 0.0],
+                        vec![0.0, 0.0],
+                        vec![4.0, 0.0],
+                        vec![4.0, 4.0],
+                        vec![0.0, 4.0],
+                        vec![0.0, 0.0],
                     ]],
                     vec![vec![
-                        vec![10.0, 10.0], vec![12.0, 10.0], vec![12.0, 12.0], vec![10.0, 12.0], vec![10.0, 10.0],
+                        vec![10.0, 10.0],
+                        vec![12.0, 10.0],
+                        vec![12.0, 12.0],
+                        vec![10.0, 12.0],
+                        vec![10.0, 10.0],
                     ]],
                 ],
             },
             GeoJsonGeometry::GeometryCollection {
                 geometries: vec![
-                    GeoJsonGeometry::Point { coordinates: vec![1.0, 1.0] },
+                    GeoJsonGeometry::Point {
+                        coordinates: vec![1.0, 1.0],
+                    },
                     GeoJsonGeometry::LineString {
                         coordinates: vec![vec![0.0, 0.0], vec![5.0, 5.0]],
                     },
@@ -430,8 +493,10 @@ mod tests {
             let wkb = geometry_to_wkb(&geom);
             let parsed = parse_wkb_geometry(&wkb);
             assert_eq!(
-                format!("{:?}", parsed), format!("{:?}", geom),
-                "WKB 往返应保持 Multi*/GeometryCollection 不变, wkb 长度={}", wkb.len()
+                format!("{:?}", parsed),
+                format!("{:?}", geom),
+                "WKB 往返应保持 Multi*/GeometryCollection 不变, wkb 长度={}",
+                wkb.len()
             );
         }
     }
@@ -450,7 +515,10 @@ mod tests {
             coordinates: vec![vec![vec![0.0, 0.0], vec![1.0, 1.0]], vec![vec![2.0, 2.0]]],
         };
         let wkb_mls = geometry_to_wkb(&mls);
-        assert_eq!(wkb_mls.len(), 1 + 4 + 4 + (1 + 4 + 4 + 2 * 16) + (1 + 4 + 4 + 1 * 16));
+        assert_eq!(
+            wkb_mls.len(),
+            1 + 4 + 4 + (1 + 4 + 4 + 2 * 16) + (1 + 4 + 4 + 1 * 16)
+        );
 
         // MultiPolygon: 1 + 4 + 4 + 2 个多边形 (每个 1+4+4+ring 数+点数)
         let mpoly = GeoJsonGeometry::MultiPolygon {
@@ -465,7 +533,9 @@ mod tests {
         // GeometryCollection: 1 + 4 + 4 + 各子几何长度
         let gc = GeoJsonGeometry::GeometryCollection {
             geometries: vec![
-                GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+                GeoJsonGeometry::Point {
+                    coordinates: vec![0.0, 0.0],
+                },
                 GeoJsonGeometry::LineString {
                     coordinates: vec![vec![0.0, 0.0], vec![1.0, 1.0]],
                 },
@@ -484,8 +554,15 @@ mod tests {
         be_point.extend_from_slice(&10.5f64.to_be_bytes());
         be_point.extend_from_slice(&(-20.25f64).to_be_bytes());
         let parsed = parse_wkb_geometry(&be_point);
-        assert_eq!(format!("{:?}", parsed), format!("{:?}",
-            GeoJsonGeometry::Point { coordinates: vec![10.5, -20.25] }));
+        assert_eq!(
+            format!("{:?}", parsed),
+            format!(
+                "{:?}",
+                GeoJsonGeometry::Point {
+                    coordinates: vec![10.5, -20.25]
+                }
+            )
+        );
 
         // 大端序 MultiPoint(1,2) (3,4)
         let mut be_mp = vec![0x00u8];
@@ -498,7 +575,14 @@ mod tests {
             be_mp.extend_from_slice(&y.to_be_bytes());
         }
         let parsed = parse_wkb_geometry(&be_mp);
-        assert_eq!(format!("{:?}", parsed), format!("{:?}",
-            GeoJsonGeometry::MultiPoint { coordinates: vec![vec![1.0, 2.0], vec![3.0, 4.0]] }));
+        assert_eq!(
+            format!("{:?}", parsed),
+            format!(
+                "{:?}",
+                GeoJsonGeometry::MultiPoint {
+                    coordinates: vec![vec![1.0, 2.0], vec![3.0, 4.0]]
+                }
+            )
+        );
     }
 }

@@ -8,7 +8,7 @@ import { StyleEditorDialogComponent } from './style-editor-dialog.component';
 @Component({
   selector: 'app-styles',
   templateUrl: './styles.component.html',
-  styleUrls: ['./styles.component.scss']
+  styleUrls: ['./styles.component.scss'],
 })
 export class StylesComponent implements OnInit {
   styles: StyleInfo[] = [];
@@ -17,7 +17,7 @@ export class StylesComponent implements OnInit {
   constructor(
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {
@@ -34,7 +34,7 @@ export class StylesComponent implements OnInit {
       error: () => {
         this.notificationService.error('加载样式列表失败');
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -42,9 +42,9 @@ export class StylesComponent implements OnInit {
     const dialogRef = this.dialog.open(StyleEditorDialogComponent, {
       width: '700px',
       maxWidth: '90vw',
-      data: { mode: 'create' }
+      data: { mode: 'create' },
     });
-    dialogRef.afterClosed().subscribe(result => {
+    dialogRef.afterClosed().subscribe((result) => {
       if (result) this.loadStyles();
     });
   }
@@ -52,15 +52,18 @@ export class StylesComponent implements OnInit {
   editStyle(style: StyleInfo): void {
     this.geoserverService.getStyle(style.name).subscribe({
       next: (full) => {
-        this.dialog.open(StyleEditorDialogComponent, {
-          width: '700px',
-          maxWidth: '90vw',
-          data: { mode: 'edit', style: full }
-        }).afterClosed().subscribe(result => {
-          if (result) this.loadStyles();
-        });
+        this.dialog
+          .open(StyleEditorDialogComponent, {
+            width: '700px',
+            maxWidth: '90vw',
+            data: { mode: 'edit', style: full },
+          })
+          .afterClosed()
+          .subscribe((result) => {
+            if (result) this.loadStyles();
+          });
       },
-      error: () => this.notificationService.error('加载样式失败')
+      error: () => this.notificationService.error('加载样式失败'),
     });
   }
 
@@ -75,7 +78,7 @@ export class StylesComponent implements OnInit {
         this.notificationService.success('样式已删除');
         this.loadStyles();
       },
-      error: () => this.notificationService.error('删除失败')
+      error: () => this.notificationService.error('删除失败'),
     });
   }
 }

@@ -12,8 +12,8 @@
 //! F = top-left y
 //! ```
 
-use std::path::{Path, PathBuf};
 use image::RgbaImage;
+use std::path::{Path, PathBuf};
 use tracing::info;
 
 use crate::models::Bounds;
@@ -65,10 +65,15 @@ fn parse_world_file(path: &Path) -> Result<(f64, f64, f64, f64, f64, f64), Strin
         .collect();
 
     if values.len() < 6 {
-        return Err(format!("世界文件格式错误: 需要 6 个数值, 找到 {}", values.len()));
+        return Err(format!(
+            "世界文件格式错误: 需要 6 个数值, 找到 {}",
+            values.len()
+        ));
     }
 
-    Ok((values[0], values[1], values[2], values[3], values[4], values[5]))
+    Ok((
+        values[0], values[1], values[2], values[3], values[4], values[5],
+    ))
 }
 
 /// 查找世界文件（尝试多种扩展名）
@@ -97,36 +102,42 @@ pub fn read_worldimage<P: AsRef<Path>>(path: P) -> Result<WorldImageData, String
     let path = path.as_ref();
     info!("[WorldImage] 开始读取: {:?}", path);
 
-    let name = path.file_stem()
+    let name = path
+        .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("worldimage")
         .to_string();
 
     // 读取图片
-    let img = image::open(path)
-        .map_err(|e| format!("无法读取图片 '{:?}': {}", path, e))?;
+    let img = image::open(path).map_err(|e| format!("无法读取图片 '{:?}': {}", path, e))?;
 
     let (width, height) = (img.width(), img.height());
     let rgba = img.to_rgba8();
 
     // 读取世界文件
-    let wld_path = find_world_file(path)
-        .ok_or_else(|| format!("找不到世界文件 (尝试了 .pgw/.jgw/.tfw/.bpw/.gfw/.wld) 对于 '{:?}'", path))?;
+    let wld_path = find_world_file(path).ok_or_else(|| {
+        format!(
+            "找不到世界文件 (尝试了 .pgw/.jgw/.tfw/.bpw/.gfw/.wld) 对于 '{:?}'",
+            path
+        )
+    })?;
 
     let (_a, _d, _b, e, c, f) = parse_world_file(&wld_path)?;
 
     // 计算边界
     let pixel_scale_x = _a.abs();
     let pixel_scale_y = e.abs();
-    let minx = c - pixel_scale_x / 2.0;  // 左上角像素中心 → 左边界
+    let minx = c - pixel_scale_x / 2.0; // 左上角像素中心 → 左边界
     let maxx = minx + width as f64 * pixel_scale_x;
-    let maxy = f + pixel_scale_y / 2.0;  // 左上角像素中心 → 上边界
+    let maxy = f + pixel_scale_y / 2.0; // 左上角像素中心 → 上边界
     let miny = maxy - height as f64 * pixel_scale_y;
 
     let bounds = Bounds::new(minx, miny, maxx, maxy);
 
-    info!("[WorldImage] 读取完成: {}x{}, 边界={:?}, 世界文件={:?}",
-          width, height, bounds, wld_path);
+    info!(
+        "[WorldImage] 读取完成: {}x{}, 边界={:?}, 世界文件={:?}",
+        width, height, bounds, wld_path
+    );
 
     Ok(WorldImageData {
         name,
@@ -144,11 +155,10 @@ pub fn read_worldimage<P: AsRef<Path>>(path: P) -> Result<WorldImageData, String
 /// 读取 WorldImage 元数据（轻量）
 pub fn read_worldimage_meta<P: AsRef<Path>>(path: P) -> Result<WorldImageMeta, String> {
     let path = path.as_ref();
-    let img = image::open(path)
-        .map_err(|e| format!("无法读取图片 '{:?}': {}", path, e))?;
+    let img = image::open(path).map_err(|e| format!("无法读取图片 '{:?}': {}", path, e))?;
 
-    let wld_path = find_world_file(path)
-        .ok_or_else(|| format!("找不到世界文件对于 '{:?}'", path))?;
+    let wld_path =
+        find_world_file(path).ok_or_else(|| format!("找不到世界文件对于 '{:?}'", path))?;
 
     let (_a, _d, _b, e, c, f) = parse_world_file(&wld_path)?;
 
@@ -162,9 +172,7 @@ pub fn read_worldimage_meta<P: AsRef<Path>>(path: P) -> Result<WorldImageMeta, S
     let miny = maxy - height as f64 * pixel_scale_y;
     let bounds = Bounds::new(minx, miny, maxx, maxy);
 
-    let file_size = std::fs::metadata(path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
 
     Ok(WorldImageMeta {
         width,

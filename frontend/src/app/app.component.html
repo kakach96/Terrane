@@ -3,11 +3,11 @@
     <mat-sidenav #sidenav mode="side" [opened]="sidenavOpened" class="sidenav">
       <div class="sidenav-header">
         <div class="logo">
-          <img src="assets/terrane.svg" alt="Terrane" class="logo-img">
+          <img src="assets/terrane.svg" alt="Terrane" class="logo-img" />
           <span class="logo-text">Terrane</span>
         </div>
       </div>
-      
+
       <mat-nav-list class="nav-menu">
         <a mat-list-item routerLink="/layer-preview" routerLinkActive="active">
           <mat-icon matListItemIcon>visibility</mat-icon>
@@ -19,17 +19,17 @@
             <mat-icon matListItemIcon>dashboard</mat-icon>
             <span matListItemTitle>仪表盘</span>
           </a>
-          
+
           <a mat-list-item routerLink="/workspaces" routerLinkActive="active">
             <mat-icon matListItemIcon>folder</mat-icon>
             <span matListItemTitle>工作空间</span>
           </a>
-          
+
           <a mat-list-item routerLink="/namespaces" routerLinkActive="active">
             <mat-icon matListItemIcon>font_download</mat-icon>
             <span matListItemTitle>命名空间</span>
           </a>
-          
+
           <a mat-list-item routerLink="/data-sources" routerLinkActive="active">
             <mat-icon matListItemIcon>storage</mat-icon>
             <span matListItemTitle>数据源</span>
@@ -39,17 +39,17 @@
             <mat-icon matListItemIcon>dns</mat-icon>
             <span matListItemTitle>存储管理</span>
           </a>
-          
+
           <a mat-list-item routerLink="/layers" routerLinkActive="active">
             <mat-icon matListItemIcon>layers</mat-icon>
             <span matListItemTitle>图层</span>
           </a>
-          
+
           <a mat-list-item routerLink="/tile-layers" routerLinkActive="active">
             <mat-icon matListItemIcon>grid_view</mat-icon>
             <span matListItemTitle>切片图层</span>
           </a>
-          
+
           <a mat-list-item routerLink="/layer-groups" routerLinkActive="active">
             <mat-icon matListItemIcon>folder_special</mat-icon>
             <span matListItemTitle>图层组</span>
@@ -85,7 +85,7 @@
         </ng-container>
       </mat-nav-list>
     </mat-sidenav>
-    
+
     <mat-sidenav-content class="main-content">
       <mat-toolbar class="top-toolbar">
         <button mat-icon-button (click)="sidenav.toggle()">
@@ -112,7 +112,7 @@
           </button>
         </mat-menu>
       </mat-toolbar>
-      
+
       <div class="page-container">
         <router-outlet></router-outlet>
       </div>

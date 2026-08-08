@@ -1,8 +1,8 @@
-use image::{Rgba, RgbaImage, ColorType};
+use crate::models::{Bounds, Feature, GeoJsonGeometry};
+use geo_types::{Geometry, LineString, Point, Polygon};
 use image::codecs::png::PngEncoder;
 use image::ImageEncoder;
-use geo_types::{Point, LineString, Polygon, Geometry};
-use crate::models::{Bounds, GeoJsonGeometry, Feature};
+use image::{ColorType, Rgba, RgbaImage};
 
 #[derive(Debug, Clone, Copy)]
 pub struct RenderOptions {
@@ -59,7 +59,15 @@ impl MapRenderer {
             for pixel in img.pixels_mut() {
                 *pixel = Rgba(bg);
             }
-            self.draw_rect(&mut img, 0, 0, self.options.width - 1, self.options.height - 1, [200, 200, 200, 255], 2);
+            self.draw_rect(
+                &mut img,
+                0,
+                0,
+                self.options.width - 1,
+                self.options.height - 1,
+                [200, 200, 200, 255],
+                2,
+            );
         }
 
         for (geometry, style) in features {
@@ -69,7 +77,16 @@ impl MapRenderer {
         img
     }
 
-    fn draw_rect(&self, img: &mut RgbaImage, x1: u32, y1: u32, x2: u32, y2: u32, color: [u8; 4], width: u32) {
+    fn draw_rect(
+        &self,
+        img: &mut RgbaImage,
+        x1: u32,
+        y1: u32,
+        x2: u32,
+        y2: u32,
+        color: [u8; 4],
+        width: u32,
+    ) {
         let min_x = x1.min(x2);
         let max_x = x1.max(x2);
         let min_y = y1.min(y2);
@@ -103,7 +120,7 @@ impl MapRenderer {
             Geometry::Point(p) => self.render_point(img, p, style),
             Geometry::LineString(ls) => self.render_linestring(img, ls, style),
             Geometry::Polygon(p) => self.render_polygon(img, p, style),
-            _ => {}
+            _ => {},
         }
     }
 
@@ -125,13 +142,25 @@ impl MapRenderer {
         }
     }
 
-    fn draw_circle(&self, img: &mut RgbaImage, cx: i32, cy: i32, r: i32, fill: [u8; 4], stroke: [u8; 4]) {
+    fn draw_circle(
+        &self,
+        img: &mut RgbaImage,
+        cx: i32,
+        cy: i32,
+        r: i32,
+        fill: [u8; 4],
+        stroke: [u8; 4],
+    ) {
         for dy in -r..=r {
             for dx in -r..=r {
                 let dist = dx * dx + dy * dy;
                 let px = cx + dx;
                 let py = cy + dy;
-                if px < 0 || px >= self.options.width as i32 || py < 0 || py >= self.options.height as i32 {
+                if px < 0
+                    || px >= self.options.width as i32
+                    || py < 0
+                    || py >= self.options.height as i32
+                {
                     continue;
                 }
                 if dist <= r * r {
@@ -145,12 +174,24 @@ impl MapRenderer {
         }
     }
 
-    fn draw_square(&self, img: &mut RgbaImage, cx: i32, cy: i32, half: i32, fill: [u8; 4], stroke: [u8; 4]) {
+    fn draw_square(
+        &self,
+        img: &mut RgbaImage,
+        cx: i32,
+        cy: i32,
+        half: i32,
+        fill: [u8; 4],
+        stroke: [u8; 4],
+    ) {
         for dy in -half..=half {
             for dx in -half..=half {
                 let px = cx + dx;
                 let py = cy + dy;
-                if px < 0 || px >= self.options.width as i32 || py < 0 || py >= self.options.height as i32 {
+                if px < 0
+                    || px >= self.options.width as i32
+                    || py < 0
+                    || py >= self.options.height as i32
+                {
                     continue;
                 }
                 if dx.abs() == half || dy.abs() == half {
@@ -167,12 +208,20 @@ impl MapRenderer {
             for w in -1..=1 {
                 let px = cx + i;
                 let py = cy + w;
-                if px >= 0 && px < self.options.width as i32 && py >= 0 && py < self.options.height as i32 {
+                if px >= 0
+                    && px < self.options.width as i32
+                    && py >= 0
+                    && py < self.options.height as i32
+                {
                     img.put_pixel(px as u32, py as u32, Rgba(color));
                 }
                 let px2 = cx + w;
                 let py2 = cy + i;
-                if px2 >= 0 && px2 < self.options.width as i32 && py2 >= 0 && py2 < self.options.height as i32 {
+                if px2 >= 0
+                    && px2 < self.options.width as i32
+                    && py2 >= 0
+                    && py2 < self.options.height as i32
+                {
                     img.put_pixel(px2 as u32, py2 as u32, Rgba(color));
                 }
             }
@@ -184,31 +233,59 @@ impl MapRenderer {
             for w in -1..=1 {
                 let px = cx + i;
                 let py = cy + i + w;
-                if px >= 0 && px < self.options.width as i32 && py >= 0 && py < self.options.height as i32 {
+                if px >= 0
+                    && px < self.options.width as i32
+                    && py >= 0
+                    && py < self.options.height as i32
+                {
                     img.put_pixel(px as u32, py as u32, Rgba(color));
                 }
                 let px2 = cx + i;
                 let py2 = cy - i + w;
-                if px2 >= 0 && px2 < self.options.width as i32 && py2 >= 0 && py2 < self.options.height as i32 {
+                if px2 >= 0
+                    && px2 < self.options.width as i32
+                    && py2 >= 0
+                    && py2 < self.options.height as i32
+                {
                     img.put_pixel(px2 as u32, py2 as u32, Rgba(color));
                 }
             }
         }
     }
 
-    fn draw_star(&self, img: &mut RgbaImage, cx: i32, cy: i32, half: i32, _fill: [u8; 4], stroke: [u8; 4]) {
+    fn draw_star(
+        &self,
+        img: &mut RgbaImage,
+        cx: i32,
+        cy: i32,
+        half: i32,
+        _fill: [u8; 4],
+        stroke: [u8; 4],
+    ) {
         let outer = half;
         let inner = half * 2 / 5;
         let points = [
-            (0.0, 1.0), (0.2245, 0.3090), (0.9511, 0.3090),
-            (0.3633, -0.1180), (0.5878, -0.8090), (0.0, -0.3820),
-            (-0.5878, -0.8090), (-0.3633, -0.1180), (-0.9511, 0.3090),
+            (0.0, 1.0),
+            (0.2245, 0.3090),
+            (0.9511, 0.3090),
+            (0.3633, -0.1180),
+            (0.5878, -0.8090),
+            (0.0, -0.3820),
+            (-0.5878, -0.8090),
+            (-0.3633, -0.1180),
+            (-0.9511, 0.3090),
             (-0.2245, 0.3090),
         ];
         for i in 0..points.len() {
             let j = (i + 1) % points.len();
-            let x1 = cx + (outer as f64 * points[i].0 + (outer - inner) as f64 * (points[j].0 - points[i].0)) as i32;
-            let y1 = cy + (outer as f64 * points[i].1 + (outer - inner) as f64 * (points[j].1 - points[i].1)) as i32;
+            let x1 = cx
+                + (outer as f64 * points[i].0
+                    + (outer - inner) as f64 * (points[j].0 - points[i].0))
+                    as i32;
+            let y1 = cy
+                + (outer as f64 * points[i].1
+                    + (outer - inner) as f64 * (points[j].1 - points[i].1))
+                    as i32;
             let x2 = cx + (outer as f64 * points[j].0) as i32;
             let y2 = cy + (outer as f64 * points[j].1) as i32;
             self.draw_line(img, x1, y1, x2, y2, stroke, 1);
@@ -218,7 +295,15 @@ impl MapRenderer {
         }
     }
 
-    fn draw_triangle(&self, img: &mut RgbaImage, cx: i32, cy: i32, half: i32, fill: [u8; 4], stroke: [u8; 4]) {
+    fn draw_triangle(
+        &self,
+        img: &mut RgbaImage,
+        cx: i32,
+        cy: i32,
+        half: i32,
+        fill: [u8; 4],
+        stroke: [u8; 4],
+    ) {
         let pts = [
             (cx, cy - half),
             (cx - half, cy + half),
@@ -246,7 +331,11 @@ impl MapRenderer {
             for pair in xs.chunks(2) {
                 if pair.len() == 2 {
                     for x in pair[0]..=pair[1] {
-                        if x >= 0 && x < self.options.width as i32 && y >= 0 && y < self.options.height as i32 {
+                        if x >= 0
+                            && x < self.options.width as i32
+                            && y >= 0
+                            && y < self.options.height as i32
+                        {
                             img.put_pixel(x as u32, y as u32, Rgba(fill));
                         }
                     }
@@ -260,20 +349,33 @@ impl MapRenderer {
         let width = style.stroke.as_ref().and_then(|s| s.width).unwrap_or(1.0) as i32;
         let dash_array = style.stroke.as_ref().and_then(|s| s.dash_array.clone());
 
-        let coords: Vec<(i32, i32)> = ls.coords()
-            .map(|c| self.world_to_pixel(c.x, c.y))
-            .collect();
+        let coords: Vec<(i32, i32)> = ls.coords().map(|c| self.world_to_pixel(c.x, c.y)).collect();
 
         if let Some(dash) = dash_array {
             self.draw_line_dashed(img, &coords, color, width, &dash);
         } else {
             for i in 0..coords.len().saturating_sub(1) {
-                self.draw_line(img, coords[i].0, coords[i].1, coords[i + 1].0, coords[i + 1].1, color, width);
+                self.draw_line(
+                    img,
+                    coords[i].0,
+                    coords[i].1,
+                    coords[i + 1].0,
+                    coords[i + 1].1,
+                    color,
+                    width,
+                );
             }
         }
     }
 
-    fn draw_line_dashed(&self, img: &mut RgbaImage, coords: &[(i32, i32)], color: [u8; 4], width: i32, dash: &[f64]) {
+    fn draw_line_dashed(
+        &self,
+        img: &mut RgbaImage,
+        coords: &[(i32, i32)],
+        color: [u8; 4],
+        width: i32,
+        dash: &[f64],
+    ) {
         let mut dash_idx = 0;
         let mut dash_remaining = dash[0].max(1.0);
         let mut drawing = true;
@@ -284,7 +386,9 @@ impl MapRenderer {
             let dx = (x1 - x0) as f64;
             let dy = (y1 - y0) as f64;
             let seg_len = (dx * dx + dy * dy).sqrt();
-            if seg_len < 0.5 { continue; }
+            if seg_len < 0.5 {
+                continue;
+            }
 
             let mut pos = 0.0_f64;
             while pos < seg_len {
@@ -329,7 +433,9 @@ impl MapRenderer {
             let width = stroke.width.unwrap_or(1.0) as i32;
             let dash_array = stroke.dash_array.clone();
 
-            let coords: Vec<(i32, i32)> = polygon.exterior().coords()
+            let coords: Vec<(i32, i32)> = polygon
+                .exterior()
+                .coords()
                 .map(|c| self.world_to_pixel(c.x, c.y))
                 .collect();
 
@@ -337,7 +443,15 @@ impl MapRenderer {
                 self.draw_line_dashed(img, &coords, color, width, &dash);
             } else {
                 for i in 0..coords.len().saturating_sub(1) {
-                    self.draw_line(img, coords[i].0, coords[i].1, coords[i + 1].0, coords[i + 1].1, color, width);
+                    self.draw_line(
+                        img,
+                        coords[i].0,
+                        coords[i].1,
+                        coords[i + 1].0,
+                        coords[i + 1].1,
+                        color,
+                        width,
+                    );
                 }
             }
         }
@@ -351,7 +465,16 @@ impl MapRenderer {
         (px as i32, py as i32)
     }
 
-    fn draw_line(&self, img: &mut RgbaImage, x0: i32, y0: i32, x1: i32, y1: i32, color: [u8; 4], width: i32) {
+    fn draw_line(
+        &self,
+        img: &mut RgbaImage,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        color: [u8; 4],
+        width: i32,
+    ) {
         let dx = (x1 - x0).abs();
         let dy = -(y1 - y0).abs();
         let sx = if x0 < x1 { 1 } else { -1 };
@@ -365,7 +488,11 @@ impl MapRenderer {
                 for wdy in -width..=width {
                     let px = x + wdx;
                     let py = y + wdy;
-                    if px >= 0 && px < self.options.width as i32 && py >= 0 && py < self.options.height as i32 {
+                    if px >= 0
+                        && px < self.options.width as i32
+                        && py >= 0
+                        && py < self.options.height as i32
+                    {
                         img.put_pixel(px as u32, py as u32, Rgba(color));
                     }
                 }
@@ -403,7 +530,8 @@ impl MapRenderer {
                 let (x2, y2) = points[j];
 
                 if (y1 <= y && y2 > y) || (y2 <= y && y1 > y) {
-                    let x_intersect = x1 as f64 + (y - y1) as f64 / (y2 - y1) as f64 * (x2 - x1) as f64;
+                    let x_intersect =
+                        x1 as f64 + (y - y1) as f64 / (y2 - y1) as f64 * (x2 - x1) as f64;
                     intersections.push(x_intersect as i32);
                 }
             }
@@ -415,7 +543,11 @@ impl MapRenderer {
                     let x_start = intersections[i];
                     let x_end = intersections[i + 1];
                     for x in x_start..=x_end {
-                        if x >= 0 && x < self.options.width as i32 && y >= 0 && y < self.options.height as i32 {
+                        if x >= 0
+                            && x < self.options.width as i32
+                            && y >= 0
+                            && y < self.options.height as i32
+                        {
                             img.put_pixel(x as u32, y as u32, Rgba(color));
                         }
                     }
@@ -467,7 +599,9 @@ impl Style {
     }
 
     pub fn parse_stroke_color(&self) -> Option<[u8; 4]> {
-        self.stroke.as_ref().and_then(|s| Self::parse_color(&s.color))
+        self.stroke
+            .as_ref()
+            .and_then(|s| Self::parse_color(&s.color))
     }
 
     fn parse_color(color: &str) -> Option<[u8; 4]> {
@@ -534,7 +668,9 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
     if features.is_empty() {
         let img = RgbaImage::new(img_width, img_height);
         let mut buf = Vec::new();
-        PngEncoder::new(&mut buf).write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8).unwrap();
+        PngEncoder::new(&mut buf)
+            .write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8)
+            .unwrap();
         return buf;
     }
 
@@ -552,7 +688,7 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
                     maxx = maxx.max(coordinates[0]);
                     maxy = maxy.max(coordinates[1]);
                 }
-            }
+            },
             GeoJsonGeometry::LineString { coordinates } => {
                 for coord in coordinates {
                     if coord.len() >= 2 {
@@ -562,7 +698,7 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
                         maxy = maxy.max(coord[1]);
                     }
                 }
-            }
+            },
             GeoJsonGeometry::Polygon { coordinates } => {
                 for ring in coordinates {
                     for coord in ring {
@@ -574,8 +710,8 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
                         }
                     }
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -618,7 +754,9 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
     let img = renderer.render(features_with_style);
 
     let mut buf = Vec::new();
-    PngEncoder::new(&mut buf).write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8).unwrap();
+    PngEncoder::new(&mut buf)
+        .write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8)
+        .unwrap();
     buf
 }
 
@@ -627,70 +765,101 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
 // ---------------------------------------------------------------------------
 
 /// 将要素渲染为 SVG 字符串
-pub fn render_to_svg(features: &[(GeoJsonGeometry, Style)], bounds: &Bounds, width: u32, height: u32) -> String {
+pub fn render_to_svg(
+    features: &[(GeoJsonGeometry, Style)],
+    bounds: &Bounds,
+    width: u32,
+    height: u32,
+) -> String {
     let mut svg = String::new();
     svg.push_str(&format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}" width="{}" height="{}">
-"#, width, height, width, height
+"#,
+        width, height, width, height
     ));
 
-    svg.push_str(r#"<defs><style type="text/css"><![CDATA[
+    svg.push_str(
+        r#"<defs><style type="text/css"><![CDATA[
     .fp { fill: #1565c0; stroke: #0d47a1; stroke-width: 2; }
     .fl { fill: none; stroke: #1565c0; stroke-width: 2; }
     .fg { fill: #bbdefb; stroke: #1565c0; stroke-width: 1.5; fill-opacity: 0.6; }
-]]></style></defs>"#);
+]]></style></defs>"#,
+    );
 
-    svg.push_str(&format!("<rect width=\"100%\" height=\"100%\" fill=\"#f8f8f8\"/>\n"));
+    svg.push_str(&format!(
+        "<rect width=\"100%\" height=\"100%\" fill=\"#f8f8f8\"/>\n"
+    ));
 
     for (geometry, _style) in features {
         match geometry {
             GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
                 let (sx, sy) = project_point(coordinates[0], coordinates[1], bounds, width, height);
-                svg.push_str(&format!(r#"<circle cx="{}" cy="{}" r="4" class="fp"/>"#, sx, sy));
-            }
+                svg.push_str(&format!(
+                    r#"<circle cx="{}" cy="{}" r="4" class="fp"/>"#,
+                    sx, sy
+                ));
+            },
             GeoJsonGeometry::MultiPoint { coordinates } => {
                 for c in coordinates {
                     if c.len() >= 2 {
                         let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
-                        svg.push_str(&format!(r#"<circle cx="{}" cy="{}" r="3" class="fp"/>"#, sx, sy));
+                        svg.push_str(&format!(
+                            r#"<circle cx="{}" cy="{}" r="3" class="fp"/>"#,
+                            sx, sy
+                        ));
                     }
                 }
-            }
+            },
             GeoJsonGeometry::LineString { coordinates } => {
                 if coordinates.len() >= 2 {
-                    let pts: String = coordinates.iter()
+                    let pts: String = coordinates
+                        .iter()
                         .filter(|c| c.len() >= 2)
-                        .map(|c| { let (sx, sy) = project_point(c[0], c[1], bounds, width, height); format!("{},{}", sx, sy) })
-                        .collect::<Vec<_>>().join(" ");
+                        .map(|c| {
+                            let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
+                            format!("{},{}", sx, sy)
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ");
                     svg.push_str(&format!(r#"<polyline points="{}" class="fl"/>"#, pts));
                 }
-            }
+            },
             GeoJsonGeometry::Polygon { coordinates } => {
                 for ring in coordinates {
                     if ring.len() >= 3 {
-                        let pts: String = ring.iter()
+                        let pts: String = ring
+                            .iter()
                             .filter(|c| c.len() >= 2)
-                            .map(|c| { let (sx, sy) = project_point(c[0], c[1], bounds, width, height); format!("{},{}", sx, sy) })
-                            .collect::<Vec<_>>().join(" ");
+                            .map(|c| {
+                                let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
+                                format!("{},{}", sx, sy)
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ");
                         svg.push_str(&format!(r#"<polygon points="{}" class="fg"/>"#, pts));
                     }
                 }
-            }
+            },
             GeoJsonGeometry::MultiPolygon { coordinates } => {
                 for poly in coordinates {
                     for ring in poly {
                         if ring.len() >= 3 {
-                            let pts: String = ring.iter()
+                            let pts: String = ring
+                                .iter()
                                 .filter(|c| c.len() >= 2)
-                                .map(|c| { let (sx, sy) = project_point(c[0], c[1], bounds, width, height); format!("{},{}", sx, sy) })
-                                .collect::<Vec<_>>().join(" ");
+                                .map(|c| {
+                                    let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
+                                    format!("{},{}", sx, sy)
+                                })
+                                .collect::<Vec<_>>()
+                                .join(" ");
                             svg.push_str(&format!(r#"<polygon points="{}" class="fg"/>"#, pts));
                         }
                     }
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
         svg.push('\n');
     }
@@ -715,20 +884,24 @@ pub fn render_to_kml(features: &[(GeoJsonGeometry, Style)], layer_name: &str) ->
     kml.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
     kml.push_str(&format!(
         r#"<kml xmlns="http://www.opengis.net/kml/2.2">
-<Document><name>{}</name><open>1</open>"#, layer_name
+<Document><name>{}</name><open>1</open>"#,
+        layer_name
     ));
 
     for (i, (geometry, _style)) in features.iter().enumerate() {
         kml.push_str(&format!(
             r#"<Placemark><name>Feature {}</name>{}</Placemark>"#,
-            i, geometry_to_kml(geometry)
+            i,
+            geometry_to_kml(geometry)
         ));
     }
 
-    kml.push_str(r#"<Style id="defaultStyle">
+    kml.push_str(
+        r#"<Style id="defaultStyle">
 <LineStyle><color>ff0000ff</color><width>2</width></LineStyle>
 <PolyStyle><color>400000ff</color></PolyStyle>
-</Style>"#);
+</Style>"#,
+    );
 
     kml.push_str("</Document></kml>");
     kml
@@ -737,21 +910,39 @@ pub fn render_to_kml(features: &[(GeoJsonGeometry, Style)], layer_name: &str) ->
 fn geometry_to_kml(g: &GeoJsonGeometry) -> String {
     match g {
         GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
-            format!("<Point><coordinates>{},{},0</coordinates></Point>", coordinates[0], coordinates[1])
-        }
+            format!(
+                "<Point><coordinates>{},{},0</coordinates></Point>",
+                coordinates[0], coordinates[1]
+            )
+        },
         GeoJsonGeometry::LineString { coordinates } => {
-            let c: Vec<String> = coordinates.iter().filter(|c| c.len() >= 2)
-                .map(|c| format!("{},{},0", c[0], c[1])).collect();
-            format!("<LineString><coordinates>{}</coordinates></LineString>", c.join(" "))
-        }
+            let c: Vec<String> = coordinates
+                .iter()
+                .filter(|c| c.len() >= 2)
+                .map(|c| format!("{},{},0", c[0], c[1]))
+                .collect();
+            format!(
+                "<LineString><coordinates>{}</coordinates></LineString>",
+                c.join(" ")
+            )
+        },
         GeoJsonGeometry::Polygon { coordinates } => {
-            let rings: Vec<String> = coordinates.iter().map(|ring| {
-                let c: Vec<String> = ring.iter().filter(|c| c.len() >= 2)
-                    .map(|c| format!("{},{},0", c[0], c[1])).collect();
-                format!("<LinearRing><coordinates>{}</coordinates></LinearRing>", c.join(" "))
-            }).collect();
+            let rings: Vec<String> = coordinates
+                .iter()
+                .map(|ring| {
+                    let c: Vec<String> = ring
+                        .iter()
+                        .filter(|c| c.len() >= 2)
+                        .map(|c| format!("{},{},0", c[0], c[1]))
+                        .collect();
+                    format!(
+                        "<LinearRing><coordinates>{}</coordinates></LinearRing>",
+                        c.join(" ")
+                    )
+                })
+                .collect();
             format!("<Polygon>{}</Polygon>", rings.join(""))
-        }
+        },
         _ => String::new(),
     }
 }

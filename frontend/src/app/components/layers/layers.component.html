@@ -14,7 +14,7 @@
     <mat-form-field appearance="outline" class="search-field">
       <mat-label>搜索图层</mat-label>
       <mat-icon matPrefix>search</mat-icon>
-      <input matInput [(ngModel)]="searchQuery" placeholder="输入图层名称或标题">
+      <input matInput [(ngModel)]="searchQuery" placeholder="输入图层名称或标题" />
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="workspace-filter">
@@ -81,8 +81,9 @@
         <div class="bounds-info">
           <div class="bounds-label">边界范围</div>
           <div class="bounds-values">
-            X: {{ layer.bounds.minx | number:'1.2-2' }} - {{ layer.bounds.maxx | number:'1.2-2' }}<br>
-            Y: {{ layer.bounds.miny | number:'1.2-2' }} - {{ layer.bounds.maxy | number:'1.2-2' }}
+            X: {{ layer.bounds.minx | number: '1.2-2' }} - {{ layer.bounds.maxx | number: '1.2-2'
+            }}<br />
+            Y: {{ layer.bounds.miny | number: '1.2-2' }} - {{ layer.bounds.maxy | number: '1.2-2' }}
           </div>
         </div>
       </mat-card-content>

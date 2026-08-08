@@ -12,7 +12,7 @@
         <div class="form-section">
           <h3>数据源配置</h3>
           <p class="section-hint">选择工作空间和数据源来配置图层数据源</p>
-          
+
           <div class="form-row">
             <mat-form-field appearance="outline">
               <mat-label>工作空间</mat-label>
@@ -31,7 +31,11 @@
               <mat-label>数据源</mat-label>
               <mat-select formControlName="dataSource">
                 <mat-option value="" disabled>-- 请先选择工作空间 --</mat-option>
-                <mat-option *ngFor="let ds of dataSources" [value]="ds.name" [disabled]="!ds.enabled">
+                <mat-option
+                  *ngFor="let ds of dataSources"
+                  [value]="ds.name"
+                  [disabled]="!ds.enabled"
+                >
                   <span [class.disabled-option]="!ds.enabled">
                     {{ ds.name }}
                     <span *ngIf="!ds.enabled"> (已禁用)</span>
@@ -45,7 +49,11 @@
             </mat-form-field>
           </div>
 
-          <mat-form-field appearance="outline" class="full-width" *ngIf="tables.length > 0 || loadingTables">
+          <mat-form-field
+            appearance="outline"
+            class="full-width"
+            *ngIf="tables.length > 0 || loadingTables"
+          >
             <mat-label>数据表</mat-label>
             <mat-select formControlName="table">
               <mat-option value="" disabled>-- 请选择数据表 --</mat-option>
@@ -62,10 +70,10 @@
 
         <div class="form-section">
           <h3>基本信息</h3>
-          
+
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>图层名称</mat-label>
-            <input matInput formControlName="name" placeholder="例如: world_cities">
+            <input matInput formControlName="name" placeholder="例如: world_cities" />
             <mat-hint>只能使用小写字母、数字和下划线</mat-hint>
             <mat-error *ngIf="layerForm.get('name')?.hasError('required')">
               图层名称是必填项
@@ -77,7 +85,7 @@
 
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>显示标题</mat-label>
-            <input matInput formControlName="title" placeholder="例如: World Cities">
+            <input matInput formControlName="title" placeholder="例如: World Cities" />
             <mat-error>显示标题是必填项</mat-error>
           </mat-form-field>
 
@@ -89,7 +97,7 @@
 
         <div class="form-section">
           <h3>空间参考</h3>
-          
+
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>坐标系统 (SRS)</mat-label>
             <mat-select formControlName="srs">
@@ -101,37 +109,33 @@
 
         <div class="form-section">
           <h3>边界范围</h3>
-          
+
           <div class="bounds-grid">
             <mat-form-field appearance="outline">
               <mat-label>最小 X</mat-label>
-              <input matInput type="number" formControlName="minx">
+              <input matInput type="number" formControlName="minx" />
             </mat-form-field>
-            
+
             <mat-form-field appearance="outline">
               <mat-label>最小 Y</mat-label>
-              <input matInput type="number" formControlName="miny">
+              <input matInput type="number" formControlName="miny" />
             </mat-form-field>
-            
+
             <mat-form-field appearance="outline">
               <mat-label>最大 X</mat-label>
-              <input matInput type="number" formControlName="maxx">
+              <input matInput type="number" formControlName="maxx" />
             </mat-form-field>
-            
+
             <mat-form-field appearance="outline">
               <mat-label>最大 Y</mat-label>
-              <input matInput type="number" formControlName="maxy">
+              <input matInput type="number" formControlName="maxy" />
             </mat-form-field>
           </div>
         </div>
 
         <div class="form-actions">
-          <button mat-button type="button" (click)="goBack()">
-            取消
-          </button>
-          <button mat-stroked-button type="button" (click)="resetForm()">
-            重置
-          </button>
+          <button mat-button type="button" (click)="goBack()">取消</button>
+          <button mat-stroked-button type="button" (click)="resetForm()">重置</button>
           <button mat-raised-button color="primary" type="submit" [disabled]="loading">
             <mat-icon *ngIf="!loading">add_circle</mat-icon>
             <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>

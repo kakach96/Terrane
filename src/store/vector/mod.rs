@@ -24,7 +24,11 @@ use crate::store::{SqliteStore, StoreError};
 #[async_trait]
 pub trait VectorStore: Send + Sync {
     /// 保存指定图层的全部要素 (覆盖写)
-    async fn save_features(&self, layer_name: &str, features: &[Feature]) -> Result<usize, StoreError>;
+    async fn save_features(
+        &self,
+        layer_name: &str,
+        features: &[Feature],
+    ) -> Result<usize, StoreError>;
     /// 加载指定图层的全部要素
     async fn load_features(&self, layer_name: &str) -> Result<Vec<Feature>, StoreError>;
     /// 删除指定图层的全部要素
@@ -38,22 +42,32 @@ pub trait VectorStore: Send + Sync {
 /// 直接复用 [`SqliteStore`] 上已有的 features 表读写逻辑, 不复制实现。
 #[async_trait]
 impl VectorStore for SqliteStore {
-    async fn save_features(&self, layer_name: &str, features: &[Feature]) -> Result<usize, StoreError> {
+    async fn save_features(
+        &self,
+        layer_name: &str,
+        features: &[Feature],
+    ) -> Result<usize, StoreError> {
         SqliteStore::save_features(self, layer_name, features)
             .await
             .map_err(StoreError::from)
     }
 
     async fn load_features(&self, layer_name: &str) -> Result<Vec<Feature>, StoreError> {
-        SqliteStore::load_features(self, layer_name).await.map_err(StoreError::from)
+        SqliteStore::load_features(self, layer_name)
+            .await
+            .map_err(StoreError::from)
     }
 
     async fn delete_features(&self, layer_name: &str) -> Result<usize, StoreError> {
-        SqliteStore::delete_features(self, layer_name).await.map_err(StoreError::from)
+        SqliteStore::delete_features(self, layer_name)
+            .await
+            .map_err(StoreError::from)
     }
 
     async fn list_tables(&self) -> Result<Vec<String>, StoreError> {
-        SqliteStore::list_feature_layers(self).await.map_err(StoreError::from)
+        SqliteStore::list_feature_layers(self)
+            .await
+            .map_err(StoreError::from)
     }
 }
 
@@ -66,12 +80,16 @@ pub async fn build_vector_store(config: &GeoServerConfig) -> Option<Arc<dyn Vect
     match vc.kind.as_str() {
         // 复用元数据存储 (内置默认选项; 元数据为非 sqlite 外部存储时的默认)
         "metadata" => match config.metadata.kind.as_str() {
-            "postgres" => match postgres::PostgresVectorStore::new(&config.metadata.postgres).await {
+            "postgres" => match postgres::PostgresVectorStore::new(&config.metadata.postgres).await
+            {
                 Ok(s) => Some(Arc::new(s)),
                 Err(e) => {
-                    eprintln!("Failed to initialize vector store (reuse postgres metadata): {}", e);
+                    eprintln!(
+                        "Failed to initialize vector store (reuse postgres metadata): {}",
+                        e
+                    );
                     None
-                }
+                },
             },
             _ => {
                 // sqlite 元数据 -> 复用同一 sqlite 文件的 features 表
@@ -83,11 +101,14 @@ pub async fn build_vector_store(config: &GeoServerConfig) -> Option<Arc<dyn Vect
                 match SqliteStore::new(sqlite_path).await {
                     Ok(s) => Some(Arc::new(s)),
                     Err(e) => {
-                        eprintln!("Failed to initialize vector store (reuse sqlite metadata): {}", e);
+                        eprintln!(
+                            "Failed to initialize vector store (reuse sqlite metadata): {}",
+                            e
+                        );
                         None
-                    }
+                    },
                 }
-            }
+            },
         },
         // 独立 PostgreSQL 矢量存储
         "postgres" => match postgres::PostgresVectorStore::new(&vc.postgres).await {
@@ -95,12 +116,15 @@ pub async fn build_vector_store(config: &GeoServerConfig) -> Option<Arc<dyn Vect
             Err(e) => {
                 eprintln!("Failed to initialize vector store (postgres): {}", e);
                 None
-            }
+            },
         },
         // 本地目录 (默认)
         _ => {
-            let dir = vc.dir.clone().unwrap_or_else(|| config.data_dir.join("business"));
+            let dir = vc
+                .dir
+                .clone()
+                .unwrap_or_else(|| config.data_dir.join("business"));
             Some(Arc::new(local_dir::LocalVectorStore::new(dir)))
-        }
+        },
     }
 }

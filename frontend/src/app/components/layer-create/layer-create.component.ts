@@ -8,7 +8,7 @@ import { Workspace, DataSource } from '../../models/geoserver.models';
 @Component({
   selector: 'app-layer-create',
   templateUrl: './layer-create.component.html',
-  styleUrls: ['./layer-create.component.scss']
+  styleUrls: ['./layer-create.component.scss'],
 })
 export class LayerCreateComponent implements OnInit {
   layerForm!: FormGroup;
@@ -25,7 +25,7 @@ export class LayerCreateComponent implements OnInit {
     private fb: FormBuilder,
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
-    private router: Router
+    private router: Router,
   ) {}
 
   ngOnInit(): void {
@@ -45,10 +45,10 @@ export class LayerCreateComponent implements OnInit {
       minx: [-180],
       miny: [-90],
       maxx: [180],
-      maxy: [90]
+      maxy: [90],
     });
 
-    this.layerForm.get('workspace')?.valueChanges.subscribe(workspaceName => {
+    this.layerForm.get('workspace')?.valueChanges.subscribe((workspaceName) => {
       if (workspaceName) {
         this.loadDataSourcesForWorkspace(workspaceName);
       } else {
@@ -59,7 +59,7 @@ export class LayerCreateComponent implements OnInit {
       }
     });
 
-    this.layerForm.get('dataSource')?.valueChanges.subscribe(dataSourceName => {
+    this.layerForm.get('dataSource')?.valueChanges.subscribe((dataSourceName) => {
       if (dataSourceName) {
         this.loadTablesForDataSource(dataSourceName);
       } else {
@@ -82,7 +82,7 @@ export class LayerCreateComponent implements OnInit {
     this.geoserverService.getAllWorkspaces().subscribe({
       next: (workspaces) => {
         this.workspaces = workspaces;
-      }
+      },
     });
   }
 
@@ -91,7 +91,9 @@ export class LayerCreateComponent implements OnInit {
     this.geoserverService.getDataSources().subscribe({
       next: (dataSources) => {
         // metadata 内置数据源不属任何工作空间, 对所有工作空间都可用
-        this.dataSources = dataSources.filter(ds => ds.workspace === workspaceName || ds.name === 'metadata');
+        this.dataSources = dataSources.filter(
+          (ds) => ds.workspace === workspaceName || ds.name === 'metadata',
+        );
         this.loadingDataSources = false;
         this.layerForm.get('dataSource')?.setValue('');
         this.tables = [];
@@ -101,18 +103,18 @@ export class LayerCreateComponent implements OnInit {
         console.error('Failed to load data sources:', err);
         this.loadingDataSources = false;
         this.dataSources = [];
-      }
+      },
     });
   }
 
   loadTablesForDataSource(dataSourceName: string): void {
-     const dataSource = this.dataSources.find(ds => ds.name === dataSourceName);
-     this.metadataNewTable = false;
-     if (!dataSource || dataSource.type !== 'postgis') {
-       this.tables = [];
-       this.layerForm.get('table')?.setValue('');
-       return;
-     }
+    const dataSource = this.dataSources.find((ds) => ds.name === dataSourceName);
+    this.metadataNewTable = false;
+    if (!dataSource || dataSource.type !== 'postgis') {
+      this.tables = [];
+      this.layerForm.get('table')?.setValue('');
+      return;
+    }
 
     this.loadingTables = true;
     this.geoserverService.getDataSourceTables(dataSourceName).subscribe({
@@ -140,7 +142,7 @@ export class LayerCreateComponent implements OnInit {
         this.loadingTables = false;
         this.tables = [];
         this.metadataNewTable = false;
-      }
+      },
     });
   }
 
@@ -164,8 +166,8 @@ export class LayerCreateComponent implements OnInit {
         minx: formValue.minx,
         miny: formValue.miny,
         maxx: formValue.maxx,
-        maxy: formValue.maxy
-      }
+        maxy: formValue.maxy,
+      },
     };
 
     this.geoserverService.createLayer(layerData).subscribe({
@@ -177,7 +179,7 @@ export class LayerCreateComponent implements OnInit {
       error: (error) => {
         this.notificationService.error('创建失败: ' + (error.message || '未知错误'));
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -193,7 +195,7 @@ export class LayerCreateComponent implements OnInit {
       minx: -180,
       miny: -90,
       maxx: 180,
-      maxy: 90
+      maxy: 90,
     });
     this.dataSources = [];
     this.tables = [];

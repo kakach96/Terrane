@@ -1,6 +1,6 @@
+use config::{Config, File};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use config::{Config, File};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GeoServerConfig {
@@ -217,10 +217,18 @@ fn default_jwt_secret() -> String {
     "terrane-jwt-secret-2026".to_string()
 }
 
-fn default_expire() -> u64 { 86400 }
-fn default_enabled() -> bool { true }
-fn default_gridset() -> String { "EPSG:4326".to_string() }
-fn default_session_ttl() -> u64 { 86400 }
+fn default_expire() -> u64 {
+    86400
+}
+fn default_enabled() -> bool {
+    true
+}
+fn default_gridset() -> String {
+    "EPSG:4326".to_string()
+}
+fn default_session_ttl() -> u64 {
+    86400
+}
 
 impl Default for ServerConfig {
     fn default() -> Self {
@@ -375,12 +383,31 @@ pub struct CorsConfig {
     pub max_age: u64,
 }
 
-fn default_cors_enabled() -> bool { true }
-fn default_cors_origins() -> Vec<String> { vec!["*".to_string()] }
-fn default_cors_methods() -> Vec<String> { vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string(), "OPTIONS".to_string(), "PATCH".to_string()] }
-fn default_cors_headers() -> Vec<String> { vec!["*".to_string()] }
-fn default_cors_credentials() -> bool { true }
-fn default_cors_max_age() -> u64 { 3600 }
+fn default_cors_enabled() -> bool {
+    true
+}
+fn default_cors_origins() -> Vec<String> {
+    vec!["*".to_string()]
+}
+fn default_cors_methods() -> Vec<String> {
+    vec![
+        "GET".to_string(),
+        "POST".to_string(),
+        "PUT".to_string(),
+        "DELETE".to_string(),
+        "OPTIONS".to_string(),
+        "PATCH".to_string(),
+    ]
+}
+fn default_cors_headers() -> Vec<String> {
+    vec!["*".to_string()]
+}
+fn default_cors_credentials() -> bool {
+    true
+}
+fn default_cors_max_age() -> u64 {
+    3600
+}
 
 impl Default for CorsConfig {
     fn default() -> Self {
@@ -388,8 +415,12 @@ impl Default for CorsConfig {
             enabled: true,
             allowed_origins: vec!["*".to_string()],
             allowed_methods: vec![
-                "GET".to_string(), "POST".to_string(), "PUT".to_string(),
-                "DELETE".to_string(), "OPTIONS".to_string(), "PATCH".to_string()
+                "GET".to_string(),
+                "POST".to_string(),
+                "PUT".to_string(),
+                "DELETE".to_string(),
+                "OPTIONS".to_string(),
+                "PATCH".to_string(),
             ],
             allowed_headers: vec!["*".to_string()],
             allow_credentials: true,
@@ -608,7 +639,10 @@ mod tests {
     fn test_effective_defaults() {
         let cfg = GeoServerConfig::default();
         assert_eq!(cfg.effective_vector().kind, "local");
-        assert_eq!(cfg.effective_vector().dir.unwrap(), PathBuf::from("./data/business"));
+        assert_eq!(
+            cfg.effective_vector().dir.unwrap(),
+            PathBuf::from("./data/business")
+        );
 
         let r = cfg.effective_raster();
         assert_eq!(r.kind, "local");

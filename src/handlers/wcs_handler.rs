@@ -1,9 +1,9 @@
-use actix_web::{HttpResponse, web};
-use crate::services::wcs::{self, WcsRequest, WcsCapabilities, CoverageDescription};
-use crate::state::AppState;
 use crate::error::GeoServerError;
 use crate::models::DataSourceType;
+use crate::services::wcs::{self, CoverageDescription, WcsCapabilities, WcsRequest};
+use crate::state::AppState;
 use crate::utils::geotiff;
+use actix_web::{web, HttpResponse};
 use quick_xml::se::to_string;
 use tracing::{info, warn};
 
@@ -23,7 +23,11 @@ pub async fn handle_wcs_request(
 
 /// 解析栅格文件的本地路径: 优先经栅格存储解析 (如管理内的栅格), 否则回退到
 /// 数据源连接里记录的原始文件路径 (外部/绝对路径栅格)。
-fn resolve_raster_path(state: &AppState, ds_name: &str, conn_file_path: Option<&String>) -> Option<std::path::PathBuf> {
+fn resolve_raster_path(
+    state: &AppState,
+    ds_name: &str,
+    conn_file_path: Option<&String>,
+) -> Option<std::path::PathBuf> {
     if let Some(rstore) = &state.raster_store {
         if let Some(p) = rstore.local_path(ds_name) {
             if p.exists() {
@@ -43,9 +47,12 @@ async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::pa
             for ds in &ds_list {
                 if ds.data_source_type == DataSourceType::Geotiff
                     || ds.data_source_type == DataSourceType::WorldImage
-                    || ds.data_source_type == DataSourceType::ArcGrid {
+                    || ds.data_source_type == DataSourceType::ArcGrid
+                {
                     if let Some(conn) = &ds.connection {
-                        if let Some(path) = resolve_raster_path(state, &ds.name, conn.file_path.as_ref()) {
+                        if let Some(path) =
+                            resolve_raster_path(state, &ds.name, conn.file_path.as_ref())
+                        {
                             if path.exists() {
                                 coverages.push((ds.name.clone(), ds.name.clone(), path));
                             }
@@ -59,8 +66,14 @@ async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::pa
     coverages
 }
 
-async fn handle_get_capabilities(state: &AppState, _request: &WcsRequest) -> Result<HttpResponse, GeoServerError> {
-    let base_url = format!("http://{}:{}", state.config.server.host, state.config.server.port);
+async fn handle_get_capabilities(
+    state: &AppState,
+    _request: &WcsRequest,
+) -> Result<HttpResponse, GeoServerError> {
+    let base_url = format!(
+        "http://{}:{}",
+        state.config.server.host, state.config.server.port
+    );
     let mut capabilities = WcsCapabilities::new(&base_url);
 
     // 动态添加栅格覆盖数据 (GeoTIFF / WorldImage)
@@ -69,8 +82,9 @@ async fn handle_get_capabilities(state: &AppState, _request: &WcsRequest) -> Res
         capabilities.add_coverage(name, title);
     }
 
-    let xml = to_string(&capabilities)
-        .map_err(|e| GeoServerError::ServiceError(format!("Failed to serialize capabilities: {}", e)))?;
+    let xml = to_string(&capabilities).map_err(|e| {
+        GeoServerError::ServiceError(format!("Failed to serialize capabilities: {}", e))
+    })?;
 
     let xml = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -78,14 +92,16 @@ async fn handle_get_capabilities(state: &AppState, _request: &WcsRequest) -> Res
         xml
     );
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/xml")
-        .body(xml))
+    Ok(HttpResponse::Ok().content_type("application/xml").body(xml))
 }
 
-async fn handle_describe_coverage(state: &AppState, request: &WcsRequest) -> Result<HttpResponse, GeoServerError> {
-    let coverage_ids = request.coverage_id.as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("COVERAGEID parameter is required".to_string()))?;
+async fn handle_describe_coverage(
+    state: &AppState,
+    request: &WcsRequest,
+) -> Result<HttpResponse, GeoServerError> {
+    let coverage_ids = request.coverage_id.as_ref().ok_or_else(|| {
+        GeoServerError::BadRequest("COVERAGEID parameter is required".to_string())
+    })?;
 
     let mut descriptions = Vec::new();
 
@@ -96,34 +112,50 @@ async fn handle_describe_coverage(state: &AppState, request: &WcsRequest) -> Res
         if let Some(store) = &state.store {
             if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
                 if let Some(conn) = &ds.connection {
-                    if let Some(path) = resolve_raster_path(state, &ds.name, conn.file_path.as_ref()) {
+                    if let Some(path) =
+                        resolve_raster_path(state, &ds.name, conn.file_path.as_ref())
+                    {
                         match ds.data_source_type {
                             DataSourceType::Geotiff => {
                                 if let Ok(meta) = geotiff::read_geotiff_metadata(&path) {
                                     if let Some(bounds) = meta.bounds {
-                                        description.set_bounds(bounds.minx, bounds.miny, bounds.maxx, bounds.maxy);
+                                        description.set_bounds(
+                                            bounds.minx,
+                                            bounds.miny,
+                                            bounds.maxx,
+                                            bounds.maxy,
+                                        );
                                     }
                                     description.set_size(meta.width, meta.height, meta.band_count);
                                 }
-                            }
+                            },
                             DataSourceType::ArcGrid => {
                                 if let Ok((bounds, width, height)) =
                                     crate::utils::arcgrid::read_arcgrid_meta(&path)
                                 {
-                                    description.set_bounds(bounds.minx, bounds.miny, bounds.maxx, bounds.maxy);
+                                    description.set_bounds(
+                                        bounds.minx,
+                                        bounds.miny,
+                                        bounds.maxx,
+                                        bounds.maxy,
+                                    );
                                     description.set_size(width, height, 1);
                                 }
-                            }
+                            },
                             DataSourceType::WorldImage => {
-                                if let Ok(meta) = crate::utils::worldimage::read_worldimage_meta(&path) {
+                                if let Ok(meta) =
+                                    crate::utils::worldimage::read_worldimage_meta(&path)
+                                {
                                     description.set_bounds(
-                                        meta.bounds.minx, meta.bounds.miny,
-                                        meta.bounds.maxx, meta.bounds.maxy,
+                                        meta.bounds.minx,
+                                        meta.bounds.miny,
+                                        meta.bounds.maxx,
+                                        meta.bounds.maxy,
                                     );
                                     description.set_size(meta.width, meta.height, 4);
                                 }
-                            }
-                            _ => {}
+                            },
+                            _ => {},
                         }
                     }
                 }
@@ -136,8 +168,9 @@ async fn handle_describe_coverage(state: &AppState, request: &WcsRequest) -> Res
     // quick-xml 无法直接序列化裸 Vec (无根标签), 逐条序列化后拼接
     let mut inner_xml = String::new();
     for description in &descriptions {
-        let item = to_string(description)
-            .map_err(|e| GeoServerError::ServiceError(format!("Failed to serialize coverage description: {}", e)))?;
+        let item = to_string(description).map_err(|e| {
+            GeoServerError::ServiceError(format!("Failed to serialize coverage description: {}", e))
+        })?;
         inner_xml.push_str(&item);
         inner_xml.push('\n');
     }
@@ -151,29 +184,38 @@ async fn handle_describe_coverage(state: &AppState, request: &WcsRequest) -> Res
         inner_xml
     );
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/xml")
-        .body(xml))
+    Ok(HttpResponse::Ok().content_type("application/xml").body(xml))
 }
 
-async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<HttpResponse, GeoServerError> {
-    let coverage_ids = request.coverage_id.as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("COVERAGEID parameter is required".to_string()))?;
+async fn handle_get_coverage(
+    state: &AppState,
+    request: &WcsRequest,
+) -> Result<HttpResponse, GeoServerError> {
+    let coverage_ids = request.coverage_id.as_ref().ok_or_else(|| {
+        GeoServerError::BadRequest("COVERAGEID parameter is required".to_string())
+    })?;
 
-    let coverage_id = coverage_ids.first()
-        .ok_or_else(|| GeoServerError::BadRequest("At least one COVERAGEID is required".to_string()))?;
+    let coverage_id = coverage_ids.first().ok_or_else(|| {
+        GeoServerError::BadRequest("At least one COVERAGEID is required".to_string())
+    })?;
 
-    let output_format = request.output_format.as_deref().unwrap_or("image/tiff").to_string();
+    let output_format = request
+        .output_format
+        .as_deref()
+        .unwrap_or("image/tiff")
+        .to_string();
 
     // 尝试从数据源读取真实栅格数据 (GeoTIFF / WorldImage)
     let raster_result = if let Some(store) = &state.store {
         if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
             let is_raster = ds.data_source_type == DataSourceType::Geotiff
-                         || ds.data_source_type == DataSourceType::WorldImage
-                         || ds.data_source_type == DataSourceType::ArcGrid;
+                || ds.data_source_type == DataSourceType::WorldImage
+                || ds.data_source_type == DataSourceType::ArcGrid;
             if is_raster {
                 if let Some(conn) = &ds.connection {
-                    if let Some(path) = resolve_raster_path(state, &ds.name, conn.file_path.as_ref()) {
+                    if let Some(path) =
+                        resolve_raster_path(state, &ds.name, conn.file_path.as_ref())
+                    {
                         info!("[WCS] 从 {:?} 读取覆盖: {:?}", ds.data_source_type, path);
                         match ds.data_source_type {
                             DataSourceType::Geotiff => {
@@ -182,34 +224,44 @@ async fn handle_get_coverage(state: &AppState, request: &WcsRequest) -> Result<H
                                     Err(e) => {
                                         info!("[WCS] GeoTIFF 读取失败: {}", e);
                                         None
-                                    }
+                                    },
                                 }
-                            }
+                            },
                             DataSourceType::WorldImage => {
                                 match crate::utils::worldimage::read_worldimage(&path) {
                                     Ok(wim) => Some((wim.rgba_image, Some(wim.bounds))),
                                     Err(e) => {
                                         info!("[WCS] WorldImage 读取失败: {}", e);
                                         None
-                                    }
+                                    },
                                 }
-                            }
+                            },
                             DataSourceType::ArcGrid => {
                                 match crate::utils::arcgrid::read_arcgrid(&path) {
                                     Ok(ag) => Some((ag.rgba_image, Some(ag.bounds))),
                                     Err(e) => {
                                         info!("[WCS] ArcGrid 读取失败: {}", e);
                                         None
-                                    }
+                                    },
                                 }
-                            }
+                            },
                             _ => None,
                         }
-                    } else { None }
-                } else { None }
-            } else { None }
-        } else { None }
-    } else { None };
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     if let Some((rgba_image, cov_bounds)) = raster_result {
         let coverage_data = crate::utils::geotiff::CoverageData {
@@ -285,73 +337,104 @@ fn apply_coverage_subsets(
 
     for subset in subsets {
         match subset.subset_type {
-            crate::services::wcs::SubsetType::Intervals { min, max, resolution } => {
+            crate::services::wcs::SubsetType::Intervals {
+                min,
+                max,
+                resolution,
+            } => {
                 match subset.axis_label.to_lowercase().as_str() {
                     "x" | "long" | "longitude" | "i" => {
                         bbox_minx = Some(min);
                         bbox_maxx = Some(max);
-                        if resolution.is_some() { use_resolution = resolution; }
-                    }
+                        if resolution.is_some() {
+                            use_resolution = resolution;
+                        }
+                    },
                     "y" | "lat" | "latitude" | "j" => {
                         bbox_miny = Some(min);
                         bbox_maxy = Some(max);
-                        if resolution.is_some() { use_resolution = resolution; }
-                    }
+                        if resolution.is_some() {
+                            use_resolution = resolution;
+                        }
+                    },
                     "time" | "t" | "elevation" | "z" | "e" => {
                         // 时间/高程子集: 对于 GeoTIFF，这些目前仅做记录
-                        info!("[WCS] 非空间子集: axis={}, range=[{}, {}]",
-                            subset.axis_label, min, max);
-                    }
+                        info!(
+                            "[WCS] 非空间子集: axis={}, range=[{}, {}]",
+                            subset.axis_label, min, max
+                        );
+                    },
                     _ => {
-                        info!("[WCS] 未知轴子集: axis={}, range=[{}, {}]",
-                            subset.axis_label, min, max);
-                    }
+                        info!(
+                            "[WCS] 未知轴子集: axis={}, range=[{}, {}]",
+                            subset.axis_label, min, max
+                        );
+                    },
                 }
-            }
+            },
             crate::services::wcs::SubsetType::Position { value } => {
                 match subset.axis_label.to_lowercase().as_str() {
                     "time" | "t" => {
-                        info!("[WCS] 时间位置子集: axis={}, value={}", subset.axis_label, value);
-                    }
+                        info!(
+                            "[WCS] 时间位置子集: axis={}, value={}",
+                            subset.axis_label, value
+                        );
+                    },
                     _ => {
-                        info!("[WCS] 未知轴位置子集: axis={}, value={}", subset.axis_label, value);
-                    }
+                        info!(
+                            "[WCS] 未知轴位置子集: axis={}, value={}",
+                            subset.axis_label, value
+                        );
+                    },
                 }
-            }
+            },
         }
     }
 
     // 应用空间裁剪
-    if let (Some(minx), Some(miny), Some(maxx), Some(maxy)) = (bbox_minx, bbox_miny, bbox_maxx, bbox_maxy) {
+    if let (Some(minx), Some(miny), Some(maxx), Some(maxy)) =
+        (bbox_minx, bbox_miny, bbox_maxx, bbox_maxy)
+    {
         let bounds = crate::models::Bounds::new(minx, miny, maxx, maxy);
         match crate::utils::geotiff::crop_coverage(coverage, &bounds) {
             Some(cropped) => {
-                info!("[WCS] 空间裁剪完成: [{}, {}, {}, {}]", minx, miny, maxx, maxy);
+                info!(
+                    "[WCS] 空间裁剪完成: [{}, {}, {}, {}]",
+                    minx, miny, maxx, maxy
+                );
                 // 如果指定了 resolution，则按分辨率重采样
                 if let Some(res) = use_resolution {
                     if res > 0.0 {
                         if let Some(ref cov_bounds) = coverage.bounds {
-                        let cov_width = ((cov_bounds.maxx - cov_bounds.minx) / res) as u32;
-                        let cov_height = ((cov_bounds.maxy - cov_bounds.miny) / res) as u32;
-                        if cov_width > 0 && cov_height > 0 {
-                            return image::imageops::resize(&cropped, cov_width, cov_height,
-                                image::imageops::FilterType::Lanczos3);
-                        }
+                            let cov_width = ((cov_bounds.maxx - cov_bounds.minx) / res) as u32;
+                            let cov_height = ((cov_bounds.maxy - cov_bounds.miny) / res) as u32;
+                            if cov_width > 0 && cov_height > 0 {
+                                return image::imageops::resize(
+                                    &cropped,
+                                    cov_width,
+                                    cov_height,
+                                    image::imageops::FilterType::Lanczos3,
+                                );
+                            }
                         }
                     }
                 }
                 // 如果指定了 SIZE，使用 SIZE
                 if let Some(ref sz) = size {
                     if sz.len() >= 2 && sz[0] > 0 && sz[1] > 0 {
-                        return image::imageops::resize(&cropped, sz[0] as u32, sz[1] as u32,
-                            image::imageops::FilterType::Lanczos3);
+                        return image::imageops::resize(
+                            &cropped,
+                            sz[0] as u32,
+                            sz[1] as u32,
+                            image::imageops::FilterType::Lanczos3,
+                        );
                     }
                 }
                 return cropped;
-            }
+            },
             None => {
                 warn!("[WCS] 空间裁剪失败: 返回 None");
-            }
+            },
         }
     }
 
@@ -365,7 +448,7 @@ fn calculate_output_size(orig_width: u32, orig_height: u32, size: &Option<Vec<i6
             let w = if sz[0] > 0 { sz[0] as u32 } else { orig_width };
             let h = if sz[1] > 0 { sz[1] as u32 } else { orig_height };
             (w, h)
-        }
+        },
         _ => (orig_width, orig_height),
     }
 }
@@ -385,7 +468,7 @@ fn encode_coverage_output(
         "application/x-grib" | "application/x-netcdf" => {
             // 不支持的原生格式，回退到 GeoTIFF
             ("image/tiff", image::ImageFormat::Tiff)
-        }
+        },
         _ => ("image/tiff", image::ImageFormat::Tiff), // WCS 默认输出 TIFF
     };
 

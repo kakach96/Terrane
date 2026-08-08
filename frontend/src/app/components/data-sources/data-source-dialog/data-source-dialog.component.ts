@@ -3,12 +3,18 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { GeoserverService } from '../../../services/geoserver.service';
 import { NotificationService } from '../../../services/notification.service';
-import { DataSource, CreateDataSourceRequest, UpdateDataSourceRequest, ConnectionTestResult, Workspace } from '../../../models/geoserver.models';
+import {
+  DataSource,
+  CreateDataSourceRequest,
+  UpdateDataSourceRequest,
+  ConnectionTestResult,
+  Workspace,
+} from '../../../models/geoserver.models';
 
 @Component({
   selector: 'app-data-source-dialog',
   templateUrl: './data-source-dialog.component.html',
-  styleUrls: ['./data-source-dialog.component.scss']
+  styleUrls: ['./data-source-dialog.component.scss'],
 })
 export class DataSourceDialogComponent implements OnInit {
   form: FormGroup;
@@ -22,7 +28,7 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'geopackage', label: 'GeoPackage' },
     { value: 'worldimage', label: 'WorldImage' },
     { value: 'cascaded_wms', label: '级联 WMS' },
-    { value: 'arcgrid', label: 'ArcGrid' }
+    { value: 'arcgrid', label: 'ArcGrid' },
   ];
   isTesting = false;
   selectedFile: File | null = null;
@@ -32,7 +38,7 @@ export class DataSourceDialogComponent implements OnInit {
     private dialogRef: MatDialogRef<DataSourceDialogComponent>,
     private fb: FormBuilder,
     private geoserverService: GeoserverService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
   ) {
     this.mode = data.mode;
     this.dataSource = data.dataSource;
@@ -47,13 +53,13 @@ export class DataSourceDialogComponent implements OnInit {
       username: [''],
       password: [''],
       file_path: [''],
-      enabled: [true]
+      enabled: [true],
     });
   }
 
   ngOnInit(): void {
     this.loadWorkspaces();
-    
+
     if (this.mode === 'edit' && this.dataSource) {
       this.form.patchValue({
         name: this.dataSource.name,
@@ -65,7 +71,7 @@ export class DataSourceDialogComponent implements OnInit {
         schema: this.dataSource.connection?.schema || 'public',
         username: this.dataSource.connection?.username || '',
         file_path: this.dataSource.connection?.file_path || '',
-        enabled: this.dataSource.enabled
+        enabled: this.dataSource.enabled,
       });
       this.form.get('name')?.disable();
     }
@@ -76,9 +82,9 @@ export class DataSourceDialogComponent implements OnInit {
       next: (workspaces: Workspace[]) => {
         this.workspaces = workspaces;
       },
-      error: (err: any) => {
+      error: (err) => {
         console.error('Failed to load workspaces:', err);
-      }
+      },
     });
   }
 
@@ -128,17 +134,17 @@ export class DataSourceDialogComponent implements OnInit {
           this.notificationService.error(`连接测试失败: ${result.message}`);
         }
       },
-      error: (err: any) => {
+      error: (err) => {
         this.isTesting = false;
         console.error('Connection test failed:', err);
         this.notificationService.error('连接测试失败');
-      }
+      },
     });
   }
 
   buildCreateRequest(): CreateDataSourceRequest {
     const type = this.form.get('type')?.value;
-    const request: any = {
+    const request: CreateDataSourceRequest = {
       name: this.form.get('name')?.value,
       type: type,
       workspace: this.form.get('workspace')?.value,
@@ -152,7 +158,7 @@ export class DataSourceDialogComponent implements OnInit {
         database: this.form.get('database')?.value,
         schema: this.form.get('schema')?.value,
         username: this.form.get('username')?.value,
-        password: this.form.get('password')?.value
+        password: this.form.get('password')?.value,
       };
     } else {
       const filePath = this.form.get('file_path')?.value || this.selectedFile?.name;
@@ -166,7 +172,7 @@ export class DataSourceDialogComponent implements OnInit {
 
   buildUpdateRequest(): UpdateDataSourceRequest {
     const type = this.form.get('type')?.value;
-    const request: any = {
+    const request: UpdateDataSourceRequest = {
       type: type,
       workspace: this.form.get('workspace')?.value,
       enabled: this.form.get('enabled')?.value ?? true,
@@ -179,7 +185,7 @@ export class DataSourceDialogComponent implements OnInit {
         database: this.form.get('database')?.value,
         schema: this.form.get('schema')?.value,
         username: this.form.get('username')?.value,
-        password: this.form.get('password')?.value
+        password: this.form.get('password')?.value,
       };
     } else {
       const filePath = this.form.get('file_path')?.value;
@@ -202,19 +208,22 @@ export class DataSourceDialogComponent implements OnInit {
     if (this.mode === 'create' && type !== 'postgis' && this.selectedFile) {
       // 文件型数据源：通过上传接口创建
       const dsName = this.form.get('name')?.value;
-      const upload$ = type === 'shapefile'
-        ? this.geoserverService.uploadShapefile(this.selectedFile, dsName)
-        : this.geoserverService.uploadGeoTiff(this.selectedFile, dsName);
+      const upload$ =
+        type === 'shapefile'
+          ? this.geoserverService.uploadShapefile(this.selectedFile, dsName)
+          : this.geoserverService.uploadGeoTiff(this.selectedFile, dsName);
 
       upload$.subscribe({
         next: () => {
-          this.notificationService.success(`${type === 'shapefile' ? 'Shapefile' : 'GeoTIFF'} 上传并创建成功`);
+          this.notificationService.success(
+            `${type === 'shapefile' ? 'Shapefile' : 'GeoTIFF'} 上传并创建成功`,
+          );
           this.dialogRef.close(true);
         },
-        error: (err: any) => {
+        error: (err) => {
           console.error('Upload failed:', err);
           this.notificationService.error(err.error?.message || '上传创建失败');
-        }
+        },
       });
     } else if (this.mode === 'create') {
       this.geoserverService.createDataSource(this.buildCreateRequest()).subscribe({
@@ -222,22 +231,24 @@ export class DataSourceDialogComponent implements OnInit {
           this.notificationService.success('创建成功');
           this.dialogRef.close(true);
         },
-        error: (err: any) => {
+        error: (err) => {
           console.error('Create failed:', err);
           this.notificationService.error('创建失败');
-        }
+        },
       });
     } else {
-      this.geoserverService.updateDataSource(this.dataSource!.name, this.buildUpdateRequest()).subscribe({
-        next: () => {
-          this.notificationService.success('更新成功');
-          this.dialogRef.close(true);
-        },
-        error: (err: any) => {
-          console.error('Update failed:', err);
-          this.notificationService.error('更新失败');
-        }
-      });
+      this.geoserverService
+        .updateDataSource(this.dataSource!.name, this.buildUpdateRequest())
+        .subscribe({
+          next: () => {
+            this.notificationService.success('更新成功');
+            this.dialogRef.close(true);
+          },
+          error: (err) => {
+            console.error('Update failed:', err);
+            this.notificationService.error('更新失败');
+          },
+        });
     }
   }
 

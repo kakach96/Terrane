@@ -35,32 +35,28 @@ pub fn create_test_config() -> terrane::config::GeoServerConfig {
         session_ttl_secs: 300,
     });
 
-    config.workspaces = vec![
-        terrane::config::WorkspaceConfig {
-            name: "default".to_string(),
-            uri: "http://geoserver.org/default".to_string(),
-            stores: vec![
-                terrane::config::StoreConfig {
-                    name: "shapes".to_string(),
-                    store_type: "DataStore".to_string(),
-                    path: "./data".to_string(),
-                    layers: vec![
-                        terrane::config::LayerConfig {
-                            name: "world".to_string(),
-                            title: "World".to_string(),
-                            abstract_text: "World layer".to_string(),
-                            srs: "EPSG:4326".to_string(),
-                            bounds: terrane::config::BoundsConfig {
-                                minx: -180.0, miny: -90.0,
-                                maxx: 180.0, maxy: 90.0,
-                            },
-                            style: Some("default".to_string()),
-                        },
-                    ],
+    config.workspaces = vec![terrane::config::WorkspaceConfig {
+        name: "default".to_string(),
+        uri: "http://geoserver.org/default".to_string(),
+        stores: vec![terrane::config::StoreConfig {
+            name: "shapes".to_string(),
+            store_type: "DataStore".to_string(),
+            path: "./data".to_string(),
+            layers: vec![terrane::config::LayerConfig {
+                name: "world".to_string(),
+                title: "World".to_string(),
+                abstract_text: "World layer".to_string(),
+                srs: "EPSG:4326".to_string(),
+                bounds: terrane::config::BoundsConfig {
+                    minx: -180.0,
+                    miny: -90.0,
+                    maxx: 180.0,
+                    maxy: 90.0,
                 },
-            ],
-        },
-    ];
+                style: Some("default".to_string()),
+            }],
+        }],
+    }];
     config
 }
 
@@ -78,7 +74,7 @@ macro_rules! build_test_app {
             actix_web::App::new()
                 .app_data(state.clone())
                 .wrap(actix_web::middleware::Logger::default())
-                .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver"))
+                .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
         )
         .await
     }};

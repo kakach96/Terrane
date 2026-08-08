@@ -1,6 +1,6 @@
-use geo::{Coord, BoundingRect, Contains, Intersects, GeodesicDistance, Area, HaversineLength};
-use geo_types::{Rect, Geometry};
 use crate::models::{Bounds, GeoJsonGeometry};
+use geo::{Area, BoundingRect, Contains, Coord, GeodesicDistance, HaversineLength, Intersects};
+use geo_types::{Geometry, Rect};
 
 pub fn calculate_bounds<T: IntoIterator<Item = Geometry<f64>>>(geometries: T) -> Option<Bounds> {
     let rect: Option<Rect<f64>> = geometries
@@ -38,7 +38,10 @@ pub fn point_in_bounds(x: f64, y: f64, bounds: &Bounds) -> bool {
     bounds.contains(x, y)
 }
 
-pub fn clip_geometry_to_bounds(_geometry: &GeoJsonGeometry, _bounds: &Bounds) -> Option<GeoJsonGeometry> {
+pub fn clip_geometry_to_bounds(
+    _geometry: &GeoJsonGeometry,
+    _bounds: &Bounds,
+) -> Option<GeoJsonGeometry> {
     None
 }
 
@@ -61,18 +64,18 @@ fn geojson_from_geo(geo: &Geometry<f64>) -> GeoJsonGeometry {
         Geometry::Polygon(p) => GeoJsonGeometry::Polygon {
             coordinates: vec![p.exterior().coords().map(|c| vec![c.x, c.y]).collect()],
         },
-        _ => GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] },
+        _ => GeoJsonGeometry::Point {
+            coordinates: vec![0.0, 0.0],
+        },
     }
 }
 
 pub fn calculate_distance(geom1: &GeoJsonGeometry, geom2: &GeoJsonGeometry) -> Option<f64> {
     let geo1 = geom1.to_geo();
     let geo2 = geom2.to_geo();
-    
+
     match (&geo1, &geo2) {
-        (Geometry::Point(p1), Geometry::Point(p2)) => {
-            Some(p1.geodesic_distance(p2))
-        }
+        (Geometry::Point(p1), Geometry::Point(p2)) => Some(p1.geodesic_distance(p2)),
         _ => None,
     }
 }
@@ -99,30 +102,35 @@ pub fn transform_coordinates(
     if from_srs == to_srs {
         return Ok(coords.to_vec());
     }
-    
+
     if coords.len() < 2 {
         return Err("Insufficient coordinates".to_string());
     }
-    
+
     let (x, y) = (coords[0], coords[1]);
-    
+
     match (from_srs, to_srs) {
         ("EPSG:4326", "EPSG:3857") | ("4326", "3857") => {
             let lon = x;
             let lat = y;
             let x_3857 = lon * 20037508.34 / 180.0;
             let y_3857 = 20037508.34 / std::f64::consts::PI
-                * (std::f64::consts::PI / 4.0 + lat.to_radians() / 2.0).tan().ln();
+                * (std::f64::consts::PI / 4.0 + lat.to_radians() / 2.0)
+                    .tan()
+                    .ln();
             Ok(vec![x_3857, y_3857])
-        }
+        },
         ("EPSG:3857", "EPSG:4326") | ("3857", "4326") => {
             let x_4326 = x * 180.0 / 20037508.34;
             let r = 20037508.34 / std::f64::consts::PI;
-            let y_4326 = (std::f64::consts::PI / 2.0 - 2.0 * (-y / r).exp().atan())
-                * 180.0 / std::f64::consts::PI;
+            let y_4326 = (std::f64::consts::PI / 2.0 - 2.0 * (-y / r).exp().atan()) * 180.0
+                / std::f64::consts::PI;
             Ok(vec![x_4326, y_4326])
-        }
-        _ => Err(format!("Unsupported projection transformation: {} to {}", from_srs, to_srs)),
+        },
+        _ => Err(format!(
+            "Unsupported projection transformation: {} to {}",
+            from_srs, to_srs
+        )),
     }
 }
 

@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
-use deadpool_postgres::{ManagerConfig, RecyclingMethod, Runtime, Pool};
+use deadpool_postgres::{ManagerConfig, Pool, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
 
 use crate::config::MetadataConfig;
@@ -280,7 +280,10 @@ impl PostgresStore {
 type DbParams = Vec<Box<dyn tokio_postgres::types::ToSql + Send + Sync>>;
 
 fn to_refs(params: &DbParams) -> Vec<&(dyn tokio_postgres::types::ToSql + Sync)> {
-    params.iter().map(|b| b.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync)).collect()
+    params
+        .iter()
+        .map(|b| b.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync))
+        .collect()
 }
 
 #[async_trait]
@@ -335,9 +338,15 @@ impl Store for PostgresStore {
             .collect()
     }
 
-    async fn create_workspace(&self, request: &CreateWorkspaceRequest) -> Result<Workspace, StoreError> {
+    async fn create_workspace(
+        &self,
+        request: &CreateWorkspaceRequest,
+    ) -> Result<Workspace, StoreError> {
         let ts = now();
-        let title = request.title.clone().unwrap_or_else(|| request.name.clone());
+        let title = request
+            .title
+            .clone()
+            .unwrap_or_else(|| request.name.clone());
         let description = request.description.clone().unwrap_or_default();
         let client = self.pool.get().await?;
         client
@@ -382,14 +391,20 @@ impl Store for PostgresStore {
             sets.push(format!("enabled = ${}", params.len()));
         }
         params.push(Box::new(name.to_string()));
-        let sql = format!("UPDATE workspaces SET {} WHERE name = ${}", sets.join(", "), params.len());
+        let sql = format!(
+            "UPDATE workspaces SET {} WHERE name = ${}",
+            sets.join(", "),
+            params.len()
+        );
         client.execute(&sql, &to_refs(&params)).await?;
         Ok(())
     }
 
     async fn delete_workspace(&self, name: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM workspaces WHERE name = $1", &[&name]).await?;
+        client
+            .execute("DELETE FROM workspaces WHERE name = $1", &[&name])
+            .await?;
         Ok(())
     }
 
@@ -491,14 +506,20 @@ impl Store for PostgresStore {
             sets.push(format!("workspace = ${}", params.len()));
         }
         params.push(Box::new(prefix.to_string()));
-        let sql = format!("UPDATE namespaces SET {} WHERE prefix = ${}", sets.join(", "), params.len());
+        let sql = format!(
+            "UPDATE namespaces SET {} WHERE prefix = ${}",
+            sets.join(", "),
+            params.len()
+        );
         client.execute(&sql, &to_refs(&params)).await?;
         Ok(())
     }
 
     async fn delete_namespace(&self, prefix: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM namespaces WHERE prefix = $1", &[&prefix]).await?;
+        client
+            .execute("DELETE FROM namespaces WHERE prefix = $1", &[&prefix])
+            .await?;
         Ok(())
     }
 
@@ -623,14 +644,20 @@ impl Store for PostgresStore {
             sets.push(format!("file_storage_type = ${}", params.len()));
         }
         params.push(Box::new(name.to_string()));
-        let sql = format!("UPDATE data_sources SET {} WHERE name = ${}", sets.join(", "), params.len());
+        let sql = format!(
+            "UPDATE data_sources SET {} WHERE name = ${}",
+            sets.join(", "),
+            params.len()
+        );
         client.execute(&sql, &to_refs(&params)).await?;
         Ok(())
     }
 
     async fn delete_data_source(&self, name: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM data_sources WHERE name = $1", &[&name]).await?;
+        client
+            .execute("DELETE FROM data_sources WHERE name = $1", &[&name])
+            .await?;
         Ok(())
     }
 
@@ -762,14 +789,20 @@ impl Store for PostgresStore {
             sets.push(format!("enabled = ${}", params.len()));
         }
         params.push(Box::new(name.to_string()));
-        let sql = format!("UPDATE layers SET {} WHERE name = ${}", sets.join(", "), params.len());
+        let sql = format!(
+            "UPDATE layers SET {} WHERE name = ${}",
+            sets.join(", "),
+            params.len()
+        );
         client.execute(&sql, &to_refs(&params)).await?;
         Ok(())
     }
 
     async fn delete_layer(&self, name: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM layers WHERE name = $1", &[&name]).await?;
+        client
+            .execute("DELETE FROM layers WHERE name = $1", &[&name])
+            .await?;
         Ok(())
     }
 
@@ -841,7 +874,8 @@ impl Store for PostgresStore {
 
     async fn create_sql_view(&self, view: &SqlView) -> Result<(), StoreError> {
         let ts = now();
-        let params_json = serde_json::to_string(&view.parameters).unwrap_or_else(|_| "[]".to_string());
+        let params_json =
+            serde_json::to_string(&view.parameters).unwrap_or_else(|_| "[]".to_string());
         let client = self.pool.get().await?;
         client
             .execute(
@@ -898,14 +932,20 @@ impl Store for PostgresStore {
             sets.push(format!("description = ${}", params.len()));
         }
         params.push(Box::new(name.to_string()));
-        let sql = format!("UPDATE sql_views SET {} WHERE name = ${}", sets.join(", "), params.len());
+        let sql = format!(
+            "UPDATE sql_views SET {} WHERE name = ${}",
+            sets.join(", "),
+            params.len()
+        );
         client.execute(&sql, &to_refs(&params)).await?;
         Ok(())
     }
 
     async fn delete_sql_view(&self, name: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM sql_views WHERE name = $1", &[&name]).await?;
+        client
+            .execute("DELETE FROM sql_views WHERE name = $1", &[&name])
+            .await?;
         Ok(())
     }
 
@@ -999,14 +1039,20 @@ impl Store for PostgresStore {
             sets.push(format!("enabled = ${}", params.len()));
         }
         params.push(Box::new(username.to_string()));
-        let sql = format!("UPDATE users SET {} WHERE username = ${}", sets.join(", "), params.len());
+        let sql = format!(
+            "UPDATE users SET {} WHERE username = ${}",
+            sets.join(", "),
+            params.len()
+        );
         client.execute(&sql, &to_refs(&params)).await?;
         Ok(())
     }
 
     async fn delete_user(&self, username: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM users WHERE username = $1", &[&username]).await?;
+        client
+            .execute("DELETE FROM users WHERE username = $1", &[&username])
+            .await?;
         Ok(())
     }
 
@@ -1032,7 +1078,11 @@ impl Store for PostgresStore {
         Ok(())
     }
 
-    async fn get_audit_logs(&self, limit: usize, offset: usize) -> Result<Vec<AuditLogRecord>, StoreError> {
+    async fn get_audit_logs(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<AuditLogRecord>, StoreError> {
         let client = self.pool.get().await?;
         let rows = client
             .query(
@@ -1106,7 +1156,9 @@ impl Store for PostgresStore {
 
     async fn delete_permission(&self, id: i64) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM permissions WHERE id = $1", &[&id]).await?;
+        client
+            .execute("DELETE FROM permissions WHERE id = $1", &[&id])
+            .await?;
         Ok(())
     }
 
@@ -1128,7 +1180,13 @@ impl Store for PostgresStore {
                    AND (resource_name = $4 OR resource_name = '*')
                    AND (access_mode = $5 OR access_mode = 'admin')
                  ORDER BY priority DESC LIMIT 1",
-                &[&username, &role, &resource_type, &resource_name, &required_mode],
+                &[
+                    &username,
+                    &role,
+                    &resource_type,
+                    &resource_name,
+                    &required_mode,
+                ],
             )
             .await?;
         if let Some(row) = rows.first() {
@@ -1201,8 +1259,13 @@ impl Store for PostgresStore {
                      is_builtin = EXCLUDED.is_builtin, content = EXCLUDED.content,
                      modified = EXCLUDED.modified",
                 &[
-                    &style.name, &style.title, &style.format, &style.is_builtin,
-                    &style.content, &style.created, &style.modified,
+                    &style.name,
+                    &style.title,
+                    &style.format,
+                    &style.is_builtin,
+                    &style.content,
+                    &style.created,
+                    &style.modified,
                 ],
             )
             .await?;
@@ -1238,14 +1301,20 @@ impl Store for PostgresStore {
             sets.push(format!("is_builtin = ${}", params.len()));
         }
         params.push(Box::new(name.to_string()));
-        let sql = format!("UPDATE styles SET {} WHERE name = ${}", sets.join(", "), params.len());
+        let sql = format!(
+            "UPDATE styles SET {} WHERE name = ${}",
+            sets.join(", "),
+            params.len()
+        );
         client.execute(&sql, &to_refs(&params)).await?;
         Ok(())
     }
 
     async fn delete_style(&self, name: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM styles WHERE name = $1", &[&name]).await?;
+        client
+            .execute("DELETE FROM styles WHERE name = $1", &[&name])
+            .await?;
         Ok(())
     }
 
@@ -1312,7 +1381,14 @@ impl Store for PostgresStore {
                  ON CONFLICT (name) DO UPDATE
                  SET title = EXCLUDED.title, layers = EXCLUDED.layers, styles = EXCLUDED.styles,
                      modified = EXCLUDED.modified",
-                &[&group.name, &group.title, &layers_json, &styles_json, &group.created, &group.modified],
+                &[
+                    &group.name,
+                    &group.title,
+                    &layers_json,
+                    &styles_json,
+                    &group.created,
+                    &group.modified,
+                ],
             )
             .await?;
         Ok(())
@@ -1320,7 +1396,9 @@ impl Store for PostgresStore {
 
     async fn delete_layer_group(&self, name: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM layer_groups WHERE name = $1", &[&name]).await?;
+        client
+            .execute("DELETE FROM layer_groups WHERE name = $1", &[&name])
+            .await?;
         Ok(())
     }
 
@@ -1375,13 +1453,17 @@ impl Store for PostgresStore {
 
     async fn delete_session(&self, jti: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM sessions WHERE jti = $1", &[&jti]).await?;
+        client
+            .execute("DELETE FROM sessions WHERE jti = $1", &[&jti])
+            .await?;
         Ok(())
     }
 
     async fn delete_user_sessions(&self, username: &str) -> Result<(), StoreError> {
         let client = self.pool.get().await?;
-        client.execute("DELETE FROM sessions WHERE username = $1", &[&username]).await?;
+        client
+            .execute("DELETE FROM sessions WHERE username = $1", &[&username])
+            .await?;
         Ok(())
     }
 
@@ -1397,8 +1479,8 @@ impl Store for PostgresStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::Store;
+    use super::*;
     use crate::config::PostgresConfig;
 
     /// 构造一个指向本地 PostGIS 的元数据配置。
@@ -1407,18 +1489,25 @@ mod tests {
     fn test_metadata_config(schema: &str) -> MetadataConfig {
         let host = std::env::var("GEOSERVER_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
         let port: u16 = std::env::var("GEOSERVER_TEST_PG_PORT")
-            .ok().and_then(|v| v.parse().ok()).unwrap_or(5432);
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5432);
         let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "postgres".into());
-        let password = std::env::var("GEOSERVER_TEST_PG_PASSWORD")
-            .unwrap_or_else(|_| "kakach2026".into());
+        let password =
+            std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "kakach2026".into());
         let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "postgres".into());
 
         MetadataConfig {
             kind: "postgres".into(),
             sqlite_path: std::path::PathBuf::new(),
             postgres: PostgresConfig {
-                host, port, instance, schema: schema.to_string(),
-                user, password, pool_size: 2,
+                host,
+                port,
+                instance,
+                schema: schema.to_string(),
+                user,
+                password,
+                pool_size: 2,
             },
         }
     }
@@ -1432,7 +1521,9 @@ mod tests {
         pg_cfg.dbname = Some(pg.instance.clone());
         pg_cfg.user = Some(pg.user.clone());
         pg_cfg.password = Some(pg.password.clone());
-        let pool = pg_cfg.create_pool(Some(deadpool_postgres::Runtime::Tokio1), NoTls).unwrap();
+        let pool = pg_cfg
+            .create_pool(Some(deadpool_postgres::Runtime::Tokio1), NoTls)
+            .unwrap();
         if let Ok(client) = pool.get().await {
             let _ = client
                 .batch_execute(&format!("DROP SCHEMA IF EXISTS {} CASCADE", pg.schema))
@@ -1448,16 +1539,19 @@ mod tests {
         let cfg = test_metadata_config(&schema);
 
         // 1. 连接 + 建表
-        let store = PostgresStore::new(&cfg).await.expect("应能连接 PostGIS 并初始化表结构");
+        let store = PostgresStore::new(&cfg)
+            .await
+            .expect("应能连接 PostGIS 并初始化表结构");
 
         // 2. workspace CRUD
-        store.create_workspace(&CreateWorkspaceRequest {
-            name: "pg_ws".into(),
-            title: Some("PG WS".into()),
-            description: None,
-        })
-        .await
-        .unwrap();
+        store
+            .create_workspace(&CreateWorkspaceRequest {
+                name: "pg_ws".into(),
+                title: Some("PG WS".into()),
+                description: None,
+            })
+            .await
+            .unwrap();
         let ws = store.get_workspace("pg_ws").await.unwrap().unwrap();
         assert_eq!(ws.name, "pg_ws");
 
@@ -1471,7 +1565,10 @@ mod tests {
             abstract_text: None,
             native_name: Some("pg_layer".into()),
             enabled: true,
-            minx: -180.0, miny: -90.0, maxx: 180.0, maxy: 90.0,
+            minx: -180.0,
+            miny: -90.0,
+            maxx: 180.0,
+            maxy: 90.0,
             created: String::new(),
             modified: String::new(),
         };
@@ -1481,7 +1578,13 @@ mod tests {
 
         // 4. user CRUD
         store
-            .create_user("pgalice", "hash", "salt", &crate::auth::UserRole::User, true)
+            .create_user(
+                "pgalice",
+                "hash",
+                "salt",
+                &crate::auth::UserRole::User,
+                true,
+            )
             .await
             .unwrap();
         assert!(store.get_user("pgalice").await.unwrap().is_some());

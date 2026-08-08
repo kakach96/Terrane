@@ -14,8 +14,8 @@
 //! [行数据，每行 ncols 个值]
 //! ```
 
+use image::{Rgba, RgbaImage};
 use std::path::Path;
-use image::{RgbaImage, Rgba};
 use tracing::info;
 
 use crate::models::Bounds;
@@ -42,7 +42,8 @@ pub fn read_arcgrid<P: AsRef<Path>>(path: P) -> Result<ArcGridData, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("无法读取 ArcGrid 文件 '{:?}': {}", path, e))?;
 
-    let name = path.file_stem()
+    let name = path
+        .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("arcgrid")
         .to_string();
@@ -63,9 +64,13 @@ pub fn read_arcgrid<P: AsRef<Path>>(path: P) -> Result<ArcGridData, String> {
 
     for (i, line) in lines.iter().enumerate() {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 2 { continue; }
+        if parts.len() < 2 {
+            continue;
+        }
 
         let key = parts[0].to_lowercase();
         let val = parts[1];
@@ -74,28 +79,28 @@ pub fn read_arcgrid<P: AsRef<Path>>(path: P) -> Result<ArcGridData, String> {
             "ncols" => {
                 ncols = val.parse().map_err(|_| "无效的 ncols".to_string())?;
                 header_lines = i + 1;
-            }
+            },
             "nrows" => {
                 nrows = val.parse().map_err(|_| "无效的 nrows".to_string())?;
                 header_lines = i + 1;
-            }
+            },
             "xllcorner" | "xllcenter" => {
                 xllcorner = val.parse().map_err(|_| "无效的 xllcorner".to_string())?;
                 header_lines = i + 1;
-            }
+            },
             "yllcorner" | "yllcenter" => {
                 yllcorner = val.parse().map_err(|_| "无效的 yllcorner".to_string())?;
                 header_lines = i + 1;
-            }
+            },
             "cellsize" => {
                 cellsize = val.parse().map_err(|_| "无效的 cellsize".to_string())?;
                 header_lines = i + 1;
-            }
+            },
             "nodata_value" => {
                 nodata = val.parse().unwrap_or(-9999.0);
                 header_lines = i + 1;
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -115,7 +120,8 @@ pub fn read_arcgrid<P: AsRef<Path>>(path: P) -> Result<ArcGridData, String> {
     let bounds = Bounds::new(minx, miny, maxx, maxy);
 
     // 读取数据行
-    let data_lines: Vec<&str> = lines[header_lines..].iter()
+    let data_lines: Vec<&str> = lines[header_lines..]
+        .iter()
         .filter(|l| !l.trim().is_empty())
         .copied()
         .collect();
@@ -139,7 +145,8 @@ pub fn read_arcgrid<P: AsRef<Path>>(path: P) -> Result<ArcGridData, String> {
     if values.len() != (nrows * ncols) as usize {
         return Err(format!(
             "数据点数不匹配: 期望 {} 个, 实际 {} 个",
-            nrows * ncols, values.len()
+            nrows * ncols,
+            values.len()
         ));
     }
 
@@ -165,8 +172,10 @@ pub fn read_arcgrid<P: AsRef<Path>>(path: P) -> Result<ArcGridData, String> {
         }
     }
 
-    info!("[ArcGrid] 读取完成: {}x{}, 值范围 [{}, {}], 边界={:?}",
-          ncols, nrows, min_value, max_value, bounds);
+    info!(
+        "[ArcGrid] 读取完成: {}x{}, 值范围 [{}, {}], 边界={:?}",
+        ncols, nrows, min_value, max_value, bounds
+    );
 
     Ok(ArcGridData {
         name,
@@ -195,14 +204,33 @@ pub fn read_arcgrid_meta<P: AsRef<Path>>(path: P) -> Result<(Bounds, u32, u32), 
 
     for line in content.lines() {
         let parts: Vec<&str> = line.trim().split_whitespace().collect();
-        if parts.len() < 2 { continue; }
+        if parts.len() < 2 {
+            continue;
+        }
         match parts[0].to_lowercase().as_str() {
-            "ncols" => { ncols = parts[1].parse().unwrap_or(0); }
-            "nrows" => { nrows = parts[1].parse().unwrap_or(0); }
-            "xllcorner" | "xllcenter" => { xllcorner = parts[1].parse().unwrap_or(0.0); }
-            "yllcorner" | "yllcenter" => { yllcorner = parts[1].parse().unwrap_or(0.0); }
-            "cellsize" => { cellsize = parts[1].parse().unwrap_or(1.0); }
-            _ => { if parts[0].chars().all(|c| c.is_digit(10) || c == '.' || c == '-') { break; } }
+            "ncols" => {
+                ncols = parts[1].parse().unwrap_or(0);
+            },
+            "nrows" => {
+                nrows = parts[1].parse().unwrap_or(0);
+            },
+            "xllcorner" | "xllcenter" => {
+                xllcorner = parts[1].parse().unwrap_or(0.0);
+            },
+            "yllcorner" | "yllcenter" => {
+                yllcorner = parts[1].parse().unwrap_or(0.0);
+            },
+            "cellsize" => {
+                cellsize = parts[1].parse().unwrap_or(1.0);
+            },
+            _ => {
+                if parts[0]
+                    .chars()
+                    .all(|c| c.is_digit(10) || c == '.' || c == '-')
+                {
+                    break;
+                }
+            },
         }
     }
 
@@ -220,7 +248,8 @@ mod tests {
     use super::*;
 
     fn write_fixture(tag: &str, content: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("terrane-arcgrid-{}-{}", tag, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("terrane-arcgrid-{}-{}", tag, std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("dem.asc");
         std::fs::write(&path, content).unwrap();
@@ -254,8 +283,8 @@ mod tests {
         let (bounds, width, height) = read_arcgrid_meta(&path).unwrap();
         assert_eq!(width, 4);
         assert_eq!(height, 3);
-        assert!((bounds.maxx - 102.0).abs() < 1e-6);   // 100 + 4*0.5
-        assert!((bounds.maxy - 201.5).abs() < 1e-6);   // 200 + 3*0.5
+        assert!((bounds.maxx - 102.0).abs() < 1e-6); // 100 + 4*0.5
+        assert!((bounds.maxy - 201.5).abs() < 1e-6); // 200 + 3*0.5
         std::fs::remove_dir_all(path.parent().unwrap()).ok();
     }
 

@@ -14,7 +14,7 @@ interface Bounds {
 @Component({
   selector: 'app-preview',
   templateUrl: './preview.component.html',
-  styleUrls: ['./preview.component.scss']
+  styleUrls: ['./preview.component.scss'],
 })
 export class PreviewComponent implements OnInit {
   layers: Layer[] = [];
@@ -39,19 +39,19 @@ export class PreviewComponent implements OnInit {
     height: 600,
     format: 'application/openlayers' as string,
     transparent: true,
-    crs: 'EPSG:4326'
+    crs: 'EPSG:4326',
   };
 
   formatOptions = [
     { value: 'application/openlayers', label: 'OpenLayers 交互地图' },
     { value: 'image/png', label: 'PNG' },
-    { value: 'image/jpeg', label: 'JPEG' }
+    { value: 'image/jpeg', label: 'JPEG' },
   ];
 
   constructor(
     private route: ActivatedRoute,
     private geoserverService: GeoserverService,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
   ) {}
 
   get isStaticFormat(): boolean {
@@ -60,20 +60,21 @@ export class PreviewComponent implements OnInit {
 
   get filteredLayers(): Layer[] {
     const q = this.searchQuery.trim().toLowerCase();
-    return this.layers.filter(l => {
+    return this.layers.filter((l) => {
       if (!q) return true;
-      return l.name.toLowerCase().includes(q)
-        || (l.title || '').toLowerCase().includes(q)
-        || l.workspace.toLowerCase().includes(q);
+      return (
+        l.name.toLowerCase().includes(q) ||
+        (l.title || '').toLowerCase().includes(q) ||
+        l.workspace.toLowerCase().includes(q)
+      );
     });
   }
 
   get filteredGroups(): LayerGroup[] {
     const q = this.searchQuery.trim().toLowerCase();
-    return this.groups.filter(g => {
+    return this.groups.filter((g) => {
       if (!q) return true;
-      return g.name.toLowerCase().includes(q)
-        || (g.title || '').toLowerCase().includes(q);
+      return g.name.toLowerCase().includes(q) || (g.title || '').toLowerCase().includes(q);
     });
   }
 
@@ -81,26 +82,26 @@ export class PreviewComponent implements OnInit {
     if (this.previewMode === 'layer') {
       const l = this.currentLayer;
       if (!l) return null;
-      return (l as any).native_bounds?.bounds || l.bounds || null;
+      return l.native_bounds?.bounds || l.bounds || null;
     }
     const g = this.currentGroup;
     if (!g || g.layers.length === 0) return null;
-    const first = this.layers.find(l => l.name === g.layers[0]);
+    const first = this.layers.find((l) => l.name === g.layers[0]);
     if (!first) return null;
-    return (first as any).native_bounds?.bounds || first.bounds || null;
+    return first.native_bounds?.bounds || first.bounds || null;
   }
 
   get displayCrs(): string {
     if (this.previewMode === 'layer') {
       const l = this.currentLayer;
       if (!l) return 'EPSG:4326';
-      return (l as any).native_bounds?.crs || l.srs || 'EPSG:4326';
+      return l.native_bounds?.crs || l.srs || 'EPSG:4326';
     }
     const g = this.currentGroup;
     if (g && g.layers.length > 0) {
-      const first = this.layers.find(l => l.name === g.layers[0]);
+      const first = this.layers.find((l) => l.name === g.layers[0]);
       if (first) {
-        return (first as any).native_bounds?.crs || first.srs || 'EPSG:4326';
+        return first.native_bounds?.crs || first.srs || 'EPSG:4326';
       }
     }
     return 'EPSG:4326';
@@ -119,13 +120,13 @@ export class PreviewComponent implements OnInit {
 
     this.geoserverService.getLayers().subscribe({
       next: (data) => {
-        this.layers = data.filter(l => l.enabled);
+        this.layers = data.filter((l) => l.enabled);
         if (this.previewMode === 'layer') {
           this.selectLayer(this.selectedLayer || (this.layers[0]?.name ?? ''));
         }
         this.loading = false;
       },
-      error: () => this.loading = false
+      error: () => (this.loading = false),
     });
 
     this.geoserverService.getLayerGroups().subscribe({
@@ -134,14 +135,14 @@ export class PreviewComponent implements OnInit {
         if (this.previewMode === 'group') {
           this.selectGroup(this.selectedGroup || (this.groups[0]?.name ?? ''));
         }
-      }
+      },
     });
   }
 
   selectLayer(name: string): void {
     if (!name) return;
     this.selectedLayer = name;
-    const layer = this.layers.find(l => l.name === name);
+    const layer = this.layers.find((l) => l.name === name);
     if (!layer) return;
     this.currentLayer = layer;
     this.currentGroup = null;
@@ -153,7 +154,7 @@ export class PreviewComponent implements OnInit {
   selectGroup(name: string): void {
     if (!name) return;
     this.selectedGroup = name;
-    const group = this.groups.find(g => g.name === name);
+    const group = this.groups.find((g) => g.name === name);
     if (!group) return;
     this.currentGroup = group;
     this.currentLayer = null;
@@ -189,7 +190,7 @@ export class PreviewComponent implements OnInit {
           height: this.previewOptions.height,
           crs: this.previewOptions.crs,
           format: 'application/openlayers',
-          transparent: true
+          transparent: true,
         });
       } else {
         this.previewUrl = this.geoserverService.getMapImageUrl(this.currentLayer, {
@@ -197,7 +198,7 @@ export class PreviewComponent implements OnInit {
           height: this.previewOptions.height,
           crs: this.previewOptions.crs,
           format: this.previewOptions.format as 'image/png' | 'image/jpeg',
-          transparent: this.previewOptions.transparent
+          transparent: this.previewOptions.transparent,
         });
       }
     } else {
@@ -218,7 +219,7 @@ export class PreviewComponent implements OnInit {
         width: this.previewOptions.width.toString(),
         height: this.previewOptions.height.toString(),
         format: this.previewOptions.format,
-        transparent: this.previewOptions.transparent.toString()
+        transparent: this.previewOptions.transparent.toString(),
       });
       this.previewUrl = `/wms?${params}`;
     }
@@ -229,14 +230,14 @@ export class PreviewComponent implements OnInit {
     this.geoserverService.getLayerFeatures(name).subscribe({
       next: (fc) => {
         this.featureCount = fc.features.length;
-        this.geometryTypes = [...new Set(
-          fc.features.map(f => f.geometry?.type).filter(Boolean) as string[]
-        )];
+        this.geometryTypes = [
+          ...new Set(fc.features.map((f) => f.geometry?.type).filter(Boolean) as string[]),
+        ];
       },
       error: () => {
         this.featureCount = 0;
         this.geometryTypes = [];
-      }
+      },
     });
   }
 

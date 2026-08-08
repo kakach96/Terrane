@@ -3,12 +3,12 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
-import { Layer, Feature, PropertyDef, StyleInfo } from '../../models/geoserver.models';
+import { Layer, Feature, PropertyDef } from '../../models/geoserver.models';
 
 @Component({
   selector: 'app-layer-detail',
   templateUrl: './layer-detail.component.html',
-  styleUrls: ['./layer-detail.component.scss']
+  styleUrls: ['./layer-detail.component.scss'],
 })
 export class LayerDetailComponent implements OnInit {
   layer: Layer | null = null;
@@ -35,10 +35,11 @@ export class LayerDetailComponent implements OnInit {
   get isDefaultBounds(): boolean {
     const b = this.displayBounds;
     const is4326Default = b.minx === -180 && b.miny === -90 && b.maxx === 180 && b.maxy === 90;
-    const is3857Default = Math.abs(b.minx - (-20037508.34)) < 0.01
-      && Math.abs(b.miny - (-20037508.34)) < 0.01
-      && Math.abs(b.maxx - 20037508.34) < 0.01
-      && Math.abs(b.maxy - 20037508.34) < 0.01;
+    const is3857Default =
+      Math.abs(b.minx - -20037508.34) < 0.01 &&
+      Math.abs(b.miny - -20037508.34) < 0.01 &&
+      Math.abs(b.maxx - 20037508.34) < 0.01 &&
+      Math.abs(b.maxy - 20037508.34) < 0.01;
     return is4326Default || is3857Default;
   }
 
@@ -47,13 +48,13 @@ export class LayerDetailComponent implements OnInit {
     height: 400,
     format: 'application/openlayers' as string,
     transparent: true,
-    crs: 'EPSG:4326'
+    crs: 'EPSG:4326',
   };
 
   previewFormats = [
     { value: 'application/openlayers', label: 'OpenLayers 交互地图' },
     { value: 'image/png', label: 'PNG (透明)' },
-    { value: 'image/jpeg', label: 'JPEG' }
+    { value: 'image/jpeg', label: 'JPEG' },
   ];
 
   previewCrsOptions = ['EPSG:4326', 'EPSG:3857'];
@@ -67,7 +68,7 @@ export class LayerDetailComponent implements OnInit {
     private router: Router,
     private sanitizer: DomSanitizer,
     private geoserverService: GeoserverService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
   ) {}
 
   ngOnInit(): void {
@@ -89,10 +90,10 @@ export class LayerDetailComponent implements OnInit {
         this.refreshPreview();
         this.loading = false;
       },
-      error: (error) => {
+      error: () => {
         this.notificationService.error('加载图层失败');
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -104,7 +105,7 @@ export class LayerDetailComponent implements OnInit {
         height: this.previewOptions.height,
         crs: this.previewOptions.crs,
         format: 'application/openlayers',
-        transparent: true
+        transparent: true,
       });
     } else {
       const bbox = `${this.displayBounds.minx},${this.displayBounds.miny},${this.displayBounds.maxx},${this.displayBounds.maxy}`;
@@ -134,7 +135,7 @@ export class LayerDetailComponent implements OnInit {
     this.geoserverService.getLayerFeatures(layerName).subscribe({
       next: (collection) => {
         this.features = collection.features;
-      }
+      },
     });
   }
 
@@ -147,15 +148,15 @@ export class LayerDetailComponent implements OnInit {
         if (this.features.length > 0) {
           this.properties = this.deriveProperties(this.features);
         }
-      }
+      },
     });
   }
 
   loadStyleNames(): void {
     this.geoserverService.getStyles().subscribe({
       next: (data) => {
-        this.styleNames = data.map(s => s.name);
-      }
+        this.styleNames = data.map((s) => s.name);
+      },
     });
   }
 
@@ -170,11 +171,11 @@ export class LayerDetailComponent implements OnInit {
               this.notificationService.success(`样式已切换为 ${style.title}`);
               this.refreshPreview();
             },
-            error: () => this.notificationService.error('样式切换失败')
+            error: () => this.notificationService.error('样式切换失败'),
           });
         }
       },
-      error: () => this.notificationService.error('加载样式失败')
+      error: () => this.notificationService.error('加载样式失败'),
     });
   }
 
@@ -190,7 +191,7 @@ export class LayerDetailComponent implements OnInit {
     return Array.from(keyTypes.entries()).map(([name, type]) => ({ name, type, nullable: true }));
   }
 
-  inferType(value: any): string {
+  inferType(value: unknown): string {
     if (value === null || value === undefined) return 'string';
     if (typeof value === 'number') return Number.isInteger(value) ? 'integer' : 'float';
     if (typeof value === 'boolean') return 'boolean';
@@ -202,14 +203,14 @@ export class LayerDetailComponent implements OnInit {
   }
 
   getGeometryTypes(): string[] {
-    return [...new Set(this.features.map(f => f.geometry.type))];
+    return [...new Set(this.features.map((f) => f.geometry.type))];
   }
 
   onPreviewError(): void {
     console.warn('地图预览加载失败，可能图层暂无数据');
   }
 
-  onTransparentChange(event: any): void {
+  onTransparentChange(event: { checked: boolean }): void {
     this.previewOptions.transparent = event.checked;
     this.refreshPreview();
   }
@@ -230,7 +231,7 @@ export class LayerDetailComponent implements OnInit {
         window.URL.revokeObjectURL(url);
         this.notificationService.success('GeoJSON 已下载');
       },
-      error: () => this.notificationService.error('下载 GeoJSON 失败')
+      error: () => this.notificationService.error('下载 GeoJSON 失败'),
     });
   }
 
@@ -246,7 +247,7 @@ export class LayerDetailComponent implements OnInit {
         window.URL.revokeObjectURL(url);
         this.notificationService.success('CSV 已下载');
       },
-      error: () => this.notificationService.error('下载 CSV 失败')
+      error: () => this.notificationService.error('下载 CSV 失败'),
     });
   }
 }
