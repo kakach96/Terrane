@@ -115,7 +115,7 @@ impl WcsCapabilities {
             version: "2.0.1".to_string(),
             service: WcsServiceMetadata {
                 name: "WCS".to_string(),
-                title: "GeoFerris WCS".to_string(),
+                title: "Terrane WCS".to_string(),
                 abstract_text: Some("Web Coverage Service implemented in Rust".to_string()),
                 keywords: vec![
                     "WCS".to_string(),

@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/logo/geoferris.svg" alt="GeoFerris" width="160">
+  <img src="docs/logo/terrane.svg" alt="Terrane" width="160">
 </p>
 
-# 🦀 GeoFerris
+# 🦀 Terrane
 
-> **Cloud-native, high-performance spatial data server with a modern UI — powered by Rust and Angular.**
+> **Cloud-native, high-performance spatial data server powered by Rust.**
 
 ## ✨ Features
 
@@ -21,7 +21,7 @@
 - ➕ **Create layer** - Form wizard
 - 🔍 **Layer detail** - Info and preview
 - 📍 **Feature management** - CRUD operations
-- 🎨 **Material Design** - Modern UI
+- 🎨 **Material Design** - UI components
 
 ## ☁️ Cloud-Native
 
@@ -94,14 +94,14 @@ docker compose up -d
 
 # Build the image manually (BuildKit is used by default; cache mounts keep
 # npm/cargo dependency downloads across builds)
-#   docker build -t geoferris:latest .
+#   docker build -t terrane:latest .
 
 # Build with domestic base-image mirrors (China):
 #   docker build \
 #     --build-arg NODE_IMAGE=docker.1ms.run/library/node:20-alpine \
 #     --build-arg RUST_IMAGE=docker.1ms.run/library/rust:1.85-bookworm \
 #     --build-arg RUNTIME_IMAGE=docker.1ms.run/library/debian:bookworm-slim \
-#     -t geoferris:latest .
+#     -t terrane:latest .
 #   (npm/cargo dependency registries default to npmmirror.com / rsproxy.cn;
 #    override via --build-arg NPM_REGISTRY / CARGO_MIRROR if needed)
 
@@ -132,7 +132,7 @@ START.bat
 ## 📁 Project Structure
 
 ```
-geoferris/
+terrane/
 ├── src/                    # Rust backend source code
 │   ├── handlers/          # HTTP request handlers
 │   ├── services/          # OGC service implementations
@@ -155,7 +155,7 @@ geoferris/
 
 ### REST API
 
-All REST endpoints live under the configurable context path (default `/geoserver`, see `[server] api_context` in `geoferris.toml`):
+All REST endpoints live under the configurable context path (default `/geoserver`, see `[server] api_context` in `terrane.toml`):
 
 | Method | Endpoint | Description |
 |------|------|------|
@@ -247,7 +247,7 @@ All REST endpoints live under the configurable context path (default `/geoserver
 
 ## 🔧 Configuration
 
-Configuration file: `geoferris.toml`
+Configuration file: `terrane.toml`
 
 ```toml
 [server]
@@ -291,4 +291,4 @@ MIT License
 
 ---
 
-**Made with ❤️ — GeoFerris, powered by Rust + Angular**
+**Made with ❤️ — Terrane, powered by Rust + Angular**

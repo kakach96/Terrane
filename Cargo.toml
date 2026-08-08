@@ -1,9 +1,9 @@
 [package]
-name = "geoferris"
+name = "terrane"
 version = "0.1.0"
 edition = "2021"
-authors = ["GeoFerris Team"]
-description = "GeoFerris - Cloud-native, high-performance spatial data server with a modern UI, powered by Rust and Angular"
+authors = ["Terrane Team"]
+description = "Terrane - Cloud-native, high-performance spatial data server, powered by Rust"
 
 [dependencies]
 actix-web = "4"

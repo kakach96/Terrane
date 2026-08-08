@@ -30,7 +30,7 @@ impl<T> ApiResponse<T> {
 pub async fn health_check() -> HttpResponse {
     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "status": "healthy",
-        "service": "geoferris",
+        "service": "terrane",
     })))
 }
 
@@ -39,7 +39,7 @@ pub async fn health_check() -> HttpResponse {
 pub async fn health_live() -> HttpResponse {
     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "status": "alive",
-        "service": "geoferris",
+        "service": "terrane",
     })))
 }
 
@@ -102,13 +102,13 @@ pub async fn health_ready(state: web::Data<AppState>) -> HttpResponse {
     if ready {
         HttpResponse::Ok().json(serde_json::json!({
             "status": "ready",
-            "service": "geoferris",
+            "service": "terrane",
             "checks": checks,
         }))
     } else {
         HttpResponse::ServiceUnavailable().json(serde_json::json!({
             "status": "not_ready",
-            "service": "geoferris",
+            "service": "terrane",
             "checks": checks,
         }))
     }

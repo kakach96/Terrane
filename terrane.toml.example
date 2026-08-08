@@ -1,12 +1,12 @@
 # =============================================================================
-# GeoFerris configuration template
-# Copy this file to geoferris.toml and adjust it for your environment.
+# Terrane configuration template
+# Copy this file to terrane.toml and adjust it for your environment.
 # Every option has a sensible default and can be overridden as needed.
 #
 # Configuration sources & precedence (highest first):
 #   1. CLI flags:         --host, --port   (override [server] host/port)
 #   2. Environment vars:  GEOSERVER__<SECTION>__<FIELD>  (double underscore)
-#   3. Config file:       geoferris.toml   (path via --config, default "geoferris")
+#   3. Config file:       terrane.toml   (path via --config, default "terrane")
 #
 # Env var naming: prefix "GEOSERVER", sections and fields joined with "__".
 #   GEOSERVER__SERVER__HOST                 -> [server] host
@@ -145,8 +145,8 @@ kind = "local"
 # JWT signing secret. In a multi-replica cluster every replica MUST share the
 # same value. For production, inject it via the GEOSERVER__SECURITY__JWT_SECRET
 # environment variable instead of committing it to a file.
-# Built-in default: "geoferris-jwt-secret-2026"
-jwt_secret = "geoferris-jwt-secret-2026"
+# Built-in default: "terrane-jwt-secret-2026"
+jwt_secret = "terrane-jwt-secret-2026"
 
 # ---------------------------------------------------------------------------
 # Logging

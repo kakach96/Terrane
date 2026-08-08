@@ -141,7 +141,7 @@ impl WfsCapabilities {
             version: "2.0.0".to_string(),
             service: WfsServiceMetadata {
                 name: "WFS".to_string(),
-                title: "GeoFerris WFS".to_string(),
+                title: "Terrane WFS".to_string(),
                 abstract_text: Some("Web Feature Service implemented in Rust".to_string()),
                 keywords: vec![
                     "WFS".to_string(),

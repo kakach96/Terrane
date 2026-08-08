@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "geoferris-ui": {
+    "terrane-ui": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -18,7 +18,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
-            "outputPath": "dist/geoferris-ui",
+            "outputPath": "dist/terrane-ui",
             "index": "src/index.html",
             "main": "src/main.ts",
             "polyfills": ["zone.js"],
@@ -63,10 +63,10 @@
           },
           "configurations": {
             "production": {
-              "buildTarget": "geoferris-ui:build:production"
+              "buildTarget": "terrane-ui:build:production"
             },
             "development": {
-              "buildTarget": "geoferris-ui:build:development"
+              "buildTarget": "terrane-ui:build:development"
             }
           },
           "defaultConfiguration": "development"

@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-echo ==================== GeoFerris Build Script ====================
+echo ==================== Terrane Build Script ====================
 echo.
 
 set BUILD_MODE=debug
@@ -66,7 +66,7 @@ echo [Step 3/4] Copying frontend to static...
 if exist "static" (
     rmdir /s /q static
 )
-xcopy /s /e /i "frontend\dist\geoferris-ui" "static" >nul
+xcopy /s /e /i "frontend\dist\terrane-ui" "static" >nul
 if errorlevel 1 (
     echo ERROR: Copy to static failed
     exit /b 1
@@ -108,12 +108,12 @@ if %BUILD_MODE%==release (
 if not exist "!ARTIFACT_DIR!" (
     mkdir "!ARTIFACT_DIR!"
 )
-if exist "geoferris.toml" (
-    copy /y "geoferris.toml" "!ARTIFACT_DIR!\geoferris.toml" >nul
-    echo Config copied: !ARTIFACT_DIR!\geoferris.toml
+if exist "terrane.toml" (
+    copy /y "terrane.toml" "!ARTIFACT_DIR!\terrane.toml" >nul
+    echo Config copied: !ARTIFACT_DIR!\terrane.toml
 ) else (
-    copy /y "geoferris.toml.example" "!ARTIFACT_DIR!\geoferris.toml" >nul
-    echo Config template copied as: !ARTIFACT_DIR!\geoferris.toml
+    copy /y "terrane.toml.example" "!ARTIFACT_DIR!\terrane.toml" >nul
+    echo Config template copied as: !ARTIFACT_DIR!\terrane.toml
 )
 echo.
 
@@ -127,34 +127,34 @@ if %BUILD_MODE%==release (
     mkdir "!RELEASE_DIR!"
     
     echo Copying executable...
-    copy "target\release\geoferris.exe" "!RELEASE_DIR!\" >nul
+    copy "target\release\terrane.exe" "!RELEASE_DIR!\" >nul
     
     echo Copying static files...
     xcopy /s /e /i "static" "!RELEASE_DIR!\static" >nul
     
     echo Copying config file...
-    if exist "geoferris.toml" (
-        copy "geoferris.toml" "!RELEASE_DIR!\" >nul
+    if exist "terrane.toml" (
+        copy "terrane.toml" "!RELEASE_DIR!\" >nul
         echo Config file copied
     ) else (
         echo No config file found, skipping
     )
 
     echo Copying config template...
-    if exist "geoferris.toml.example" (
-        copy "geoferris.toml.example" "!RELEASE_DIR!\" >nul
+    if exist "terrane.toml.example" (
+        copy "terrane.toml.example" "!RELEASE_DIR!\" >nul
         echo Config template copied
     )
 
     echo Creating README...
     (
-        echo GeoFerris v0.1.0
+        echo Terrane v0.1.0
         echo.
         echo Usage:
-        echo   geoferris.exe
+        echo   terrane.exe
         echo.
         echo Configuration:
-        echo   Edit geoferris.toml to configure server settings.
+        echo   Edit terrane.toml to configure server settings.
         echo.
         echo API: http://localhost:8080/geoserver
         echo Web: http://localhost:8080
@@ -168,9 +168,9 @@ echo ==================== Build Complete ====================
 echo.
 if %BUILD_MODE%==release (
     echo Release package: target\release\release-package\
-    echo Executable: target\release\release-package\geoferris.exe
+    echo Executable: target\release\release-package\terrane.exe
 ) else (
-    echo Executable: target\debug\geoferris.exe
+    echo Executable: target\debug\terrane.exe
 )
 echo Frontend: static\
 echo.

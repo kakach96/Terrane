@@ -1,5 +1,5 @@
 # =============================================================================
-# GeoFerris - Docker build context exclusions
+# Terrane - Docker build context exclusions
 # The image build does NOT need: local data, build artifacts, VCS, docs or scripts
 # =============================================================================
 
@@ -17,7 +17,7 @@ static/
 *.db
 
 # ---- Local config (container config is injected entirely via env vars) ----
-geoferris.toml
+terrane.toml
 
 # ---- Version control / CI ----
 .git/

@@ -1291,49 +1291,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "geoferris"
-version = "0.1.0"
-dependencies = [
- "actix-cors",
- "actix-files",
- "actix-multipart",
- "actix-rt",
- "actix-web",
- "anyhow",
- "async-trait",
- "chrono",
- "clap",
- "config",
- "deadpool-postgres",
- "futures-util",
- "geo",
- "geo-types",
- "hex",
- "image",
- "jsonwebtoken",
- "postgres-native-tls",
- "quick-xml",
- "rand 0.8.6",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2 0.10.9",
- "shapefile",
- "sysinfo",
- "tempfile",
- "thiserror 1.0.69",
- "tiff",
- "tokio",
- "tokio-postgres",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "zip",
-]
-
-[[package]]
 name = "geographiclib-rs"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3179,6 +3136,49 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "terrane"
+version = "0.1.0"
+dependencies = [
+ "actix-cors",
+ "actix-files",
+ "actix-multipart",
+ "actix-rt",
+ "actix-web",
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "config",
+ "deadpool-postgres",
+ "futures-util",
+ "geo",
+ "geo-types",
+ "hex",
+ "image",
+ "jsonwebtoken",
+ "postgres-native-tls",
+ "quick-xml",
+ "rand 0.8.6",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.10.9",
+ "shapefile",
+ "sysinfo",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tiff",
+ "tokio",
+ "tokio-postgres",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zip",
 ]
 
 [[package]]

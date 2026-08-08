@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 # =============================================================================
-# GeoFerris - multi-stage container image
+# Terrane - multi-stage container image
 #
 # Stages:
-#   1. frontend : build the Angular frontend with Node 20 -> /app/dist/geoferris-ui
-#   2. builder  : compile the Rust backend -> /build/target/release/geoferris
+#   1. frontend : build the Angular frontend with Node 20 -> /app/dist/terrane-ui
+#   2. builder  : compile the Rust backend -> /build/target/release/terrane
 #   3. runtime  : debian-slim image (binary + static/ only, non-root)
 #
 # The image ships a built-in readiness probe (HEALTHCHECK -> /health/ready) and
@@ -12,7 +12,7 @@
 #
 # Build (BuildKit is required for the cache mounts below; Docker Desktop enables
 # it by default, otherwise export DOCKER_BUILDKIT=1):
-#   docker build -t geoferris:latest .
+#   docker build -t terrane:latest .
 #
 # To pull base images from a domestic (China) registry mirror instead of Docker
 # Hub, override the base-image ARGs:
@@ -20,7 +20,7 @@
 #     --build-arg NODE_IMAGE=docker.1ms.run/library/node:20-alpine \
 #     --build-arg RUST_IMAGE=docker.1ms.run/library/rust:1.95-bookworm \
 #     --build-arg RUNTIME_IMAGE=docker.1ms.run/library/debian:bookworm-slim \
-#     -t geoferris:latest .
+#     -t terrane:latest .
 #
 # Dependency registries default to domestic mirrors:
 #   - npm:   registry.npmmirror.com (override via --build-arg NPM_REGISTRY)
@@ -54,7 +54,7 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY frontend/ ./
 RUN npm run build
 
-# Artifacts: /app/dist/geoferris-ui (angular.json -> outputPath)
+# Artifacts: /app/dist/terrane-ui (angular.json -> outputPath)
 
 # ---------------------------------------------------------------------------
 # Stage 2: Backend (Rust, release)
@@ -113,8 +113,8 @@ RUN groupadd --system --gid 10001 geoserver \
 
 WORKDIR /app
 
-COPY --from=builder   /build/target/release/geoferris /app/geoferris
-COPY --from=frontend  /app/dist/geoferris-ui          /app/static
+COPY --from=builder   /build/target/release/terrane /app/terrane
+COPY --from=frontend  /app/dist/terrane-ui          /app/static
 
 # Data dir: metadata sqlite + business data + tile cache + uploads (mountable volume)
 RUN mkdir -p /data \
@@ -133,7 +133,7 @@ ENV GEOSERVER__SERVER__HOST=0.0.0.0 \
     GEOSERVER__METADATA__SQLITE_PATH=/data/geoserver.sqlite \
     GEOSERVER__CACHE__CACHE_DIR=/data/gwc \
     GEOSERVER__CACHE__META_DIR=/data/gwc/meta \
-    GEOSERVER__SECURITY__JWT_SECRET=geoferris-dev-secret \
+    GEOSERVER__SECURITY__JWT_SECRET=terrane-dev-secret \
     RUST_LOG=info
 
 EXPOSE 8080
@@ -144,4 +144,4 @@ USER geoserver
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8080/health/ready || exit 1
 
-CMD ["/app/geoferris"]
+CMD ["/app/terrane"]

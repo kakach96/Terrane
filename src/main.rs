@@ -46,10 +46,10 @@ impl FormatTime for FriendlyTimeFormat {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "geoferris")]
+#[command(name = "terrane")]
 #[command(about = "A high-performance geospatial data server implemented in Rust", long_about = None)]
 struct Args {
-    #[arg(long, default_value = "geoferris")]
+    #[arg(long, default_value = "terrane")]
     config: String,
     
     #[arg(long)]
@@ -76,7 +76,7 @@ fn init_tracing(default_level: &str) {
 }
 
 fn load_config(config_path: &str) -> GeoServerConfig {
-    // geoferris.toml (可选) + GEOSERVER__ 环境变量双源加载，env 覆盖文件
+    // terrane.toml (可选) + GEOSERVER__ 环境变量双源加载，env 覆盖文件
     GeoServerConfig::load_from_file(config_path).unwrap_or_else(|e| {
         // 注意: load_config 在 init_tracing 之前调用, tracing::warn! 不生效,
         // 因此必须同时输出到 stderr, 否则配置错误会被静默吞掉
@@ -88,7 +88,7 @@ fn load_config(config_path: &str) -> GeoServerConfig {
 }
 
 fn print_startup_info(host: &str, port: u16, api_context: &str) {
-    tracing::info!("Starting GeoFerris on {}:{}", host, port);
+    tracing::info!("Starting Terrane on {}:{}", host, port);
     tracing::info!("WMS endpoint: http://{}:{}/wms", host, port);
     tracing::info!("WFS endpoint: http://{}:{}/wfs", host, port);
     tracing::info!("WCS endpoint: http://{}:{}/wcs", host, port);

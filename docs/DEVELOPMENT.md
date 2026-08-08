@@ -1,4 +1,4 @@
-# GeoFerris — Development Guide
+# Terrane — Development Guide
 
 > Local setup, environment variables, and contribution conventions.
 
@@ -82,7 +82,7 @@ docker compose --profile postgres up -d     # app + PostgreSQL (PostGIS)
 ## 4. Environment Variables
 
 `GEOSERVER__<SECTION>__<FIELD>` (double underscore). Precedence:
-**CLI flags > env vars > geoferris.toml > built-in defaults**.
+**CLI flags > env vars > terrane.toml > built-in defaults**.
 
 | Variable                                  | Maps to                                      | Default                    |
 |-------------------------------------------|----------------------------------------------|----------------------------|
@@ -108,7 +108,7 @@ docker compose --profile postgres up -d     # app + PostgreSQL (PostGIS)
 | `GEOSERVER__VECTOR__POSTGRES__*`          | `[vector.postgres] *`                        | (mirrors metadata.postgres)|
 | `GEOSERVER__RASTER__KIND`                 | `[raster] kind` (`local`)                    | `local`                    |
 | `GEOSERVER__RASTER__DIR`                  | `[raster] dir`                               | `<data_dir>/rasters`       |
-| `GEOSERVER__SECURITY__JWT_SECRET`         | `[security] jwt_secret`                      | `geoferris-jwt-secret-2026`|
+| `GEOSERVER__SECURITY__JWT_SECRET`         | `[security] jwt_secret`                      | `terrane-jwt-secret-2026`|
 | `GEOSERVER__LOGGING__LEVEL`               | `[logging] level`                            | `info`                     |
 | `GEOSERVER__CACHE__KIND`                  | `[cache] kind` (`local`)                     | `local`                    |
 | `GEOSERVER__CACHE__CACHE_DIR`             | `[cache] cache_dir`                          | `<data_dir>/gwc`           |
@@ -129,7 +129,7 @@ docker compose --profile postgres up -d     # app + PostgreSQL (PostGIS)
 
 | Flag                | Description                          |
 |---------------------|--------------------------------------|
-| `--config <name>`   | Config file name/path (default `geoferris`) |
+| `--config <name>`   | Config file name/path (default `terrane`) |
 | `--host <host>`     | Override `[server] host`             |
 | `-p, --port <port>` | Override `[server] port`             |
 
@@ -141,7 +141,7 @@ docker compose --profile postgres up -d     # app + PostgreSQL (PostGIS)
 - Built-in `HEALTHCHECK` hits `/health/ready`; graceful shutdown drains in-flight requests (`shutdown_timeout_secs`).
 
 ```bash
-docker build -t geoferris:latest .
+docker build -t terrane:latest .
 docker compose up -d
 docker compose --profile postgres up -d
 ```

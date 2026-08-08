@@ -11,7 +11,7 @@ import { LoginComponent } from './components/login/login.component';
   styleUrls: ['./app.component.scss']
 })
 export class AppComponent implements OnInit {
-  title = 'GeoFerris';
+  title = 'Terrane';
   pageTitle = '仪表盘';
   sidenavOpened = true;
 
@@ -50,7 +50,7 @@ export class AppComponent implements OnInit {
 
   private updatePageTitle(url: string): void {
     const basePath = url.split('?')[0];
-    this.pageTitle = this.menuTitles[basePath] || 'GeoFerris';
+    this.pageTitle = this.menuTitles[basePath] || 'Terrane';
   }
 
   openLoginDialog(): void {

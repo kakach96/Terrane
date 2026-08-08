@@ -1,4 +1,4 @@
-# GeoFerris 前端 - 项目总结
+# Terrane 前端 - 项目总结
 
 > 前端基于 **Angular 17 + Angular Material** 构建。本文档最初记录重构初期的实现情况，
 > 现随项目演进持续更新（最新更新：2026-08）。
@@ -210,7 +210,7 @@ cargo run
 ng build --configuration production
 ```
 
-构建产物在 `dist/geoferris-ui/`
+构建产物在 `dist/terrane-ui/`
 
 ## 🔄 与后端集成
 
@@ -344,4 +344,4 @@ backend/
 
 **项目已完成！** 🚀
 
-现在您拥有了一个完整的、生产级的 Angular + Material 前端应用，可以与 GeoFerris 后端无缝集成。
+现在您拥有了一个完整的、生产级的 Angular + Material 前端应用，可以与 Terrane 后端无缝集成。

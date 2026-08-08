@@ -289,7 +289,7 @@ mod tests {
     #[tokio::test]
     async fn test_tile_put_get_disk_layout() {
         let mut config = CacheConfig::default();
-        let dir = std::env::temp_dir().join(format!("geoferris-gwc-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("terrane-gwc-test-{}", std::process::id()));
         config.cache_dir = dir.clone();
         config.meta_dir = dir.join("meta");
         let cache = TileCache::new(config);

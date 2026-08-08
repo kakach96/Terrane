@@ -246,8 +246,8 @@ impl WmsCapabilities {
             version: "1.3.0".to_string(),
             service: ServiceMetadata {
                 name: "WMS".to_string(),
-                title: "GeoFerris".to_string(),
-                abstract_text: Some("Cloud-native, high-performance spatial data server with a modern UI, powered by Rust and Angular".to_string()),
+                title: "Terrane".to_string(),
+                abstract_text: Some("Cloud-native, high-performance spatial data server, powered by Rust".to_string()),
                 keywords: vec![
                     "WMS".to_string(),
                     "Web Map Service".to_string(),

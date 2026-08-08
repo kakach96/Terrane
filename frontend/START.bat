@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 > nul
 echo ========================================
-echo   GeoFerris + Angular UI 启动器
+echo   Terrane + Angular UI 启动器
 echo ========================================
 echo.
 

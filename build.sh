@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ==================== GeoFerris Build Script (Linux) ====================
+# ==================== Terrane Build Script (Linux) ====================
 
 set -e
 
@@ -19,7 +19,7 @@ for arg in "$@"; do
     esac
 done
 
-echo "==================== GeoFerris Build Script ===================="
+echo "==================== Terrane Build Script ===================="
 echo ""
 
 if [ $SKIP_FRONTEND -eq 0 ]; then
@@ -62,7 +62,7 @@ if [ $SKIP_FRONTEND -eq 0 ]; then
     
     echo "[Step 3/4] Copying frontend to static..."
     rm -rf static
-    cp -r frontend/dist/geoferris-ui static
+    cp -r frontend/dist/terrane-ui static
     echo "Copy OK"
     echo ""
 else
@@ -91,12 +91,12 @@ else
     ARTIFACT_DIR="target/debug"
 fi
 mkdir -p "$ARTIFACT_DIR"
-if [ -f "geoferris.toml" ]; then
-    cp -f "geoferris.toml" "$ARTIFACT_DIR/geoferris.toml"
-    echo "Config copied: $ARTIFACT_DIR/geoferris.toml"
+if [ -f "terrane.toml" ]; then
+    cp -f "terrane.toml" "$ARTIFACT_DIR/terrane.toml"
+    echo "Config copied: $ARTIFACT_DIR/terrane.toml"
 else
-    cp -f "geoferris.toml.example" "$ARTIFACT_DIR/geoferris.toml"
-    echo "Config template copied as: $ARTIFACT_DIR/geoferris.toml"
+    cp -f "terrane.toml.example" "$ARTIFACT_DIR/terrane.toml"
+    echo "Config template copied as: $ARTIFACT_DIR/terrane.toml"
 fi
 echo ""
 
@@ -108,34 +108,34 @@ if [ "$BUILD_MODE" = "release" ]; then
     mkdir -p "$RELEASE_DIR"
     
     echo "Copying executable..."
-    cp "target/release/geoferris" "$RELEASE_DIR/"
+    cp "target/release/terrane" "$RELEASE_DIR/"
     
     echo "Copying static files..."
     cp -r static "$RELEASE_DIR/"
     
     echo "Copying config file..."
-    if [ -f "geoferris.toml" ]; then
-        cp "geoferris.toml" "$RELEASE_DIR/"
+    if [ -f "terrane.toml" ]; then
+        cp "terrane.toml" "$RELEASE_DIR/"
         echo "Config file copied"
     else
         echo "No config file found, skipping"
     fi
 
     echo "Copying config template..."
-    if [ -f "geoferris.toml.example" ]; then
-        cp "geoferris.toml.example" "$RELEASE_DIR/"
+    if [ -f "terrane.toml.example" ]; then
+        cp "terrane.toml.example" "$RELEASE_DIR/"
         echo "Config template copied"
     fi
 
     echo "Creating README..."
     cat > "$RELEASE_DIR/README.txt" << EOF
-GeoFerris v0.1.0
+Terrane v0.1.0
 
 Usage:
-  ./geoferris
+  ./terrane
 
 Configuration:
-  Edit geoferris.toml to configure server settings.
+  Edit terrane.toml to configure server settings.
 
 API: http://localhost:8080/geoserver
 Web: http://localhost:8080
@@ -149,9 +149,9 @@ echo "==================== Build Complete ===================="
 echo ""
 if [ "$BUILD_MODE" = "release" ]; then
     echo "Release package: target/release/release-package/"
-    echo "Executable: target/release/release-package/geoferris"
+    echo "Executable: target/release/release-package/terrane"
 else
-    echo "Executable: target/debug/geoferris"
+    echo "Executable: target/debug/terrane"
 fi
 echo "Frontend: static/"
 echo ""

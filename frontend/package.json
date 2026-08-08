@@ -1,7 +1,7 @@
 {
-  "name": "geoferris-ui",
+  "name": "terrane-ui",
   "version": "1.0.0",
-  "description": "GeoFerris Management UI built with Angular and Material",
+  "description": "Terrane Management UI built with Angular and Material",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",

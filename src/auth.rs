@@ -98,7 +98,7 @@ pub fn verify_password(password: &str, salt: &str, hash: &str) -> bool {
 static JWT_SECRET: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// 默认密钥（仅在未通过 `init_secret` 配置时用于测试/降级）
-const DEFAULT_JWT_SECRET: &str = "geoferris-jwt-secret-2026";
+const DEFAULT_JWT_SECRET: &str = "terrane-jwt-secret-2026";
 
 /// 初始化 JWT 密钥（应在进程启动时从配置调用一次）
 pub fn init_secret(secret: &str) {

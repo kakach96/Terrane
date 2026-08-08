@@ -216,7 +216,7 @@ pub async fn export_backup(
         created_at: Utc::now().to_rfc3339(),
         server_info: serde_json::json!({
             "version": env!("CARGO_PKG_VERSION"),
-            "name": "geoferris",
+            "name": "terrane",
         }),
         workspaces, data_sources, layers, styles,
         layer_groups, namespaces, sql_views, permissions, users,

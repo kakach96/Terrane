@@ -1,4 +1,4 @@
-# GeoFerris — Roadmap
+# Terrane — Roadmap
 
 > Product roadmap, milestone plan, known technical debt, and future vision.
 > Complements [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) (feature-gap analysis)
@@ -6,8 +6,8 @@
 
 ## Vision
 
-GeoFerris is a **cloud-native, high-performance geospatial data server with a modern UI**,
-re-implementing the GeoServer feature set in Rust + Angular.
+Terrane is a **cloud-native, high-performance geospatial data server**,
+re-implementing the GeoServer feature set in Rust.
 
 The core architectural vision is a **dual-mode** design — one codebase, two deployment
 profiles:
@@ -32,7 +32,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - REST API: workspaces / namespaces / layers / stores / data sources / styles / layer groups / sql views / permissions
 - Data sources: PostGIS, Shapefile, GeoTIFF, GeoPackage, WorldImage, CascadedWms, ArcGrid
 - Security: JWT auth, users/roles, layer-level permissions
-- Modern Angular 17 + Material admin UI
+- Angular 17 + Material admin console
 - Cloud-native foundation: multi-stage Docker image, docker-compose, split health probes, Prometheus `/metrics`, graceful shutdown
 - Overall progress: ~54% (see [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md))
 
@@ -67,7 +67,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 ## Known Technical Debt
 
-- **JWT secret hardcoded default** in `src/auth.rs` (`geoferris-jwt-secret-2026`) — must be injected via `GEOSERVER__SECURITY__JWT_SECRET` in production.
+- **JWT secret hardcoded default** in `src/auth.rs` (`terrane-jwt-secret-2026`) — must be injected via `GEOSERVER__SECURITY__JWT_SECRET` in production.
 - **In-memory caches** (`Arc<RwLock<...>>` in `src/state.rs`) diverge across replicas; no refresh mechanism yet.
 - **Tile cache backend is disk-only** (`./data/gwc`, `src/store/cache/tile.rs`) — the `TileCacheBackend` trait exists but no Redis / S3 backend yet.
 - **Uploads on local disk** (`./data`) — no shared volume / object storage.

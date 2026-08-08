@@ -1,4 +1,4 @@
-# GeoFerris — Architecture
+# Terrane — Architecture
 
 > Design rationale, module dependency graph, data flow, and API contract design.
 > This document explains **why** the code is structured the way it is.
@@ -7,9 +7,8 @@
 
 1. **Cloud-native** — containerized, 12-Factor configuration, observable, horizontally scalable.
 2. **High performance** — Rust + Actix-web async runtime, low-latency OGC responses, tile caching.
-3. **Modern UI** — Angular 17 + Material management console.
-4. **Stateless service** — the server is a pure protocol adapter; state lives in external stores.
-5. **Dual-mode** — standalone (SQLite + local files + in-memory) and cloud-native (PostgreSQL + Redis + object storage).
+3. **Stateless service** — the server is a pure protocol adapter; state lives in external stores.
+4. **Dual-mode** — standalone (SQLite + local files + in-memory) and cloud-native (PostgreSQL + Redis + object storage).
 
 ## 2. Tech Stack & Selection Rationale
 
@@ -34,7 +33,7 @@
 Metadata (workspaces, data sources, layer definitions, styles, permissions), vector data
 (layer features), raster data (GeoTIFF / WorldImage / ArcGrid) and cache data (tiles +
 sessions) have different access patterns and scaling needs. Splitting them into separate
-sections (`[metadata]`, `[vector]`, `[raster]`, `[cache]` in `geoferris.toml`) lets a
+sections (`[metadata]`, `[vector]`, `[raster]`, `[cache]` in `terrane.toml`) lets a
 cluster keep metadata in PostgreSQL, vector data in a dedicated database, raster data in
 object storage and cache in Redis — matching the
 "structured data → database, raster → file storage, session/cache → Redis" vision.
@@ -117,7 +116,7 @@ graph TD
 ```mermaid
 graph LR
     Browser[Browser - Angular UI]
-    App[geoferris process]
+    App[terrane process]
     SQLite[(SQLite - metadata)]
     LocalDir[(data_dir/business - vector GeoJSON)]
     LocalRaster[(data_dir/rasters - raster files)]
@@ -137,8 +136,8 @@ graph LR
 ```mermaid
 graph LR
     LB[Load Balancer / Ingress]
-    R1[geoferris replica 1]
-    R2[geoferris replica N]
+    R1[terrane replica 1]
+    R2[terrane replica N]
     PG[(PostgreSQL / PostGIS - metadata + vector)]
     Redis[(Redis - session + cache)]
     MinIO[(MinIO / S3 - raster + uploads)]
@@ -276,6 +275,6 @@ Errors are returned as JSON with an HTTP status code; error mapping is centraliz
 
 ### 6.5 Configuration contract
 
-All options are externalized via `geoferris.toml` + `GEOSERVER__<SECTION>__<KEY>` env
+All options are externalized via `terrane.toml` + `GEOSERVER__<SECTION>__<KEY>` env
 overrides (precedence: CLI > env > file > defaults). See
 [DEVELOPMENT.md](DEVELOPMENT.md) for the full variable reference.
