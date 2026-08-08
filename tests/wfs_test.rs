@@ -510,6 +510,9 @@ fn urlencode_xml(xml: &str) -> String {
             ' ' => "%20".to_string(),
             '=' => "%3D".to_string(),
             '\'' => "%27".to_string(),
+            '"' => "%22".to_string(),
+            ':' => "%3A".to_string(),
+            ',' => "%2C".to_string(),
             _ => c.to_string(),
         })
         .collect()
@@ -692,4 +695,83 @@ async fn test_wfs_get_feature_xml_filter_numeric() {
     );
     let name = features[0]["properties"]["name"].as_str().unwrap_or("");
     assert_eq!(name, "high", "应只返回 high, 实际: {:?}", name);
+}
+
+// ---------------------------------------------------------------------------
+// Batch 12: OGC XML FILTER= 边界 — ogc:Function (strToLowerCase) + 空间 Intersects
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_wfs_get_feature_xml_filter_intersects() {
+    let app = build_test_app!();
+    create_world_feature!(app, "inside", 100, 1.0, 1.0);
+    create_world_feature!(app, "outside", 200, 10.0, 10.0);
+
+    // ogc:Intersects + gml:Polygon (外环为 0,0 - 4,4 的正方形)
+    let xml = urlencode_xml(
+        "<Filter><Intersects><PropertyName>geometry</PropertyName>\
+         <gml:Polygon><gml:exterior><gml:LinearRing>\
+         <gml:coordinates>0,0 4,0 4,4 0,4 0,0</gml:coordinates>\
+         </gml:LinearRing></gml:exterior></gml:Polygon>\
+         </Intersects></Filter>",
+    );
+    let uri = format!(
+        "/wfs?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=world&OUTPUTFORMAT=application/json&FILTER={}",
+        xml
+    );
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "GetFeature + FILTER(Intersects XML) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let features = body["features"].as_array().cloned().unwrap_or_default();
+    assert_eq!(
+        features.len(),
+        1,
+        "Intersects(0,0,4,4) 应只返回 1 条要素, 实际: {}",
+        features.len()
+    );
+    let name = features[0]["properties"]["name"].as_str().unwrap_or("");
+    assert_eq!(name, "inside", "应只返回 inside, 实际: {:?}", name);
+}
+
+#[actix_rt::test]
+async fn test_wfs_get_feature_xml_filter_function_strtolower() {
+    let app = build_test_app!();
+    create_world_feature!(app, "Alpha", 100, 10.0, 10.0);
+    create_world_feature!(app, "beta", 200, 50.0, 50.0);
+
+    // ogc:Function name="strToLowerCase" → 大小写不敏感等值比较
+    let xml = urlencode_xml(
+        "<Filter><PropertyIsEqualTo>\
+         <Function name=\"strToLowerCase\"><PropertyName>name</PropertyName></Function>\
+         <Literal>alpha</Literal>\
+         </PropertyIsEqualTo></Filter>",
+    );
+    let uri = format!(
+        "/wfs?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=world&OUTPUTFORMAT=application/json&FILTER={}",
+        xml
+    );
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "GetFeature + FILTER(Function strToLowerCase) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let features = body["features"].as_array().cloned().unwrap_or_default();
+    assert_eq!(
+        features.len(),
+        1,
+        "strToLowerCase(name)='alpha' 应只返回 1 条 (大小写不敏感), 实际: {}",
+        features.len()
+    );
+    let name = features[0]["properties"]["name"].as_str().unwrap_or("");
+    assert_eq!(name, "Alpha", "应返回 'Alpha' (大小写不敏感匹配), 实际: {:?}", name);
 }
