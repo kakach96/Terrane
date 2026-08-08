@@ -252,6 +252,82 @@ async fn test_wms_get_map_geojson() {
 }
 
 #[actix_rt::test]
+async fn test_wms_get_map_georss() {
+    let app = build_test_app!();
+
+    let uri = GET_MAP_BASE.replace("FORMAT=image/png", "FORMAT=application/rss+xml");
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS GetMap (GeoRSS) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("application/rss+xml"),
+        "Content-Type 应为 application/rss+xml, 实际: {}",
+        content_type
+    );
+
+    let body = actix_web::test::read_body(resp).await;
+    let text = String::from_utf8_lossy(&body);
+    assert!(
+        text.contains(r#"<rss xmlns:georss="http://www.georss.org/georss" version="2.0">"#),
+        "GeoRSS 应包含 rss + georss 命名空间"
+    );
+    assert!(text.contains("<channel>"), "GeoRSS 应包含 channel");
+    assert!(text.contains("</rss>"), "GeoRSS 应以 </rss> 结尾");
+    // 注意: world 测试图层无要素, 故不校验 <item>/<georss:point>;
+    // 几何输出 (lat lon 顺序) 由 rendering.rs 单元测试覆盖。
+}
+
+#[actix_rt::test]
+async fn test_wms_get_map_pdf() {
+    let app = build_test_app!();
+
+    let uri = GET_MAP_BASE.replace("FORMAT=image/png", "FORMAT=application/pdf");
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS GetMap (PDF) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("application/pdf"),
+        "Content-Type 应为 application/pdf, 实际: {}",
+        content_type
+    );
+
+    let body = actix_web::test::read_body(resp).await;
+    assert!(
+        body.starts_with(b"%PDF-"),
+        "PDF 应以 %PDF- 魔数开头"
+    );
+    let text = String::from_utf8_lossy(&body);
+    assert!(text.contains("/Type /Page"), "PDF 应包含页面对象");
+    assert!(text.contains("startxref"), "PDF 应包含 xref 起始偏移");
+    assert!(
+        text.trim_end().ends_with("%%EOF"),
+        "PDF 应以 %%EOF 结尾"
+    );
+}
+
+#[actix_rt::test]
 async fn test_wms_get_map_jpeg() {
     let app = build_test_app!();
 
