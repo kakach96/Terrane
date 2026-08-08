@@ -21,6 +21,7 @@ pub mod wms_handler;
 pub mod wmsc_handler;
 pub mod wmts_handler;
 pub mod workspace_handler;
+pub mod wps_handler;
 
 pub use auth_handler::*;
 pub use backup_handler::*;
@@ -42,3 +43,4 @@ pub use wms_handler::*;
 pub use wmsc_handler::*;
 pub use wmts_handler::*;
 pub use workspace_handler::*;
+pub use wps_handler::*;

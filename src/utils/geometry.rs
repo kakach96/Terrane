@@ -49,8 +49,98 @@ pub fn simplify_geometry(geometry: &GeoJsonGeometry, _tolerance: f64) -> GeoJson
     geometry.clone()
 }
 
-pub fn buffer_geometry(_geometry: &GeoJsonGeometry, _distance: f64) -> Option<GeoJsonGeometry> {
-    None
+/// Compute the centroid of a geometry as a Point (lon, lat). Uses the `geo`
+/// `Centroid` algorithm on the projected coordinates.
+pub fn centroid_geometry(geometry: &GeoJsonGeometry) -> Option<GeoJsonGeometry> {
+    use geo::Centroid;
+    geometry
+        .to_geo()
+        .centroid()
+        .map(|p| GeoJsonGeometry::Point {
+            coordinates: vec![p.x(), p.y()],
+        })
+}
+
+/// Collect every distinct coordinate pair of a geometry (recursively for
+/// collections), used by the manual buffer approximation.
+fn collect_points_from_geometry(geometry: &GeoJsonGeometry, out: &mut Vec<(f64, f64)>) {
+    use crate::models::GeoJsonGeometry as G;
+    match geometry {
+        G::Point { coordinates } if coordinates.len() >= 2 => {
+            out.push((coordinates[0], coordinates[1]));
+        },
+        G::MultiPoint { coordinates } | G::LineString { coordinates } => {
+            for c in coordinates {
+                if c.len() >= 2 {
+                    out.push((c[0], c[1]));
+                }
+            }
+        },
+        G::Polygon { coordinates } | G::MultiLineString { coordinates } => {
+            for ring in coordinates {
+                for c in ring {
+                    if c.len() >= 2 {
+                        out.push((c[0], c[1]));
+                    }
+                }
+            }
+        },
+        G::MultiPolygon { coordinates } => {
+            for poly in coordinates {
+                for ring in poly {
+                    for c in ring {
+                        if c.len() >= 2 {
+                            out.push((c[0], c[1]));
+                        }
+                    }
+                }
+            }
+        },
+        G::GeometryCollection { geometries } => {
+            for sub in geometries {
+                collect_points_from_geometry(sub, out);
+            }
+        },
+        _ => {},
+    }
+}
+
+/// A closed ring of a circle of radius `r` around `(x, y)` with `n` segments.
+fn circle_ring(x: f64, y: f64, r: f64, n: u32) -> Vec<Vec<f64>> {
+    let mut ring = Vec::with_capacity((n + 1) as usize);
+    for i in 0..=n {
+        let a = std::f64::consts::TAU * (i as f64) / (n as f64);
+        ring.push(vec![x + r * a.cos(), y + r * a.sin()]);
+    }
+    ring
+}
+
+/// Buffer a geometry by `distance`. This is a *point buffer* approximation: it
+/// places a circle of the given radius around every coordinate of the input
+/// (exact for `Point`/`MultiPoint`, a conservative per-vertex approximation for
+/// lines and polygons) and returns the circles as a Polygon / MultiPolygon.
+pub fn buffer_geometry(geometry: &GeoJsonGeometry, distance: f64) -> Option<GeoJsonGeometry> {
+    use crate::models::GeoJsonGeometry as G;
+    if distance <= 0.0 {
+        return None;
+    }
+    let mut pts: Vec<(f64, f64)> = Vec::new();
+    collect_points_from_geometry(geometry, &mut pts);
+    if pts.is_empty() {
+        return None;
+    }
+    let n = 32u32;
+    let rings: Vec<Vec<Vec<f64>>> = pts
+        .iter()
+        .map(|(x, y)| circle_ring(*x, *y, distance, n))
+        .collect();
+    if rings.len() == 1 {
+        Some(G::Polygon { coordinates: rings })
+    } else {
+        Some(G::MultiPolygon {
+            coordinates: vec![rings],
+        })
+    }
 }
 
 fn geojson_from_geo(geo: &Geometry<f64>) -> GeoJsonGeometry {

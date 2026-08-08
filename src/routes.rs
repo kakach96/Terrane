@@ -18,6 +18,11 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
         )
         .service(web::scope("/wcs").route("", web::get().to(crate::handlers::handle_wcs_request)))
         .service(
+            web::scope("/wps")
+                .route("", web::get().to(crate::handlers::handle_wps_request))
+                .route("", web::post().to(crate::handlers::handle_wps_post_request)),
+        )
+        .service(
             web::scope(api_context)
                 .route("/health", web::get().to(crate::handlers::health_check))
                 .service(

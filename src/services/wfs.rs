@@ -523,20 +523,25 @@ pub fn parse_filter(value: &str) -> Result<Filter, crate::error::GeoServerError>
 // OGC XML Filter 编码解析
 // ---------------------------------------------------------------------------
 
-/// 简化的 XML 节点树，由 quick-xml 事件构建
-struct XmlNode {
-    name: String,
-    attrs: Vec<(String, String)>,
-    text: String,
-    children: Vec<XmlNode>,
+/// 简化的 XML 节点树，由 quick-xml 事件构建 (跨模块复用, 见 wps.rs)
+pub(crate) struct XmlNode {
+    pub(crate) name: String,
+    pub(crate) attrs: Vec<(String, String)>,
+    pub(crate) text: String,
+    pub(crate) children: Vec<XmlNode>,
 }
 
 impl XmlNode {
-    fn attr(&self, key: &str) -> Option<&str> {
+    pub(crate) fn attr(&self, key: &str) -> Option<&str> {
         self.attrs
             .iter()
             .find(|(k, _)| k == key)
             .map(|(_, v)| v.as_str())
+    }
+
+    /// Direct children with the given local element name.
+    pub(crate) fn children_named(&self, name: &str) -> Vec<&XmlNode> {
+        self.children.iter().filter(|c| c.name == name).collect()
     }
 }
 
@@ -547,7 +552,7 @@ fn xml_local_name(raw: &[u8]) -> String {
 }
 
 /// 将 XML 字符串解析为节点树
-fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
+pub(crate) fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
     use quick_xml::events::Event;
     use quick_xml::Reader;
 

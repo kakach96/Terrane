@@ -4,3 +4,4 @@ pub mod wfs;
 pub mod wms;
 pub mod wmsc;
 pub mod wmts;
+pub mod wps;
