@@ -345,15 +345,21 @@ pub async fn create_layer(
 
         match store.create_layer(&layer).await {
             Ok(created_layer) => {
-                state
-                    .add_layer(Layer::new(
-                        created_layer.name.clone(),
-                        created_layer.title.clone(),
-                        created_layer.workspace.clone(),
-                        created_layer.store.clone(),
-                        CoordinateReferenceSystem::from_epsg(&created_layer.srs),
-                    ))
-                    .await;
+                // Apply the user-provided (or auto-computed) bounds to the
+                // in-memory Layer, so the catalog reflects the real extent.
+                let mut created = Layer::new(
+                    created_layer.name.clone(),
+                    created_layer.title.clone(),
+                    created_layer.workspace.clone(),
+                    created_layer.store.clone(),
+                    CoordinateReferenceSystem::from_epsg(&created_layer.srs),
+                );
+                created.lat_lon_bounds = crate::models::BoundingBox::new(
+                    CoordinateReferenceSystem::EPSG4326,
+                    crate::models::Bounds::new(minx, miny, maxx, maxy),
+                );
+                created.native_bounds = created.lat_lon_bounds.clone();
+                state.add_layer(created).await;
 
                 let response = serde_json::json!({
                     "name": created_layer.name,
