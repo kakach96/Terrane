@@ -67,7 +67,7 @@ Endpoint `/wfs` (`src/services/wfs.rs`, `src/handlers/wfs_handler.rs`). GET + PO
 | Operation           | Status | Notes |
 |---------------------|--------|-------|
 | GetCapabilities     | ✅     | Advertises 2.0.0 |
-| DescribeFeatureType | ✅     | XSD schema |
+| DescribeFeatureType | ✅     | XSD schema (real typed columns for published GeoPackage layers) |
 | GetFeature          | ✅     | GML 2.1.2 / GML 3.1.1 / GML 3.2, GeoJSON, CSV |
 | GetFeatureWithLock  | ✅     | |
 | LockFeature         | ✅     | |
@@ -168,7 +168,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 10. Automated test coverage
 
-`cargo test` currently green: **106 lib unit tests + 82 integration tests**, plus
+`cargo test` currently green: **107 lib unit tests + 83 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -179,7 +179,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
 | `tests/wms_test.rs` | 22 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) |
-| `tests/wfs_test.rs` | 21    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects`) |
+| `tests/wfs_test.rs` | 22    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns) |
 | `tests/rest_test.rs`| 23 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 12    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
@@ -198,7 +198,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | Layer              | Coverage                                                                 |
 |--------------------|--------------------------------------------------------------------------|
 | WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
-| WFS                | GetCapabilities, DescribeFeatureType, GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
+| WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
 | WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | MVT                | `/mvt/{layer}/{z}/{x}/{y}` endpoint integration + 5 encoder unit tests    |
@@ -313,10 +313,19 @@ in `lat lon` order; multi-geometries fall back to the first member) and
 compressed RGB image, hand-written xref/trailer). Verified against the reference
 GeoServer: `FORMAT=application/rss+xml` → `application/rss+xml`, `FORMAT=application/
 pdf` → `%PDF-1.5`. Both formats are now advertised in GetMap capabilities.
+
+Batch 14 completed: GeoPackage `FeatureType` via WFS **`DescribeFeatureType`** —
+`handle_describe_feature_type` now resolves the layer's store and, for GeoPackage
+data sources, reports the real typed columns (`PRAGMA table_info` via a new
+`geopackage_table_columns` helper in `src/utils/geopackage.rs`) instead of the
+hardcoded id/name/geometry stub. The SQLite→XSD mapping (`sqlite_type_to_xsd` in
+`src/services/wfs.rs`) follows the reference GeoServer: INTEGER→`xsd:long`, REAL→
+`xsd:double`, BOOLEAN→`xsd:boolean`, geometry→`gml:GeometryPropertyType`, BLOB→
+`xsd:base64Binary`; the internal `id` primary key is skipped (fid is not a regular
+attribute). Verified against the reference GeoServer `DescribeFeatureType` on
+`sf:archsites` (`cat`→xsd:long, `str1`→xsd:string, `the_geom`→gml:PointPropertyType).
 Next candidates:
 
-1. GeoPackage `FeatureType` describe via WFS `DescribeFeatureType` for a
-   published GeoPackage layer
-2. TMS 1.0.0 + WMS-C 1.1.1 (GWC, reuse the tile engine)
-3. WFS KML / Shapefile output
+1. TMS 1.0.0 + WMS-C 1.1.1 (GWC, reuse the tile engine)
+2. WFS KML / Shapefile output
 
