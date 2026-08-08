@@ -173,7 +173,7 @@ chore: bump actix-web to 4.x
 
 ## 7. Testing
 
-- Run `cargo test` for the full suite: **97 lib unit tests + 71 integration tests**
+- Run `cargo test` for the full suite: **98 lib unit tests + 77 integration tests**
   (+ **4 `#[ignore]` live tests** that require running services, run with
   `cargo test -- --ignored`: 3× PostGIS via `GEOSERVER_TEST_PG_*` env, 1×
   CascadedWms against the reference GeoServer at :18080).

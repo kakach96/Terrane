@@ -168,7 +168,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 10. Automated test coverage
 
-`cargo test` currently green: **97 lib unit tests + 71 integration tests**, plus
+`cargo test` currently green: **98 lib unit tests + 77 integration tests**, plus
 **4 `#[ignore]`-marked live tests** (3× PostGIS + 1× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -179,7 +179,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
 | `tests/wms_test.rs` | 20 (+1 ignored live) | WMS (all operations, formats, vendor params; + cascaded WMS live proxy) |
-| `tests/wfs_test.rs` | 13    | WFS (all operations + WFS-T + LockFeature contract)       |
+| `tests/wfs_test.rs` | 19    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER) |
 | `tests/rest_test.rs`| 22 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 12    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
@@ -198,13 +198,13 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | Layer              | Coverage                                                                 |
 |--------------------|--------------------------------------------------------------------------|
 | WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
-| WFS                | GetCapabilities, DescribeFeatureType, GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported) — integration |
+| WFS                | GetCapabilities, DescribeFeatureType, GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
 | WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | MVT                | `/mvt/{layer}/{z}/{x}/{y}` endpoint integration + 5 encoder unit tests    |
 | REST               | health, split probes `/health/live` + `/health/ready` + `/metrics`, `/server/status`, layers, workspaces CRUD, namespaces CRUD, styles CRUD, layer-groups CRUD, features CRUD (+ single get / update / delete), sql-views CRUD, data-sources CRUD, auth (login / verify / users CRUD), permissions CRUD, backup export + import round-trip, GeoJSON upload, `/tiles` PNG tile, tile cache stats / clear / HIT, live PostGIS data source HTTP (`/data-sources/{name}/tables` + `/layers/{layer}/feature-type` against a real schema) — integration |
 | Tile cache (util)  | 10 unit tests (`utils/tile_cache.rs`: gridset, bounds, hit-rate)         |
-| CQL / ECQL         | 7 unit tests (`utils/cql_filter.rs`)                                     |
+| CQL / ECQL         | 8 unit tests (`utils/cql_filter.rs`) — incl. bug8 regression: `A AND B` is a real AND, not OR |
 | Projection         | 7 unit tests (`utils/projection.rs`)                                     |
 | Geometry           | 3 unit tests (`utils/geometry.rs`)                                       |
 | Shapefile          | 3 unit tests (`utils/shapefile.rs`: PRJ + coordinates)                   |
@@ -220,7 +220,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 
 | Protocol / surface | Missing tests                                                              |
 |--------------------|----------------------------------------------------------------------------|
-| **WFS**            | LockFeature (documented as unsupported — GET returns 400); URL `FILTER=` is still a hardcoded stub (`parse_filter_xml`) |
+| **WFS**            | LockFeature (documented as unsupported — GET returns 400); OGC XML `FILTER=` supports the common operators (And/Or/Not, the 6 PropertyIs* comparisons, Like, Null, Between, BBox, FeatureId) but not `ogc:Function` / spatial `Intersects` XML forms (ECQL path covers those via CQL) |
 | **WCS**            | native netCDF output (falls back to TIFF); elevation / time subsetting on real rasters (only recorded) |
 | **Data sources**   | GeoPackage attributes are stored as TEXT only (numbers / booleans not typed); no GeoPackage **update** / append |
 | **WKB**            | encoder emits MultiPoint / MultiLineString / MultiPolygon / GeometryCollection, but the **decoder** only parses Point / LineString / Polygon (others fall back to Point) |
@@ -264,6 +264,15 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
   the full image. Fixed in `src/utils/geotiff.rs` by using the named tag variants;
   guarded by a new unit test (`utils/geotiff.rs`) that writes a georeferenced TIFF
   fixture and asserts bounds + 2×2 crop.
+- **CQL/ECQL `A AND B` parsed as `A OR B` (bug8)** — `split_top_level` built its
+  keyword list from a hardcoded mix of `AND`/`OR` variants regardless of which
+  operator was being split, so `parse_or_expr` also split on `AND` and combined with
+  `Or`, and vice-versa. Any multi-clause CQL with both a LIKE/compare and an `AND`
+  silently became an OR, returning too many features. The existing unit test only
+  asserted `true` and never caught it. Fixed in `src/utils/cql_filter.rs` by passing
+  only the current operator's keyword into `split_top_level`; guarded by a new unit
+  test (`test_and_or_precedence_bug8`). Found while testing WFS `FILTER=name LIKE
+  'alp%' AND elevation > 100` (returned 2 instead of 1).
 - **MVT `.pbf` route is shadowed** — the generic `/tiles/{layer}/{z}/{x}/{y}` route is
   registered before `/tiles/{layer}/{z}/{x}/{y}.pbf`, so the latter never matches
   (`{y}` captures `0.pbf` and returns a PNG tile). The `/mvt/{layer}/{z}/{x}/{y}`
@@ -273,13 +282,15 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 
 Batch 7 completed the previous list: GeoPackage **write** round-trip (done),
 WCS SUBSET/SIZE on a real georeferenced GeoTIFF (done, caught bug7), and
-PostGIS data source HTTP integration (done, live). Next candidates:
+PostGIS data source HTTP integration (done, live).
 
-1. WFS URL `FILTER=` (ECQL) over HTTP — replace the hardcoded `parse_filter_xml`
-   stub and test `GetFeature?FILTER=bbox(...)` / `name='x'`
-2. Extend the WKB **decoder** to MultiPoint / MultiLineString / MultiPolygon /
+Batch 8 completed: WFS URL `FILTER=` (OGC XML + ECQL) and `CQL_FILTER` over HTTP
+(done, caught bug8 in the CQL parser). Next candidates:
+
+1. Extend the WKB **decoder** to MultiPoint / MultiLineString / MultiPolygon /
    GeometryCollection, then cover the encoder round-trip for those types
-3. GeoPackage typed attributes (INTEGER / REAL / BOOLEAN) + `FeatureType`
+2. GeoPackage typed attributes (INTEGER / REAL / BOOLEAN) + `FeatureType`
    describe over REST for a published GeoPackage layer
-4. WMS vendor params on the live cascaded proxy (CQL / TIME pass-through)
+3. WMS vendor params on the live cascaded proxy (CQL / TIME pass-through)
+4. OGC XML `FILTER=` edge cases: `ogc:Function`, spatial `Intersects` XML form
 
