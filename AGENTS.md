@@ -74,7 +74,7 @@ cargo build
 - **Windows-native** (build.bat, PowerShell). `cargo run` expects `./static/` with built frontend
 - **Config**: `terrane.toml` optional; defaults work without it. Environment variables: `RUST_LOG`, `GEOSERVER__SERVER__HOST` etc. (double-underscore separator). `load_from_file()` already mounts the `GEOSERVER__` env source, so env overrides also work with `--config`.
 - **Frontend proxy**: `proxy.conf.json` routes `/api`, `/wms`, `/wfs`, `/wcs` to `http://localhost:8080`
-- **AGENTS.md** is the single instruction file (no .cursorrules, no copilot-instructions.md)
+- **AGENTS.md** is the single instruction file (no .cursorrules). `.github/copilot-instructions.md` is a thin entry point that points back to AGENTS.md, so GitHub Copilot contexts (e.g. GitHub.com / PRs) pick up the same guidance.
 
 ## Cloud-native status (see IMPLEMENTATION_PLAN.md §7)
 

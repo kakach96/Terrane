@@ -1,0 +1,29 @@
+# Terrane — rustfmt configuration
+# Based on common Rust community best practices.
+# All options below are stable (no `unstable_features` needed).
+
+# Edition must match Cargo.toml so formatting rules (e.g. `let`/`match` syntax)
+# are applied consistently across the codebase.
+edition = "2021"
+
+# Line width limit (rustfmt default is 100). Kept explicit for readability.
+max_width = 100
+
+# Apply consistent, smaller indentation heuristics for fn args,
+# array/struct literals and chains (stable since rustfmt 1.4.4).
+use_small_heuristics = "Default"
+
+# Import ordering ----------------------------------------------------------
+# Keep imports sorted lexicographically (rustfmt default).
+reorder_imports = true
+# Note: `imports_granularity = "Crate"` and `group_imports = "StdExternalCrate"`
+# (serde/tokio style import grouping) are nightly-only in rustfmt 1.9 stable and
+# would emit warnings. Enable them if the project ever moves to a nightly toolchain.
+
+# Miscellaneous -------------------------------------------------------------
+# Auto-detect newlines (LF on Unix, CRLF on Windows) — keeps diffs clean
+# on the Windows-native toolchain used by this repo.
+newline_style = "Auto"
+
+# Match arms and struct/enum definitions get a trailing comma (rustfmt default).
+match_block_trailing_comma = true
