@@ -672,3 +672,159 @@ async fn test_rest_backup_import_roundtrip() {
         .iter().filter_map(|w| w["name"].as_str().map(|s| s.to_string())).collect();
     assert!(names.contains(&"ws_import".to_string()), "导入后 App B 应包含 ws_import, 实际: {:?}", names);
 }
+
+// ---------------------------------------------------------------------------
+// Batch 7: PostGIS 数据源 HTTP 层集成 (live, 需本机 PostGIS 容器)
+// ---------------------------------------------------------------------------
+
+/// 连接参数可用 `GEOSERVER_TEST_PG_*` 环境变量覆盖 (与 store 层 live 测试一致)。
+/// 返回 (host, port, user, password, database)。
+fn pg_http_test_params() -> (String, u16, String, String, String) {
+    let host = std::env::var("GEOSERVER_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port: u16 = std::env::var("GEOSERVER_TEST_PG_PORT")
+        .ok().and_then(|v| v.parse().ok()).unwrap_or(5432);
+    let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "postgres".into());
+    let password = std::env::var("GEOSERVER_TEST_PG_PASSWORD")
+        .unwrap_or_else(|_| "kakach2026".into());
+    let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "postgres".into());
+    (host, port, user, password, instance)
+}
+
+/// 直接连接 PostGIS, 创建 schema + 带 PostGIS 几何列的测试表。
+async fn pg_http_setup_schema(schema: &str) -> tokio_postgres::Client {
+    let (host, port, user, password, instance) = pg_http_test_params();
+    let (client, connection) = tokio_postgres::connect(
+        &format!("host={} port={} dbname={} user={} password={}",
+            host, port, instance, user, password),
+        tokio_postgres::NoTls,
+    )
+    .await
+    .expect("应能连接本地 PostGIS (postgis 容器)");
+    tokio::spawn(connection);
+
+    client
+        .batch_execute(&format!(
+            "CREATE SCHEMA IF NOT EXISTS {};
+             CREATE TABLE {}.cities (
+                id SERIAL PRIMARY KEY,
+                name TEXT,
+                geom GEOMETRY(Point, 4326)
+             );
+             INSERT INTO {}.cities (name, geom) VALUES
+                ('Amsterdam', ST_SetSRID(ST_MakePoint(4.9, 52.37), 4326)),
+                ('Rotterdam', ST_SetSRID(ST_MakePoint(4.48, 51.92), 4326));",
+            schema, schema, schema
+        ))
+        .await
+        .expect("应能创建 schema 与测试表 (需要 PostGIS 扩展)");
+    client
+}
+
+/// 删除测试 schema (清理)。
+async fn pg_http_drop_schema(schema: &str) {
+    let (host, port, user, password, instance) = pg_http_test_params();
+    let (client, connection) = tokio_postgres::connect(
+        &format!("host={} port={} dbname={} user={} password={}",
+            host, port, instance, user, password),
+        tokio_postgres::NoTls,
+    )
+    .await
+    .unwrap();
+    tokio::spawn(connection);
+    let _ = client
+        .batch_execute(&format!("DROP SCHEMA IF EXISTS {} CASCADE", schema))
+        .await;
+}
+
+#[actix_rt::test]
+#[ignore = "requires a live PostGIS (e.g. docker compose --profile postgres)"]
+async fn test_live_rest_postgis_data_source_http() {
+    use actix_web::http::StatusCode;
+
+    let (pg_host, pg_port, pg_user, pg_password, pg_db) = pg_http_test_params();
+    // 每进程独立 schema, 避免并行运行互相清理
+    let schema = format!("terrane_http_test_{}", std::process::id());
+    let setup_client = pg_http_setup_schema(&schema).await;
+
+    let app = build_test_app!();
+
+    // 1. 通过 REST 创建 postgis 数据源 (指向真实容器)
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(&serde_json::json!({
+            "name": "pg_http_ds",
+            "type": "postgis",
+            "workspace": "default",
+            "enabled": true,
+            "connection": {
+                "host": pg_host,
+                "port": pg_port,
+                "database": pg_db,
+                "schema": schema,
+                "username": pg_user,
+                "password": pg_password,
+            },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED,
+        "创建 PostGIS 数据源应返回 201, 实际: {}", resp.status());
+
+    // 2. 数据源列表应包含
+    let req = test::TestRequest::get().uri("/geoserver/data-sources").to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|d| d["name"].as_str().map(|s| s.to_string())).collect();
+    assert!(names.contains(&"pg_http_ds".to_string()),
+        "数据源列表应包含 pg_http_ds, 实际: {:?}", names);
+
+    // 3. 表列表 → 应包含 cities
+    let req = test::TestRequest::get()
+        .uri("/geoserver/data-sources/pg_http_ds/tables")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "表列表应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let tables: Vec<String> = body["data"].as_array().cloned().unwrap_or_default()
+        .iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect();
+    assert!(tables.contains(&"cities".to_string()),
+        "表列表应包含 cities, 实际: {:?}", tables);
+
+    // 4. 创建图层 (引用数据源 + native table name)
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(&serde_json::json!({
+            "name": "cities_layer",
+            "title": "Cities",
+            "workspace": "default",
+            "store": "pg_http_ds",
+            "native_name": "cities",
+            "srs": "EPSG:4326",
+            "minx": 3.0, "miny": 51.0, "maxx": 6.0, "maxy": 53.0,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED,
+        "创建图层应返回 201, 实际: {}", resp.status());
+
+    // 5. feature-type → 应返回表结构 (name / geom)
+    let req = test::TestRequest::get()
+        .uri("/geoserver/layers/cities_layer/feature-type")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "feature-type 应返回 200, 实际: {}", resp.status());
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let cols = body["data"].as_array().cloned().unwrap_or_default();
+    let col_names: Vec<String> = cols.iter()
+        .filter_map(|c| c["name"].as_str().map(|s| s.to_string()))
+        .collect();
+    assert!(col_names.contains(&"name".to_string()),
+        "feature-type 应包含 name 列, 实际: {:?}", col_names);
+    assert!(col_names.contains(&"geom".to_string()),
+        "feature-type 应包含 geom 列, 实际: {:?}", col_names);
+
+    // 清理: 释放 setup 连接, DROP SCHEMA
+    drop(setup_client);
+    pg_http_drop_schema(&schema).await;
+}

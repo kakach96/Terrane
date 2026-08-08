@@ -324,3 +324,102 @@ async fn test_wcs_get_coverage_real_arcgrid_subset_size() {
     // 清理 fixture
     std::fs::remove_dir_all(&dir).ok();
 }
+
+// ---------------------------------------------------------------------------
+// Batch 7: 真实 GeoTIFF (带地理配准标签) 上的 SUBSET / SIZE
+// ---------------------------------------------------------------------------
+
+/// 生成一个带地理配准标签的 8x8 GeoTIFF fixture (用 tiff crate 编码):
+/// - ModelPixelScaleTag (33550) = [1.0, 1.0, 0.0]
+/// - ModelTiepointTag (33922)   = [0,0,0, 0,8,0] → 左上角模型坐标 (0, 8)
+/// → bounds = (minx 0, miny 0, maxx 8, maxy 8)
+fn create_georef_tiff_fixture(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    use tiff::encoder::*;
+    use tiff::tags::Tag;
+
+    let path = dir.join(name);
+    let file = std::fs::File::create(&path).unwrap();
+    let mut tiff = TiffEncoder::new(file).unwrap();
+    let mut image_enc = tiff.new_image::<colortype::RGB8>(8, 8).unwrap();
+    // 先写地理配准标签, 再写数据
+    let pixel_scale: &[f64] = &[1.0, 1.0, 0.0];
+    let tiepoint: &[f64] = &[0.0, 0.0, 0.0, 0.0, 8.0, 0.0];
+    image_enc
+        .encoder()
+        .write_tag(Tag::Unknown(33550), pixel_scale)
+        .unwrap();
+    image_enc
+        .encoder()
+        .write_tag(Tag::Unknown(33922), tiepoint)
+        .unwrap();
+    // 8x8 RGB 像素 (每列渐变, 便于肉眼/程序验证裁剪区域)
+    let mut data = Vec::with_capacity(8 * 8 * 3);
+    for _y in 0..8 {
+        for x in 0..8 {
+            let v = (x * 30) as u8;
+            data.extend_from_slice(&[v, 100, 200]);
+        }
+    }
+    image_enc.write_data(&data).unwrap();
+    path
+}
+
+#[actix_rt::test]
+async fn test_wcs_get_coverage_real_geotiff_subset_size() {
+    use actix_web::http::StatusCode;
+
+    let app = build_test_app!();
+
+    // 1. 带地理配准标签的 8x8 GeoTIFF (bounds 0,0 → 8,8)
+    let dir = std::env::temp_dir().join(format!("terrane-wcs-geotiff-sub-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let tif_path = create_georef_tiff_fixture(&dir, "cov_geo.tif");
+
+    // 2. 创建 geotiff 数据源
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(&serde_json::json!({
+            "name": "cov_geo",
+            "type": "geotiff",
+            "workspace": "default",
+            "enabled": true,
+            "connection": { "file_path": tif_path.to_string_lossy(), "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建 GeoTIFF 数据源应返回 201, 实际: {}", resp.status());
+
+    // 3. DescribeCoverage → 应包含真实尺寸 8x8 与地理边界
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=DescribeCoverage&COVERAGEID=cov_geo")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "WCS DescribeCoverage 应返回 200, 实际: {}", resp.status());
+    let xml = String::from_utf8_lossy(&test::read_body(resp).await).to_string();
+    assert!(xml.contains("8x8"), "DescribeCoverage 应包含真实 GeoTIFF 尺寸 8x8, 实际: {}", xml);
+
+    // 4. SUBSET x(0,2) y(0,2) → 真实裁剪为 2x2 (无地理配准时 SUBSET 会被忽略, 可区分)
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_geo&FORMAT=image/tiff&SUBSET=x(0,2)&SUBSET=y(0,2)")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "WCS GetCoverage + SUBSET (真实 GeoTIFF) 应返回 200, 实际: {}", resp.status());
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
+    assert_eq!(decoded.width(), 2, "SUBSET x(0,2) y(0,2) 应裁剪为 2x2, 实际: {}", decoded.width());
+    assert_eq!(decoded.height(), 2);
+
+    // 5. SUBSET + SIZE=8,8 → 重采样为 8x8
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_geo&FORMAT=image/tiff&SUBSET=x(0,2)&SUBSET=y(0,2)&SIZE=8,8")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "WCS GetCoverage + SUBSET + SIZE (真实 GeoTIFF) 应返回 200, 实际: {}", resp.status());
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
+    assert_eq!(decoded.width(), 8, "SUBSET + SIZE=8,8 应输出 8x8, 实际: {}", decoded.width());
+    assert_eq!(decoded.height(), 8);
+
+    // 清理 fixture
+    std::fs::remove_dir_all(&dir).ok();
+}
