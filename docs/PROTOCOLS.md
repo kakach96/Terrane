@@ -26,7 +26,7 @@ and *which remain to be adapted*.
 | **Tile cache (GWC-like)** | —                         | ⚠️      | Basic `/tiles` + local disk cache; no seeding / metastore / full GWC |
 | **SLD styling**     | 1.0.0                          | ⚠️      | Basic CRUD + rendering; no CSS / YSLD / MBStyle, limited SLD features |
 | **WMS output formats** | —                          | ✅      | PNG/JPEG/GIF/WebP/SVG/KML/GeoJSON/PDF/GeoRSS |
-| **WFS output formats** | —                          | ⚠️      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV ✅; KML, Shapefile ❌ |
+| **WFS output formats** | —                          | ✅      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV / KML / Shapefile (SHAPE-ZIP) |
 | **WPS**             | —                              | ❌      | Processing service (P4) |
 | **CSW**             | —                              | ❌      | Catalog service (P4) |
 | **OGC API series**  | Features / Tiles / Maps / Coverages / Processes / Styles | ❌ | P4 |
@@ -68,12 +68,12 @@ Endpoint `/wfs` (`src/services/wfs.rs`, `src/handlers/wfs_handler.rs`). GET + PO
 |---------------------|--------|-------|
 | GetCapabilities     | ✅     | Advertises 2.0.0 |
 | DescribeFeatureType | ✅     | XSD schema (real typed columns for published GeoPackage layers) |
-| GetFeature          | ✅     | GML 2.1.2 / GML 3.1.1 / GML 3.2, GeoJSON, CSV |
+| GetFeature          | ✅     | GML 2.1.2 / GML 3.1.1 / GML 3.2, GeoJSON, CSV, KML 2.2, Shapefile (SHAPE-ZIP) |
 | GetFeatureWithLock  | ✅     | |
 | LockFeature         | ✅     | |
 | Transaction         | ✅     | WFS-T insert / update / delete via POST XML |
 
-**Gaps vs reference**: KML / Shapefile output; deeper GML 3.2 schema fidelity.
+**Gaps vs reference**: deeper GML 3.2 schema fidelity.
 
 ## 4. WCS — Web Coverage Service
 
@@ -157,7 +157,7 @@ Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](../IMPLEMEN
 |----------|-------------------------------------|--------|
 | P2       | TMS 1.0.0 + WMS-C 1.1.1 (GWC)       | small — reuse tile engine |
 | P2       | WMS PDF / GeoRSS output             | small — reuse render pipeline |
-| P2       | WFS KML / Shapefile output          | small |
+| P2       | WFS KML / Shapefile output          | ✅ done |
 | P4       | WPS (processing)                    | 4–6 weeks |
 | P4       | CSW (catalog)                       | 3–4 weeks |
 | P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | 2–3 weeks each |
@@ -181,7 +181,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 10. Automated test coverage
 
-`cargo test` currently green: **119 lib unit tests + 94 integration tests**, plus
+`cargo test` currently green: **123 lib unit tests + 99 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -192,7 +192,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
 | `tests/wms_test.rs` | 26 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
-| `tests/wfs_test.rs` | 22    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns) |
+| `tests/wfs_test.rs` | 27    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
 | `tests/rest_test.rs`| 23 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 12    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
@@ -212,7 +212,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | Layer              | Coverage                                                                 |
 |--------------------|--------------------------------------------------------------------------|
 | WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
-| WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
+| WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV / KML 2.2 / Shapefile SHAPE-ZIP), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
 | WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | TMS                | GetCapabilities (RESTful + KVP), TileMap document (SRS / BoundingBox / Origin / TileFormat / TileSets + units-per-pixel), GetTile (global-geodetic + global-mercator, PNG + JPEG, TMS bottom-up y flip) — integration |
@@ -225,6 +225,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 | Projection         | 7 unit tests (`utils/projection.rs`)                                     |
 | Geometry           | 3 unit tests (`utils/geometry.rs`)                                       |
 | Shapefile          | 3 unit tests (`utils/shapefile.rs`: PRJ + coordinates)                   |
+| Shapefile export   | 4 unit tests (`utils/shapefile_export.rs`: .shp/.shx structure, .dbf fields/values, .prj, ZIP package, **round-trip through the reader**, polyline/polygon shape types) |
 | GeoTIFF            | 3 unit tests (`utils/geotiff.rs`: format, crop-no-geo, georeferencing-tags → bounds + crop) |
 | Config             | 3 unit tests (`config.rs`, incl. legacy `[business]`/`[gwc]` alias)      |
 | Auth               | 8 unit tests (`auth.rs`: salt, hash, verify, JWT)                        |
@@ -353,7 +354,24 @@ matrix). TMS is served at `/gwc/service/tms` (+ RESTful `/1.0.0`): GetCapabiliti
 to a cached tile; verified against the reference, which rejects off-grid BBOXes
 over a 10% threshold). New unit tests: 5 (tile_grid) + 5 (tms) + 2 (wmsc); new
 integration tests: 7 (tms_test) + 4 (WMS-C in wms_test).
+Batch 16 completed: **WFS KML / Shapefile output** — `GetFeature` now emits
+**KML 2.2** (`application/vnd.google-earth.kml+xml`, aliases `KML` and the
+GeoServer `application/vnd.google-earth.kml xml` quirk): a `<Document>` with a
+`<Schema>` of the layer attributes and one `<Placemark>` per feature
+(`<ExtendedData>/<SchemaData>/<SimpleData>` + `lon,lat` geometry, LineString /
+Polygon / Multi* supported). **Shapefile** (`SHAPE-ZIP`, `application/zip`): a
+new hand-written in-memory exporter `src/utils/shapefile_export.rs` produces
+`.shp` / `.shx` / `.dbf` / `.prj` (ESRI Shapefile Technical Description +
+dBASE III; Point / MultiPoint / PolyLine / Polygon with parts, dBASE field
+types inferred from property values) and zips them (STORE). The output
+round-trips through the existing `read_shapefile` reader (verified by unit +
+integration tests). GetFeature capabilities now advertise KML / SHAPE-ZIP /
+CSV. Verified against the reference GeoServer: `outputFormat=application/vnd.
+google-earth.kml+xml` → KML 2.2 Document with Schema + Placemarks,
+`outputFormat=SHAPE-ZIP` → `application/zip` with .shp/.shx/.dbf/.prj/.cst.
+New unit tests: 4 (shapefile_export); new integration: 5 (KML + SHAPE-ZIP in
+wfs_test).
 Next candidates:
 
-1. WFS KML / Shapefile output
-
+1. WPS (processing) — first real P4 surface
+2. CSW (catalog)
