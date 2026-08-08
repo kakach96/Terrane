@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use crate::models::{Bounds, Feature, GeoJsonGeometry};
+use crate::utils::cql_filter::{parse_cql, CqlExpression, evaluate_cql};
 use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +70,8 @@ pub enum Filter {
     PropertyIsBetween(PropertyName, Literal, Literal),
     BBox(PropertyName, Bbox),
     FeatureId(Vec<String>),
+    /// GeoServer 厂商扩展: ECQL / CQL 表达式 (来自 FILTER=ECQL 或 CQL_FILTER 参数)
+    Cql(Box<CqlExpression>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -383,7 +386,13 @@ pub fn parse_wfs_request(params: &[(String, String)]) -> Result<WfsRequest, crat
             "MAXFEATURES" | "MAXFEATURE" => max_features = value.parse().ok(),
             "STARTINDEX" => start_index = value.parse().ok(),
             "SRSNAME" => srs_name = Some(value.clone()),
-            "FILTER" => filter = Some(parse_filter_xml(value)?),
+            "FILTER" => filter = Some(parse_filter(value)?),
+            "CQL_FILTER" => {
+                let expr = parse_cql(value).map_err(|e| {
+                    crate::error::GeoServerError::BadRequest(format!("Invalid CQL_FILTER: {}", e))
+                })?;
+                filter = Some(Filter::Cql(Box::new(expr)));
+            }
             "BBOX" => {
                 let parts: Vec<f64> = value.split(',')
                     .filter_map(|s| s.trim().parse().ok())
@@ -430,33 +439,346 @@ pub fn parse_wfs_request(params: &[(String, String)]) -> Result<WfsRequest, crat
     })
 }
 
-fn parse_filter_xml(_xml: &str) -> Result<Filter, crate::error::GeoServerError> {
-    Ok(Filter::And(
-        Box::new(Filter::PropertyIsEqualTo(PropertyName("name".to_string()), Literal("test".to_string()))),
-        Box::new(Filter::BBox(
-            PropertyName("geometry".to_string()),
-            Bbox {
-                minx: -180.0,
-                miny: -90.0,
-                maxx: 180.0,
-                maxy: 90.0,
-                srs: None,
-            }
-        )),
-    ))
+/// 解析 WFS `FILTER` 参数。
+///
+/// 与参考 GeoServer 行为一致，支持两种编码:
+/// - OGC XML Filter 编码 (WFS 1.0/1.1/2.0 标准): `<Filter>...</Filter>`
+/// - ECQL / CQL (GeoServer 厂商扩展): `name='x' AND bbox(geom, ...)`
+pub fn parse_filter(value: &str) -> Result<Filter, crate::error::GeoServerError> {
+    let trimmed = value.trim();
+    if trimmed.starts_with('<') {
+        return parse_ogc_filter_xml(trimmed);
+    }
+    let expr = parse_cql(trimmed).map_err(|e| {
+        crate::error::GeoServerError::BadRequest(format!("Invalid FILTER expression: {}", e))
+    })?;
+    Ok(Filter::Cql(Box::new(expr)))
 }
 
+// ---------------------------------------------------------------------------
+// OGC XML Filter 编码解析
+// ---------------------------------------------------------------------------
+
+/// 简化的 XML 节点树，由 quick-xml 事件构建
+struct XmlNode {
+    name: String,
+    attrs: Vec<(String, String)>,
+    text: String,
+    children: Vec<XmlNode>,
+}
+
+impl XmlNode {
+    fn attr(&self, key: &str) -> Option<&str> {
+        self.attrs.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+    }
+}
+
+/// 去掉命名空间前缀，返回本地元素名
+fn xml_local_name(raw: &[u8]) -> String {
+    let s = String::from_utf8_lossy(raw).to_string();
+    s.rsplit(':').next().unwrap_or(&s).to_string()
+}
+
+/// 将 XML 字符串解析为节点树
+fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
+    use quick_xml::Reader;
+    use quick_xml::events::Event;
+
+    let mut reader = Reader::from_str(xml);
+    reader.trim_text(true);
+    let mut buf = Vec::new();
+
+    let mut stack: Vec<XmlNode> = Vec::new();
+    let mut roots: Vec<XmlNode> = Vec::new();
+    let mut text_buf = String::new();
+
+    let flush_text = |stack: &mut Vec<XmlNode>, text_buf: &mut String| {
+        if !text_buf.is_empty() {
+            if let Some(top) = stack.last_mut() {
+                top.text.push_str(text_buf.trim());
+                top.text.push(' ');
+            }
+            text_buf.clear();
+        }
+    };
+    let attach = |stack: &mut Vec<XmlNode>, roots: &mut Vec<XmlNode>, node: XmlNode| {
+        if let Some(parent) = stack.last_mut() {
+            parent.children.push(node);
+        } else {
+            roots.push(node);
+        }
+    };
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Err(e) => return Err(format!("XML parse error: {}", e)),
+            Ok(Event::Eof) => break,
+            Ok(Event::Start(ref e)) => {
+                flush_text(&mut stack, &mut text_buf);
+                let name = xml_local_name(e.name().as_ref());
+                let attrs = e.attributes().filter_map(|a| a.ok())
+                    .map(|a| (xml_local_name(a.key.as_ref()), String::from_utf8_lossy(&a.value).to_string()))
+                    .collect();
+                stack.push(XmlNode { name, attrs, text: String::new(), children: vec![] });
+            }
+            Ok(Event::Empty(ref e)) => {
+                flush_text(&mut stack, &mut text_buf);
+                let name = xml_local_name(e.name().as_ref());
+                let attrs = e.attributes().filter_map(|a| a.ok())
+                    .map(|a| (xml_local_name(a.key.as_ref()), String::from_utf8_lossy(&a.value).to_string()))
+                    .collect();
+                attach(&mut stack, &mut roots, XmlNode { name, attrs, text: String::new(), children: vec![] });
+            }
+            Ok(Event::Text(ref e)) => {
+                text_buf.push_str(String::from_utf8_lossy(e.as_ref()).trim());
+            }
+            Ok(Event::End(_)) => {
+                flush_text(&mut stack, &mut text_buf);
+                if let Some(node) = stack.pop() {
+                    attach(&mut stack, &mut roots, node);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(roots)
+}
+
+/// 将 XML 节点树转换为 OGC Filter
+fn node_to_filter(node: &XmlNode) -> Result<Filter, String> {
+    match node.name.as_str() {
+        "Filter" => {
+            let child = node.children.first()
+                .ok_or_else(|| "empty <Filter> element".to_string())?;
+            node_to_filter(child)
+        }
+        "And" | "Or" => {
+            let is_and = node.name == "And";
+            let children: Vec<Filter> = node.children.iter()
+                .map(node_to_filter)
+                .collect::<Result<_, _>>()?;
+            if children.is_empty() {
+                return Err(format!("empty <{}> element", node.name));
+            }
+            let mut iter = children.into_iter();
+            let first = iter.next().unwrap();
+            Ok(iter.fold(first, |acc, f| {
+                if is_and {
+                    Filter::And(Box::new(acc), Box::new(f))
+                } else {
+                    Filter::Or(Box::new(acc), Box::new(f))
+                }
+            }))
+        }
+        "Not" => {
+            let child = node.children.first()
+                .ok_or_else(|| "empty <Not> element".to_string())?;
+            Ok(Filter::Not(Box::new(node_to_filter(child)?)))
+        }
+        "PropertyIsEqualTo" => comparison_filter(node, CompareOp::Equal),
+        "PropertyIsNotEqualTo" => comparison_filter(node, CompareOp::NotEqual),
+        "PropertyIsLessThan" => comparison_filter(node, CompareOp::LessThan),
+        "PropertyIsGreaterThan" => comparison_filter(node, CompareOp::GreaterThan),
+        "PropertyIsLessThanOrEqualTo" => comparison_filter(node, CompareOp::LessThanOrEqual),
+        "PropertyIsGreaterThanOrEqualTo" => comparison_filter(node, CompareOp::GreaterThanOrEqual),
+        "PropertyIsLike" => {
+            let prop = child_text(node, "PropertyName")?;
+            let pat = child_text(node, "Literal")?;
+            Ok(Filter::PropertyIsLike(PropertyName(prop), Literal(pat)))
+        }
+        "PropertyIsNull" => {
+            let prop = child_text(node, "PropertyName")?;
+            Ok(Filter::PropertyIsNull(PropertyName(prop)))
+        }
+        "PropertyIsBetween" => {
+            let prop = child_text(node, "PropertyName")?;
+            let lits: Vec<String> = node.children.iter()
+                .filter(|c| c.name == "Literal")
+                .map(|c| c.text.trim().to_string())
+                .collect();
+            if lits.len() < 2 {
+                return Err("<PropertyIsBetween> 需要两个 <Literal>".to_string());
+            }
+            Ok(Filter::PropertyIsBetween(
+                PropertyName(prop),
+                Literal(lits[0].clone()),
+                Literal(lits[1].clone()),
+            ))
+        }
+        "BBOX" => {
+            let prop = child_text(node, "PropertyName")?;
+            let (minx, miny, maxx, maxy) = parse_bbox_corners(node)?;
+            Ok(Filter::BBox(PropertyName(prop), Bbox {
+                minx, miny, maxx, maxy, srs: None,
+            }))
+        }
+        "FeatureId" => {
+            let fid = node.attr("fid").unwrap_or("").to_string();
+            if fid.is_empty() {
+                return Err("<FeatureId> 缺少 fid 属性".to_string());
+            }
+            Ok(Filter::FeatureId(vec![fid]))
+        }
+        other => Err(format!("不支持的 OGC Filter 元素: {}", other)),
+    }
+}
+
+/// 获取指定名称子元素的文本内容
+fn child_text(node: &XmlNode, name: &str) -> Result<String, String> {
+    node.children.iter()
+        .find(|c| c.name == name)
+        .map(|c| c.text.trim().to_string())
+        .ok_or_else(|| format!("<{}> 缺少 <{}> 子元素", node.name, name))
+}
+
+/// 比较操作符节点 → Filter
+fn comparison_filter(node: &XmlNode, op: CompareOp) -> Result<Filter, String> {
+    let prop = child_text(node, "PropertyName")?;
+    let lit = child_text(node, "Literal")?;
+    Ok(match op {
+        CompareOp::Equal => Filter::PropertyIsEqualTo(PropertyName(prop), Literal(lit)),
+        CompareOp::NotEqual => Filter::PropertyIsNotEqualTo(PropertyName(prop), Literal(lit)),
+        CompareOp::LessThan => Filter::PropertyIsLessThan(PropertyName(prop), Literal(lit)),
+        CompareOp::GreaterThan => Filter::PropertyIsGreaterThan(PropertyName(prop), Literal(lit)),
+        CompareOp::LessThanOrEqual => Filter::PropertyIsLessThanOrEqualTo(PropertyName(prop), Literal(lit)),
+        CompareOp::GreaterThanOrEqual => Filter::PropertyIsGreaterThanOrEqualTo(PropertyName(prop), Literal(lit)),
+    })
+}
+
+/// 从 BBOX 节点的 Envelope (lowerCorner/upperCorner) 提取角点
+fn parse_bbox_corners(node: &XmlNode) -> Result<(f64, f64, f64, f64), String> {
+    let envelope = node.children.iter().find(|c| c.name == "Envelope")
+        .ok_or_else(|| "<BBOX> 缺少 <Envelope>".to_string())?;
+    let lower = child_text(envelope, "lowerCorner")?;
+    let upper = child_text(envelope, "upperCorner")?;
+    let parse_pair = |s: &str| -> Result<(f64, f64), String> {
+        let parts: Vec<f64> = s.split_whitespace().filter_map(|p| p.parse().ok()).collect();
+        if parts.len() >= 2 {
+            Ok((parts[0], parts[1]))
+        } else {
+            Err(format!("无效的角点: '{}'", s))
+        }
+    };
+    let (minx, miny) = parse_pair(&lower)?;
+    let (maxx, maxy) = parse_pair(&upper)?;
+    Ok((minx, miny, maxx, maxy))
+}
+
+fn parse_ogc_filter_xml(xml: &str) -> Result<Filter, crate::error::GeoServerError> {
+    let roots = parse_xml_nodes(xml)
+        .map_err(|e| crate::error::GeoServerError::BadRequest(format!("Invalid FILTER XML: {}", e)))?;
+    let node = roots.first()
+        .ok_or_else(|| crate::error::GeoServerError::BadRequest("Empty FILTER XML".to_string()))?;
+    node_to_filter(node)
+        .map_err(|e| crate::error::GeoServerError::BadRequest(format!("Invalid FILTER XML: {}", e)))
+}
+
+/// 属性比较操作符
+#[derive(Clone, Copy)]
+enum CompareOp {
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+}
+
+/// 属性比较: 双方都能解析为数值时按数值比较, 否则按字符串比较
+fn compare_property(feature: &Feature, property: &str, literal: &str, op: CompareOp) -> bool {
+    let Some(val) = feature.properties.get(property) else {
+        return false;
+    };
+    let val_str = val.to_string();
+    if let (Ok(n), Ok(l)) = (val_str.parse::<f64>(), literal.parse::<f64>()) {
+        return match op {
+            CompareOp::Equal => n == l,
+            CompareOp::NotEqual => n != l,
+            CompareOp::LessThan => n < l,
+            CompareOp::LessThanOrEqual => n <= l,
+            CompareOp::GreaterThan => n > l,
+            CompareOp::GreaterThanOrEqual => n >= l,
+        };
+    }
+    match op {
+        CompareOp::Equal => val_str == literal,
+        CompareOp::NotEqual => val_str != literal,
+        _ => false,
+    }
+}
+
+/// SQL 风格通配符匹配 (`%` 任意多个字符, `_` 单个字符)
+fn wildcard_match(text: &str, pattern: &str) -> bool {
+    let mut ti = 0;
+    let mut pi = 0;
+    let text_bytes = text.as_bytes();
+    let pat_bytes = pattern.as_bytes();
+    let mut star = None;
+
+    while ti < text_bytes.len() {
+        if pi < pat_bytes.len() && (pat_bytes[pi] == b'_' || pat_bytes[pi] == text_bytes[ti]) {
+            ti += 1;
+            pi += 1;
+        } else if pi < pat_bytes.len() && pat_bytes[pi] == b'%' {
+            star = Some((ti, pi));
+            pi += 1;
+        } else if let Some((st, sp)) = star {
+            ti = st + 1;
+            pi = sp + 1;
+            star = Some((ti, pi));
+        } else {
+            return false;
+        }
+    }
+
+    while pi < pat_bytes.len() && pat_bytes[pi] == b'%' {
+        pi += 1;
+    }
+
+    pi == pat_bytes.len()
+}
+
+/// 对要素应用 OGC/ECQL 过滤器，返回是否匹配
 pub fn validate_filter(feature: &Feature, filter: &Filter) -> bool {
     match filter {
         Filter::And(f1, f2) => validate_filter(feature, f1) && validate_filter(feature, f2),
         Filter::Or(f1, f2) => validate_filter(feature, f1) || validate_filter(feature, f2),
         Filter::Not(f) => !validate_filter(feature, f),
         Filter::PropertyIsEqualTo(prop, lit) => {
-            if let Some(value) = feature.properties.get(&prop.0) {
-                value.to_string() == lit.0
-            } else {
-                false
+            compare_property(feature, &prop.0, &lit.0, CompareOp::Equal)
+        }
+        Filter::PropertyIsNotEqualTo(prop, lit) => {
+            compare_property(feature, &prop.0, &lit.0, CompareOp::NotEqual)
+        }
+        Filter::PropertyIsLessThan(prop, lit) => {
+            compare_property(feature, &prop.0, &lit.0, CompareOp::LessThan)
+        }
+        Filter::PropertyIsGreaterThan(prop, lit) => {
+            compare_property(feature, &prop.0, &lit.0, CompareOp::GreaterThan)
+        }
+        Filter::PropertyIsLessThanOrEqualTo(prop, lit) => {
+            compare_property(feature, &prop.0, &lit.0, CompareOp::LessThanOrEqual)
+        }
+        Filter::PropertyIsGreaterThanOrEqualTo(prop, lit) => {
+            compare_property(feature, &prop.0, &lit.0, CompareOp::GreaterThanOrEqual)
+        }
+        Filter::PropertyIsLike(prop, lit) => {
+            match feature.properties.get(&prop.0) {
+                Some(val) => wildcard_match(&val.to_string(), &lit.0),
+                None => false,
             }
+        }
+        Filter::PropertyIsNull(prop) => {
+            !feature.properties.contains_key(&prop.0)
+                || matches!(feature.properties.get(&prop.0), Some(crate::models::PropertyValue::Null))
+        }
+        Filter::PropertyIsBetween(prop, low, high) => {
+            feature.properties.get(&prop.0)
+                .and_then(|v| v.to_string().parse::<f64>().ok())
+                .zip(low.0.parse::<f64>().ok())
+                .zip(high.0.parse::<f64>().ok())
+                .map(|((v, l), h)| v >= l && v <= h)
+                .unwrap_or(false)
         }
         Filter::BBox(_, bbox) => {
             let bounds = bbox.to_bounds();
@@ -472,7 +794,7 @@ pub fn validate_filter(feature: &Feature, filter: &Filter) -> bool {
             }
         }
         Filter::FeatureId(ids) => ids.contains(&feature.id),
-        _ => true,
+        Filter::Cql(expr) => evaluate_cql(feature, expr),
     }
 }
 

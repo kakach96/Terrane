@@ -35,7 +35,7 @@ use crate::models::{Feature, GeoJsonGeometry, PropertyValue};
 // CQL 表达式类型
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum CqlExpression {
     /// 比较: 属性 操作符 值
     Comparison {
@@ -74,7 +74,7 @@ pub enum CqlExpression {
     False,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ComparisonOp {
     Equal,
     NotEqual,
@@ -84,14 +84,14 @@ pub enum ComparisonOp {
     GreaterThanOrEqual,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum LiteralValue {
     String(String),
     Number(f64),
     Boolean(bool),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum SpatialOp {
     BBox {
         property: String,
@@ -132,7 +132,7 @@ pub fn parse_cql(cql: &str) -> Result<CqlExpression, String> {
 /// 解析顶层 OR 表达式
 fn parse_or_expr(s: &str) -> Result<CqlExpression, String> {
     // 按 OR 分割（忽略括号内的）
-    let parts = split_top_level(s, "OR", "or", "Or", "oR")?;
+    let parts = split_top_level(s, &["OR"])?;
     if parts.len() == 1 {
         return parse_and_expr(&parts[0]);
     }
@@ -151,7 +151,7 @@ fn parse_and_expr(s: &str) -> Result<CqlExpression, String> {
     if s.to_uppercase().contains(" BETWEEN ") {
         return parse_not_expr(s);
     }
-    let parts = split_top_level(s, "AND", "and", "And", "aND")?;
+    let parts = split_top_level(s, &["AND"])?;
     if parts.len() == 1 {
         return parse_not_expr(&parts[0]);
     }
@@ -712,7 +712,10 @@ fn regex_like(s: &str, pattern: &str) -> bool {
 }
 
 /// 在顶层（忽略括号内）按关键字分割
-fn split_top_level(s: &str, keywords: &str, _k2: &str, _k3: &str, _k4: &str) -> Result<Vec<String>, String> {
+///
+/// `keywords` 为当前解析层级的关键字（应为大写，与 `remaining.to_uppercase()` 比较）。
+/// 注意: AND / OR 必须分别传入，否则 `A AND B` 会被误拆成 OR 组合（bug8）。
+fn split_top_level(s: &str, keywords: &[&str]) -> Result<Vec<String>, String> {
     let mut parts = Vec::new();
     let mut depth = 0i32;
     let mut start = 0usize;
@@ -735,7 +738,7 @@ fn split_top_level(s: &str, keywords: &str, _k2: &str, _k3: &str, _k4: &str) -> 
         if depth == 0 {
             let remaining: String = chars[i..].iter().collect();
             let upper = remaining.to_uppercase();
-            for kw in &[keywords, "AND", "or", "Or", "oR"] {
+            for kw in keywords {
                 if upper.starts_with(kw) && (i + kw.len() >= chars.len() || !chars[i + kw.len()].is_alphanumeric()) {
                     if start < i {
                         parts.push(chars[start..i].iter().collect::<String>().trim().to_string());
@@ -887,6 +890,24 @@ mod tests {
     fn test_is_null() {
         let f = make_feature("Tokyo", 37_000_000f64);
         let expr = parse_cql("missing IS NULL").unwrap();
+        assert!(evaluate_cql(&f, &expr));
+    }
+
+    #[test]
+    fn test_and_or_precedence_bug8() {
+        // bug8 回归: `A AND B` 此前被 `split_top_level` 误拆成 OR 组合。
+        let f = make_feature("Tokyo", 37_000_000f64);
+        // 两个条件都满足
+        let expr = parse_cql("population > 1000 AND name = 'Tokyo'").unwrap();
+        assert!(evaluate_cql(&f, &expr));
+        // 仅第一个条件满足 → AND 应为 false (此前错误地返回 true)
+        let expr = parse_cql("population > 1000 AND name = 'London'").unwrap();
+        assert!(!evaluate_cql(&f, &expr), "bug8: `A AND B` 被错误解析为 `A OR B`");
+        // OR 语义保持正确
+        let expr = parse_cql("population < 1000 OR name = 'Tokyo'").unwrap();
+        assert!(evaluate_cql(&f, &expr));
+        // 混合: A OR (B AND C)
+        let expr = parse_cql("population < 1 OR (name = 'Tokyo' AND population > 1000)").unwrap();
         assert!(evaluate_cql(&f, &expr));
     }
 }
