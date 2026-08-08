@@ -12,6 +12,97 @@ pub fn parse_wkb_geometry(wkb: &[u8]) -> GeoJsonGeometry {
     }
 }
 
+/// 将 GeoJSON 几何编码为小端序 WKB 字节。
+///
+/// 支持 Point / LineString / Polygon / MultiPoint / MultiLineString /
+/// MultiPolygon / GeometryCollection。缺失坐标时以 0.0 兜底。
+pub fn geometry_to_wkb(geom: &GeoJsonGeometry) -> Vec<u8> {
+    fn point_wkb(x: f64, y: f64) -> Vec<u8> {
+        let mut v = Vec::with_capacity(21);
+        v.push(0x01); // little-endian
+        v.extend_from_slice(&1u32.to_le_bytes()); // type = Point
+        v.extend_from_slice(&x.to_le_bytes());
+        v.extend_from_slice(&y.to_le_bytes());
+        v
+    }
+
+    fn coord_x(c: &[f64]) -> f64 { if c.len() >= 2 { c[0] } else { 0.0 } }
+    fn coord_y(c: &[f64]) -> f64 { if c.len() >= 2 { c[1] } else { 0.0 } }
+
+    match geom {
+        GeoJsonGeometry::Point { coordinates } => point_wkb(coord_x(coordinates), coord_y(coordinates)),
+        GeoJsonGeometry::MultiPoint { coordinates } => {
+            let mut v = Vec::new();
+            v.push(0x01);
+            v.extend_from_slice(&4u32.to_le_bytes());
+            v.extend_from_slice(&(coordinates.len() as u32).to_le_bytes());
+            for c in coordinates {
+                v.extend_from_slice(&point_wkb(coord_x(c), coord_y(c)));
+            }
+            v
+        }
+        GeoJsonGeometry::LineString { coordinates } => {
+            let mut v = Vec::new();
+            v.push(0x01);
+            v.extend_from_slice(&2u32.to_le_bytes());
+            v.extend_from_slice(&(coordinates.len() as u32).to_le_bytes());
+            for c in coordinates {
+                v.extend_from_slice(&coord_x(c).to_le_bytes());
+                v.extend_from_slice(&coord_y(c).to_le_bytes());
+            }
+            v
+        }
+        GeoJsonGeometry::MultiLineString { coordinates } => {
+            let mut v = Vec::new();
+            v.push(0x01);
+            v.extend_from_slice(&5u32.to_le_bytes());
+            v.extend_from_slice(&(coordinates.len() as u32).to_le_bytes());
+            for line in coordinates {
+                v.extend_from_slice(&geometry_to_wkb(&GeoJsonGeometry::LineString {
+                    coordinates: line.clone(),
+                }));
+            }
+            v
+        }
+        GeoJsonGeometry::Polygon { coordinates } => {
+            let mut v = Vec::new();
+            v.push(0x01);
+            v.extend_from_slice(&3u32.to_le_bytes());
+            v.extend_from_slice(&(coordinates.len() as u32).to_le_bytes());
+            for ring in coordinates {
+                v.extend_from_slice(&(ring.len() as u32).to_le_bytes());
+                for c in ring {
+                    v.extend_from_slice(&coord_x(c).to_le_bytes());
+                    v.extend_from_slice(&coord_y(c).to_le_bytes());
+                }
+            }
+            v
+        }
+        GeoJsonGeometry::MultiPolygon { coordinates } => {
+            let mut v = Vec::new();
+            v.push(0x01);
+            v.extend_from_slice(&6u32.to_le_bytes());
+            v.extend_from_slice(&(coordinates.len() as u32).to_le_bytes());
+            for poly in coordinates {
+                v.extend_from_slice(&geometry_to_wkb(&GeoJsonGeometry::Polygon {
+                    coordinates: poly.clone(),
+                }));
+            }
+            v
+        }
+        GeoJsonGeometry::GeometryCollection { geometries } => {
+            let mut v = Vec::new();
+            v.push(0x01);
+            v.extend_from_slice(&7u32.to_le_bytes());
+            v.extend_from_slice(&(geometries.len() as u32).to_le_bytes());
+            for g in geometries {
+                v.extend_from_slice(&geometry_to_wkb(g));
+            }
+            v
+        }
+    }
+}
+
 fn parse_ewkb_geometry(wkb: &[u8]) -> GeoJsonGeometry {
     if wkb.len() < 5 {
         return GeoJsonGeometry::Point { coordinates: vec![0.0, 0.0] };
@@ -274,4 +365,50 @@ pub fn parse_postgres_row(
     }
 
     Ok((id, geometry, properties))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 编码 → 解析 往返: Point / LineString / Polygon 必须一致 (解析端支持这三类)
+    #[test]
+    fn test_geometry_to_wkb_roundtrip_basic() {
+        let cases = vec![
+            GeoJsonGeometry::Point { coordinates: vec![10.5, -20.25] },
+            GeoJsonGeometry::LineString {
+                coordinates: vec![vec![0.0, 0.0], vec![1.5, 2.5], vec![3.0, -4.0]],
+            },
+            GeoJsonGeometry::Polygon {
+                coordinates: vec![vec![
+                    vec![0.0, 0.0], vec![4.0, 0.0], vec![4.0, 4.0], vec![0.0, 4.0], vec![0.0, 0.0],
+                ]],
+            },
+        ];
+        for geom in cases {
+            let wkb = geometry_to_wkb(&geom);
+            let parsed = parse_wkb_geometry(&wkb);
+            assert_eq!(
+                format!("{:?}", parsed), format!("{:?}", geom),
+                "WKB 往返应保持几何不变, wkb={:?}", wkb
+            );
+        }
+    }
+
+    /// Multi* / GeometryCollection 编码应生成结构正确的 WKB (解析端暂不支持, 仅校验字节长度)
+    #[test]
+    fn test_geometry_to_wkb_multipart_lengths() {
+        // MultiPoint: 1 + 4 + 4 + 2 * 21
+        let mp = GeoJsonGeometry::MultiPoint {
+            coordinates: vec![vec![1.0, 2.0], vec![3.0, 4.0]],
+        };
+        assert_eq!(geometry_to_wkb(&mp).len(), 1 + 4 + 4 + 2 * 21);
+
+        // MultiLineString: 1 + 4 + 4 + 2 条线的长度 (每条 1+4+4+16*n)
+        let mls = GeoJsonGeometry::MultiLineString {
+            coordinates: vec![vec![vec![0.0, 0.0], vec![1.0, 1.0]], vec![vec![2.0, 2.0]]],
+        };
+        let wkb_mls = geometry_to_wkb(&mls);
+        assert_eq!(wkb_mls.len(), 1 + 4 + 4 + (1 + 4 + 4 + 2 * 16) + (1 + 4 + 4 + 1 * 16));
+    }
 }

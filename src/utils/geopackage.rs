@@ -221,6 +221,163 @@ fn read_srs(conn: &Connection) -> Result<HashMap<i32, String>, String> {
     Ok(map)
 }
 
+/// 将要素写入一个新的 GeoPackage 文件（写入端）。
+///
+/// 按 OGC GeoPackage 标准创建核心元数据表
+/// (`gpkg_contents` / `gpkg_geometry_columns` / `gpkg_spatial_ref_sys`),
+/// 再创建要素表并写入 WKB 几何 + 属性。属性列取所有要素属性键的并集
+/// (当前以 TEXT 存储)。`geometry_type` 用 GeoPackage 命名, 如 "POINT"。
+/// 返回写入的图层信息。
+pub fn write_geopackage_features<P: AsRef<Path>>(
+    path: P,
+    layer_name: &str,
+    geometry_type: &str,
+    srs_id: i32,
+    features: &[Feature],
+    bounds: &Bounds,
+) -> Result<GeoPackageLayer, String> {
+    let path = path.as_ref();
+    if path.exists() {
+        std::fs::remove_file(path)
+            .map_err(|e| format!("无法覆盖已有 GeoPackage '{:?}': {}", path, e))?;
+    }
+
+    let conn = Connection::open(path)
+        .map_err(|e| format!("无法创建 GeoPackage '{:?}': {}", path, e))?;
+
+    // 1. 核心元数据表
+    conn.execute_batch(
+        "CREATE TABLE gpkg_contents (
+            table_name TEXT NOT NULL PRIMARY KEY,
+            data_type TEXT NOT NULL,
+            identifier TEXT UNIQUE,
+            description TEXT DEFAULT '',
+            last_change DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            min_x DOUBLE, min_y DOUBLE, max_x DOUBLE, max_y DOUBLE,
+            srs_id INTEGER,
+            CONSTRAINT fk_gc_r_srs_id FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id));
+         CREATE TABLE gpkg_geometry_columns (
+            table_name TEXT NOT NULL,
+            column_name TEXT NOT NULL,
+            geometry_type_name TEXT NOT NULL,
+            srs_id INTEGER NOT NULL,
+            z TEXT NOT NULL,
+            m TEXT NOT NULL,
+            CONSTRAINT pk_geom_cols PRIMARY KEY (table_name, column_name),
+            CONSTRAINT fk_gc_tn FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name),
+            CONSTRAINT fk_gc_srs FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id));
+         CREATE TABLE gpkg_spatial_ref_sys (
+            srs_name TEXT NOT NULL,
+            srs_id INTEGER NOT NULL PRIMARY KEY,
+            organization TEXT NOT NULL,
+            organization_coordsys_id INTEGER NOT NULL,
+            definition TEXT NOT NULL,
+            description TEXT);
+        ",
+    )
+    .map_err(|e| format!("创建 GeoPackage 元数据表失败: {}", e))?;
+
+    // 2. 空间参考系 (WGS 84)
+    conn.execute(
+        "INSERT OR IGNORE INTO gpkg_spatial_ref_sys
+            (srs_name, srs_id, organization, organization_coordsys_id, definition, description)
+         VALUES ('WGS 84 geodetic', 4326, 'EPSG', 4326,
+                 'GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",...]]',
+                 'longitude/latitude coordinates in decimal degrees')",
+        [],
+    )
+    .map_err(|e| format!("写入空间参考系失败: {}", e))?;
+
+    // 3. 属性列 = 所有要素属性键的并集
+    let mut attr_columns: Vec<String> = Vec::new();
+    for f in features {
+        for key in f.properties.keys() {
+            if !attr_columns.contains(key) {
+                attr_columns.push(key.clone());
+            }
+        }
+    }
+
+    // 4. 图层元数据
+    conn.execute(
+        "INSERT INTO gpkg_contents
+            (table_name, data_type, identifier, description, min_x, min_y, max_x, max_y, srs_id)
+         VALUES (?1, 'features', ?1, '', ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![layer_name, bounds.minx, bounds.miny, bounds.maxx, bounds.maxy, srs_id],
+    )
+    .map_err(|e| format!("写入 gpkg_contents 失败: {}", e))?;
+
+    conn.execute(
+        "INSERT INTO gpkg_geometry_columns
+            (table_name, column_name, geometry_type_name, srs_id, z, m)
+         VALUES (?1, 'geom', ?2, ?3, 'XY', '')",
+        rusqlite::params![layer_name, geometry_type, srs_id],
+    )
+    .map_err(|e| format!("写入 gpkg_geometry_columns 失败: {}", e))?;
+
+    // 5. 建要素表
+    let qn = |s: &str| s.replace('"', "\"\"");
+    let mut create_sql = format!("CREATE TABLE \"{}\" (id INTEGER PRIMARY KEY AUTOINCREMENT, \"geom\" BLOB", qn(layer_name));
+    for col in &attr_columns {
+        create_sql.push_str(&format!(", \"{}\" TEXT", qn(col)));
+    }
+    create_sql.push(')');
+    conn.execute_batch(&create_sql)
+        .map_err(|e| format!("创建要素表失败: {}", e))?;
+
+    // 6. 写入要素 (WKB 几何 + 属性)
+    let mut insert_sql = format!("INSERT INTO \"{}\" (\"geom\"", qn(layer_name));
+    for col in &attr_columns {
+        insert_sql.push_str(&format!(", \"{}\"", qn(col)));
+    }
+    insert_sql.push_str(") VALUES (?1");
+    for _ in &attr_columns {
+        insert_sql.push_str(", ?");
+    }
+    insert_sql.push(')');
+
+    let mut stmt = conn
+        .prepare(&insert_sql)
+        .map_err(|e| format!("准备插入语句失败: {}", e))?;
+    for f in features {
+        let wkb = crate::utils::wkb::geometry_to_wkb(&f.geometry);
+        let mut values: Vec<rusqlite::types::Value> = vec![rusqlite::types::Value::Blob(wkb)];
+        for col in &attr_columns {
+            let val = match f.properties.get(col) {
+                Some(pv) => rusqlite::types::Value::Text(pv.to_string()),
+                None => rusqlite::types::Value::Null,
+            };
+            values.push(val);
+        }
+        stmt.execute(rusqlite::params_from_iter(values.iter()))
+            .map_err(|e| format!("写入要素失败: {}", e))?;
+    }
+    drop(stmt);
+
+    // 7. 统计并返回
+    let count: i64 = conn
+        .query_row(
+            &format!("SELECT COUNT(*) FROM \"{}\"", qn(layer_name)),
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("统计要素失败: {}", e))?;
+
+    info!(
+        "[GeoPackage] 写入完成: 图层 '{}', {} 个要素, {} 个属性列",
+        layer_name, count, attr_columns.len()
+    );
+
+    Ok(GeoPackageLayer {
+        table_name: layer_name.to_string(),
+        geometry_column: "geom".to_string(),
+        geometry_type: geometry_type.to_string(),
+        srs_id,
+        crs: format!("EPSG:{}", srs_id),
+        feature_count: count,
+    })
+}
+
 /// 从几何更新边界
 fn update_bounds_from_geometry(geometry: &GeoJsonGeometry, bounds: &mut Bounds) {
     let mut update = |x: f64, y: f64| {
@@ -394,5 +551,90 @@ mod tests {
         assert_eq!(result.feature_count, 2, "limit=2 应只读取 2 个要素");
         assert_eq!(result.features.len(), 2);
         std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    // -----------------------------------------------------------------------
+    // Batch 7: GeoPackage 写入 (write_geopackage_features) → 读取 往返
+    // -----------------------------------------------------------------------
+
+    /// 写入 3 个点 + 属性, 再读回验证几何/属性/边界/图层列表完全一致
+    #[test]
+    fn test_write_geopackage_roundtrip() {
+        let dir = temp_dir("wr1");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("roundtrip.gpkg");
+
+        let mut props = HashMap::new();
+        props.insert("name".to_string(), PropertyValue::String("pt-a".to_string()));
+        let features = vec![
+            Feature::with_id("f1".into(), GeoJsonGeometry::Point { coordinates: vec![10.0, 20.0] }, props.clone()),
+            Feature::with_id("f2".into(), GeoJsonGeometry::Point { coordinates: vec![11.5, 21.5] }, props.clone()),
+            Feature::with_id("f3".into(), GeoJsonGeometry::Point { coordinates: vec![12.0, 22.0] }, props.clone()),
+        ];
+        let bounds = Bounds::new(10.0, 20.0, 12.0, 22.0);
+
+        let layer = write_geopackage_features(&path, "places", "POINT", 4326, &features, &bounds).unwrap();
+        assert_eq!(layer.table_name, "places");
+        assert_eq!(layer.feature_count, 3);
+        assert_eq!(layer.geometry_column, "geom");
+        assert!(layer.crs.contains("4326"), "CRS 应包含 4326, 实际: {}", layer.crs);
+
+        // 读回验证
+        let result = read_geopackage_layer_features(&path, "places", None).unwrap();
+        assert_eq!(result.feature_count, 3, "往返后要素数应为 3");
+        assert_eq!(result.features.len(), 3);
+
+        assert!((result.bounds.minx - 10.0).abs() < 1e-6, "minx 应为 10.0, 实际: {}", result.bounds.minx);
+        assert!((result.bounds.miny - 20.0).abs() < 1e-6, "miny 应为 20.0, 实际: {}", result.bounds.miny);
+        assert!((result.bounds.maxx - 12.0).abs() < 1e-6, "maxx 应为 12.0, 实际: {}", result.bounds.maxx);
+        assert!((result.bounds.maxy - 22.0).abs() < 1e-6, "maxy 应为 22.0, 实际: {}", result.bounds.maxy);
+
+        if let GeoJsonGeometry::Point { coordinates } = &result.features[0].geometry {
+            assert!((coordinates[0] - 10.0).abs() < 1e-6, "x 应为 10.0, 实际: {:?}", coordinates);
+            assert!((coordinates[1] - 20.0).abs() < 1e-6, "y 应为 20.0, 实际: {:?}", coordinates);
+        } else {
+            panic!("第一个要素应为点, 实际: {:?}", result.features[0].geometry);
+        }
+        match result.features[0].properties.get("name") {
+            Some(PropertyValue::String(v)) => assert_eq!(v, "pt-a"),
+            other => panic!("name 属性应为 String, 实际: {:?}", other),
+        }
+
+        // 图层列表也应可见
+        let layers = read_geopackage_layers(&path).unwrap();
+        assert_eq!(layers.len(), 1);
+        assert_eq!(layers[0].table_name, "places");
+        assert_eq!(layers[0].feature_count, 3);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// LineString 写入 → 读取 往返 (验证 WKB 编码器在多点类型上的正确性)
+    #[test]
+    fn test_write_geopackage_linestring_roundtrip() {
+        let dir = temp_dir("wr2");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("lines.gpkg");
+
+        let line = GeoJsonGeometry::LineString {
+            coordinates: vec![vec![0.0, 0.0], vec![1.5, 2.5], vec![3.0, -4.0]],
+        };
+        let features = vec![Feature::with_id("l1".into(), line, HashMap::new())];
+        let bounds = Bounds::new(0.0, -4.0, 3.0, 2.5);
+
+        write_geopackage_features(&path, "roads", "LINESTRING", 4326, &features, &bounds).unwrap();
+
+        let result = read_geopackage_layer_features(&path, "roads", None).unwrap();
+        assert_eq!(result.features.len(), 1);
+        match &result.features[0].geometry {
+            GeoJsonGeometry::LineString { coordinates } => {
+                assert_eq!(coordinates.len(), 3);
+                assert!((coordinates[2][0] - 3.0).abs() < 1e-6, "第 3 点 x 应为 3.0, 实际: {:?}", coordinates[2]);
+                assert!((coordinates[2][1] + 4.0).abs() < 1e-6, "第 3 点 y 应为 -4.0, 实际: {:?}", coordinates[2]);
+            }
+            other => panic!("应为 LineString, 实际: {:?}", other),
+        }
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
