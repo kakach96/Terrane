@@ -161,6 +161,23 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                     "/wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}",
                     web::get().to(crate::handlers::handle_wmts_rest_tile),
                 )
+                // GeoWebCache 兼容: TMS 1.0.0 (RESTful + KVP) 与 WMS-C 1.1.1
+                .route(
+                    "/gwc/service/tms",
+                    web::get().to(crate::handlers::handle_tms_request),
+                )
+                .route(
+                    "/gwc/service/tms/1.0.0",
+                    web::get().to(crate::handlers::handle_tms_path),
+                )
+                .route(
+                    "/gwc/service/tms/1.0.0/{tail:.*}",
+                    web::get().to(crate::handlers::handle_tms_path),
+                )
+                .route(
+                    "/gwc/service/wms",
+                    web::get().to(crate::handlers::handle_wmsc_request),
+                )
                 .route(
                     "/tiles/cache/clear/{layer}",
                     web::delete().to(crate::handlers::clear_tile_cache),

@@ -1,4 +1,6 @@
+pub mod tms;
 pub mod wcs;
 pub mod wfs;
 pub mod wms;
+pub mod wmsc;
 pub mod wmts;

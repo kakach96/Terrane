@@ -13,6 +13,7 @@ pub mod rendering;
 pub mod shapefile;
 pub mod sld_parser;
 pub mod tile_cache;
+pub mod tile_grid;
 pub mod wkb;
 pub mod worldimage;
 pub mod ysld_parser;

@@ -116,108 +116,23 @@ async fn handle_get_tile(
         tile_matrix.parse().unwrap_or(0)
     };
 
-    // 构建内部 /tiles URL 参数，转发到现有的瓦片渲染端点
     let gridset = _tile_matrix_set;
 
-    // 1. 尝试从 GeoWebCache 获取
-    if let Some(ref cache) = state.tile_cache {
-        if let Some(cached) = cache.get(layer, gridset, z, tile_col, tile_row).await {
-            return Ok(HttpResponse::Ok()
-                .insert_header(("X-Tile-Cache", "HIT"))
-                .insert_header(("X-WMTS", "1.0.0"))
-                .content_type("image/png")
-                .body(cached));
-        }
-    }
+    // 通过共享瓦片渲染管线取瓦片 (含缓存)
+    let (tile_data, cache_hit) = crate::handlers::tile_common::render_tile_bytes(
+        state,
+        layer,
+        gridset,
+        z,
+        tile_col,
+        tile_row,
+        crate::handlers::tile_common::TileFormat::Png,
+    )
+    .await?;
 
-    // 2. 渲染瓦片（复用现有逻辑）
-    use crate::handlers::features;
-    use crate::models::Bounds;
-    use crate::utils::rendering::{MapRenderer, RenderFormat, RenderOptions};
-
-    let tile_size = 256u32;
-
-    // 根据 gridset 计算瓦片边界
-    let bounds = match gridset {
-        "EPSG:3857" | "EPSG:900913" => {
-            let n = 2.0_f64.powi(z as i32);
-            let minx = (tile_col as f64 / n) * 360.0 - 180.0;
-            let maxx = ((tile_col + 1) as f64 / n) * 360.0 - 180.0;
-            let sin_lat = |y: f64| -> f64 {
-                let v = std::f64::consts::PI * (1.0 - 2.0 * y / n);
-                v.cos().recip().ln().atan().to_degrees()
-            };
-            let miny = sin_lat(tile_row as f64 + 1.0).max(-85.0511);
-            let maxy = sin_lat(tile_row as f64).min(85.0511);
-            Bounds::new(minx, miny, maxx, maxy)
-        },
-        _ => {
-            let n = 2.0_f64.powi(z as i32);
-            let minx = (tile_col as f64 / n) * 360.0 - 180.0;
-            let maxx = ((tile_col + 1) as f64 / n) * 360.0 - 180.0;
-            let miny = (tile_row as f64 / n) * 180.0 - 90.0;
-            let maxy = ((tile_row + 1) as f64 / n) * 180.0 - 90.0;
-            Bounds::new(minx, miny, maxx, maxy)
-        },
-    };
-
-    let options = RenderOptions {
-        width: tile_size,
-        height: tile_size,
-        transparent: true,
-        bg_color: None,
-        format: RenderFormat::PNG,
-    };
-
-    let renderer = MapRenderer::new(options, bounds);
-    let layers_lock = state.layers.read().await;
-    let styles_lock = state.styles.read().await;
-    let meta_lock = state.styles_meta.read().await;
-    let mut render_items = Vec::new();
-
-    if let Some(layer_obj) = layers_lock.iter().find(|l| l.name == layer) {
-        use crate::handlers::style_handler::{
-            calculate_tile_scale_denom, get_style_rules, reproject_geometry_helper,
-        };
-        use crate::utils::sld_parser;
-
-        let layer_crs = layer_obj.srs.to_epsg();
-        let needs_reproject = layer_crs != "EPSG:4326";
-        let rules = get_style_rules(&styles_lock, &meta_lock, layer_obj);
-
-        let features = features::query_layer_features(state, layer, None, None, None)
-            .await
-            .unwrap_or_default();
-        let scale_denom = calculate_tile_scale_denom(z);
-        for feature in &features {
-            let geom = if needs_reproject {
-                reproject_geometry_helper(&feature.geometry, &layer_crs, "EPSG:4326")
-            } else {
-                feature.geometry.clone()
-            };
-            let style = sld_parser::resolve_style(&rules, feature, Some(scale_denom));
-            render_items.push((geom, style));
-        }
-    }
-    drop(layers_lock);
-    drop(styles_lock);
-    drop(meta_lock);
-
-    let img = renderer.render(render_items);
-    let mut buffer = std::io::Cursor::new(Vec::new());
-    img.write_to(&mut buffer, image::ImageFormat::Png)
-        .map_err(|e| GeoServerError::RenderingError(e.to_string()))?;
-    let tile_data = buffer.into_inner();
-
-    // 3. 写入缓存
-    if let Some(ref cache) = state.tile_cache {
-        cache
-            .put(layer, gridset, z, tile_col, tile_row, &tile_data)
-            .await;
-    }
-
+    let cache_state = if cache_hit { "HIT" } else { "MISS" };
     Ok(HttpResponse::Ok()
-        .insert_header(("X-Tile-Cache", "MISS"))
+        .insert_header(("X-Tile-Cache", cache_state))
         .insert_header(("X-WMTS", "1.0.0"))
         .content_type("image/png")
         .body(tile_data))
