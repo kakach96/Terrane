@@ -180,7 +180,7 @@ pub fn item(feature: &Feature) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{BoundingBox, CoordinateReferenceSystem, GeoJsonGeometry, PropertyValue};
+    use crate::models::{BoundingBox, CoordinateReferenceSystem, GeoJsonGeometry};
     use std::collections::HashMap;
 
     fn test_layer(name: &str, title: &str) -> Layer {

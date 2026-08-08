@@ -40,6 +40,25 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                 ),
         )
         .service(
+            web::scope("/ogc/tiles")
+                .route("", web::get().to(crate::handlers::handle_ogc_tiles_landing))
+                .route("/conformance", web::get().to(crate::handlers::handle_ogc_tiles_conformance))
+                .route("/tileMatrixSets", web::get().to(crate::handlers::handle_ogc_tiles_tile_matrix_sets))
+                .route(
+                    "/tileMatrixSets/{id}",
+                    web::get().to(crate::handlers::handle_ogc_tiles_tile_matrix_set),
+                )
+                .route("/collections", web::get().to(crate::handlers::handle_ogc_tiles_collections))
+                .route(
+                    "/collections/{collection}/tiles",
+                    web::get().to(crate::handlers::handle_ogc_tiles_collection),
+                )
+                .route(
+                    "/collections/{collection}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}",
+                    web::get().to(crate::handlers::handle_ogc_tile),
+                ),
+        )
+        .service(
             web::scope(api_context)
                 .route("/health", web::get().to(crate::handlers::health_check))
                 .service(
