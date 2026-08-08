@@ -17,9 +17,9 @@
 | Styling System | 4/5 | 0 | 1 | **80%** |
 | Tile Caching | 3/6 | 0 | 3 | **50%** |
 | Security | 3/7 | 0 | 4 | **43%** |
-| Extensions | 5/14 | 0 | 9 | **36%** |
+| Extensions | 6/14 | 0 | 8 | **43%** |
 | Cloud-Native | 4/7 | 0 | 3 | **57%** |
-| **Overall Progress** | | | | **~55%** |
+| **Overall Progress** | | | | **~56%** |
 
 ```
 OGC services     █████████████░░░░  71%
@@ -28,10 +28,10 @@ Data sources     █████████░░░░░░░  47%
 Styling system   ████████████████░  80%
 Tile caching     ██████████░░░░░░  50%
 Security         ████████░░░░░░░░  43%
-Extensions       ███████░░░░░░░░░  36%
+Extensions       ███████░░░░░░░░░  43%
 Cloud-Native     █████████░░░░░░░  57%
 ──────────────────────────────
-Overall progress █████████░░░░░░░  55%
+Overall progress █████████░░░░░░░  56%
 ```
 
 ---
@@ -194,7 +194,7 @@ Overall progress █████████░░░░░░░  55%
 | # | Feature | Description | Est. Effort |
 |---|------|------|:---------:|
 | 25 | **WPS (Web Processing Service)** | Geoprocessing services: buffer, union/intersection/difference, coordinate transforms, etc. | ✅ **Completed** (first surface: vec:Centroid / vec:Buffer / gs:Bounds) |
-| 26 | **CSW (Catalog Service)** | Catalog service: data discovery and metadata management | 3-4 weeks |
+| 26 | **CSW (Catalog Service)** | Catalog service: data discovery and metadata management | ✅ **Completed** (first surface: GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain) |
 | 27 | **OGC API series** | Features / Tiles / Maps / Coverages / Processes / Styles | 2-3 weeks each |
 | 28 | **Vector Tiles** | MVT (Mapbox Vector Tile) format output | ✅ **Completed** |
 | 29 | **KML output** | Map/feature export in KML/KMZ format | 1-2 weeks |

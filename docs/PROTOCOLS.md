@@ -28,7 +28,7 @@ and *which remain to be adapted*.
 | **WMS output formats** | —                          | ✅      | PNG/JPEG/GIF/WebP/SVG/KML/GeoJSON/PDF/GeoRSS |
 | **WFS output formats** | —                          | ✅      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV / KML / Shapefile (SHAPE-ZIP) |
 | **WPS**             | 1.0.0                          | ✅      | GetCapabilities / DescribeProcess / Execute (KVP + XML POST); built-in processes vec:Centroid / vec:Buffer / gs:Bounds |
-| **CSW**             | —                              | ❌      | Catalog service (P4) |
+| **CSW**             | 2.0.2                          | ✅      | GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain; catalog = Terrane layers as Dublin Core records (KVP + XML POST) |
 | **OGC API series**  | Features / Tiles / Maps / Coverages / Processes / Styles | ❌ | P4 |
 
 ## 2. WMS — Web Map Service
@@ -176,7 +176,7 @@ Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](IMPLEMENTAT
 | P2       | WMS PDF / GeoRSS output             | small — reuse render pipeline |
 | P2       | WFS KML / Shapefile output          | ✅ done |
 | P4       | WPS (processing)                    | ✅ first surface (Centroid/Buffer/Bounds) |
-| P4       | CSW (catalog)                       | 3–4 weeks |
+| P4       | CSW (catalog)                       | ✅ first surface (GetCapabilities/DescribeRecord/GetRecords/GetRecordById/GetDomain) |
 | P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | 2–3 weeks each |
 | P4       | Printing / Importer / GeoFence      | enterprise |
 | P4       | CSS / YSLD / MBStyle styling        | medium |
@@ -200,7 +200,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **129 lib unit tests + 105 integration tests**, plus
+`cargo test` currently green: **138 lib unit tests + 115 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -217,6 +217,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
 | `tests/tms_test.rs` | 7     | TMS (GetCapabilities RESTful + KVP, TileMap document, GetTile geodetic/mercator PNG + JPEG, KVP GetTile) |
 | `tests/wps_test.rs` | 6     | WPS (GetCapabilities, DescribeProcess, Execute KVP raw centroid/buffer/bounds + XML POST) |
+| `tests/csw_test.rs` | 10    | CSW (GetCapabilities, DescribeRecord, GetRecords KVP + XML POST summary/brief/full + CQL constraint + paging/hits, GetRecordById, GetDomain) |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
 has at least one request/response test validating status codes, content types,
@@ -408,5 +409,24 @@ WPS 1.0.0 schema directly. New unit tests: 6 (wps.rs); new integration: 6
 (wps_test.rs).
 Next candidates:
 
-1. CSW (catalog) — next P4 surface
-2. OGC API Features / Processes (P4)
+Batch 18 completed: **CSW (Catalog Service for the Web) 2.0.2 first surface** —
+`src/services/csw.rs` + `src/handlers/csw_handler.rs` served at `/csw`
+(GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain,
+KVP + XML POST). GetCapabilities emits `csw:Capabilities` (ServiceIdentification /
+ServiceProvider / OperationsMetadata / FilterCapabilities); DescribeRecord emits
+`csw:DescribeRecordResponse` with a simplified inline schema per type name.
+GetRecords returns `csw:GetRecordsResponse` with `csw:SearchResults` — catalog
+records are derived from the Terrane layer catalog and rendered as Dublin Core
+`csw:SummaryRecord` / `csw:BriefRecord` / `csw:Record` (identifier / title /
+subject / type / format / references + WGS84 `ows:BoundingBox`), with paging
+(`startPosition` / `maxRecords`), `resultType=hits`, `elementSetName`, and a
+minimal CQL constraint (`Title` / `Identifier` / `Subject`, `=` and `like`).
+GetRecordById returns matching records; GetDomain reports result-type values.
+The reference GeoServer has CSW disabled, so this follows the OGC CSW 2.0.2
+schema directly (OGC 07-006r1). Also fixed: `create_layer` ignored the
+user-provided bounds (the in-memory catalog kept the world extent) — REST layer
+creation now applies them to `native_bounds` / `lat_lon_bounds`. New unit
+tests: 9 (csw.rs); new integration: 10 (csw_test.rs).
+Next candidates:
+
+1. OGC API Features / Processes (P4)
