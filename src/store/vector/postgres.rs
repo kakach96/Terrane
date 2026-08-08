@@ -179,9 +179,23 @@ impl super::VectorStore for PostgresVectorStore {
 
     async fn delete_features(&self, layer_name: &str) -> Result<usize, StoreError> {
         let client = self.pool.get().await?;
+        // 表不存在时返回 0 (与 SqliteStore 一致: 删除行并返回行数, 保留表结构)
+        let exists: bool = client
+            .query_one(
+                "SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = current_schema() AND table_name = $1
+                 )",
+                &[&format!("{}{}", BIZ_TABLE_PREFIX, layer_name)],
+            )
+            .await?
+            .get(0);
+        if !exists {
+            return Ok(0);
+        }
         let table = self.table_name(layer_name);
         let res = client
-            .execute(&format!("DROP TABLE IF EXISTS {}", table), &[])
+            .execute(&format!("DELETE FROM {}", table), &[])
             .await?;
         Ok(res as usize)
     }
@@ -204,6 +218,87 @@ impl super::VectorStore for PostgresVectorStore {
                 self.layer_name_from_table(&t)
             })
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Feature, GeoJsonGeometry};
+    use crate::store::vector::VectorStore;
+
+    /// 构造一个指向本地 PostGIS 的矢量存储配置。
+    /// 连接参数可用 `GEOSERVER_TEST_PG_*` 环境变量覆盖, 默认匹配本地开发栈
+    /// (`docker compose --profile postgres` 或本机 postgis 容器)。
+    fn test_pg_config(schema: &str) -> PostgresConfig {
+        let host = std::env::var("GEOSERVER_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+        let port: u16 = std::env::var("GEOSERVER_TEST_PG_PORT")
+            .ok().and_then(|v| v.parse().ok()).unwrap_or(5432);
+        let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "postgres".into());
+        let password = std::env::var("GEOSERVER_TEST_PG_PASSWORD")
+            .unwrap_or_else(|_| "kakach2026".into());
+        let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "postgres".into());
+
+        PostgresConfig {
+            host, port, instance, schema: schema.to_string(),
+            user, password, pool_size: 2,
+        }
+    }
+
+    /// 删除测试 schema (清理)。
+    async fn drop_test_schema(cfg: &PostgresConfig) {
+        let mut pg_cfg = deadpool_postgres::Config::new();
+        pg_cfg.host = Some(cfg.host.clone());
+        pg_cfg.port = Some(cfg.port);
+        pg_cfg.dbname = Some(cfg.instance.clone());
+        pg_cfg.user = Some(cfg.user.clone());
+        pg_cfg.password = Some(cfg.password.clone());
+        let pool = pg_cfg.create_pool(Some(deadpool_postgres::Runtime::Tokio1), NoTls).unwrap();
+        if let Ok(client) = pool.get().await {
+            let _ = client
+                .batch_execute(&format!("DROP SCHEMA IF EXISTS {} CASCADE", cfg.schema))
+                .await;
+        }
+    }
+
+    #[actix_rt::test]
+    #[ignore = "requires a live PostGIS (e.g. docker compose --profile postgres)"]
+    async fn test_live_postgres_vector_store() {
+        // 每进程独立 schema, 避免并行运行互相清理
+        let schema = format!("terrane_vec_test_{}", std::process::id());
+        let cfg = test_pg_config(&schema);
+
+        // 1. 连接 + 确保 schema
+        let store = PostgresVectorStore::new(&cfg).await.expect("应能连接 PostGIS 并初始化 schema");
+
+        // 2. 要素保存/读取往返
+        let feature = Feature::new(
+            GeoJsonGeometry::Point { coordinates: vec![10.0, 20.0] },
+            std::collections::HashMap::new(),
+        );
+        let saved = store.save_features("vec_layer", &[feature]).await.unwrap();
+        assert_eq!(saved, 1, "PostGIS 应保存 1 个要素");
+
+        let feats = store.load_features("vec_layer").await.unwrap();
+        assert_eq!(feats.len(), 1, "PostGIS 应能读回 1 个要素");
+        if let GeoJsonGeometry::Point { coordinates } = &feats[0].geometry {
+            assert!((coordinates[0] - 10.0).abs() < 1e-6);
+            assert!((coordinates[1] - 20.0).abs() < 1e-6);
+        } else {
+            panic!("读回的要素应为点, 实际: {:?}", feats[0].geometry);
+        }
+
+        // 3. list_tables 应包含该图层
+        let tables = store.list_tables().await.unwrap();
+        assert!(tables.iter().any(|t| t == "vec_layer"), "list_tables 应包含 vec_layer, 实际: {:?}", tables);
+
+        // 4. 删除后为空
+        let deleted = store.delete_features("vec_layer").await.unwrap();
+        assert!(deleted > 0);
+        assert!(store.load_features("vec_layer").await.unwrap().is_empty());
+
+        // 5. 清理测试 schema
+        drop_test_schema(&cfg).await;
     }
 }
 

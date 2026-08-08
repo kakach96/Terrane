@@ -39,6 +39,9 @@ pub enum DataSourceType {
     Geotiff,
     Geopackage,
     WorldImage,
+    /// 级联 WMS — 公共名与 Display/前端/备份一致 (serde 的 lowercase 会把
+    /// `CascadedWms` 变成 `cascadedwms`, 这里显式覆盖为 `cascaded_wms`)
+    #[serde(rename = "cascaded_wms")]
     CascadedWms,
     ArcGrid,
     /// 元数据存储复用（业务数据复用元数据存储时的内置默认数据源）
@@ -156,4 +159,48 @@ pub struct UpdateDataSourceRequest {
 pub struct ConnectionTestResult {
     pub success: bool,
     pub message: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_data_source_type_serde_roundtrip() {
+        // 公共名称 (Display / 前端 / 备份) 与 serde 序列化/反序列化必须一致
+        let cases: &[(&str, DataSourceType)] = &[
+            ("postgis", DataSourceType::Postgis),
+            ("shapefile", DataSourceType::Shapefile),
+            ("geotiff", DataSourceType::Geotiff),
+            ("geopackage", DataSourceType::Geopackage),
+            ("worldimage", DataSourceType::WorldImage),
+            ("cascaded_wms", DataSourceType::CascadedWms),
+            ("arcgrid", DataSourceType::ArcGrid),
+            ("metadata", DataSourceType::Metadata),
+        ];
+        for (name, expected) in cases {
+            // serde 反序列化
+            let parsed: DataSourceType = serde_json::from_str(&format!("\"{}\"", name))
+                .unwrap_or_else(|e| panic!("type '{}' 应能反序列化: {}", name, e));
+            assert_eq!(&parsed, expected, "type '{}' 反序列化结果不符", name);
+            // serde 序列化
+            let serialized = serde_json::to_string(expected).unwrap();
+            assert_eq!(serialized, format!("\"{}\"", name), "type '{}' 序列化结果不符", name);
+        }
+    }
+
+    #[test]
+    fn test_data_source_connection_postgis() {
+        let conn = DataSourceConnection::postgis(
+            "localhost".to_string(), 5432, "geoserver".to_string(),
+            "user".to_string(), Some("pass".to_string()),
+        );
+        assert_eq!(conn.host.as_deref(), Some("localhost"));
+        assert_eq!(conn.port, Some(5432));
+        assert_eq!(conn.database.as_deref(), Some("geoserver"));
+        assert_eq!(conn.schema.as_deref(), Some("public"));
+        assert_eq!(conn.username.as_deref(), Some("user"));
+        assert_eq!(conn.password.as_deref(), Some("pass"));
+        assert!(conn.file_path.is_none());
+    }
 }
