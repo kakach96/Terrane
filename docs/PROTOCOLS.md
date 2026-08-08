@@ -168,7 +168,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 10. Automated test coverage
 
-`cargo test` currently green: **102 lib unit tests + 78 integration tests**, plus
+`cargo test` currently green: **103 lib unit tests + 80 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -179,7 +179,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
 | `tests/wms_test.rs` | 20 (+2 ignored live) | WMS (all operations, formats, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) |
-| `tests/wfs_test.rs` | 19    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER) |
+| `tests/wfs_test.rs` | 21    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects`) |
 | `tests/rest_test.rs`| 23 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 12    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
@@ -220,7 +220,7 @@ metadata store for vectors, so tests write nothing to `./data`. The live tests
 
 | Protocol / surface | Missing tests                                                              |
 |--------------------|----------------------------------------------------------------------------|
-| **WFS**            | LockFeature (documented as unsupported — GET returns 400); OGC XML `FILTER=` supports the common operators (And/Or/Not, the 6 PropertyIs* comparisons, Like, Null, Between, BBox, FeatureId) but not `ogc:Function` / spatial `Intersects` XML forms (ECQL path covers those via CQL) |
+| **WFS**            | LockFeature (documented as unsupported — GET returns 400); OGC XML `FILTER=` now also handles `ogc:Function` (e.g. `strToLowerCase` → case-insensitive equality) and spatial `Intersects` / `Within` / `DWithin` with GML Point / Polygon / Envelope (delegated to the CQL engine) — a superset of the reference KVP `FILTER=`, which rejects `ogc:`-prefixed tags and GML geometry |
 | **WCS**            | native netCDF output (falls back to TIFF); elevation / time subsetting on real rasters (only recorded) |
 | **Data sources**   | GeoPackage attributes are typed on write (INTEGER/REAL/BOOLEAN/TEXT by value inference) and typed on read, but no GeoPackage **update** / append; GeoPackage writer still only emits Point / LineString geometry types |
 | **WKB**            | decoder now handles all 7 WKB types (2D); EWKB Z/M/SRID flags are masked for routing but Z/M coordinates are not yet parsed; no GeometryCollection-in-GeoPackage round-trip test (GeoPackage write supports Point/LineString only) |
@@ -297,11 +297,18 @@ Batch 11 completed: cascaded WMS **vendor-param pass-through** — the live prox
 now forwards CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID (URL-
 encoded) to the upstream; verified live against the reference GeoServer: valid
 CQL_FILTER → PNG, invalid CQL_FILTER → upstream OGC exception (non-PNG, proving
-pass-through), TIME → PNG. Next candidates:
+pass-through), TIME → PNG.
 
-1. OGC XML `FILTER=` edge cases: `ogc:Function`, spatial `Intersects` XML form
-2. WMS PDF / GeoRSS output (reuse the render pipeline)
-3. GeoPackage `FeatureType` describe via WFS `DescribeFeatureType` for a
+Batch 12 completed: OGC XML `FILTER=` edge cases — `ogc:Function` (e.g.
+`strToLowerCase` maps to case-insensitive equality via a new `CaseInsensitiveEq`
+CQL expression) and spatial `Intersects` / `Within` / `DWithin` with GML Point /
+Polygon / Envelope (GML→WKT, delegated to the CQL engine). Note: the reference
+GeoServer's KVP `FILTER=` parser rejects `ogc:`-prefixed tags and GML geometry,
+so this is a Terrane superset. Next candidates:
+
+1. WMS PDF / GeoRSS output (reuse the render pipeline)
+2. GeoPackage `FeatureType` describe via WFS `DescribeFeatureType` for a
    published GeoPackage layer
-4. TMS 1.0.0 + WMS-C 1.1.1 (GWC, reuse the tile engine)
+3. TMS 1.0.0 + WMS-C 1.1.1 (GWC, reuse the tile engine)
+4. WFS KML / Shapefile output
 
