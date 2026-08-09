@@ -1,9 +1,6 @@
 use crate::config::GeoServerConfig;
-use crate::models::{layer::LayerGroup, Feature, Layer};
-use crate::store::{
-    build_raster_store, build_session_cache, build_vector_store, PostgresStore, RasterStore,
-    SessionCache, SqliteStore, Store, VectorStore,
-};
+use crate::models::{layer::LayerGroup, Layer};
+use crate::store::{build_session_cache, PostgresStore, SessionCache, SqliteStore, Store};
 use crate::utils::sld_parser;
 use crate::utils::tile_cache::TileCache;
 use serde::Serialize;
@@ -59,15 +56,10 @@ pub struct RequestRecord {
 pub struct AppState {
     pub config: GeoServerConfig,
     pub layers: Arc<RwLock<Vec<Layer>>>,
-    pub features: Arc<RwLock<HashMap<String, Vec<Feature>>>>,
     pub styles: Arc<RwLock<HashMap<String, String>>>,
     pub styles_meta: Arc<RwLock<HashMap<String, StyleMeta>>>,
     pub store: Option<Arc<dyn Store>>,
-    /// 矢量数据存储 (图层要素; 与元数据存储分离, 见 config::VectorConfig)
-    pub vector_store: Option<Arc<dyn VectorStore>>,
-    /// 栅格数据存储 (GeoTIFF/WorldImage/ArcGrid 文件; 见 config::RasterConfig)
-    pub raster_store: Option<Arc<dyn RasterStore>>,
-    /// 会话缓存 (会话快速层; 元数据存储为真源, 见 config::CacheConfig)
+    /// 会话缓存 (会话快速层; 元数据存储为真源)
     pub session_cache: Option<Arc<dyn SessionCache>>,
     pub pg_pools: Arc<Mutex<HashMap<String, deadpool_postgres::Pool>>>,
     pub layer_groups: Arc<RwLock<Vec<LayerGroup>>>,
@@ -126,52 +118,13 @@ impl AppState {
             },
         };
 
-        // 构建矢量数据存储 (元数据与矢量数据分离; 见 config::VectorConfig)
-        let vector_store = build_vector_store(&config).await;
-        match &vector_store {
-            Some(_) => {
-                let eff = config.effective_vector();
-                let detail = match eff.kind.as_str() {
-                    "metadata" => "reuse metadata store".to_string(),
-                    "postgres" => format!("PostgreSQL ({})", eff.postgres.instance),
-                    _ => eff
-                        .dir
-                        .as_ref()
-                        .map(|d| d.to_string_lossy().to_string())
-                        .unwrap_or_default(),
-                };
-                tracing::info!("Vector data store backend: {} ({})", eff.kind, detail);
-            },
-            None => {
-                tracing::warn!("Vector data store backend: none");
-            },
-        }
-
-        // 构建栅格数据存储 (见 config::RasterConfig)
-        let raster_store = build_raster_store(&config).await;
-        match &raster_store {
-            Some(_) => {
-                let eff = config.effective_raster();
-                let dir = eff
-                    .dir
-                    .as_ref()
-                    .map(|d| d.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                tracing::info!("Raster data store backend: {} ({})", eff.kind, dir);
-            },
-            None => {
-                tracing::warn!("Raster data store backend: none");
-            },
-        }
-
-        // 构建会话缓存 (瓦片缓存之外的会话快速层; 见 config::CacheConfig)
-        let eff_cache = config.effective_cache();
-        let session_cache = build_session_cache(&eff_cache);
+        // 构建会话缓存 (会话快速层; 元数据存储为真源; 内置默认 local)
+        let session_cache = build_session_cache(&config.cache);
         if session_cache.is_some() {
             tracing::info!(
                 "Session cache backend: {} (ttl {}s)",
-                eff_cache.kind,
-                eff_cache.session_ttl_secs
+                config.cache.kind,
+                config.cache.session_ttl_secs
             );
         }
 
@@ -250,13 +203,38 @@ impl AppState {
         }
 
         let features_layers = if all_layers.is_empty() {
-            vec![Layer::new(
+            // 开箱即用: 自动创建内置 world 图层 (store = metadata, 空发布)。
+            // metadata 数据源为内置选项 (postgres 元数据复用同一 PG / sqlite 空发布),
+            // 数据由外部数据源发布, 此处仅提供可用的图层定义。
+            let world_layer = Layer::new(
                 "world".to_string(),
                 "World".to_string(),
                 "default".to_string(),
-                "shapes".to_string(),
+                crate::models::METADATA_DATA_SOURCE.to_string(),
                 crate::models::CoordinateReferenceSystem::EPSG4326,
-            )]
+            );
+            if let Some(ref store) = store {
+                // 持久化到元数据库 (下次启动从 DB 加载, 不重复创建)
+                let _ = store
+                    .create_layer(&crate::store::types::Layer {
+                        name: "world".to_string(),
+                        title: "World".to_string(),
+                        workspace: "default".to_string(),
+                        store: crate::models::METADATA_DATA_SOURCE.to_string(),
+                        srs: "EPSG:4326".to_string(),
+                        abstract_text: None,
+                        native_name: None,
+                        enabled: true,
+                        minx: -180.0,
+                        miny: -90.0,
+                        maxx: 180.0,
+                        maxy: 90.0,
+                        created: String::new(),
+                        modified: String::new(),
+                    })
+                    .await;
+            }
+            vec![world_layer]
         } else {
             all_layers.clone()
         };
@@ -327,11 +305,8 @@ impl AppState {
             crate::auth::ensure_default_admin(store.as_ref()).await;
         }
 
-        // GeoWebCache 初始化 (后端按 [cache].kind 选择; 未配置 [cache] 时保持 None)
-        let tile_cache = config
-            .cache
-            .as_ref()
-            .map(|_| TileCache::new(config.effective_cache()));
+        // GeoWebCache 初始化 (内置默认 local 瓦片缓存)
+        let tile_cache = Some(TileCache::new(config.cache.clone()));
 
         // 异步初始化瓦片缓存后端
         if let Some(ref cache) = tile_cache {
@@ -343,13 +318,10 @@ impl AppState {
         AppState {
             config,
             layers: Arc::new(RwLock::new(features_layers)),
-            features: Arc::new(RwLock::new(HashMap::new())),
             styles: Arc::new(RwLock::new(default_styles)),
             styles_meta: Arc::new(RwLock::new(styles_meta_map)),
             layer_groups: Arc::new(RwLock::new(layer_groups_init)),
             store,
-            vector_store,
-            raster_store,
             session_cache,
             pg_pools: Arc::new(Mutex::new(HashMap::new())),
             start_time: Instant::now(),
@@ -458,24 +430,6 @@ impl AppState {
         format!("{}天 {}小时 {}分钟", days, hours, minutes)
     }
 
-    pub async fn get_layer_features(&self, layer_name: &str) -> Option<Vec<Feature>> {
-        let features = self.features.read().await;
-        features.get(layer_name).cloned()
-    }
-
-    pub async fn add_layer_features(&self, layer_name: &str, features: Vec<Feature>) {
-        let mut features_map = self.features.write().await;
-        features_map.insert(layer_name.to_string(), features);
-    }
-
-    pub async fn add_feature(&self, layer_name: &str, feature: Feature) {
-        let mut features_map = self.features.write().await;
-        features_map
-            .entry(layer_name.to_string())
-            .or_insert_with(Vec::new)
-            .push(feature);
-    }
-
     pub async fn get_layer(&self, layer_name: &str) -> Option<Layer> {
         let layers = self.layers.read().await;
         layers.iter().find(|l| l.name == layer_name).cloned()
@@ -523,8 +477,6 @@ impl AppState {
         let mut layers = self.layers.write().await;
         if let Some(pos) = layers.iter().position(|l| l.name == layer_name) {
             layers.remove(pos);
-            let mut features_map = self.features.write().await;
-            features_map.remove(layer_name);
             true
         } else {
             false

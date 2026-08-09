@@ -97,7 +97,7 @@ frontend/
 ### 4. Layer Detail (`/layers/:name`)
 - Layer info display
 - Live preview
-- Feature management (list, delete)
+- Feature browsing (read-only list + GeoJSON/CSV export)
 - Preview size adjustment
 
 ## 🎨 Design Features
@@ -127,9 +127,7 @@ The frontend communicates with the backend via Angular HttpClient. The API base 
 | PUT | `/geoserver/layers/:name` | Update a layer |
 | DELETE | `/geoserver/layers/:name` | Delete a layer |
 | GET | `/geoserver/layers/:name/preview` | Get layer preview image |
-| GET | `/geoserver/layers/:name/features` | Get layer features |
-| POST | `/geoserver/layers/:name/features` | Add a feature |
-| DELETE | `/geoserver/layers/:name/features/:id` | Delete a feature |
+| GET | `/geoserver/layers/:name/features` | Get layer features (read-only) |
 
 ## 🛠️ Dev Commands
 

@@ -83,16 +83,6 @@ export interface UpdateLayerRequest {
   enabled?: boolean;
 }
 
-export interface CreateFeatureRequest {
-  geometry: GeoJsonGeometry;
-  properties: Record<string, unknown>;
-}
-
-export interface UpdateFeatureRequest {
-  geometry?: GeoJsonGeometry;
-  properties?: Record<string, unknown>;
-}
-
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;

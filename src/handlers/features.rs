@@ -18,28 +18,13 @@ pub async fn query_layer_features(
     let layer = layer
         .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
-    // 内置 metadata 数据源: 业务数据从业务存储读取
+    // 内置 metadata 数据源: 数据发布平台不再持久化要素, 返回空
     if layer.store == METADATA_DATA_SOURCE {
-        if let Some(bstore) = &state.vector_store {
-            info!(
-                "[Features] 图层 '{}' 使用内置 metadata 数据源, 从矢量存储读取",
-                layer_name
-            );
-            let all = bstore.load_features(layer_name).await.map_err(|e| {
-                GeoServerError::InternalError(format!(
-                    "Failed to load features from vector store: {}",
-                    e
-                ))
-            })?;
-            let mut filtered = filter_features(all, bbox);
-            if let Some(o) = offset {
-                filtered = filtered.into_iter().skip(o as usize).collect();
-            }
-            if let Some(l) = limit {
-                filtered = filtered.into_iter().take(l as usize).collect();
-            }
-            return Ok(filtered);
-        }
+        info!(
+            "[Features] 图层 '{}' 使用内置 metadata 数据源, 已不再持久化要素, 返回空",
+            layer_name
+        );
+        return Ok(Vec::new());
     }
 
     let data_source = if let Some(store) = &state.store {
@@ -68,64 +53,122 @@ pub async fn query_layer_features(
                         .await;
                     }
                 }
+                info!(
+                    "[Features] PostGIS 数据源 '{}' 缺少连接/表名, 返回空",
+                    ds.name
+                );
+                return Ok(Vec::new());
             },
             DataSourceType::Shapefile => {
                 return query_shapefile_features(ds, bbox, limit, offset);
             },
-            DataSourceType::Geotiff => {
-                // GeoTIFF 是栅格格式，通过 WCS 访问，不支持矢量要素查询
-                info!("[Features] GeoTIFF 数据源 '{}' 不返回矢量要素", ds.name);
-                return Ok(Vec::new());
+            DataSourceType::GeoJson => {
+                return query_geojson_features(ds, bbox, limit, offset);
             },
             DataSourceType::Geopackage => {
                 return query_geopackage_features(ds, bbox, limit, offset);
             },
+            DataSourceType::Geotiff => {
+                info!(
+                    "[Features] GeoTIFF 数据源 '{}' 是栅格格式, 通过 WCS 访问, 不返回矢量要素",
+                    ds.name
+                );
+                return Ok(Vec::new());
+            },
             DataSourceType::WorldImage => {
-                info!("[Features] WorldImage 是栅格格式，通过 WCS 访问");
+                info!(
+                    "[Features] WorldImage 数据源 '{}' 是栅格格式, 通过 WCS 访问",
+                    ds.name
+                );
                 return Ok(Vec::new());
             },
             DataSourceType::CascadedWms => {
-                info!("[Features] CascadedWms 是级联服务，通过 WMS 代理访问");
+                info!(
+                    "[Features] CascadedWms 数据源 '{}' 是级联服务, 通过 WMS 代理访问",
+                    ds.name
+                );
                 return Ok(Vec::new());
             },
             DataSourceType::ArcGrid => {
-                info!("[Features] ArcGrid 是栅格格式，通过 WCS 访问");
+                info!(
+                    "[Features] ArcGrid 数据源 '{}' 是栅格格式, 通过 WCS 访问",
+                    ds.name
+                );
                 return Ok(Vec::new());
             },
             DataSourceType::Metadata => {
-                if let Some(bstore) = &state.vector_store {
-                    info!(
-                        "[Features] 图层 '{}' 使用 metadata 数据源, 从矢量存储读取",
-                        layer_name
-                    );
-                    let all = bstore.load_features(layer_name).await.map_err(|e| {
-                        GeoServerError::InternalError(format!(
-                            "Failed to load features from vector store: {}",
-                            e
-                        ))
-                    })?;
-                    let mut filtered = filter_features(all, bbox);
-                    if let Some(o) = offset {
-                        filtered = filtered.into_iter().skip(o as usize).collect();
-                    }
-                    if let Some(l) = limit {
-                        filtered = filtered.into_iter().take(l as usize).collect();
-                    }
-                    return Ok(filtered);
-                }
+                info!(
+                    "[Features] metadata 数据源 '{}' 已不再持久化要素, 返回空",
+                    ds.name
+                );
+                return Ok(Vec::new());
             },
         }
     }
 
-    // 回退到内存要素
-    let in_memory = state.features.read().await;
-    let all = in_memory.get(layer_name).cloned().unwrap_or_default();
-    let mut filtered = filter_features(all, bbox);
+    // 强制数据源: 无数据源的图层返回空 (避免 5xx), 由管理端配置数据源
+    info!(
+        "[Features] 图层 '{}' 无数据源 '{}', 返回空 (请先配置数据源)",
+        layer_name, layer.store
+    );
+    Ok(Vec::new())
+}
+
+/// 从 GeoJSON 数据源查询要素。
+///
+/// 仅支持 `file_storage_type = "local"` 的本地文件; 对象存储后端
+/// ("s3" / "oss") 预留, 未实现时返回明确错误。
+fn query_geojson_features(
+    ds: &crate::models::DataSource,
+    bbox: Option<&Bounds>,
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Result<Vec<Feature>, GeoServerError> {
+    let conn = ds
+        .connection
+        .as_ref()
+        .ok_or_else(|| GeoServerError::BadRequest("GeoJSON 数据源缺少连接信息".to_string()))?;
+    let file_path = conn
+        .file_path
+        .as_ref()
+        .ok_or_else(|| GeoServerError::BadRequest("GeoJSON 数据源缺少文件路径".to_string()))?;
+    let storage = conn.file_storage_type.as_deref().unwrap_or("local");
+    if storage != "local" {
+        return Err(GeoServerError::NotImplemented(format!(
+            "GeoJSON 对象存储后端 '{}' 尚未实现, 请使用本地文件 (local)",
+            storage
+        )));
+    }
+
+    info!("[Features] 从 GeoJSON 读取要素: {}", file_path);
+
+    let raw = std::fs::read_to_string(file_path)
+        .map_err(|e| GeoServerError::InternalError(format!("读取 GeoJSON 失败: {}", e)))?;
+    let root: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| GeoServerError::InternalError(format!("解析 GeoJSON 失败: {}", e)))?;
+
+    let features: Vec<Feature> = root
+        .get("features")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|f| serde_json::from_value::<Feature>(f.clone()).ok())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let mut filtered = filter_features(features, bbox);
+    let total = filtered.len();
     if let Some(o) = offset {
-        filtered = filtered.into_iter().skip(o as usize).collect();
+        let o = o as usize;
+        if o < total {
+            filtered = filtered.into_iter().skip(o).collect();
+        } else {
+            return Ok(Vec::new());
+        }
     }
     if let Some(l) = limit {
-        filtered = filtered.into_iter().take(l as usize).collect();
+        filtered.truncate(l as usize);
     }
     Ok(filtered)
 }

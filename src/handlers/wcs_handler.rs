@@ -21,20 +21,13 @@ pub async fn handle_wcs_request(
     }
 }
 
-/// 解析栅格文件的本地路径: 优先经栅格存储解析 (如管理内的栅格), 否则回退到
-/// 数据源连接里记录的原始文件路径 (外部/绝对路径栅格)。
+/// 解析栅格文件的本地路径: 数据源连接里记录的 file_path 即文件位置
+/// (本地存储后端); 对象存储后端 ("s3"/"oss") 预留, 后续经 FileStore 解析。
 fn resolve_raster_path(
-    state: &AppState,
-    ds_name: &str,
+    _state: &AppState,
+    _ds_name: &str,
     conn_file_path: Option<&String>,
 ) -> Option<std::path::PathBuf> {
-    if let Some(rstore) = &state.raster_store {
-        if let Some(p) = rstore.local_path(ds_name) {
-            if p.exists() {
-                return Some(p);
-            }
-        }
-    }
     conn_file_path.map(|f| std::path::PathBuf::from(f))
 }
 

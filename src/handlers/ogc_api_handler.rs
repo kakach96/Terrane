@@ -89,7 +89,14 @@ pub async fn handle_ogc_items(
         Some(l) => l,
         None => return not_found(&name),
     };
-    let features = state.get_layer_features(&name).await.unwrap_or_default();
+    let features = match crate::handlers::features::query_layer_features(
+        &state, &name, None, None, None,
+    )
+    .await
+    {
+        Ok(f) => f,
+        Err(_) => Vec::new(),
+    };
     let limit = query.limit.unwrap_or(10).max(1) as usize;
     let offset = query.offset.unwrap_or(0) as usize;
     let bbox = query.bbox.as_deref().and_then(ogc_features::parse_bbox);
@@ -112,7 +119,14 @@ pub async fn handle_ogc_item(
     state: web::Data<AppState>,
 ) -> HttpResponse {
     let (name, feature_id) = path.into_inner();
-    let features = state.get_layer_features(&name).await.unwrap_or_default();
+    let features = match crate::handlers::features::query_layer_features(
+        &state, &name, None, None, None,
+    )
+    .await
+    {
+        Ok(f) => f,
+        Err(_) => Vec::new(),
+    };
     match features.iter().find(|f| f.id == feature_id) {
         Some(f) => json_response(ogc_features::item(f), ogc_features::GEOJSON_MIME),
         None => not_found(&feature_id),

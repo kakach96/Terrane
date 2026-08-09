@@ -13,21 +13,22 @@
 - 📍 **WFS** - Web Feature Service
 - 🛰️ **WCS** - Web Coverage Service
 - 🔌 **REST API** - Complete data management interface
-- 🗺️ **Map rendering** - Supports points, lines, and polygons
+- �️ **Data source management** - Per-datasource storage (PostGIS tables / data files; local dir / s3 / oss reserved)
+- �🗺️ **Map rendering** - Supports points, lines, and polygons
 
 ### Frontend (Angular)
 - 📊 **Dashboard** - System overview and statistics
 - 🗺️ **Layer management** - Visual layer management
 - ➕ **Create layer** - Form wizard
 - 🔍 **Layer detail** - Info and preview
-- 📍 **Feature management** - CRUD operations
+- 📍 **Feature browsing** - Read-only view & export (GeoJSON / CSV)
 - 🎨 **Material Design** - UI components
 
 ## ☁️ Cloud-Native
 
 **Goal**: containerization + 12-Factor configuration + observability + horizontal scaling, suitable for Docker / Kubernetes deployment.
 
-**Dual-mode**: one codebase, two deployment profiles — standalone (SQLite metadata, local/raster files, in-memory session & cache) and cloud-native (PostgreSQL/PostGIS metadata + vector, object-storage raster, Redis session & cache, stateless replicas). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
+**Dual-mode**: one codebase, two deployment profiles — standalone (SQLite metadata, local data files, in-memory session & cache) and cloud-native (PostgreSQL/PostGIS metadata, object-storage file backends, Redis session & cache, stateless replicas). Terrane is a **data publishing platform**: business data lives in external stores (PostGIS tables / data files) registered per data source, and Terrane focuses on publishing & OGC protocol adaptation (read-only). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 
 **Current status
 
@@ -37,7 +38,7 @@
 - ✅ Prometheus `/metrics` endpoint (requests/errors, tile cache hit rate, PG pool watermarks, system resources)
 - ✅ Graceful shutdown on SIGTERM/SIGINT with `shutdown_timeout_secs` in-flight drain
 - ⚠️ TODO: JWT secret default is hardcoded in `src/auth.rs`; use `GEOSERVER__SECURITY__JWT_SECRET` env injection in prod
-- ✅ Storage split: `[metadata]` (workspaces / data sources / layers / styles, default SQLite) + `[vector]` (layer features; local dir / reuse metadata / PostgreSQL, alias `[business]`) + `[raster]` (GeoTIFF files; local dir) + `[cache]` (tile + session cache; local disk / in-memory, alias `[gwc]`), see `src/config.rs`
+- ✅ Storage: 配置文件只保留 `[metadata]`（workspaces / data sources / layers / styles, default SQLite / PostgreSQL）; 数据源记录（元数据）按数据源指定矢量/栅格文件存储（`file_storage_type`: local / s3 / oss, 对象存储预留）; 瓦片+会话缓存保持内置 local, 见 `src/config.rs`
 - ⚠️ TODO: in-memory caches (`src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL / object storage
 - ⚠️ TODO: tile cache / uploaded data on local disk, needs PVC or object storage
 - ⚠️ TODO: CI pipeline + image registry push (GitHub Actions / GitLab CI)
@@ -168,8 +169,7 @@ All REST endpoints live under the configurable context path (default `/geoserver
 | PUT | `/geoserver/layers/:name` | Update a layer |
 | DELETE | `/geoserver/layers/:name` | Delete a layer |
 | GET | `/geoserver/layers/:name/preview` | Get layer preview image |
-| GET | `/geoserver/layers/:name/features` | Get layer features |
-| POST | `/geoserver/layers/:name/features` | Add a feature |
+| GET | `/geoserver/layers/:name/features` | Get layer features (read-only) |
 
 ### OGC Services
 

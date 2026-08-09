@@ -18,8 +18,7 @@
 | Web framework   | Actix-web                 | High-throughput async HTTP, mature middleware (CORS, multipart), clean route/scope model          |
 | Async runtime   | Tokio                     | Industry-standard async runtime (`full` features: signals, timers, filesystem, IO)                |
 | Metadata store  | SQLite / PostgreSQL       | SQLite: zero-config standalone; PostgreSQL: HA + PostGIS spatial types for cluster deployments    |
-| Vector store    | Local dir / PostgreSQL / metadata reuse | Decoupled from metadata so each scales independently; local dir supports NFS/object-storage mounts |
-| Raster store    | Local dir (GeoTIFF / WorldImage / ArcGrid) | Raster files kept separate from metadata; local dir supports NFS/object-storage mounts, future S3/MinIO |
+| Data sources    | Per-datasource file backends (local / s3 / oss reserved) | File data sources record `file_path` + `file_storage_type`; PostGIS via deadpool pools; object storage reserved via `FileStore` |
 | Cache store     | Local disk (tile) + in-memory (session)  | Tile cache on disk with TTL; session fast-path in memory; future Redis backend                 |
 | Geometry        | geo / geo-types           | Pure-Rust geometry model and spatial predicates                                                   |
 | Raster rendering| image                     | Pure-Rust image encode/decode (PNG/JPEG map output, GeoTIFF read)                                 |
@@ -28,15 +27,16 @@
 | Serialization   | serde / serde_json / quick-xml | Fast JSON + XML (OGC capabilities documents)                                                  |
 | Auth            | jsonwebtoken + sha2       | Stateless JWT auth; SHA-256 + salt password hashing                                               |
 
-### Why the storage split?
+### Storage model
 
-Metadata (workspaces, data sources, layer definitions, styles, permissions), vector data
-(layer features), raster data (GeoTIFF / WorldImage / ArcGrid) and cache data (tiles +
-sessions) have different access patterns and scaling needs. Splitting them into separate
-sections (`[metadata]`, `[vector]`, `[raster]`, `[cache]` in `terrane.toml`) lets a
-cluster keep metadata in PostgreSQL, vector data in a dedicated database, raster data in
-object storage and cache in Redis — matching the
-"structured data → database, raster → file storage, session/cache → Redis" vision.
+Terrane is a **read-only data publishing platform**: business data lives in external
+stores (PostGIS tables / data files) registered **per data source** in the metadata
+store (workspaces, data sources, layer definitions, styles, permissions). The
+configuration file only keeps `[metadata]` (SQLite / PostgreSQL); file data sources
+record `file_path` + `file_storage_type` (local / s3 / oss — object-storage backends
+reserved via `FileStore`). Tile + session cache stay local by default. This keeps the
+"structured data → database, raster → file storage, session/cache → Redis" scaling
+vision without a complex multi-section config.
 
 ## 3. Module Dependency Graph
 

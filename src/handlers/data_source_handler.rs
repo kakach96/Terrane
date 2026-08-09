@@ -8,17 +8,12 @@ use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
 use std::time::Instant;
 
-/// 当矢量数据复用元数据存储 (vector.kind = "metadata") 时,
-/// 构造内置 metadata 数据源的 JSON 表示（内置默认选项, 不可编辑/删除）。
+/// 构造内置 metadata 数据源的 JSON 表示 (内置默认选项, 不可编辑/删除)。
 ///
-/// 与 PostGIS 数据源保持一致: 元数据存储为 postgres 时 type 显示为 postgis,
-/// connection 展示元数据 postgres 连接配置。
+/// - 元数据存储为 postgres 时 type 显示为 postgis, connection 展示元数据 postgres
+///   连接 (复用同一 PG 发布业务表)
+/// - 元数据存储为 sqlite 时 type 显示为 metadata (已不再持久化要素, 空发布)
 fn builtin_metadata_data_source(state: &AppState) -> Option<serde_json::Value> {
-    let eff = state.config.effective_vector();
-    if eff.kind != "metadata" {
-        return None;
-    }
-
     let mc = &state.config.metadata;
     let (ds_type, connection) = if mc.kind == "postgres" {
         let pg = &mc.postgres;
@@ -420,27 +415,26 @@ pub async fn get_data_source_tables(
     let name = req.match_info().get("name").unwrap_or("");
     tracing::debug!("[get_data_source_tables] 开始处理, name={}", name);
 
-    // 内置 metadata 数据源: 与 PostGIS 相同逻辑, 列出业务存储中已有的图层表
+    // 内置 metadata 数据源: 元数据为 postgres 时复用同一 PG 列出业务表 (postgis 语义);
+    // sqlite 元数据已不再持久化要素, 返回空表列表
     if is_builtin_metadata(name) {
-        if builtin_metadata_data_source(&state).is_some() {
-            if let Some(bstore) = &state.vector_store {
-                match bstore.list_tables().await {
-                    Ok(tables) => {
-                        tracing::debug!(
-                            "[get_data_source_tables] 内置 metadata 数据源, 矢量表: {:?}",
-                            tables
-                        );
-                        return Ok(HttpResponse::Ok().json(ApiResponse::success(tables)));
-                    },
-                    Err(e) => {
-                        eprintln!("Failed to list vector tables: {}", e);
-                    },
-                }
-            }
-            return Err(GeoServerError::InternalError(
-                "Vector store not available".to_string(),
-            ));
+        if state.config.metadata.kind == "postgres" {
+            let mc = &state.config.metadata;
+            let conn = DataSourceConnection {
+                host: Some(mc.postgres.host.clone()),
+                port: Some(mc.postgres.port),
+                database: Some(mc.postgres.instance.clone()),
+                schema: Some(mc.postgres.schema.clone()),
+                username: Some(mc.postgres.user.clone()),
+                password: Some(mc.postgres.password.clone()),
+                file_path: None,
+                file_storage_type: None,
+            };
+            let pool = state.get_pg_pool(METADATA_DATA_SOURCE, &conn);
+            let tables = list_postgis_tables_from_pool(&pool, &conn).await;
+            return Ok(HttpResponse::Ok().json(ApiResponse::success(tables)));
         }
+        return Ok(HttpResponse::Ok().json(ApiResponse::success(Vec::<String>::new())));
     }
 
     if let Some(store) = &state.store {

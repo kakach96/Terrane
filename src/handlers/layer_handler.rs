@@ -2,6 +2,7 @@ use super::rest_handler::ApiResponse;
 use crate::error::GeoServerError;
 use crate::models::{CoordinateReferenceSystem, FeatureCollection, Layer};
 use crate::state::AppState;
+use crate::store::FileStore;
 use crate::utils::rendering;
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
@@ -522,6 +523,7 @@ pub async fn upload_geojson(
     body: web::Json<serde_json::Value>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
+    // 校验 GeoJSON FeatureCollection
     let fc = if let Some(fc) = body.get("FeatureCollection") {
         serde_json::from_value::<FeatureCollection>(fc.clone())
             .map_err(|e| GeoServerError::BadRequest(format!("Invalid GeoJSON: {}", e)))?
@@ -530,7 +532,8 @@ pub async fn upload_geojson(
             .map_err(|e| GeoServerError::BadRequest(format!("Invalid GeoJSON: {}", e)))?
     };
 
-    let layer_name = fc
+    // 数据源名: 优先从要素属性 layer_name 读取, 否则用默认
+    let ds_name = fc
         .features
         .first()
         .and_then(|f| f.properties.get("layer_name"))
@@ -544,41 +547,61 @@ pub async fn upload_geojson(
         .unwrap_or("uploaded")
         .to_string();
 
-    // 写入内存缓存
-    {
-        let mut features_map = state.features.write().await;
-        features_map.insert(layer_name.clone(), fc.features.clone());
-    }
-
-    // 确保图层定义存在 (仅在元数据存储可用时自动创建)
-    if state.store.is_some() {
-        let layers = state.layers.read().await;
-        let layer_exists = layers.iter().any(|l| l.name == layer_name);
-        drop(layers);
-
-        if !layer_exists {
-            // 自动创建图层定义
-            let new_layer = crate::models::Layer::new(
-                layer_name.clone(),
-                layer_name.clone(),
-                "default".to_string(),
-                "memory".to_string(),
-                crate::models::CoordinateReferenceSystem::EPSG4326,
-            );
-            state.layers.write().await.push(new_layer);
+    if let Some(store) = &state.store {
+        if let Ok(Some(_)) = store.get_data_source(&ds_name).await {
+            return Err(GeoServerError::Conflict(format!(
+                "Data source '{}' already exists",
+                ds_name
+            )));
         }
     }
 
-    // 持久化要素到矢量数据存储（如可用）
-    if let Some(bstore) = &state.vector_store {
-        if let Err(e) = bstore.save_features(&layer_name, &fc.features).await {
-            tracing::warn!("[Upload] 保存要素到矢量存储失败: {}", e);
-        }
-    }
+    // 保存为本地文件 (数据目录 <data_dir>/geojson/<name>.geojson), 本地存储后端
+    let data_dir = state.config.data_dir.clone();
+    let geojson_dir = data_dir.join("geojson");
+    let file_store = crate::store::LocalFileStore::new(geojson_dir.clone());
+    let file_name = format!("{}.geojson", ds_name);
+    let bytes = serde_json::to_vec_pretty(&fc)
+        .map_err(|e| GeoServerError::InternalError(format!("序列化 GeoJSON 失败: {}", e)))?;
+    file_store
+        .put(&file_name, &bytes)
+        .await
+        .map_err(|e| GeoServerError::InternalError(format!("保存 GeoJSON 文件失败: {}", e)))?;
+    let file_path = file_store
+        .local_path(&file_name)
+        .unwrap_or_else(|| geojson_dir.join(&file_name));
 
-    Ok(
-        HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
-            "message": format!("Uploaded {} features to layer '{}'", fc.features.len(), layer_name),
-        }))),
-    )
+    // 创建 GeoJSON 数据源 (本地存储, file_storage_type = "local")
+    let connection =
+        crate::models::DataSourceConnection::file(file_path.to_string_lossy().to_string());
+
+    if let Some(store) = &state.store {
+        match store
+            .create_data_source(
+                &ds_name,
+                &crate::models::DataSourceType::GeoJson,
+                Some("default".to_string()),
+                true,
+                &connection,
+            )
+            .await
+        {
+            Ok(ds) => {
+                tracing::info!("[Upload] GeoJSON 数据源已创建: {}", ds.name);
+                Ok(HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
+                    "name": ds.name,
+                    "type": "geojson",
+                    "file_path": ds.connection.as_ref().and_then(|c| c.file_path.as_ref()),
+                    "file_storage_type": "local",
+                    "message": format!("GeoJSON '{}' uploaded and data source created", ds.name),
+                }))))
+            },
+            Err(e) => {
+                tracing::warn!("[Upload] 创建数据源失败: {}", e);
+                Err(GeoServerError::InternalError("创建数据源失败".to_string()))
+            },
+        }
+    } else {
+        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+    }
 }

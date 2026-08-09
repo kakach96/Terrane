@@ -125,6 +125,8 @@ export class DataSourcesComponent implements OnInit {
         return 'folder_open';
       case 'geotiff':
         return 'image';
+      case 'geojson':
+        return 'map';
       default:
         return 'storage';
     }
@@ -140,6 +142,8 @@ export class DataSourcesComponent implements OnInit {
         return 'Shapefile';
       case 'geotiff':
         return 'GeoTIFF';
+      case 'geojson':
+        return 'GeoJSON';
       default:
         return type;
     }
@@ -155,6 +159,8 @@ export class DataSourcesComponent implements OnInit {
         return 'accent';
       case 'geotiff':
         return 'warn';
+      case 'geojson':
+        return 'accent';
       default:
         return undefined;
     }

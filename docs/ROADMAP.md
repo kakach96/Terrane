@@ -16,8 +16,8 @@ profiles:
 | Dimension  | Standalone (local / dev)                     | Cloud-Native (production)                    |
 |------------|----------------------------------------------|----------------------------------------------|
 | Metadata   | SQLite                                       | PostgreSQL (PostGIS)                         |
-| Vector data| Local dir (GeoJSON) / SQLite / PostgreSQL    | PostgreSQL (PostGIS)                         |
-| Raster data| Local files                                  | Object storage (MinIO / S3)                  |
+| Vector data| Per-datasource: PostGIS tables / GeoJSON / Shapefile / GeoPackage files (local) | PostgreSQL (PostGIS) / object storage |
+| Raster data| Local files (GeoTIFF / WorldImage / ArcGrid) | Object storage (MinIO / S3)                  |
 | Session    | In-memory                                    | Redis                                        |
 | Cache      | In-memory                                    | Redis                                        |
 | Service    | Single process, in-process caches            | **Stateless** protocol adapter, horizontal scale |
@@ -31,7 +31,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 - OGC services: WMS 1.1.1/1.3.0, WFS 1.0/1.1/2.0, WCS 1.0/1.1/2.0, WMTS 1.0.0
 - REST API: workspaces / namespaces / layers / stores / data sources / styles / layer groups / sql views / permissions
-- Data sources: PostGIS, Shapefile, GeoTIFF, GeoPackage, WorldImage, CascadedWms, ArcGrid
+- Data sources: PostGIS, Shapefile, GeoTIFF, GeoPackage, GeoJSON, WorldImage, CascadedWms, ArcGrid
 - Security: JWT auth, users/roles, layer-level permissions
 - Angular 17 + Material admin console
 - Cloud-native foundation: multi-stage Docker image, `build/docker-compose.yml`, split health probes, Prometheus `/metrics`, graceful shutdown
@@ -41,7 +41,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 - Metadata + vector data on PostgreSQL (PostGIS) for HA / multi-replica
 - Session storage: Redis (cloud) / in-memory (standalone)
-- Storage config split done: `[vector]` / `[raster]` / `[cache]` sections with local backends + abstraction traits (`VectorStore`, `RasterStore`, `TileCacheBackend`, `SessionCache`)
+- Storage config simplified: config keeps only `[metadata]`; vector/raster file data sources registered per data source (`file_path` + `file_storage_type`) with `FileStore` abstraction (`src/store/file_store.rs`); cache stays local (`TileCacheBackend` + `SessionCache`)
 - Tile cache backend abstraction: local disk backend done; Redis / object storage pending
 - Raster data backend abstraction: local files backend done; MinIO / S3 pending
 - Session cache: local in-memory backend done; Redis pending

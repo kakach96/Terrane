@@ -9,7 +9,6 @@ import {
   FeatureCollection,
   CreateLayerRequest,
   UpdateLayerRequest,
-  CreateFeatureRequest,
   PropertyDef,
   StyleInfo,
   ApiResponse,
@@ -87,25 +86,6 @@ export class GeoserverService {
 
   getFeature(layerName: string, featureId: string): Observable<Feature> {
     return this.http.get<Feature>(`${this.apiUrl}/layers/${layerName}/features/${featureId}`);
-  }
-
-  createFeature(layerName: string, feature: CreateFeatureRequest): Observable<Feature> {
-    return this.http.post<Feature>(`${this.apiUrl}/layers/${layerName}/features`, feature);
-  }
-
-  deleteFeature(layerName: string, featureId: string): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/layers/${layerName}/features/${featureId}`);
-  }
-
-  updateFeature(
-    layerName: string,
-    featureId: string,
-    feature: CreateFeatureRequest,
-  ): Observable<Feature> {
-    return this.http.put<Feature>(
-      `${this.apiUrl}/layers/${layerName}/features/${featureId}`,
-      feature,
-    );
   }
 
   getPreviewUrl(layerName: string, options?: PreviewOptions): string {

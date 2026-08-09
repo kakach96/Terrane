@@ -12,6 +12,9 @@ pub enum GeoServerError {
     #[error("Conflict: {0}")]
     Conflict(String),
 
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
+
     #[error("Internal error: {0}")]
     InternalError(String),
 
@@ -48,6 +51,12 @@ impl ResponseError for GeoServerError {
                 "error": "Bad Request",
                 "message": msg
             })),
+            GeoServerError::NotImplemented(msg) => {
+                HttpResponse::NotImplemented().json(serde_json::json!({
+                    "error": "Not Implemented",
+                    "message": msg
+                }))
+            },
             _ => HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Internal Server Error",
                 "message": self.to_string()

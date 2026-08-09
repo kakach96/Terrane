@@ -27,10 +27,24 @@ fn xml_response(body: String) -> HttpResponse {
 /// feature collection is parsed inline; otherwise it stays a literal.
 async fn resolve_input(state: &AppState, value: &str) -> Result<ResolvedInput, GeoServerError> {
     if let Some(layer) = value.strip_prefix("layer:") {
-        let features = state
-            .get_layer_features(layer)
-            .await
-            .ok_or_else(|| GeoServerError::BadRequest(format!("Layer '{}' not found", layer)))?;
+        let features =
+            match crate::handlers::features::query_layer_features(state, layer, None, None, None)
+                .await
+            {
+                Ok(f) => f,
+                Err(GeoServerError::NotFound(_)) => {
+                    return Err(GeoServerError::BadRequest(format!(
+                        "Layer '{}' not found",
+                        layer
+                    )))
+                },
+                Err(e) => {
+                    return Err(GeoServerError::InternalError(format!(
+                        "Failed to load layer features: {}",
+                        e
+                    )))
+                },
+            };
         return Ok(ResolvedInput::Features(features));
     }
     if value.trim_start().starts_with('{') {

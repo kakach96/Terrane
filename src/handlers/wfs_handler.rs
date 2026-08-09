@@ -1,12 +1,11 @@
 use crate::error::GeoServerError;
-use crate::models::{DataSourceType, Feature, PropertyValue};
+use crate::models::DataSourceType;
 use crate::services::wfs::{self, DescribeFeatureTypeResponse, WfsCapabilities, WfsRequest};
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
 use quick_xml::se::to_string;
-use tracing::info;
 
-// ---- GET handler (原有，增加了 Transaction 的 POST 解析) ----
+// ---- GET handler ----
 
 pub async fn handle_wfs_request(
     query: web::Query<Vec<(String, String)>>,
@@ -24,32 +23,33 @@ pub async fn handle_wfs_request(
         wfs::WfsOperation::GetFeatureWithLock => {
             handle_get_feature_with_lock(&state, &wfs_request).await
         },
-        wfs::WfsOperation::Transaction => handle_transaction(&state, &wfs_request).await,
+        // Terrane 是数据发布平台, 不提供 WFS Transaction 写入
+        wfs::WfsOperation::Transaction => Err(GeoServerError::NotImplemented(
+            "WFS Transaction is not supported: Terrane is a read-only data publishing platform"
+                .to_string(),
+        )),
         _ => Err(GeoServerError::BadRequest(
             "Operation not implemented".to_string(),
         )),
     }
 }
 
-// ---- POST handler (解析 XML body 中的 Transaction) ----
+// ---- POST handler (解析 KVP body) ----
 
 pub async fn handle_wfs_post_request(
-    req: HttpRequest,
+    _req: HttpRequest,
     body: String,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
-    let content_type = req
-        .headers()
-        .get("Content-Type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-
-    // 检查是否为 Transaction 请求
-    if body.contains("Transaction") || content_type.contains("xml") {
-        return handle_transaction_xml(&state, &body).await;
+    // WFS-T (Transaction XML) 不支持: Terrane 是只读数据发布平台
+    if body.contains("Transaction") || body.contains("<wfs:") {
+        return Err(GeoServerError::NotImplemented(
+            "WFS Transaction is not supported: Terrane is a read-only data publishing platform"
+                .to_string(),
+        ));
     }
 
-    // 否则尝试按 KVP 解析 POST body
+    // 按 KVP 解析 POST body
     let params: Vec<(String, String)> = body
         .split('&')
         .filter_map(|pair| {
@@ -68,135 +68,15 @@ pub async fn handle_wfs_post_request(
             handle_describe_feature_type(&state, &wfs_request).await
         },
         wfs::WfsOperation::GetFeature => handle_get_feature(&state, &wfs_request).await,
-        wfs::WfsOperation::Transaction => handle_transaction(&state, &wfs_request).await,
+        // Terrane 是数据发布平台, 不提供 WFS Transaction 写入
+        wfs::WfsOperation::Transaction => Err(GeoServerError::NotImplemented(
+            "WFS Transaction is not supported: Terrane is a read-only data publishing platform"
+                .to_string(),
+        )),
         _ => Err(GeoServerError::BadRequest(
             "Operation not implemented".to_string(),
         )),
     }
-}
-
-// ---- Transaction XML 处理核心 ----
-
-async fn handle_transaction_xml(
-    state: &AppState,
-    xml: &str,
-) -> Result<HttpResponse, GeoServerError> {
-    info!("[WFS-T] 收到 Transaction 请求, 长度={}", xml.len());
-
-    let transaction = wfs::parse_transaction_xml(xml)?;
-
-    let mut total_inserted = 0u32;
-    let mut total_updated = 0u32;
-    let mut total_deleted = 0u32;
-    let mut insert_results: Vec<String> = Vec::new();
-
-    // 处理 Insert
-    for insert_op in &transaction.inserts {
-        for feature in &insert_op.features {
-            let layer_name = &insert_op.type_name;
-            let mut new_feature =
-                Feature::new(feature.geometry.clone(), feature.properties.clone());
-            new_feature.id = feature.id.clone();
-
-            state.add_feature(layer_name, new_feature.clone()).await;
-
-            // 持久化到矢量数据存储（如可用）
-            if let Some(bstore) = &state.vector_store {
-                let _ = bstore
-                    .save_features(layer_name, &[new_feature.clone()])
-                    .await;
-            }
-
-            insert_results.push(new_feature.id.clone());
-            total_inserted += 1;
-        }
-    }
-
-    // 处理 Update
-    for update_op in &transaction.updates {
-        let layer_name = &update_op.type_name;
-        let updated = {
-            let mut features_lock = state.features.write().await;
-
-            if let Some(existing) = features_lock.get_mut(layer_name) {
-                for feature in existing.iter_mut() {
-                    if update_op
-                        .filter
-                        .as_ref()
-                        .map_or(true, |f| wfs::validate_filter(feature, f))
-                    {
-                        for prop in &update_op.properties {
-                            feature.properties.insert(
-                                prop.name.clone(),
-                                PropertyValue::String(prop.value.clone()),
-                            );
-                        }
-                        total_updated += 1;
-                    }
-                }
-                existing.clone()
-            } else {
-                Vec::new()
-            }
-        };
-
-        // 持久化
-        if !updated.is_empty() {
-            if let Some(bstore) = &state.vector_store {
-                let _ = bstore.save_features(layer_name, &updated).await;
-            }
-        }
-    }
-
-    // 处理 Delete
-    for delete_op in &transaction.deletes {
-        let layer_name = &delete_op.type_name;
-        let mut features_lock = state.features.write().await;
-        if let Some(existing) = features_lock.get_mut(layer_name) {
-            let filter = &delete_op.filter;
-            let before = existing.len();
-            existing.retain(|f| !wfs::validate_filter(f, filter));
-            total_deleted = (before - existing.len()) as u32;
-        }
-        drop(features_lock);
-
-        if let Some(bstore) = &state.vector_store {
-            let _ = bstore.delete_features(layer_name).await;
-            if let Some(features) = state.get_layer_features(layer_name).await {
-                let _ = bstore.save_features(layer_name, &features).await;
-            }
-        }
-    }
-
-    info!(
-        "[WFS-T] Transaction 完成: inserted={}, updated={}, deleted={}",
-        total_inserted, total_updated, total_deleted
-    );
-
-    let insert_xml: String = insert_results
-        .iter()
-        .map(|id| format!("            <wfs:Feature>wfs:{}</wfs:Feature>", id))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let xml = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<wfs:TransactionResponse xmlns:wfs="http://www.opengis.net/wfs/2.0"
-                         xmlns:ogc="http://www.opengis.net/ogc"
-                         version="2.0.0">
-    <wfs:TransactionSummary>
-        <wfs:totalInserted>{}</wfs:totalInserted>
-        <wfs:totalUpdated>{}</wfs:totalUpdated>
-        <wfs:totalDeleted>{}</wfs:totalDeleted>
-    </wfs:TransactionSummary>
-    <wfs:InsertResults>
-{}
-    </wfs:InsertResults>
-</wfs:TransactionResponse>"#,
-        total_inserted, total_updated, total_deleted, insert_xml
-    );
-
-    Ok(HttpResponse::Ok().content_type("application/xml").body(xml))
 }
 
 // ---- 原有操作处理函数保持不变 ----
@@ -314,48 +194,57 @@ async fn handle_get_feature(
     let mut all_features = Vec::new();
 
     for type_name in type_names {
-        if let Some(features) = state.get_layer_features(type_name).await {
-            let mut filtered_features = features;
+        // 从数据源只读查询要素 (强制数据源, 无数据源图层返回空)
+        let features = match crate::handlers::features::query_layer_features(
+            state, type_name, None, None, None,
+        )
+        .await
+        {
+            Ok(f) => f,
+            // 图层不存在时跳过 (与原先 Option 语义一致)
+            Err(GeoServerError::NotFound(_)) => Vec::new(),
+            Err(e) => return Err(e),
+        };
+        let mut filtered_features = features;
 
-            if let Some(ref filter) = request.filter {
-                filtered_features.retain(|f| wfs::validate_filter(f, filter));
-            }
-
-            if let Some(ref bbox) = request.bbox {
-                let bounds = bbox.to_bounds();
-                filtered_features.retain(|f| match &f.geometry {
-                    crate::models::GeoJsonGeometry::Point { coordinates } => {
-                        if coordinates.len() >= 2 {
-                            bounds.contains(coordinates[0], coordinates[1])
-                        } else {
-                            false
-                        }
-                    },
-                    _ => true,
-                });
-            }
-
-            if let Some(ref feature_ids) = request.feature_id {
-                filtered_features.retain(|f| feature_ids.contains(&f.id));
-            }
-
-            if let Some(max_features) = request.max_features {
-                filtered_features.truncate(max_features as usize);
-            }
-
-            if let Some(start_index) = request.start_index {
-                if (start_index as usize) < filtered_features.len() {
-                    filtered_features = filtered_features
-                        .into_iter()
-                        .skip(start_index as usize)
-                        .collect();
-                } else {
-                    filtered_features.clear();
-                }
-            }
-
-            all_features.extend(filtered_features);
+        if let Some(ref filter) = request.filter {
+            filtered_features.retain(|f| wfs::validate_filter(f, filter));
         }
+
+        if let Some(ref bbox) = request.bbox {
+            let bounds = bbox.to_bounds();
+            filtered_features.retain(|f| match &f.geometry {
+                crate::models::GeoJsonGeometry::Point { coordinates } => {
+                    if coordinates.len() >= 2 {
+                        bounds.contains(coordinates[0], coordinates[1])
+                    } else {
+                        false
+                    }
+                },
+                _ => true,
+            });
+        }
+
+        if let Some(ref feature_ids) = request.feature_id {
+            filtered_features.retain(|f| feature_ids.contains(&f.id));
+        }
+
+        if let Some(max_features) = request.max_features {
+            filtered_features.truncate(max_features as usize);
+        }
+
+        if let Some(start_index) = request.start_index {
+            if (start_index as usize) < filtered_features.len() {
+                filtered_features = filtered_features
+                    .into_iter()
+                    .skip(start_index as usize)
+                    .collect();
+            } else {
+                filtered_features.clear();
+            }
+        }
+
+        all_features.extend(filtered_features);
     }
 
     let response = crate::models::FeatureCollection::new(all_features);
@@ -435,26 +324,6 @@ async fn handle_get_feature_with_lock(
 ) -> Result<HttpResponse, GeoServerError> {
     let response = handle_get_feature(state, request).await?;
     Ok(response)
-}
-
-async fn handle_transaction(
-    _state: &AppState,
-    _request: &WfsRequest,
-) -> Result<HttpResponse, GeoServerError> {
-    // GET 方式的 Transaction 不支持操作体，返回空结果
-    let xml = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<wfs:TransactionResponse xmlns:wfs="http://www.opengis.net/wfs/2.0"
-                         version="2.0.0">
-    <wfs:TransactionSummary>
-        <wfs:totalInserted>0</wfs:totalInserted>
-        <wfs:totalUpdated>0</wfs:totalUpdated>
-        <wfs:totalDeleted>0</wfs:totalDeleted>
-    </wfs:TransactionSummary>
-</wfs:TransactionResponse>"#
-    );
-
-    Ok(HttpResponse::Ok().content_type("application/xml").body(xml))
 }
 
 // ---- GML 序列化辅助函数 ----

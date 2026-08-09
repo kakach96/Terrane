@@ -10,21 +10,6 @@ mod common;
 
 use actix_web::test;
 
-/// 通过 REST 向 world 图层创建一条几何要素 (与 wps_test.rs 相同的辅助宏)
-macro_rules! create_feature {
-    ($app:expr, $geom:tt, $props:tt) => {{
-        let req = test::TestRequest::post()
-            .uri("/geoserver/layers/world/features")
-            .set_json(&serde_json::json!({
-                "geometry": $geom,
-                "properties": $props,
-            }))
-            .to_request();
-        let resp = test::call_service(&$app, req).await;
-        assert_eq!(resp.status(), actix_web::http::StatusCode::CREATED, "创建要素应返回 201");
-    }};
-}
-
 #[actix_rt::test]
 async fn test_ogc_processes_landing() {
     let app = build_test_app!();
@@ -118,9 +103,8 @@ async fn test_ogc_processes_description() {
 #[actix_rt::test]
 async fn test_ogc_processes_execute_centroid() {
     let app = build_test_app!();
-    create_feature!(app, {"type": "Point", "coordinates": [10.0, 20.0]}, {"name": "a"});
 
-    // 执行 vec:Centroid, 输入为本地图层引用 layer:world
+    // 执行 vec:Centroid, 输入为本地图层引用 layer:world (空发布)
     let req = test::TestRequest::post()
         .uri("/ogc/processes/jobs")
         .set_json(&serde_json::json!({
@@ -206,9 +190,8 @@ async fn test_ogc_processes_execute_buffer() {
 #[actix_rt::test]
 async fn test_ogc_processes_jobs_list() {
     let app = build_test_app!();
-    create_feature!(app, {"type": "Point", "coordinates": [5.0, 5.0]}, {"name": "b"});
 
-    // 先执行一个任务
+    // 先执行一个任务 (world 空发布)
     let req = test::TestRequest::post()
         .uri("/ogc/processes/jobs")
         .set_json(&serde_json::json!({
@@ -269,7 +252,6 @@ async fn test_ogc_processes_execute_errors() {
 #[actix_rt::test]
 async fn test_ogc_processes_cancel_successful_conflict() {
     let app = build_test_app!();
-    create_feature!(app, {"type": "Point", "coordinates": [1.0, 1.0]}, {"name": "c"});
 
     // 同步执行的任务立即 success, 取消应返回 409 (不能取消已完成任务)
     let req = test::TestRequest::post()

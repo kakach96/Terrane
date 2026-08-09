@@ -71,24 +71,12 @@ pub async fn health_ready(state: web::Data<AppState>) -> HttpResponse {
         }));
     }
 
-    // 2. 矢量数据存储 (local / metadata / postgres) — 未配置时视为就绪
-    if let Some(ref bs) = state.vector_store {
-        match bs.list_tables().await {
-            Ok(_) => checks.push(serde_json::json!({"name": "vector_store", "status": "ok"})),
-            Err(e) => {
-                ready = false;
-                checks.push(serde_json::json!({
-                    "name": "vector_store",
-                    "status": "error",
-                    "detail": format!("query failed: {}", e)
-                }));
-            },
-        }
-    } else {
-        checks.push(
-            serde_json::json!({"name": "vector_store", "status": "ok", "detail": "not configured"}),
-        );
-    }
+    // 2. 数据源可用性 — 数据源通过元数据存储管理 (只读发布), 元数据存储就绪即可
+    checks.push(serde_json::json!({
+        "name": "data_sources",
+        "status": "ok",
+        "detail": "managed by metadata store (read-only publishing)"
+    }));
 
     // 3. 瓦片缓存目录 (可选) — 已配置但不可用时不阻塞就绪, 仅记录
     if let Some(ref cache) = state.tile_cache {

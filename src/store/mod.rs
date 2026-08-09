@@ -1,20 +1,18 @@
 pub mod cache;
 pub mod error;
+pub mod file_store;
 pub mod postgres_store;
-pub mod raster;
 pub mod sqlite_store;
 pub mod types;
-pub mod vector;
 
 pub use cache::{build_session_cache, SessionCache};
 pub use error::StoreError;
+pub use file_store::{FileStore, LocalFileStore};
 pub use postgres_store::PostgresStore;
-pub use raster::{build_raster_store, RasterStore};
 pub use sqlite_store::SqliteStore;
 pub use types::{
     AuditLogRecord, Layer, LayerGroupRecord, NamespaceRecord, SessionRecord, StyleRecord, Workspace,
 };
-pub use vector::{build_vector_store, VectorStore};
 
 use crate::auth::{User, UserRole};
 use crate::handlers::CreateWorkspaceRequest;

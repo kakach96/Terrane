@@ -14,7 +14,7 @@ pub struct DataSource {
 }
 
 impl DataSource {
-    /// 判断数据源是否为基于文件的类型（shapefile / geotiff / geopackage）
+    /// 判断数据源是否为基于文件的类型（shapefile / geotiff / geopackage / geojson）
     pub fn is_file_based(&self) -> bool {
         matches!(
             self.data_source_type,
@@ -23,6 +23,7 @@ impl DataSource {
                 | DataSourceType::Geopackage
                 | DataSourceType::WorldImage
                 | DataSourceType::ArcGrid
+                | DataSourceType::GeoJson
         )
     }
 
@@ -48,6 +49,9 @@ pub enum DataSourceType {
     #[serde(rename = "cascaded_wms")]
     CascadedWms,
     ArcGrid,
+    /// GeoJSON 文件数据源 (存储位置由 connection.file_storage_type 决定: local/s3/oss)
+    #[serde(rename = "geojson")]
+    GeoJson,
     /// 元数据存储复用（业务数据复用元数据存储时的内置默认数据源）
     Metadata,
 }
@@ -62,6 +66,7 @@ impl std::fmt::Display for DataSourceType {
             DataSourceType::WorldImage => write!(f, "worldimage"),
             DataSourceType::CascadedWms => write!(f, "cascaded_wms"),
             DataSourceType::ArcGrid => write!(f, "arcgrid"),
+            DataSourceType::GeoJson => write!(f, "geojson"),
             DataSourceType::Metadata => write!(f, "metadata"),
         }
     }
@@ -88,10 +93,10 @@ pub struct DataSourceConnection {
     pub password: Option<String>,
 
     // -- 文件型字段 --
-    /// 文件路径 (shapefile .shp / geotiff .tif)
+    /// 文件路径 (shapefile .shp / geotiff .tif / geojson .geojson)
     #[serde(default)]
     pub file_path: Option<String>,
-    /// 文件存储类型，例如 "local" / "s3" / "oss"
+    /// 文件存储类型: "local" (服务数据目录) / "s3" / "oss" (对象存储, 预留)
     #[serde(default = "default_file_storage")]
     pub file_storage_type: Option<String>,
 }
@@ -180,6 +185,7 @@ mod tests {
             ("worldimage", DataSourceType::WorldImage),
             ("cascaded_wms", DataSourceType::CascadedWms),
             ("arcgrid", DataSourceType::ArcGrid),
+            ("geojson", DataSourceType::GeoJson),
             ("metadata", DataSourceType::Metadata),
         ];
         for (name, expected) in cases {

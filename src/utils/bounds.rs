@@ -35,10 +35,94 @@ pub async fn compute_layer_bounds(
             }
         },
         DataSourceType::Geopackage => compute_geopackage_bounds(ds),
+        DataSourceType::GeoJson => compute_geojson_bounds(ds),
         DataSourceType::WorldImage => compute_worldimage_bounds(ds),
         DataSourceType::CascadedWms => Ok(None),
         DataSourceType::ArcGrid => compute_arcgrid_bounds(ds),
         DataSourceType::Metadata => Ok(None),
+    }
+}
+
+/// 从 GeoJSON 文件计算边界 (遍历要素坐标)
+fn compute_geojson_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+    let conn = ds
+        .connection
+        .as_ref()
+        .ok_or_else(|| GeoServerError::BadRequest("GeoJSON 数据源缺少连接信息".to_string()))?;
+    let file_path = conn
+        .file_path
+        .as_ref()
+        .ok_or_else(|| GeoServerError::BadRequest("GeoJSON 数据源缺少文件路径".to_string()))?;
+
+    info!("[Bounds] 从 GeoJSON 计算边界: {}", file_path);
+
+    let raw = match std::fs::read_to_string(file_path) {
+        Ok(s) => s,
+        Err(e) => {
+            info!("[Bounds] GeoJSON 读取失败: {}", e);
+            return Ok(None);
+        },
+    };
+    let root: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            info!("[Bounds] GeoJSON 解析失败: {}", e);
+            return Ok(None);
+        },
+    };
+
+    let mut minx = f64::MAX;
+    let mut miny = f64::MAX;
+    let mut maxx = f64::MIN;
+    let mut maxy = f64::MIN;
+    let mut found = false;
+
+    if let Some(features) = root.get("features").and_then(|v| v.as_array()) {
+        for f in features {
+            if let Some(geom) = f.get("geometry") {
+                collect_geojson_coords(geom.get("coordinates"), &mut |x, y| {
+                    minx = minx.min(x);
+                    miny = miny.min(y);
+                    maxx = maxx.max(x);
+                    maxy = maxy.max(y);
+                    found = true;
+                });
+            }
+        }
+    }
+
+    if !found {
+        info!("[Bounds] GeoJSON 无有效坐标, 返回 None");
+        return Ok(None);
+    }
+
+    let bounds = Bounds::new(minx, miny, maxx, maxy);
+    info!("[Bounds] GeoJSON 边界: {:?}", bounds);
+    Ok(Some(ComputedBounds {
+        bounds,
+        crs: CoordinateReferenceSystem::EPSG4326,
+    }))
+}
+
+/// 递归收集 GeoJSON 坐标数组中的所有 (x, y) 坐标点
+fn collect_geojson_coords(arr: Option<&serde_json::Value>, visit: &mut impl FnMut(f64, f64)) {
+    let Some(arr) = arr else { return };
+    match arr {
+        serde_json::Value::Array(items) => {
+            if items.iter().all(|i| i.is_number()) {
+                // 坐标点 [x, y, ...]
+                if items.len() >= 2 {
+                    let x = items[0].as_f64().unwrap_or(0.0);
+                    let y = items[1].as_f64().unwrap_or(0.0);
+                    visit(x, y);
+                }
+            } else {
+                for item in items {
+                    collect_geojson_coords(Some(item), visit);
+                }
+            }
+        },
+        _ => {},
     }
 }
 

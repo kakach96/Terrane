@@ -106,14 +106,14 @@ services:
       # All replicas must share the same JWT secret; inject a strong random
       # value via .env in production
       GEOSERVER__SECURITY__JWT_SECRET: ${GEOSERVER_JWT_SECRET:-terrane-dev-secret}
-      # Metadata + vector in PostgreSQL (the postgres dev dependency above)
+      # Metadata in PostgreSQL (the postgres dev dependency above); business
+      # data is published per data source (read-only) — no global vector config
       GEOSERVER__METADATA__KIND: postgres
       GEOSERVER__METADATA__POSTGRES__HOST: postgres
       GEOSERVER__METADATA__POSTGRES__PORT: 5432
       GEOSERVER__METADATA__POSTGRES__INSTANCE: terrane
       GEOSERVER__METADATA__POSTGRES__USER: terrane
       GEOSERVER__METADATA__POSTGRES__PASSWORD: ${POSTGRES_PASSWORD:-terrane}
-      GEOSERVER__VECTOR__KIND: metadata
     volumes:
       - geoserver-data:/data
     depends_on:

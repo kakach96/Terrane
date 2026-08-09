@@ -27,6 +27,7 @@ fn parse_ds_type(type_str: &str) -> DataSourceType {
         "shapefile" => DataSourceType::Shapefile,
         "geotiff" => DataSourceType::Geotiff,
         "geopackage" => DataSourceType::Geopackage,
+        "geojson" => DataSourceType::GeoJson,
         "worldimage" => DataSourceType::WorldImage,
         "cascaded_wms" => DataSourceType::CascadedWms,
         "arcgrid" => DataSourceType::ArcGrid,
@@ -126,18 +127,6 @@ impl SqliteStore {
         if !column_exists(conn, "layers", "native_name") {
             conn.execute("ALTER TABLE layers ADD COLUMN native_name TEXT", [])?;
         }
-
-        // 要素存储表（用于 GeoJSON 上传持久化）
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS features (
-                layer_name TEXT NOT NULL,
-                feature_id TEXT NOT NULL,
-                geometry TEXT NOT NULL,
-                properties TEXT,
-                PRIMARY KEY (layer_name, feature_id)
-            )",
-            [],
-        )?;
 
         // 命名空间表
         conn.execute(
@@ -956,84 +945,6 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM layers WHERE name = ?", [name])?;
         Ok(())
-    }
-
-    // ---- 要素持久化 ----
-
-    /// 保存要素到 features 表（GeoJSON 上传持久化）
-    pub async fn save_features(
-        &self,
-        layer_name: &str,
-        features: &[crate::models::Feature],
-    ) -> SqlResult<usize> {
-        let conn = self.conn.lock().unwrap();
-
-        // 清空该图层的旧数据
-        conn.execute("DELETE FROM features WHERE layer_name = ?", [layer_name])?;
-
-        let mut count = 0;
-        for feature in features {
-            let geometry =
-                serde_json::to_string(&feature.geometry).unwrap_or_else(|_| "{}".to_string());
-            let properties =
-                serde_json::to_string(&feature.properties).unwrap_or_else(|_| "{}".to_string());
-
-            conn.execute(
-                "INSERT OR REPLACE INTO features (layer_name, feature_id, geometry, properties)
-                 VALUES (?, ?, ?, ?)",
-                rusqlite::params![layer_name, feature.id, geometry, properties],
-            )?;
-            count += 1;
-        }
-
-        Ok(count)
-    }
-
-    /// 加载指定图层的所有要素
-    pub async fn load_features(&self, layer_name: &str) -> SqlResult<Vec<crate::models::Feature>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT feature_id, geometry, properties FROM features WHERE layer_name = ? ORDER BY feature_id"
-        )?;
-
-        let rows = stmt.query_map([layer_name], |row| {
-            let id: String = row.get(0)?;
-            let geometry_str: String = row.get(1)?;
-            let properties_str: Option<String> = row.get(2)?;
-
-            let geometry = serde_json::from_str(&geometry_str).unwrap_or(
-                crate::models::GeoJsonGeometry::Point {
-                    coordinates: vec![0.0, 0.0],
-                },
-            );
-            let properties = properties_str
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or_default();
-
-            Ok(crate::models::Feature::with_id(id, geometry, properties))
-        })?;
-
-        rows.collect()
-    }
-
-    /// 删除指定图层的所有要素
-    pub async fn delete_features(&self, layer_name: &str) -> SqlResult<usize> {
-        let conn = self.conn.lock().unwrap();
-        let count = conn.execute("DELETE FROM features WHERE layer_name = ?", [layer_name])?;
-        Ok(count)
-    }
-
-    /// 列出 features 表中已有的图层名 (metadata 数据源表列表使用)
-    pub async fn list_feature_layers(&self) -> SqlResult<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT DISTINCT layer_name FROM features ORDER BY layer_name")?;
-        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(r?);
-        }
-        Ok(out)
     }
 
     // ========================================================================
@@ -2012,7 +1923,6 @@ mod tests {
     use super::*;
     use crate::handlers::CreateWorkspaceRequest;
     use crate::models::permission::{AccessMode, Effect, Permission};
-    use crate::models::{Feature, GeoJsonGeometry};
     use crate::store::Store;
 
     async fn new_store() -> SqliteStore {
@@ -2054,42 +1964,6 @@ mod tests {
         assert_eq!(got.uri, "http://example.com/ns1");
         store.delete_namespace("ns1").await.unwrap();
         assert!(store.get_namespace("ns1").await.unwrap().is_none());
-    }
-
-    #[actix_rt::test]
-    async fn test_layer_and_features_roundtrip() {
-        let store = new_store().await;
-        let layer = Layer {
-            name: "world".into(),
-            title: "World".into(),
-            workspace: "default".into(),
-            store: "shapes".into(),
-            srs: "EPSG:4326".into(),
-            abstract_text: None,
-            native_name: Some("world".into()),
-            enabled: true,
-            minx: -180.0,
-            miny: -90.0,
-            maxx: 180.0,
-            maxy: 90.0,
-            created: String::new(),
-            modified: String::new(),
-        };
-        store.create_layer(&layer).await.unwrap();
-        let got = store.get_layer("world").await.unwrap().unwrap();
-        assert_eq!(got.title, "World");
-
-        let feature = Feature::new(
-            GeoJsonGeometry::Point {
-                coordinates: vec![10.0, 20.0],
-            },
-            std::collections::HashMap::new(),
-        );
-        store.save_features("world", &[feature]).await.unwrap();
-        let feats = store.load_features("world").await.unwrap();
-        assert_eq!(feats.len(), 1);
-        store.delete_features("world").await.unwrap();
-        assert!(store.load_features("world").await.unwrap().is_empty());
     }
 
     #[actix_rt::test]

@@ -11,15 +11,17 @@
 # Env var naming: prefix "GEOSERVER", sections and fields joined with "__".
 #   GEOSERVER__SERVER__HOST                 -> [server] host
 #   GEOSERVER__METADATA__POSTGRES__HOST     -> [metadata.postgres] host
-#   GEOSERVER__VECTOR__KIND                 -> [vector] kind
-#   GEOSERVER__RASTER__KIND                 -> [raster] kind
-#   GEOSERVER__CACHE__KIND                  -> [cache] kind
 # The special var RUST_LOG overrides [logging] level (see below).
 #
 # NOTE: if any REQUIRED key is missing (host / port / api_context /
-# [[workspaces]] / cache.cache_dir / cache.meta_dir when [cache] is present), the
-# whole config fails to load and the server silently falls back to built-in
-# defaults (metadata kind reverts to "sqlite"). Keep required sections complete.
+# [[workspaces]]), the whole config fails to load and the server silently falls
+# back to built-in defaults (metadata kind reverts to "sqlite"). Keep required
+# sections complete.
+#
+# Storage: only [metadata] is configured here. Vector / raster data sources are
+# registered per data source (persisted in the metadata store) via the REST API;
+# file data sources record file_path + file_storage_type (local / s3 / oss,
+# object-storage backends reserved). Tile + session cache stay local by default.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -87,58 +89,6 @@ password = "postgres"
 pool_size = 10
 
 # ---------------------------------------------------------------------------
-# Vector data storage (OPTIONAL)
-# Stores layer feature (vector) data, decoupled from metadata so each can
-# scale/extend independently (e.g. metadata in PostgreSQL, vector data in
-# another database / NFS / object storage).
-# Backward compatible: the legacy section name [business] is accepted as an alias.
-#
-# Defaults when [vector] is omitted:
-#   - metadata kind = sqlite   -> "local" (local directory, default <data_dir>/business)
-#   - metadata kind = postgres -> "metadata" (reuse the metadata store, the
-#                                 built-in default data source option)
-# ---------------------------------------------------------------------------
-[vector]
-# Storage backend: "local" (local dir / NFS / object storage mount) |
-#                  "metadata" (reuse metadata store) |
-#                  "postgres" (standalone PostgreSQL)
-# Env: GEOSERVER__VECTOR__KIND   (legacy: GEOSERVER__BUSINESS__KIND)
-kind = "local"
-# Local directory for vector data (kind = "local"; default: "<data_dir>/business")
-# Each layer is stored as one GeoJSON FeatureCollection file (<dir>/<layer>.geojson).
-# Env: GEOSERVER__VECTOR__DIR   (legacy: GEOSERVER__BUSINESS__DIR)
-# dir = "./data/business"
-
-# Standalone PostgreSQL config (used only when kind = "postgres").
-# Env overrides: GEOSERVER__VECTOR__POSTGRES__HOST / __PORT / __INSTANCE
-#                / __SCHEMA / __USER / __PASSWORD / __POOL_SIZE
-[vector.postgres]
-host = "127.0.0.1"
-port = 5432
-instance = "geoserver_vector"
-schema = "public"
-user = "postgres"
-password = "postgres"
-pool_size = 10
-
-# ---------------------------------------------------------------------------
-# Raster data storage (OPTIONAL)
-# Stores raster files (GeoTIFF / WorldImage / ArcGrid). Decoupled from metadata
-# so raster data can live on a shared volume / NFS / object storage later.
-# Backends: "local" (default; local dir / NFS / object storage mount).
-#           Future: "s3" / "minio" object storage.
-#
-# Defaults when [raster] is omitted: kind = "local", dir = <data_dir>/rasters
-# ---------------------------------------------------------------------------
-[raster]
-# Storage backend: "local" (default)
-# Env: GEOSERVER__RASTER__KIND
-kind = "local"
-# Local directory for raster files (kind = "local"; default: "<data_dir>/rasters")
-# Env: GEOSERVER__RASTER__DIR
-# dir = "./data/rasters"
-
-# ---------------------------------------------------------------------------
 # Security
 # ---------------------------------------------------------------------------
 [security]
@@ -155,41 +105,6 @@ jwt_secret = "terrane-jwt-secret-2026"
 # Log level: trace / debug / info / warn / error (default: "info")
 # Env: GEOSERVER__LOGGING__LEVEL, or RUST_LOG (RUST_LOG takes precedence)
 level = "info"
-
-# ---------------------------------------------------------------------------
-# Cache storage — tile cache + session cache (optional)
-# Backward compatible: the legacy section name [gwc] is accepted as an alias.
-# Backends: "local" (default; tile cache on disk, session cache in memory).
-#           Future: "redis".
-# ---------------------------------------------------------------------------
-[cache]
-# Cache backend: "local" (default)
-# Env: GEOSERVER__CACHE__KIND
-kind = "local"
-# Tile cache root directory (REQUIRED when this section is present;
-# built-in default: "<data_dir>/gwc")
-# Env: GEOSERVER__CACHE__CACHE_DIR   (legacy: GEOSERVER__GWC__CACHE_DIR)
-cache_dir = "./data/gwc"
-# Tile cache metadata directory (REQUIRED when this section is present;
-# built-in default: "<data_dir>/gwc/meta")
-# Env: GEOSERVER__CACHE__META_DIR   (legacy: GEOSERVER__GWC__META_DIR)
-meta_dir = "./data/gwc/meta"
-# Tile expiration time in seconds (0 = never expire; default: 86400 = 24h)
-# Env: GEOSERVER__CACHE__EXPIRE_AFTER_SECS
-expire_after_secs = 86400
-# Max cached tiles (0 = unlimited). When omitted in the file the default is 0;
-# the built-in fallback default is 100000.
-# Env: GEOSERVER__CACHE__MAX_TILES
-max_tiles = 100000
-# Enable tile cache (default: true)
-# Env: GEOSERVER__CACHE__ENABLED
-enabled = true
-# Default Gridset (default: "EPSG:4326")
-# Env: GEOSERVER__CACHE__DEFAULT_GRIDSET
-default_gridset = "EPSG:4326"
-# Session cache TTL in seconds (local in-memory session cache; default: 86400)
-# Env: GEOSERVER__CACHE__SESSION_TTL_SECS
-session_ttl_secs = 86400
 
 # ---------------------------------------------------------------------------
 # CORS config (optional)

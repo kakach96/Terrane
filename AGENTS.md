@@ -18,8 +18,7 @@ src/              — Rust backend (Actix-web)
   handlers/       — REST + OGC (WMS/WFS/WCS) handlers
   models/         — Shared data structs (Layer, Feature, DataSource, etc.)
   store/          — SQLite store (sqlite_store.rs) with PostGIS extension
-    vector/       — Vector store abstraction (local dir / PostgreSQL / metadata reuse)
-    raster/       — Raster store abstraction (local dir; future S3/MinIO)
+    file_store.rs — File store abstraction (LocalFileStore; future S3/MinIO)
     cache/        — Cache abstraction (TileCacheBackend + SessionCache; local disk/in-memory)
   routes.rs       — All route registrations in one file
 frontend/         — Angular 17 + Material
@@ -67,7 +66,7 @@ cargo build
 
 - **API base path**: `/geoserver` (configurable in `terrane.toml: api_context`)
 - **Frontend build**: `optimization.fonts = false` (offline env), Google Fonts loaded at runtime
-- **Storage split**: metadata store (`AppState.store`, default SQLite, `[metadata]`) vs vector store (`AppState.vector_store`, `[vector]`, alias `[business]`) vs raster store (`AppState.raster_store`, `[raster]`) vs cache (`AppState.tile_cache` + `AppState.session_cache`, `[cache]`, alias `[gwc]`). Defaults: metadata=sqlite → vector=local dir (`<data_dir>/business`, one GeoJSON per layer); metadata=postgres → vector=metadata (reuse, built-in default data source option); raster=local dir (`<data_dir>/rasters`); cache=local (tile disk `<data_dir>/gwc` + in-memory session). Legacy `[database]` config is accepted as a `[metadata]` alias. PostGIS data sources use `deadpool_postgres` pools cached in `AppState.pg_pools`
+- **Storage**: config keeps only `[metadata]` (SQLite / PostgreSQL; legacy `[database]` accepted as a `[metadata]` alias). Vector / raster file data sources are registered **per data source** (persisted in the metadata store) with `file_path` + `file_storage_type` (local / s3 / oss; object-storage backends reserved via `FileStore`). PostGIS data sources use `deadpool_postgres` pools cached in `AppState.pg_pools`. Tile + session cache stay local by default (`AppState.tile_cache` + `AppState.session_cache`). **Terrane is a read-only data publishing platform**: no business-data writes (no feature CRUD / WFS-T / feature persistence; `data/business` & DB `features` table removed)
 - **Layer <-> DB mapping**: `layer.store` = data source name, `layer.native_name` = DB table name
 - **Boundary representation**: GET `/layers/{name}` returns `native_bounds.bounds.{minx,miny,maxx,maxy}`; the list endpoint returns `bounds` at top level
 - **No test suite** configured (no test dependencies in Cargo.toml, Angular `ng test` untested)

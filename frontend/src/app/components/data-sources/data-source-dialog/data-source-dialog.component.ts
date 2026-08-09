@@ -26,9 +26,15 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'shapefile', label: 'Shapefile' },
     { value: 'geotiff', label: 'GeoTIFF' },
     { value: 'geopackage', label: 'GeoPackage' },
+    { value: 'geojson', label: 'GeoJSON' },
     { value: 'worldimage', label: 'WorldImage' },
     { value: 'cascaded_wms', label: '级联 WMS' },
     { value: 'arcgrid', label: 'ArcGrid' },
+  ];
+  fileStorageTypes = [
+    { value: 'local', label: '本地目录 (local)' },
+    { value: 's3', label: '对象存储 S3 (预留)' },
+    { value: 'oss', label: '对象存储 OSS (预留)' },
   ];
   isTesting = false;
   selectedFile: File | null = null;
@@ -53,6 +59,7 @@ export class DataSourceDialogComponent implements OnInit {
       username: [''],
       password: [''],
       file_path: [''],
+      file_storage_type: ['local'],
       enabled: [true],
     });
   }
@@ -71,6 +78,7 @@ export class DataSourceDialogComponent implements OnInit {
         schema: this.dataSource.connection?.schema || 'public',
         username: this.dataSource.connection?.username || '',
         file_path: this.dataSource.connection?.file_path || '',
+        file_storage_type: this.dataSource.connection?.file_storage_type || 'local',
         enabled: this.dataSource.enabled,
       });
       this.form.get('name')?.disable();
@@ -163,7 +171,10 @@ export class DataSourceDialogComponent implements OnInit {
     } else {
       const filePath = this.form.get('file_path')?.value || this.selectedFile?.name;
       if (filePath) {
-        request.connection = { file_path: filePath };
+        request.connection = {
+          file_path: filePath,
+          file_storage_type: this.form.get('file_storage_type')?.value || 'local',
+        };
       }
     }
 
@@ -190,7 +201,10 @@ export class DataSourceDialogComponent implements OnInit {
     } else {
       const filePath = this.form.get('file_path')?.value;
       if (filePath) {
-        request.connection = { file_path: filePath };
+        request.connection = {
+          file_path: filePath,
+          file_storage_type: this.form.get('file_storage_type')?.value || 'local',
+        };
       }
     }
 
@@ -205,7 +219,8 @@ export class DataSourceDialogComponent implements OnInit {
 
     const type = this.form.get('type')?.value;
 
-    if (this.mode === 'create' && type !== 'postgis' && this.selectedFile) {
+    // geojson 数据源走普通创建 (指定 file_path + file_storage_type), 不走文件上传
+    if (this.mode === 'create' && type !== 'postgis' && type !== 'geojson' && this.selectedFile) {
       // 文件型数据源：通过上传接口创建
       const dsName = this.form.get('name')?.value;
       const upload$ =

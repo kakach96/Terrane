@@ -81,12 +81,21 @@
 
       <h3 class="section-title">文件配置</h3>
 
-      <mat-form-field class="form-field" *ngIf="mode === 'edit'">
+      <mat-form-field class="form-field" *ngIf="mode === 'edit' || selectedType === 'geojson'">
         <mat-label>文件路径</mat-label>
         <input matInput formControlName="file_path" placeholder="数据文件路径" />
       </mat-form-field>
 
-      <div class="form-row file-upload-row" *ngIf="mode === 'create'">
+      <mat-form-field class="form-field">
+        <mat-label>存储类型</mat-label>
+        <mat-select formControlName="file_storage_type">
+          <mat-option *ngFor="let st of fileStorageTypes" [value]="st.value">
+            {{ st.label }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <div class="form-row file-upload-row" *ngIf="mode === 'create' && selectedType !== 'geojson'">
         <input
           #fileInput
           type="file"

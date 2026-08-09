@@ -29,6 +29,7 @@ fn parse_ds_type(type_str: &str) -> DataSourceType {
         "shapefile" => DataSourceType::Shapefile,
         "geotiff" => DataSourceType::Geotiff,
         "geopackage" => DataSourceType::Geopackage,
+        "geojson" => DataSourceType::GeoJson,
         "worldimage" => DataSourceType::WorldImage,
         "cascaded_wms" => DataSourceType::CascadedWms,
         "arcgrid" => DataSourceType::ArcGrid,
@@ -127,14 +128,6 @@ impl PostgresStore {
                 maxy FLOAT8 DEFAULT 90,
                 created TEXT,
                 modified TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS features (
-                layer_name TEXT NOT NULL,
-                feature_id TEXT NOT NULL,
-                geometry TEXT NOT NULL,
-                properties TEXT,
-                PRIMARY KEY (layer_name, feature_id)
             );
 
             CREATE TABLE IF NOT EXISTS namespaces (

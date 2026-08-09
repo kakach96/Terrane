@@ -10,15 +10,10 @@ pub struct GeoServerConfig {
     /// 元数据存储配置 (默认 sqlite) — 兼容旧节名 `[database]` (serde alias)
     #[serde(alias = "database", default)]
     pub metadata: MetadataConfig,
-    /// 矢量数据存储配置 (可选; 图层要素数据) — 兼容旧节名 `[business]` (serde alias)
-    #[serde(alias = "business", default)]
-    pub vector: Option<VectorConfig>,
-    /// 栅格数据存储配置 (可选; GeoTIFF/WorldImage/ArcGrid 等栅格文件)
-    #[serde(default)]
-    pub raster: Option<RasterConfig>,
-    /// 缓存存储配置 (可选; 瓦片缓存 + 会话缓存) — 兼容旧节名 `[gwc]` (serde alias)
-    #[serde(alias = "gwc", default)]
-    pub cache: Option<CacheConfig>,
+    /// 缓存存储配置 — 不参与配置文件/env 反序列化 (`#[serde(skip)]`),
+    /// 仅作为内置默认 (瓦片缓存 local + 会话缓存内存), 代码/测试可编程覆盖。
+    #[serde(skip, default)]
+    pub cache: CacheConfig,
     /// 安全配置 (无配置时使用内置默认 JWT 密钥, 生产必须注入)
     #[serde(default)]
     pub security: SecurityConfig,
@@ -66,45 +61,11 @@ pub struct MetadataConfig {
     pub postgres: PostgresConfig,
 }
 
-/// 矢量数据存储配置 — 保存图层要素 (矢量业务数据)。
-///
-/// 未配置 `[vector]` 节时的默认规则 (见 [`GeoServerConfig::effective_vector`]):
-/// - 元数据存储为 sqlite → `local` (本地目录, 默认 `<data_dir>/business`)
-/// - 元数据存储为其他外部存储 (如 postgres) → `metadata` (复用元数据存储, 内置默认选项)
-///
-/// 兼容旧节名 `[business]` (serde alias, 声明在字段 `vector` 上)。
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct VectorConfig {
-    /// 矢量存储后端类型: "local" | "metadata" | "postgres" (默认: "local")
-    #[serde(default = "default_vector_kind")]
-    pub kind: String,
-    /// 本地目录 (kind = "local" 时生效; 默认: `<data_dir>/business`, 支持 NFS/对象存储挂载)
-    #[serde(default)]
-    pub dir: Option<PathBuf>,
-    /// PostgreSQL 配置 (kind = "postgres", 或复用 postgres 元数据存储时生效)
-    #[serde(default)]
-    pub postgres: PostgresConfig,
-}
-
-/// 栅格数据存储配置 — 保存栅格文件 (GeoTIFF / WorldImage / ArcGrid)。
-///
-/// 未配置 `[raster]` 节时默认 `local` (本地目录, 默认 `<data_dir>/rasters`)。
-/// 后续可扩展 `s3` / `minio` 等对象存储后端 (见 [`crate::store::raster`])。
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RasterConfig {
-    /// 栅格存储后端类型: "local" (默认) | 未来 "s3"/"minio"
-    #[serde(default = "default_raster_kind")]
-    pub kind: String,
-    /// 本地目录 (kind = "local" 时生效; 默认: `<data_dir>/rasters`, 支持 NFS/对象存储挂载)
-    #[serde(default)]
-    pub dir: Option<PathBuf>,
-}
-
 /// 缓存存储配置 — 瓦片缓存 + 会话缓存。
 ///
-/// 未配置 `[cache]` 节时默认 `local` (瓦片缓存落盘 `<data_dir>/gwc`, 会话缓存内存写穿透)。
+/// 不作为配置文件节 (`GeoServerConfig.cache` 标记 `#[serde(skip)]`), 仅提供
+/// 内置默认 (瓦片缓存落盘 `<data_dir>/gwc`, 会话缓存内存)。代码/测试可编程覆盖。
 /// 后续可扩展 `redis` 等后端 (见 [`crate::store::cache`])。
-/// 兼容旧节名 `[gwc]` (serde alias, 声明在字段 `cache` 上)。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CacheConfig {
     /// 缓存后端类型: "local" (默认) | 未来 "redis"
@@ -167,14 +128,6 @@ pub struct SecurityConfig {
 
 fn default_db_kind() -> String {
     "sqlite".to_string()
-}
-
-fn default_vector_kind() -> String {
-    "local".to_string()
-}
-
-fn default_raster_kind() -> String {
-    "local".to_string()
 }
 
 fn default_cache_kind() -> String {
@@ -279,15 +232,6 @@ impl Default for PostgresConfig {
             user: default_db_user(),
             password: default_db_password(),
             pool_size: default_db_pool_size(),
-        }
-    }
-}
-
-impl Default for RasterConfig {
-    fn default() -> Self {
-        RasterConfig {
-            kind: default_raster_kind(),
-            dir: None,
         }
     }
 }
@@ -453,13 +397,7 @@ impl Default for GeoServerConfig {
                 sqlite_path: default_sqlite_path(),
                 postgres: PostgresConfig::default(),
             },
-            vector: None,
-            raster: None,
-            cache: Some(CacheConfig {
-                cache_dir: PathBuf::from("./data/gwc"),
-                meta_dir: PathBuf::from("./data/gwc/meta"),
-                ..Default::default()
-            }),
+            cache: CacheConfig::default(),
             security: SecurityConfig {
                 jwt_secret: default_jwt_secret(),
             },
@@ -474,58 +412,6 @@ impl Default for GeoServerConfig {
 }
 
 impl GeoServerConfig {
-    /// 解析生效的矢量数据存储配置 (应用默认规则)。
-    ///
-    /// - 显式配置了 `[vector]` → 直接使用 (dir 为空时回退 `<data_dir>/business`)
-    /// - 未配置:
-    ///   - 元数据存储非 sqlite (外部存储) → 复用元数据存储 (kind = "metadata", 内置默认选项)
-    ///   - 元数据存储为 sqlite → 本地目录 (kind = "local", 默认 `<data_dir>/business`)
-    pub fn effective_vector(&self) -> VectorConfig {
-        let mut vc = self.vector.clone().unwrap_or_else(|| {
-            if self.metadata.kind != "sqlite" {
-                VectorConfig {
-                    kind: "metadata".to_string(),
-                    dir: None,
-                    postgres: PostgresConfig::default(),
-                }
-            } else {
-                VectorConfig {
-                    kind: "local".to_string(),
-                    dir: None,
-                    postgres: PostgresConfig::default(),
-                }
-            }
-        });
-        if vc.dir.is_none() {
-            vc.dir = Some(self.data_dir.join("business"));
-        }
-        vc
-    }
-
-    /// 解析生效的栅格存储配置 (默认 `local`, 目录 `<data_dir>/rasters`)。
-    pub fn effective_raster(&self) -> RasterConfig {
-        let mut rc = self.raster.clone().unwrap_or_default();
-        if rc.dir.is_none() {
-            rc.dir = Some(self.data_dir.join("rasters"));
-        }
-        rc
-    }
-
-    /// 解析生效的缓存存储配置。
-    ///
-    /// - 未配置 `[cache]` → 默认 `local` 缓存, 瓦片目录锚定到 `<data_dir>/gwc`
-    /// - 显式配置 → 按原样使用 (目录字段相对路径保持 CWD 语义, 与 `effective_vector` 一致)
-    pub fn effective_cache(&self) -> CacheConfig {
-        match self.cache.clone() {
-            Some(c) => c,
-            None => CacheConfig {
-                cache_dir: self.data_dir.join("gwc"),
-                meta_dir: self.data_dir.join("gwc").join("meta"),
-                ..Default::default()
-            },
-        }
-    }
-
     pub fn load() -> Result<Self, config::ConfigError> {
         let config = Config::builder()
             .add_source(File::with_name("terrane").required(false))
@@ -597,58 +483,52 @@ mod tests {
     }
 
     #[test]
-    fn test_new_sections_parse() {
+    fn test_metadata_only_parse() {
+        let cfg = parse_toml(
+            r#"
+            [metadata]
+            kind = "sqlite"
+            "#,
+        );
+        assert_eq!(cfg.metadata.kind, "sqlite");
+    }
+
+    #[test]
+    fn test_legacy_database_alias() {
+        // 旧节名 [database] 通过 serde alias 映射到 metadata
+        let cfg = parse_toml(
+            r#"
+            [database]
+            kind = "sqlite"
+            "#,
+        );
+        assert_eq!(cfg.metadata.kind, "sqlite");
+    }
+
+    #[test]
+    fn test_storage_sections_ignored() {
+        // [vector]/[raster]/[cache] 不再参与配置文件: vector/raster 字段已移除,
+        // cache 为 `#[serde(skip)]` (配置文件写 [cache] 被忽略, 保持内置默认)
         let cfg = parse_toml(
             r#"
             [vector]
-            kind = "local"
+            kind = "postgres"
             [raster]
             kind = "local"
             [cache]
-            kind = "local"
             cache_dir = "./tmp/gwc"
             meta_dir = "./tmp/gwc/meta"
             "#,
         );
-        assert_eq!(cfg.vector.unwrap().kind, "local");
-        assert_eq!(cfg.raster.unwrap().kind, "local");
-        let c = cfg.cache.unwrap();
-        assert_eq!(c.kind, "local");
-        assert_eq!(c.cache_dir, PathBuf::from("./tmp/gwc"));
-        assert_eq!(c.meta_dir, PathBuf::from("./tmp/gwc/meta"));
+        assert_eq!(cfg.cache.kind, "local");
+        assert_eq!(cfg.cache.cache_dir, PathBuf::from("./data/gwc"));
+        assert_eq!(cfg.cache.meta_dir, PathBuf::from("./data/gwc/meta"));
     }
 
     #[test]
-    fn test_legacy_sections_alias() {
-        // 旧节名 [business] / [gwc] 通过 serde alias 映射到 vector / cache
-        let cfg = parse_toml(
-            r#"
-            [business]
-            kind = "metadata"
-            [gwc]
-            cache_dir = "./data/gwc"
-            meta_dir = "./data/gwc/meta"
-            "#,
-        );
-        assert_eq!(cfg.vector.unwrap().kind, "metadata");
-        let c = cfg.cache.unwrap();
-        assert_eq!(c.cache_dir, PathBuf::from("./data/gwc"));
-    }
-
-    #[test]
-    fn test_effective_defaults() {
+    fn test_cache_defaults() {
         let cfg = GeoServerConfig::default();
-        assert_eq!(cfg.effective_vector().kind, "local");
-        assert_eq!(
-            cfg.effective_vector().dir.unwrap(),
-            PathBuf::from("./data/business")
-        );
-
-        let r = cfg.effective_raster();
-        assert_eq!(r.kind, "local");
-        assert_eq!(r.dir.unwrap(), PathBuf::from("./data/rasters"));
-
-        let c = cfg.effective_cache();
+        let c = &cfg.cache;
         assert_eq!(c.kind, "local");
         assert_eq!(c.cache_dir, PathBuf::from("./data/gwc"));
         assert_eq!(c.meta_dir, PathBuf::from("./data/gwc/meta"));

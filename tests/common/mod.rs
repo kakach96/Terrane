@@ -17,14 +17,8 @@ pub fn create_test_config() -> terrane::config::GeoServerConfig {
     config.server.port = 0;
     config.metadata.sqlite_path = ":memory:".into();
 
-    // 矢量存储复用元数据存储, 避免测试写入 ./data/business
-    config.vector = Some(terrane::config::VectorConfig {
-        kind: "metadata".to_string(),
-        dir: None,
-        postgres: Default::default(),
-    });
-    // 禁用瓦片缓存, 避免测试写入 ./data/gwc
-    config.cache = Some(terrane::config::CacheConfig {
+    // 禁用瓦片缓存, 避免测试写入 ./data/gwc (缓存为内置默认, 测试可编程覆盖)
+    config.cache = terrane::config::CacheConfig {
         kind: "local".to_string(),
         cache_dir: PathBuf::from(std::env::temp_dir()).join("terrane-test-gwc"),
         meta_dir: PathBuf::from(std::env::temp_dir()).join("terrane-test-gwc-meta"),
@@ -33,7 +27,7 @@ pub fn create_test_config() -> terrane::config::GeoServerConfig {
         enabled: false,
         default_gridset: "EPSG:4326".to_string(),
         session_ttl_secs: 300,
-    });
+    };
 
     config.workspaces = vec![terrane::config::WorkspaceConfig {
         name: "default".to_string(),

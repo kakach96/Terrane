@@ -254,26 +254,14 @@ async fn test_rest_layer_groups_crud() {
 }
 
 // ---------------------------------------------------------------------------
-// CRUD: Features
+// Features: read-only browsing (数据发布平台, 无要素写入接口)
 // ---------------------------------------------------------------------------
 
 #[actix_rt::test]
-async fn test_rest_features_crud() {
+async fn test_rest_features_readonly() {
     let app = build_test_app!();
 
-    let create = test::TestRequest::post()
-        .uri("/geoserver/layers/world/features")
-        .set_json(&serde_json::json!({
-            "geometry": { "type": "Point", "coordinates": [10.0, 20.0] },
-            "properties": { "name": "integration-test" },
-        }))
-        .to_request();
-    let resp = test::call_service(&app, create).await;
-    assert_eq!(resp.status(), StatusCode::CREATED, "创建要素应返回 201");
-
-    let body: serde_json::Value = test::read_body_json(resp).await;
-    assert!(body["id"].is_string(), "应返回要素 id");
-
+    // GET 读取要素 (world 图层空发布 → 200 空集合)
     let req = test::TestRequest::get()
         .uri("/geoserver/layers/world/features")
         .to_request();
@@ -285,8 +273,31 @@ async fn test_rest_features_crud() {
     );
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    let total = body["totalFeatures"].as_i64().unwrap_or(0);
-    assert!(total >= 1, "应至少 1 条要素, 实际: {}", total);
+    assert_eq!(
+        body["totalFeatures"].as_i64().unwrap_or(-1),
+        0,
+        "world 图层空发布, 应返回 0 条要素"
+    );
+}
+
+#[actix_rt::test]
+async fn test_rest_feature_write_not_supported() {
+    let app = build_test_app!();
+
+    // POST 创建要素 → 405 (接口已移除, 只读发布)
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layers/world/features")
+        .set_json(&serde_json::json!({
+            "geometry": { "type": "Point", "coordinates": [10.0, 20.0] },
+            "properties": { "name": "integration-test" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert!(
+        !resp.status().is_success(),
+        "要素写入接口已移除, POST 不应成功, 实际: {}",
+        resp.status()
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -408,72 +419,23 @@ async fn test_mvt_endpoint() {
 }
 
 // ---------------------------------------------------------------------------
-// Batch 3: 单要素查询/更新/删除 + 认证 + 权限 + 备份 + 上传
+// Batch 3: 单要素只读查询 + 认证 + 权限 + 备份 + 上传
 // ---------------------------------------------------------------------------
 
 #[actix_rt::test]
-async fn test_rest_feature_single_get_update_delete() {
+async fn test_rest_feature_readonly() {
     let app = build_test_app!();
 
-    // 1. 创建要素, 获取 id
-    let create = test::TestRequest::post()
-        .uri("/geoserver/layers/world/features")
-        .set_json(&serde_json::json!({
-            "geometry": { "type": "Point", "coordinates": [50.0, 60.0] },
-            "properties": { "name": "before-update" },
-        }))
-        .to_request();
-    let resp = test::call_service(&app, create).await;
-    assert_eq!(resp.status(), StatusCode::CREATED, "创建要素应返回 201");
-    let body: serde_json::Value = test::read_body_json(resp).await;
-    let fid = body["id"].as_str().expect("应返回要素 id").to_string();
-
-    // 2. 单条查询
+    // 只读发布: world 图层空发布, GET 单要素应返回 404 (要素不存在)
     let req = test::TestRequest::get()
-        .uri(&format!("/geoserver/layers/world/features/{}", fid))
+        .uri("/geoserver/layers/world/features/nonexistent")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
-        resp.status().is_success(),
-        "GET 单要素应返回 200, 实际: {}",
+        resp.status().is_success() || resp.status() == StatusCode::NOT_FOUND,
+        "GET 单要素应返回 200 或 404, 实际: {}",
         resp.status()
     );
-    let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["id"], fid, "应返回同一要素 id");
-
-    // 3. 更新属性
-    let update = test::TestRequest::put()
-        .uri(&format!("/geoserver/layers/world/features/{}", fid))
-        .set_json(&serde_json::json!({
-            "properties": { "name": "after-update" },
-        }))
-        .to_request();
-    let resp = test::call_service(&app, update).await;
-    assert!(
-        resp.status().is_success(),
-        "PUT 单要素应返回 200, 实际: {}",
-        resp.status()
-    );
-    let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["properties"]["name"], "after-update", "属性应已更新");
-
-    // 4. 删除
-    let del = test::TestRequest::delete()
-        .uri(&format!("/geoserver/layers/world/features/{}", fid))
-        .to_request();
-    let resp = test::call_service(&app, del).await;
-    assert!(
-        resp.status().is_success(),
-        "DELETE 单要素应返回 200, 实际: {}",
-        resp.status()
-    );
-
-    // 5. 删除后再查 → 404
-    let req = test::TestRequest::get()
-        .uri(&format!("/geoserver/layers/world/features/{}", fid))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND, "删除后查询应返回 404");
 }
 
 // ---------------------------------------------------------------------------
@@ -739,7 +701,45 @@ async fn test_rest_upload_geojson() {
         resp.status()
     );
 
-    // 上传后可查询该图层要素
+    // 上传登记为 geojson 文件数据源 (文件数据源登记, 数据发布平台只读)
+    let req = test::TestRequest::get()
+        .uri("/geoserver/data-sources/uploaded_layer")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "数据源应已创建, 实际: {}",
+        resp.status()
+    );
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["type"], "geojson", "应为 geojson 数据源");
+    assert_eq!(
+        body["data"]["connection"]["file_storage_type"], "local",
+        "应为本地存储"
+    );
+
+    // 发布图层 (store = 数据源名) 后可查询上传的要素
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(&serde_json::json!({
+            "name": "uploaded_layer",
+            "title": "Uploaded",
+            "workspace": "default",
+            "store": "uploaded_layer",
+            "native_name": "uploaded_layer",
+            "srs": "EPSG:4326",
+            "minx": -180.0, "miny": -90.0, "maxx": 180.0, "maxy": 90.0,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建图层应返回 201, 实际: {}",
+        resp.status()
+    );
+
     let req = test::TestRequest::get()
         .uri("/geoserver/layers/uploaded_layer/features")
         .to_request();
@@ -851,7 +851,7 @@ async fn test_rest_tile_cache_stats_and_clear() {
 async fn test_rest_tile_cache_hit() {
     // 使用启用缓存的自定义配置 (独立临时目录), 验证 MISS → HIT
     let mut config = common::create_test_config();
-    config.cache = Some(terrane::config::CacheConfig {
+    config.cache = terrane::config::CacheConfig {
         kind: "local".to_string(),
         cache_dir: std::env::temp_dir().join(format!("terrane-rest-gwc-{}", std::process::id())),
         meta_dir: std::env::temp_dir()
@@ -861,7 +861,7 @@ async fn test_rest_tile_cache_hit() {
         enabled: true,
         default_gridset: "EPSG:4326".to_string(),
         session_ttl_secs: 300,
-    });
+    };
     let state = actix_web::web::Data::new(terrane::state::AppState::new(config).await);
     let app = actix_web::test::init_service(
         actix_web::App::new()
