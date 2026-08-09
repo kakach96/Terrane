@@ -29,7 +29,7 @@ and *which remain to be adapted*.
 | **WFS output formats** | —                          | ✅      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV / KML / Shapefile (SHAPE-ZIP) |
 | **WPS**             | 1.0.0                          | ✅      | GetCapabilities / DescribeProcess / Execute (KVP + XML POST); built-in processes vec:Centroid / vec:Buffer / gs:Bounds |
 | **CSW**             | 2.0.2                          | ✅      | GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain; catalog = Terrane layers as Dublin Core records (KVP + XML POST) |
-| **OGC API series**  | Features (Core) / Tiles / Maps / Coverages / Processes / Styles | ⚠️ | Features Core ✅ at `/ogc/features`; Tiles ✅ at `/ogc/tiles` (tileMatrixSets + raster tiles, PNG/JPEG); Maps/Coverages/Processes/Styles pending |
+| **OGC API series**  | Features (Core) / Tiles / Maps / Coverages / Processes / Styles | ⚠️ | Features Core ✅ at `/ogc/features`; Tiles ✅ at `/ogc/tiles` (tileMatrixSets + raster tiles, PNG/JPEG); **Maps ✅ at `/ogc/maps`** (map operation reuses the WMS GetMap pipeline); **Processes ✅ at `/ogc/processes`** (synchronous jobs over the WPS engine); Coverages/Styles pending |
 
 ## 2. WMS — Web Map Service
 
@@ -177,7 +177,7 @@ Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](IMPLEMENTAT
 | P2       | WFS KML / Shapefile output          | ✅ done |
 | P4       | WPS (processing)                    | ✅ first surface (Centroid/Buffer/Bounds) |
 | P4       | CSW (catalog)                       | ✅ first surface (GetCapabilities/DescribeRecord/GetRecords/GetRecordById/GetDomain) |
-| P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | ✅ Features Core + Tiles (batch 19/20); Maps/Coverages/Processes/Styles 2–3 weeks each |
+| P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | ✅ Features Core + Tiles (batch 19/20) + Maps + Processes (batch 21); Coverages/Styles 2–3 weeks each |
 | P4       | Printing / Importer / GeoFence      | enterprise |
 | P4       | CSS / YSLD / MBStyle styling        | medium |
 
@@ -200,7 +200,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **152 lib unit tests + 130 integration tests**, plus
+`cargo test` currently green: **169 lib unit tests + 147 integration tests**, plus
 **5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
 running services and are verified with `cargo test -- --ignored`.
 
@@ -220,6 +220,8 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | `tests/csw_test.rs` | 10    | CSW (GetCapabilities, DescribeRecord, GetRecords KVP + XML POST summary/brief/full + CQL constraint + paging/hits, GetRecordById, GetDomain) |
 | `tests/ogc_api_test.rs` | 8 | OGC API Features (landing, conformance, collections, collection, items with limit/offset/bbox, item by id, 404) |
 | `tests/ogc_tiles_test.rs` | 7 | OGC API Tiles (landing, conformance, tileMatrixSets + definition, collections/tilesets, tile PNG/JPEG, 404) |
+| `tests/ogc_maps_test.rs` | 8 | OGC API Maps (landing, conformance, collections, collection, styles, map PNG/JPEG + size, 400/404) |
+| `tests/ogc_processes_test.rs` | 9 | OGC API Processes (landing, conformance, process list, description, execute centroid/buffer, jobs list, results, cancel 409, 400/404) |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
 has at least one request/response test validating status codes, content types,
@@ -238,6 +240,8 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 | WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
 | WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV / KML 2.2 / Shapefile SHAPE-ZIP), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
 | WPS                | GetCapabilities (ServiceIdentification / OperationsMetadata / ProcessOfferings / Languages), DescribeProcess (DataInputs / ProcessOutputs + xsd:double), Execute (KVP `response=raw` → GeoJSON + document XML, POST XML with `Reference xlink:href="layer:…"`), built-in `vec:Centroid` / `vec:Buffer` / `gs:Bounds` — integration + 6 unit tests (`services/wps.rs`: KVP DataInputs, operation parse, Execute XML, capabilities structure, features_to_geojson, run_process) |
+| OGC API Maps       | Landing / conformance / collections / collection / styles, `map` operation (`bbox` + `width`/`height`, PNG/JPEG via `?f=`, `transparent` / `bgcolor` / `datetime` / `cql_filter` pass-through) reusing the shared WMS GetMap pipeline — integration + 8 unit tests (`services/ogc_maps.rs`: landing, conformance, collections, collection links, styles, bbox parse, map href formats) |
+| OGC API Processes  | Landing / conformance / process list / process description; synchronous job surface (`POST /jobs` → 201 status document, `GET /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/results`, `DELETE /jobs/{id}`) over the WPS engine, inputs as `layer:` reference / inline GeoJSON / OGC API href / literals — integration + 9 unit tests (`services/ogc_processes.rs`: landing, conformance, process list/description, job status/results, job request parse) |
 | WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | TMS                | GetCapabilities (RESTful + KVP), TileMap document (SRS / BoundingBox / Origin / TileFormat / TileSets + units-per-pixel), GetTile (global-geodetic + global-mercator, PNG + JPEG, TMS bottom-up y flip) — integration |
@@ -462,4 +466,32 @@ WMTS / TMS / WMS-C. New unit tests: 7 (ogc_tiles.rs); new integration: 7
 (ogc_tiles_test.rs).
 Next candidates:
 
-1. OGC API Maps / Processes (P4)
+Batch 21 completed: **OGC API - Maps (OGC 20-058) + OGC API - Processes
+(OGC 18-062) first surfaces** — `src/services/ogc_maps.rs` +
+`src/handlers/ogc_maps_handler.rs` served at `/ogc/maps` and
+`src/services/ogc_processes.rs` + `src/handlers/ogc_processes_handler.rs`
+served at `/ogc/processes` (both JSON; the reference GeoServer at :18080 does
+not ship the OGC API extension, so both follow the OGC API schema directly).
+**Maps**: landing page, `/conformance` (conformsTo: core / oas30 / html / map /
+collections / collection-map), `/collections` and `/collections/{id}` (map
+collection = Terrane layer with WGS84 extent + self/styles/map links),
+`/collections/{id}/styles` and the `map` operation at
+`/collections/{id}/map` (`bbox` + `width`/`height`, PNG default / JPEG via
+`?f=image/jpeg`, `transparent` / `bgcolor` / `datetime` / `cql_filter`
+pass-through) — rendered through the shared WMS GetMap pipeline (new public
+`render_ogc_map` helper in `wms_handler.rs`), so OGC API - Maps serves the
+same PNG/JPEG maps as the WMS 1.1.1/1.3.0 interface. **Processes**: landing
+page, `/conformance` (conformsTo: core / ogc-process-description / json),
+`/processes` and `/processes/{processId}` (process summary / full description
+with typed inputs & outputs), and a **synchronous job surface** —
+`POST /ogc/processes/jobs` executes a built-in process immediately (inputs as
+`layer:<name>` reference, inline GeoJSON FeatureCollection, OGC API href to a
+collection, or literal) and returns `201` with a status document; `GET /jobs` /
+`GET /jobs/{jobId}` / `GET /jobs/{jobId}/results` / `DELETE /jobs/{jobId}`
+complete the lifecycle (in-memory job store in `AppState.ogc_jobs`). The
+built-in processes reuse the WPS 1.0.0 engine (`vec:Centroid` / `vec:Buffer` /
+`gs:Bounds`). New unit tests: 8 (ogc_maps.rs) + 9 (ogc_processes.rs); new
+integration: 8 (ogc_maps_test.rs) + 9 (ogc_processes_test.rs).
+Next candidates:
+
+1. OGC API Coverages / Styles (P4)

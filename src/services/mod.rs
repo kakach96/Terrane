@@ -1,5 +1,7 @@
 pub mod csw;
 pub mod ogc_features;
+pub mod ogc_maps;
+pub mod ogc_processes;
 pub mod ogc_tiles;
 pub mod tms;
 pub mod wcs;

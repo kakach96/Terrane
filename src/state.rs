@@ -86,6 +86,8 @@ pub struct AppState {
     pub recent_request_count: AtomicU64,
     /// GeoWebCache 瓦片缓存引擎
     pub tile_cache: Option<TileCache>,
+    /// OGC API - Processes 任务存储 (jobID -> OgcJob; 首版为同步执行)
+    pub ogc_jobs: Arc<Mutex<HashMap<String, crate::services::ogc_processes::OgcJob>>>,
 }
 
 impl AppState {
@@ -359,6 +361,7 @@ impl AppState {
             request_log: Arc::new(RwLock::new(Vec::with_capacity(10000))),
             recent_request_count: AtomicU64::new(0),
             tile_cache,
+            ogc_jobs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 

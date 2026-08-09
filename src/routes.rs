@@ -59,6 +59,48 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig, api_context: &str) {
                 ),
         )
         .service(
+            web::scope("/ogc/maps")
+                .route("", web::get().to(crate::handlers::handle_ogc_maps_landing))
+                .route("/conformance", web::get().to(crate::handlers::handle_ogc_maps_conformance))
+                .route("/collections", web::get().to(crate::handlers::handle_ogc_maps_collections))
+                .route(
+                    "/collections/{collection}",
+                    web::get().to(crate::handlers::handle_ogc_maps_collection),
+                )
+                .route(
+                    "/collections/{collection}/styles",
+                    web::get().to(crate::handlers::handle_ogc_maps_styles),
+                )
+                .route(
+                    "/collections/{collection}/map",
+                    web::get().to(crate::handlers::handle_ogc_maps_map),
+                ),
+        )
+        .service(
+            web::scope("/ogc/processes")
+                .route("", web::get().to(crate::handlers::handle_ogc_processes_landing))
+                .route("/conformance", web::get().to(crate::handlers::handle_ogc_processes_conformance))
+                .route("/processes", web::get().to(crate::handlers::handle_ogc_processes_processes))
+                .route(
+                    "/processes/{processId}",
+                    web::get().to(crate::handlers::handle_ogc_processes_process),
+                )
+                .route("/jobs", web::get().to(crate::handlers::handle_ogc_processes_jobs))
+                .route("/jobs", web::post().to(crate::handlers::handle_ogc_processes_execute))
+                .route(
+                    "/jobs/{jobId}",
+                    web::get().to(crate::handlers::handle_ogc_processes_job),
+                )
+                .route(
+                    "/jobs/{jobId}",
+                    web::delete().to(crate::handlers::handle_ogc_processes_job_cancel),
+                )
+                .route(
+                    "/jobs/{jobId}/results",
+                    web::get().to(crate::handlers::handle_ogc_processes_job_results),
+                ),
+        )
+        .service(
             web::scope(api_context)
                 .route("/health", web::get().to(crate::handlers::health_check))
                 .service(

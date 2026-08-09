@@ -109,6 +109,58 @@ fn format_wms_error_response(err: &GeoServerError, params: &[(String, String)]) 
     HttpResponse::Ok().content_type(content_type).body(body)
 }
 
+/// Render a map for a single layer by delegating to the shared WMS GetMap
+/// pipeline. Used by the OGC API - Maps `map` operation
+/// (`GET /ogc/maps/collections/{id}/map`).
+pub async fn render_ogc_map(
+    state: &AppState,
+    layer: &str,
+    bbox: &Bounds,
+    width: u32,
+    height: u32,
+    format: &str,
+    crs: &str,
+    transparent: bool,
+    bgcolor: Option<String>,
+    time: Option<String>,
+    cql_filter: Option<String>,
+) -> Result<HttpResponse, GeoServerError> {
+    let request = wms::WmsRequest {
+        service: "WMS".to_string(),
+        version: Some("1.3.0".to_string()),
+        request: wms::WmsOperation::GetMap,
+        layers: Some(vec![layer.to_string()]),
+        styles: None,
+        crs: Some(crs.to_string()),
+        bbox: Some(wms::Bbox {
+            minx: bbox.minx,
+            miny: bbox.miny,
+            maxx: bbox.maxx,
+            maxy: bbox.maxy,
+        }),
+        width: Some(width),
+        height: Some(height),
+        format: Some(format.to_string()),
+        transparent: Some(transparent),
+        bgcolor,
+        exceptions: None,
+        time,
+        elevation: None,
+        query_layers: None,
+        info_format: None,
+        feature_count: None,
+        i: None,
+        j: None,
+        sld: None,
+        sld_body: None,
+        cql_filter,
+        env: None,
+        feature_id: None,
+        angle: None,
+    };
+    handle_get_map(state, &request).await
+}
+
 async fn handle_get_capabilities(
     state: &AppState,
     _request: &WmsRequest,
@@ -1954,21 +2006,13 @@ async fn handle_cascaded_wms_request(
 
     // 收集请求级厂商参数, 透传到上游 WMS (CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID)
     let mut passthrough: HashMap<String, String> = HashMap::new();
-    if let Some(cql) = context
-        .cql_filter
-        .as_ref()
-        .filter(|c| !c.trim().is_empty())
-    {
+    if let Some(cql) = context.cql_filter.as_ref().filter(|c| !c.trim().is_empty()) {
         passthrough.insert("CQL_FILTER".to_string(), cql.clone());
     }
     if let Some(time) = context.time.as_ref().filter(|t| !t.trim().is_empty()) {
         passthrough.insert("TIME".to_string(), time.clone());
     }
-    if let Some(elev) = context
-        .elevation
-        .as_ref()
-        .filter(|e| !e.trim().is_empty())
-    {
+    if let Some(elev) = context.elevation.as_ref().filter(|e| !e.trim().is_empty()) {
         passthrough.insert("ELEVATION".to_string(), elev.clone());
     }
     if let Some(env) = &context.env {
@@ -1984,11 +2028,7 @@ async fn handle_cascaded_wms_request(
     if let Some(angle) = context.angle {
         passthrough.insert("ANGLE".to_string(), angle.to_string());
     }
-    if let Some(fids) = context
-        .feature_id
-        .as_ref()
-        .filter(|f| !f.is_empty())
-    {
+    if let Some(fids) = context.feature_id.as_ref().filter(|f| !f.is_empty()) {
         passthrough.insert("FEATUREID".to_string(), fids.join(","));
     }
 

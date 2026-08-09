@@ -195,7 +195,7 @@ Overall progress █████████░░░░░░░  58%
 |---|------|------|:---------:|
 | 25 | **WPS (Web Processing Service)** | Geoprocessing services: buffer, union/intersection/difference, coordinate transforms, etc. | ✅ **Completed** (first surface: vec:Centroid / vec:Buffer / gs:Bounds) |
 | 26 | **CSW (Catalog Service)** | Catalog service: data discovery and metadata management | ✅ **Completed** (first surface: GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain) |
-| 27 | **OGC API series** | Features / Tiles / Maps / Coverages / Processes / Styles | ⏳ Features Core + Tiles ✅ (batch 19/20); Maps/Coverages/Processes/Styles 2-3 weeks each |
+| 27 | **OGC API series** | Features / Tiles / Maps / Coverages / Processes / Styles | ⏳ Features Core + Tiles ✅ (batch 19/20); Maps + Processes ✅ (batch 21); Coverages/Styles 2-3 weeks each |
 | 28 | **Vector Tiles** | MVT (Mapbox Vector Tile) format output | ✅ **Completed** |
 | 29 | **KML output** | Map/feature export in KML/KMZ format | 1-2 weeks |
 | 30 | **Printing module** | PDF map printing service | 3-4 weeks |
