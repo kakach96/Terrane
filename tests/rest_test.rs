@@ -1020,11 +1020,11 @@ fn pg_http_test_params() -> (String, u16, String, String, String) {
     let port: u16 = std::env::var("GEOSERVER_TEST_PG_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(5432);
-    let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "postgres".into());
+        .unwrap_or(5433);
+    let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "terrane".into());
     let password =
-        std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "kakach2026".into());
-    let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "postgres".into());
+        std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "terrane".into());
+    let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "terrane".into());
     (host, port, user, password, instance)
 }
 
@@ -1079,7 +1079,7 @@ async fn pg_http_drop_schema(schema: &str) {
 }
 
 #[actix_rt::test]
-#[ignore = "requires a live PostGIS (e.g. docker compose --profile postgres)"]
+#[ignore = "requires a live PostGIS (e.g. docker compose -f build/docker-compose.yml up -d)"]
 async fn test_live_rest_postgis_data_source_http() {
     use actix_web::http::StatusCode;
 

@@ -228,7 +228,8 @@ semantics (XML schema conformance of capabilities, GML 3.2 fidelity, etc.).
 The test config uses in-memory SQLite, disables the tile cache, and reuses the
 metadata store for vectors, so tests write nothing to `./data`. The live tests
 (`#[ignore]`) talk to a local PostGIS (env `GEOSERVER_TEST_PG_*`, defaults
-127.0.0.1:5432 postgres/`kakach2026`) and the reference GeoServer at :18080.
+matching the dev compose `build/docker-compose.yml`: 127.0.0.1:5433
+terrane/`terrane`) and the reference GeoServer at :18080.
 
 ### 11.1 What IS covered
 

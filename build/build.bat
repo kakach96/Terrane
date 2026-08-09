@@ -1,6 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
+rem Change to the repository root so relative paths work from any directory
+cd /d "%~dp0.."
+
 echo ==================== Terrane Build Script ====================
 echo.
 

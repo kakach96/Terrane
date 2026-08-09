@@ -30,7 +30,7 @@ Material** frontend.
   Rust, TypeScript, configs, scripts, and Docker files alike).
 - Commit message format: `type: changes content` — `type` is `feat`, `fix`,
   `refactor`, `chore`, etc.
-- Backend is Windows-native (`build.bat`); API base path is `/geoserver`
+- Backend is Windows-native (`build/build.bat`); API base path is `/geoserver`
   (`terrane.toml: api_context`).
 - Storage is split: metadata store (SQLite/PostgreSQL) vs vector store vs
   raster store vs cache — see `AGENTS.md` "Storage split".

@@ -4,6 +4,11 @@
 
 set -e
 
+# Resolve the repository root so the script works regardless of the CWD
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$ROOT_DIR"
+
 BUILD_MODE="debug"
 SKIP_FRONTEND=0
 

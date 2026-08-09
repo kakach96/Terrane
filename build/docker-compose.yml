@@ -1,0 +1,138 @@
+# =============================================================================
+# Terrane - Docker Compose orchestration
+#
+# Purpose:
+#   * Default `up -d`: start ALL local dev dependencies in one command:
+#       - PostgreSQL/PostGIS (metadata + vector store, host port 5433)
+#       - Redis              (session / tile-cache backend, host port 6379)
+#       - MinIO              (S3-compatible object storage for raster/uploads,
+#                             host ports 9000 API + 9001 console)
+#   * Optionally add the terrane application itself via: --profile terrane
+#
+# Usage (run from the repo root; this file lives in build/):
+#   docker compose -f build/docker-compose.yml up -d                        # dev deps only
+#   docker compose -f build/docker-compose.yml --profile terrane up -d      # dev deps + terrane app
+#   docker compose -f build/docker-compose.yml logs -f
+#   docker compose -f build/docker-compose.yml down
+#
+# Local images (offline-friendly, already cached on the dev machine):
+#   * postgis/postgis:18-3.6-alpine
+#   * redis:8.8
+#   * elestio/minio:latest
+#
+# Production notes:
+#   * GEOSERVER_JWT_SECRET must be injected via a .env file or an environment
+#     variable; all replicas must share the same secret
+#   * Data is persisted on named volumes (replace with PVC / object storage on K8s)
+# =============================================================================
+
+name: terrane-dev-env
+
+services:
+  # ---- Dev dependency 1: PostgreSQL + PostGIS (metadata / vector store) ----
+  postgres:
+    image: postgis/postgis:18-3.6-alpine
+    container_name: terrane-postgres
+    environment:
+      POSTGRES_DB: terrane
+      POSTGRES_USER: terrane
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-terrane}
+    volumes:
+      # PostgreSQL 18+ layout: mount at /var/lib/postgresql (data is stored in a
+      # major-version subdir). Mounting at /var/lib/postgresql/data triggers the
+      # image's upgrade guard when leftover data is present.
+      - postgres-data:/var/lib/postgresql
+    ports:
+      - "5433:5432" # Mapped to 5433 to avoid clashing with a local PostgreSQL
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U terrane -d terrane"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---- Dev dependency 2: Redis (session / tile-cache backend) ----
+  redis:
+    image: redis:8.8
+    container_name: terrane-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---- Dev dependency 3: MinIO (S3-compatible object storage) ----
+  minio:
+    image: elestio/minio:latest
+    container_name: terrane-minio
+    # The image default CMD is just "minio" (prints help); pass the server
+    # subcommand explicitly so the entrypoint runs `minio server /data`
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-terrane}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-terrane-secret}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web console
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---- Optional: terrane application itself (enable via --profile terrane) ----
+  terrane:
+    profiles: ["terrane"]
+    build:
+      # Repo root is one level up (Dockerfile lives at the repo root)
+      context: ..
+      dockerfile: Dockerfile
+    image: terrane:latest
+    container_name: terrane
+    ports:
+      - "8080:8080"
+    environment:
+      GEOSERVER__SERVER__HOST: 0.0.0.0
+      GEOSERVER__SERVER__PORT: 8080
+      # All replicas must share the same JWT secret; inject a strong random
+      # value via .env in production
+      GEOSERVER__SECURITY__JWT_SECRET: ${GEOSERVER_JWT_SECRET:-terrane-dev-secret}
+      # Metadata + vector in PostgreSQL (the postgres dev dependency above)
+      GEOSERVER__METADATA__KIND: postgres
+      GEOSERVER__METADATA__POSTGRES__HOST: postgres
+      GEOSERVER__METADATA__POSTGRES__PORT: 5432
+      GEOSERVER__METADATA__POSTGRES__INSTANCE: terrane
+      GEOSERVER__METADATA__POSTGRES__USER: terrane
+      GEOSERVER__METADATA__POSTGRES__PASSWORD: ${POSTGRES_PASSWORD:-terrane}
+      GEOSERVER__VECTOR__KIND: metadata
+    volumes:
+      - geoserver-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/ready"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  geoserver-data:
+  postgres-data:
+  redis-data:
+  minio-data:

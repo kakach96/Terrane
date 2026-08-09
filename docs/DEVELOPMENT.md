@@ -60,9 +60,9 @@ npm start        # http://localhost:4200 (proxies /api, /wms, /wfs, /wcs to :808
 
 ```bash
 # Windows
-./build.bat
+./build/build.bat
 # Unix-like
-./build.sh
+./build/build.sh
 
 # Backend only
 cargo build
@@ -73,8 +73,8 @@ cd frontend && npm run build
 ### Option D — Docker
 
 ```bash
-docker compose up -d                        # SQLite standalone
-docker compose --profile postgres up -d     # app + PostgreSQL (PostGIS)
+docker compose -f build/docker-compose.yml up -d                        # dev deps: PostGIS + Redis + MinIO
+docker compose -f build/docker-compose.yml --profile terrane up -d      # dev deps + terrane app
 ```
 
 > Default admin account: `admin` / `geoserver`.
@@ -142,8 +142,8 @@ docker compose --profile postgres up -d     # app + PostgreSQL (PostGIS)
 
 ```bash
 docker build -t terrane:latest .
-docker compose up -d
-docker compose --profile postgres up -d
+docker compose -f build/docker-compose.yml up -d                        # dev deps (PostGIS + Redis + MinIO)
+docker compose -f build/docker-compose.yml --profile terrane up -d      # + terrane app
 ```
 
 ## 6. Git Conventions

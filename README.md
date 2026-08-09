@@ -32,7 +32,7 @@
 **Current status
 
 - ✅ Configuration supports environment variable overrides (`GEOSERVER__<section>__<key>`, double-underscore separator, see `src/config.rs`)
-- ✅ Multi-stage container image: `Dockerfile` + `.dockerignore` + `docker-compose.yml` (SQLite standalone / PostgreSQL HA)
+- ✅ Multi-stage container image: `Dockerfile` + `.dockerignore` + `build/docker-compose.yml` (dev deps: PostGIS + Redis + MinIO; app via `--profile terrane`)
 - ✅ Built-in image `HEALTHCHECK` + split probes: `/health/live` (liveness) & `/health/ready` (readiness)
 - ✅ Prometheus `/metrics` endpoint (requests/errors, tile cache hit rate, PG pool watermarks, system resources)
 - ✅ Graceful shutdown on SIGTERM/SIGINT with `shutdown_timeout_secs` in-flight drain
@@ -89,8 +89,11 @@ cargo run
 ### Option 4: Docker (containerized)
 
 ```bash
-# Build the image and start the stack (default: SQLite standalone mode)
-docker compose up -d
+# Start the local dev dependencies (PostgreSQL/PostGIS + Redis + MinIO)
+docker compose -f build/docker-compose.yml up -d
+
+# Also start the terrane app itself (builds the image, wires it to PostGIS)
+docker compose -f build/docker-compose.yml --profile terrane up -d
 
 # Build the image manually (BuildKit is used by default; cache mounts keep
 # npm/cargo dependency downloads across builds)
@@ -105,9 +108,9 @@ docker compose up -d
 #   (npm/cargo dependency registries default to npmmirror.com / rsproxy.cn;
 #    override via --build-arg NPM_REGISTRY / CARGO_MIRROR if needed)
 
-# Use PostgreSQL (metadata + business data reuse):
-#   uncomment the postgres config in the geoserver service in docker-compose.yml, then:
-#   docker compose --profile postgres up -d
+# Use PostgreSQL (metadata + business data reuse): the app service in
+# build/docker-compose.yml already wires this up, just start it with:
+#   docker compose -f build/docker-compose.yml --profile terrane up -d
 
 # Visit: http://127.0.0.1:8080  (frontend is baked into the image; no separate frontend service)
 ```

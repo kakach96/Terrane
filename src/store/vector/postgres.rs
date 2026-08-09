@@ -246,17 +246,17 @@ mod tests {
 
     /// 构造一个指向本地 PostGIS 的矢量存储配置。
     /// 连接参数可用 `GEOSERVER_TEST_PG_*` 环境变量覆盖, 默认匹配本地开发栈
-    /// (`docker compose --profile postgres` 或本机 postgis 容器)。
+    /// (`docker compose -f build/docker-compose.yml up -d` 或本机 postgis 容器)。
     fn test_pg_config(schema: &str) -> PostgresConfig {
         let host = std::env::var("GEOSERVER_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
         let port: u16 = std::env::var("GEOSERVER_TEST_PG_PORT")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(5432);
-        let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "postgres".into());
+            .unwrap_or(5433);
+        let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "terrane".into());
         let password =
-            std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "kakach2026".into());
-        let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "postgres".into());
+            std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "terrane".into());
+        let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "terrane".into());
 
         PostgresConfig {
             host,
@@ -288,7 +288,7 @@ mod tests {
     }
 
     #[actix_rt::test]
-    #[ignore = "requires a live PostGIS (e.g. docker compose --profile postgres)"]
+    #[ignore = "requires a live PostGIS (e.g. docker compose -f build/docker-compose.yml up -d)"]
     async fn test_live_postgres_vector_store() {
         // 每进程独立 schema, 避免并行运行互相清理
         let schema = format!("terrane_vec_test_{}", std::process::id());

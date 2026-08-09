@@ -27,11 +27,11 @@ frontend/         — Angular 17 + Material
     models/       — TypeScript interfaces (geoserver.models.ts)
     services/     — geoserver.service.ts (API client)
     components/   — One dir per page (dashboard, layers, layer-detail, ...)
-# Planned for cloud-native (not yet created):
+# Cloud-native files (created; see docs/IMPLEMENTATION_PLAN.md §6):
 #   Dockerfile          — multi-stage image build
 #   .dockerignore       — exclude target/, node_modules/, static/
-#   docker-compose.yml  — local dev (app + postgres [+ minio])
-#   .github/workflows/  — CI pipeline
+#   build/docker-compose.yml  — local dev deps (postgres + redis + minio [+ app])
+# TODO: .github/workflows/  — CI pipeline (not yet created)
 ```
 
 ## Key commands
@@ -40,7 +40,7 @@ frontend/         — Angular 17 + Material
 
 ```powershell
 # Full
-./build.bat
+./build/build.bat
 
 # Frontend Only
 cd frontend
@@ -54,7 +54,7 @@ cargo build
 
 ```bash
 # Full
-./build.sh
+./build/build.sh
 
 # Frontend Only
 cd frontend && npm run build
@@ -71,18 +71,18 @@ cargo build
 - **Layer <-> DB mapping**: `layer.store` = data source name, `layer.native_name` = DB table name
 - **Boundary representation**: GET `/layers/{name}` returns `native_bounds.bounds.{minx,miny,maxx,maxy}`; the list endpoint returns `bounds` at top level
 - **No test suite** configured (no test dependencies in Cargo.toml, Angular `ng test` untested)
-- **Windows-native** (build.bat, PowerShell). `cargo run` expects `./static/` with built frontend
+- **Windows-native** (build/build.bat, PowerShell). `cargo run` expects `./static/` with built frontend
 - **Config**: `terrane.toml` optional; defaults work without it. Environment variables: `RUST_LOG`, `GEOSERVER__SERVER__HOST` etc. (double-underscore separator). `load_from_file()` already mounts the `GEOSERVER__` env source, so env overrides also work with `--config`.
 - **Frontend proxy**: `proxy.conf.json` routes `/api`, `/wms`, `/wfs`, `/wcs` to `http://localhost:8080`
 - **AGENTS.md** is the single instruction file (no .cursorrules). `.github/copilot-instructions.md` is a thin entry point that points back to AGENTS.md, so GitHub Copilot contexts (e.g. GitHub.com / PRs) pick up the same guidance.
 
 ## Cloud-native status (see docs/IMPLEMENTATION_PLAN.md §6)
 
-- **Containerized**: multi-stage `Dockerfile` (node → rust → debian-slim, non-root) + `.dockerignore` + `docker-compose.yml`; no CI pipeline yet
+- **Containerized**: multi-stage `Dockerfile` (node → rust → debian-slim, non-root) + `.dockerignore` + `build/docker-compose.yml`; no CI pipeline yet
   ```bash
   docker build -t terrane:latest .
-  docker compose up -d                    # SQLite standalone mode (default)
-  docker compose --profile postgres up -d # app + PostgreSQL
+  docker compose -f build/docker-compose.yml up -d                        # dev deps: postgres + redis + minio
+  docker compose -f build/docker-compose.yml --profile terrane up -d      # dev deps + terrane app
   ```
 - **JWT secret has a hardcoded default** in `src/auth.rs` (`terrane-jwt-secret-2026`); inject via env `GEOSERVER__SECURITY__JWT_SECRET` in multi-replica prod (docker-compose passes `GEOSERVER_JWT_SECRET`)
 - **Runtime host**: default `127.0.0.1`; Docker image sets `GEOSERVER__SERVER__HOST=0.0.0.0`
