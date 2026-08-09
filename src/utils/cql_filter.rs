@@ -44,7 +44,10 @@ pub enum CqlExpression {
         value: LiteralValue,
     },
     /// 大小写不敏感等值比较 (来自 OGC XML `Function name="strToLowerCase"` 等)
-    CaseInsensitiveEq { property: String, value: String },
+    CaseInsensitiveEq {
+        property: String,
+        value: String,
+    },
     /// 逻辑组合
     And(Box<CqlExpression>, Box<CqlExpression>),
     Or(Box<CqlExpression>, Box<CqlExpression>),

@@ -172,7 +172,9 @@ pub fn parse_csw_request(params: &[(String, String)]) -> Result<CswOperation, Ge
             },
         }),
         "GETRECORDBYID" => Ok(CswOperation::GetRecordById {
-            ids: first_param(params, "id").map(split_list).unwrap_or_default(),
+            ids: first_param(params, "id")
+                .map(split_list)
+                .unwrap_or_default(),
             element_set: CswElementSet::parse(
                 first_param(params, "elementsetname").unwrap_or("summary"),
             ),
@@ -293,9 +295,7 @@ pub fn parse_csw_post(xml: &str) -> Result<CswOperation, GeoServerError> {
                 .collect();
             Ok(CswOperation::GetRecordById {
                 ids,
-                element_set: CswElementSet::parse(
-                    root.attr("elementSetName").unwrap_or("summary"),
-                ),
+                element_set: CswElementSet::parse(root.attr("elementSetName").unwrap_or("summary")),
                 output_schema: root.attr("outputSchema").map(|s| s.to_string()),
             })
         },
@@ -409,10 +409,7 @@ pub fn record_xml(base_url: &str, layer: &Layer, element_set: CswElementSet) -> 
         "    <dc:identifier>{}</dc:identifier>\n",
         escape_xml(&layer.name)
     );
-    let title = format!(
-        "    <dc:title>{}</dc:title>\n",
-        escape_xml(&layer.title)
-    );
+    let title = format!("    <dc:title>{}</dc:title>\n", escape_xml(&layer.title));
     let rtype = "    <dc:type>dataset</dc:type>\n";
     let bbox = bbox_xml(layer);
 
@@ -714,7 +711,11 @@ mod tests {
     fn test_parse_kvp_operations() {
         // GetCapabilities
         assert!(matches!(
-            parse_csw_request(&params(&[("service", "CSW"), ("request", "GetCapabilities")])).unwrap(),
+            parse_csw_request(&params(&[
+                ("service", "CSW"),
+                ("request", "GetCapabilities")
+            ]))
+            .unwrap(),
             CswOperation::GetCapabilities
         ));
         // DescribeRecord with typeNames
@@ -743,8 +744,11 @@ mod tests {
             _ => panic!("expected GetRecordById"),
         }
         // wrong service
-        assert!(parse_csw_request(&params(&[("service", "WFS"), ("request", "GetCapabilities")]))
-            .is_err());
+        assert!(parse_csw_request(&params(&[
+            ("service", "WFS"),
+            ("request", "GetCapabilities")
+        ]))
+        .is_err());
     }
 
     #[test]
@@ -804,7 +808,13 @@ mod tests {
         let xml = build_capabilities("http://127.0.0.1:8080");
         assert!(xml.contains("<csw:Capabilities service=\"CSW\" version=\"2.0.2\""));
         assert!(xml.contains("<ows:OperationsMetadata>"));
-        for op in ["GetCapabilities", "DescribeRecord", "GetRecords", "GetRecordById", "GetDomain"] {
+        for op in [
+            "GetCapabilities",
+            "DescribeRecord",
+            "GetRecords",
+            "GetRecordById",
+            "GetDomain",
+        ] {
             assert!(xml.contains(&format!("<ows:Operation name=\"{}\">", op)));
         }
         assert!(xml.contains("<csw:FilterCapabilities>"));
@@ -856,7 +866,7 @@ mod tests {
         assert!(xml.contains("<dc:identifier>usa</dc:identifier>"));
         assert!(xml.contains("<dc:identifier>parks</dc:identifier>"));
         assert!(!xml.contains("<dc:format>")); // summary has no format
-        // hits result type → no records
+                                               // hits result type → no records
         let hits = GetRecordsQuery {
             result_type: CswResultType::Hits,
             ..GetRecordsQuery::default()

@@ -1022,8 +1022,7 @@ fn pg_http_test_params() -> (String, u16, String, String, String) {
         .and_then(|v| v.parse().ok())
         .unwrap_or(5433);
     let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "terrane".into());
-    let password =
-        std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "terrane".into());
+    let password = std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "terrane".into());
     let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "terrane".into());
     (host, port, user, password, instance)
 }

@@ -49,7 +49,11 @@ async fn test_ogc_landing() {
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
-    assert!(ct.contains("application/json"), "CT 应为 json, 实际: {}", ct);
+    assert!(
+        ct.contains("application/json"),
+        "CT 应为 json, 实际: {}",
+        ct
+    );
 
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert_eq!(body["title"], "Terrane");
@@ -72,8 +76,12 @@ async fn test_ogc_conformance() {
 
     let body: serde_json::Value = test::read_body_json(resp).await;
     let conforms = body["conformsTo"].as_array().unwrap();
-    assert!(conforms.iter().any(|x| x.as_str().unwrap().contains("core")));
-    assert!(conforms.iter().any(|x| x.as_str().unwrap().contains("geojson")));
+    assert!(conforms
+        .iter()
+        .any(|x| x.as_str().unwrap().contains("core")));
+    assert!(conforms
+        .iter()
+        .any(|x| x.as_str().unwrap().contains("geojson")));
 }
 
 #[actix_rt::test]
@@ -207,7 +215,10 @@ async fn test_ogc_items_limit_offset() {
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert_eq!(body["numberMatched"], 3);
     assert_eq!(body["numberReturned"], 1);
-    assert_eq!(body["features"].as_array().unwrap()[0]["properties"]["name"], "p3");
+    assert_eq!(
+        body["features"].as_array().unwrap()[0]["properties"]["name"],
+        "p3"
+    );
     let rels: Vec<&str> = body["links"]
         .as_array()
         .unwrap()

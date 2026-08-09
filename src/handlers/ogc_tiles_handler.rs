@@ -42,9 +42,7 @@ pub async fn handle_ogc_tiles_conformance() -> HttpResponse {
 }
 
 /// `GET /ogc/tiles/tileMatrixSets`
-pub async fn handle_ogc_tiles_tile_matrix_sets(
-    state: web::Data<AppState>,
-) -> HttpResponse {
+pub async fn handle_ogc_tiles_tile_matrix_sets(state: web::Data<AppState>) -> HttpResponse {
     json_response(ogc_tiles::tile_matrix_sets(&base_url(state.get_ref())))
 }
 
@@ -110,10 +108,7 @@ pub async fn handle_ogc_tile(
     .await
     {
         Ok((data, cache_hit)) => HttpResponse::Ok()
-            .insert_header((
-                "X-Tile-Cache",
-                if cache_hit { "HIT" } else { "MISS" },
-            ))
+            .insert_header(("X-Tile-Cache", if cache_hit { "HIT" } else { "MISS" }))
             .insert_header(("X-OGCAPI-Tiles", "1.0"))
             .content_type(format.mime())
             .body(data),

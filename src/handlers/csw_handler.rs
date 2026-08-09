@@ -26,9 +26,7 @@ fn xml_response(body: String) -> HttpResponse {
 async fn dispatch(state: web::Data<AppState>, operation: CswOperation) -> HttpResponse {
     let state = state.get_ref();
     match operation {
-        CswOperation::GetCapabilities => {
-            xml_response(csw::build_capabilities(&base_url(state)))
-        },
+        CswOperation::GetCapabilities => xml_response(csw::build_capabilities(&base_url(state))),
         CswOperation::DescribeRecord {
             typenames,
             output_format: _,

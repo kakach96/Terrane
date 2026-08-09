@@ -78,7 +78,10 @@ fn collection_json(base_url: &str, layer: &Layer) -> Value {
 
 /// Build the `/collections` document.
 pub fn collections(base_url: &str, layers: &[Layer]) -> Value {
-    let colls: Vec<Value> = layers.iter().map(|l| collection_json(base_url, l)).collect();
+    let colls: Vec<Value> = layers
+        .iter()
+        .map(|l| collection_json(base_url, l))
+        .collect();
     json!({
         "collections": colls,
         "links": [
@@ -95,10 +98,7 @@ pub fn collection(base_url: &str, layer: &Layer) -> Value {
 /// Parse a `bbox` query value: four comma-separated WGS84 numbers
 /// (`minx,miny,maxx,maxy`). Returns `None` for malformed values.
 pub fn parse_bbox(s: &str) -> Option<Bounds> {
-    let parts: Vec<f64> = s
-        .split(',')
-        .filter_map(|p| p.trim().parse().ok())
-        .collect();
+    let parts: Vec<f64> = s.split(',').filter_map(|p| p.trim().parse().ok()).collect();
     if parts.len() >= 4 {
         Some(Bounds::new(parts[0], parts[1], parts[2], parts[3]))
     } else {
@@ -145,14 +145,16 @@ pub fn items(
     let returned = page.len();
     let features_json: Vec<Value> = page.iter().map(|f| feature_json(f)).collect();
 
-    let items_href = format!(
-        "{}/ogc/features/collections/{}/items",
-        base_url, layer.name
-    );
+    let items_href = format!("{}/ogc/features/collections/{}/items", base_url, layer.name);
     let mut links = vec![link(&items_href, "self", GEOJSON_MIME, "Items")];
     if offset + returned < matched {
         links.push(link(
-            &format!("{}?offset={}&limit={}", items_href, offset + returned, limit),
+            &format!(
+                "{}?offset={}&limit={}",
+                items_href,
+                offset + returned,
+                limit
+            ),
             "next",
             GEOJSON_MIME,
             "Next page",
@@ -214,10 +216,7 @@ mod tests {
         assert_eq!(v["title"], "Terrane");
         let links = v["links"].as_array().unwrap();
         assert_eq!(links.len(), 3);
-        let rels: Vec<&str> = links
-            .iter()
-            .map(|l| l["rel"].as_str().unwrap())
-            .collect();
+        let rels: Vec<&str> = links.iter().map(|l| l["rel"].as_str().unwrap()).collect();
         assert!(rels.contains(&"self"));
         assert!(rels.contains(&"conformance"));
         assert!(rels.contains(&"data"));
@@ -288,7 +287,7 @@ mod tests {
             .collect();
         assert!(rels.contains(&"self"));
         assert!(!rels.contains(&"next")); // last page
-        // first page has next link
+                                          // first page has next link
         let v = items("http://x", &layer, &features, 2, 0, None);
         let rels: Vec<&str> = v["links"]
             .as_array()

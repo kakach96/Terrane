@@ -45,9 +45,15 @@ async fn test_ogc_tiles_conformance() {
 
     let body: serde_json::Value = test::read_body_json(resp).await;
     let conforms = body["conformsTo"].as_array().unwrap();
-    assert!(conforms.iter().any(|x| x.as_str().unwrap().contains("core")));
-    assert!(conforms.iter().any(|x| x.as_str().unwrap().contains("tileset")));
-    assert!(conforms.iter().any(|x| x.as_str().unwrap().contains("tilematrixset")));
+    assert!(conforms
+        .iter()
+        .any(|x| x.as_str().unwrap().contains("core")));
+    assert!(conforms
+        .iter()
+        .any(|x| x.as_str().unwrap().contains("tileset")));
+    assert!(conforms
+        .iter()
+        .any(|x| x.as_str().unwrap().contains("tilematrixset")));
 }
 
 #[actix_rt::test]
@@ -122,7 +128,10 @@ async fn test_ogc_tiles_collections_and_tilesets() {
         tilesets[0]["tileMatrixSetURI"],
         "http://www.opengis.net/def/tilematrixset/OGC/1.0/global-geodetic"
     );
-    assert_eq!(tilesets[1]["crs"], "http://www.opengis.net/def/crs/EPSG/0/3857");
+    assert_eq!(
+        tilesets[1]["crs"],
+        "http://www.opengis.net/def/crs/EPSG/0/3857"
+    );
 
     // 未知图层 → 404
     let req = test::TestRequest::get()

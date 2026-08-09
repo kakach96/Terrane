@@ -1005,10 +1005,7 @@ fn geometry_to_georss(g: &GeoJsonGeometry) -> String {
         GeoJsonGeometry::Polygon { coordinates } => {
             // GeoRSS polygon uses the (closed) exterior ring only.
             if let Some(ring) = coordinates.first() {
-                let pts: Vec<String> = ring
-                    .iter()
-                    .filter_map(|c| format_georss_coord(c))
-                    .collect();
+                let pts: Vec<String> = ring.iter().filter_map(|c| format_georss_coord(c)).collect();
                 if !pts.is_empty() {
                     format!("<georss:polygon>{}</georss:polygon>", pts.join(" "))
                 } else {
@@ -1028,10 +1025,7 @@ fn geometry_to_georss(g: &GeoJsonGeometry) -> String {
         },
         GeoJsonGeometry::MultiLineString { coordinates } => {
             if let Some(line) = coordinates.first() {
-                let pts: Vec<String> = line
-                    .iter()
-                    .filter_map(|c| format_georss_coord(c))
-                    .collect();
+                let pts: Vec<String> = line.iter().filter_map(|c| format_georss_coord(c)).collect();
                 if !pts.is_empty() {
                     format!("<georss:line>{}</georss:line>", pts.join(" "))
                 } else {
@@ -1044,10 +1038,8 @@ fn geometry_to_georss(g: &GeoJsonGeometry) -> String {
         GeoJsonGeometry::MultiPolygon { coordinates } => {
             if let Some(poly) = coordinates.first() {
                 if let Some(ring) = poly.first() {
-                    let pts: Vec<String> = ring
-                        .iter()
-                        .filter_map(|c| format_georss_coord(c))
-                        .collect();
+                    let pts: Vec<String> =
+                        ring.iter().filter_map(|c| format_georss_coord(c)).collect();
                     if !pts.is_empty() {
                         format!("<georss:polygon>{}</georss:polygon>", pts.join(" "))
                     } else {
@@ -1206,9 +1198,7 @@ mod tests {
         let features = vec![(line, Style::default()), (polygon, Style::default())];
         let rss = render_to_georss(&features, "shapes");
         assert!(rss.contains("<georss:line>1 0 3 2 5 4</georss:line>"));
-        assert!(rss.contains(
-            "<georss:polygon>0 0 4 0 4 4 0 4 0 0</georss:polygon>"
-        ));
+        assert!(rss.contains("<georss:polygon>0 0 4 0 4 4 0 4 0 0</georss:polygon>"));
     }
 
     fn find_bytes(hay: &[u8], needle: &[u8]) -> Option<usize> {
@@ -1231,13 +1221,12 @@ mod tests {
         // Parse as raw bytes because the image stream is binary.
         let startxref_pos = find_bytes(&pdf, b"startxref\n").expect("startxref");
         let after = &pdf[startxref_pos + b"startxref\n".len()..];
-        let xref_offset: usize = std::str::from_utf8(
-            after.split(|&b| b == b'\n').next().expect("offset line"),
-        )
-        .expect("utf8 offset")
-        .trim()
-        .parse()
-        .expect("xref offset");
+        let xref_offset: usize =
+            std::str::from_utf8(after.split(|&b| b == b'\n').next().expect("offset line"))
+                .expect("utf8 offset")
+                .trim()
+                .parse()
+                .expect("xref offset");
 
         let xref = &pdf[xref_offset..];
         assert!(xref.starts_with(b"xref\n0 6\n"));

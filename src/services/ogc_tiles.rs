@@ -142,7 +142,9 @@ fn tile_matrix_set_mercator() -> Value {
 
 fn tile_matrix_set_uri(tms: &str) -> String {
     match tms {
-        "EPSG:4326" => "http://www.opengis.net/def/tilematrixset/OGC/1.0/global-geodetic".to_string(),
+        "EPSG:4326" => {
+            "http://www.opengis.net/def/tilematrixset/OGC/1.0/global-geodetic".to_string()
+        },
         _ => "http://www.opengis.net/def/tilematrixset/OGC/1.0/global-mercator".to_string(),
     }
 }
@@ -312,8 +314,14 @@ mod tests {
         let v = collection_tilesets("http://x", &layer);
         let tilesets = v["tilesets"].as_array().unwrap();
         assert_eq!(tilesets.len(), 2);
-        assert_eq!(tilesets[0]["tileMatrixSetURI"], "http://www.opengis.net/def/tilematrixset/OGC/1.0/global-geodetic");
-        assert_eq!(tilesets[1]["crs"], "http://www.opengis.net/def/crs/EPSG/0/3857");
+        assert_eq!(
+            tilesets[0]["tileMatrixSetURI"],
+            "http://www.opengis.net/def/tilematrixset/OGC/1.0/global-geodetic"
+        );
+        assert_eq!(
+            tilesets[1]["crs"],
+            "http://www.opengis.net/def/crs/EPSG/0/3857"
+        );
         let item_rel = tilesets[0]["links"]
             .as_array()
             .unwrap()
