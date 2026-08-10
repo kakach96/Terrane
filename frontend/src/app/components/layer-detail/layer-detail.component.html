@@ -105,6 +105,8 @@
 
     <mat-card class="preview-card" *ngIf="previewUrl">
       <mat-card-header class="preview-header">
+        <mat-icon matCardAvatar>map</mat-icon>
+        <mat-card-title>地图预览</mat-card-title>
         <div class="preview-actions">
           <mat-form-field appearance="outline" class="download-field">
             <mat-label>下载</mat-label>
@@ -171,7 +173,7 @@
 
           <button mat-stroked-button (click)="refreshPreview()" matTooltip="刷新预览">
             <mat-icon>refresh</mat-icon>
-            <span>刷新</span>
+            <span>刷新预览</span>
           </button>
           <button
             mat-stroked-button
@@ -180,7 +182,7 @@
             matTooltip="在新窗口打开预览"
           >
             <mat-icon>open_in_new</mat-icon>
-            <span>新窗口</span>
+            <span>在新窗口打开</span>
           </button>
         </div>
       </mat-card-header>

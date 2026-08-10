@@ -84,21 +84,22 @@
 }
 
 .preview-card mat-card-header.preview-header {
-  padding: 16px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
 }
 
 .preview-card {
   .preview-actions {
+    margin-left: auto;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    width: 100%;
 
     .download-field,
     .format-field,
     .crs-field {
-      width: 100px;
+      width: 140px;
     }
 
     .size-field {
