@@ -83,15 +83,32 @@
   padding: 0 !important;
 }
 
+.preview-card mat-card-header.preview-header {
+  padding: 16px;
+}
+
 .preview-card {
   .preview-actions {
-    margin-left: auto;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
+    width: 100%;
 
-    .download-field {
-      width: 140px;
+    .download-field,
+    .format-field,
+    .crs-field {
+      width: 100px;
+    }
+
+    .size-field {
+      width: 80px;
+    }
+
+    .download-field,
+    .format-field,
+    .crs-field,
+    .size-field {
       height: 48px;
 
       --mdc-outlined-text-field-outline-color: var(--border-color);
@@ -113,67 +130,16 @@
         display: none;
       }
     }
-  }
 
-  .preview-toolbar {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-    padding: 16px;
-    background: white;
-    border-bottom: 1px solid var(--border-color);
-
-    .format-field,
-    .crs-field {
-      width: 120px;
-    }
-
-    .size-field {
-      width: 90px;
-    }
-
-    .format-field,
-    .crs-field,
-    .size-field {
+    button {
       height: 48px;
+      font-size: 13px;
+      white-space: nowrap;
 
-      --mdc-outlined-text-field-outline-color: var(--border-color);
-      --mdc-outlined-text-field-hover-outline-color: var(--border-color);
-      --mdc-outlined-text-field-focus-outline-color: var(--primary-color);
-      --mdc-outlined-text-field-active-outline-color: var(--primary-color);
-
-      ::ng-deep .mat-mdc-text-field-wrapper {
-        height: 48px;
-        flex: none;
-      }
-
-      ::ng-deep .mat-mdc-form-field-infix {
-        padding-top: 12px;
-        padding-bottom: 8px;
-      }
-    }
-
-    ::ng-deep .mat-mdc-form-field-subscript-wrapper {
-      display: none;
-    }
-
-    .toolbar-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-left: auto;
-
-      button {
-        height: 48px;
-        font-size: 13px;
-        white-space: nowrap;
-
-        mat-icon {
-          font-size: 18px;
-          width: 18px;
-          height: 18px;
-        }
+      mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
       }
     }
   }

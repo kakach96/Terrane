@@ -104,9 +104,7 @@
     </mat-card>
 
     <mat-card class="preview-card" *ngIf="previewUrl">
-      <mat-card-header>
-        <mat-icon matCardAvatar>map</mat-icon>
-        <mat-card-title>地图预览</mat-card-title>
+      <mat-card-header class="preview-header">
         <div class="preview-actions">
           <mat-form-field appearance="outline" class="download-field">
             <mat-label>下载</mat-label>
@@ -118,10 +116,7 @@
               <mat-option value="csv">CSV</mat-option>
             </mat-select>
           </mat-form-field>
-        </div>
-      </mat-card-header>
-      <mat-card-content class="preview-content">
-        <div class="preview-toolbar">
+
           <mat-form-field appearance="outline" class="format-field">
             <mat-label>格式</mat-label>
             <mat-select
@@ -130,6 +125,18 @@
             >
               <mat-option *ngFor="let fmt of previewFormats" [value]="fmt.value">
                 {{ fmt.label }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="crs-field">
+            <mat-label>坐标系</mat-label>
+            <mat-select
+              [value]="previewOptions.crs"
+              (selectionChange)="updatePreviewParam('crs', $event.value)"
+            >
+              <mat-option *ngFor="let crs of previewCrsOptions" [value]="crs">
+                {{ crs }}
               </mat-option>
             </mat-select>
           </mat-form-field>
@@ -154,18 +161,6 @@
             />
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="crs-field">
-            <mat-label>坐标系</mat-label>
-            <mat-select
-              [value]="previewOptions.crs"
-              (selectionChange)="updatePreviewParam('crs', $event.value)"
-            >
-              <mat-option *ngFor="let crs of previewCrsOptions" [value]="crs">
-                {{ crs }}
-              </mat-option>
-            </mat-select>
-          </mat-form-field>
-
           <mat-checkbox
             *ngIf="isStaticPreview"
             [checked]="previewOptions.transparent"
@@ -174,23 +169,22 @@
             透明背景
           </mat-checkbox>
 
-          <div class="toolbar-actions">
-            <button mat-stroked-button (click)="refreshPreview()" matTooltip="刷新预览">
-              <mat-icon>refresh</mat-icon>
-              <span>刷新预览</span>
-            </button>
-            <button
-              mat-stroked-button
-              [disabled]="!previewUrl"
-              (click)="openInNewWindow()"
-              matTooltip="在新窗口打开预览"
-            >
-              <mat-icon>open_in_new</mat-icon>
-              <span>在新窗口打开</span>
-            </button>
-          </div>
+          <button mat-stroked-button (click)="refreshPreview()" matTooltip="刷新预览">
+            <mat-icon>refresh</mat-icon>
+            <span>刷新</span>
+          </button>
+          <button
+            mat-stroked-button
+            [disabled]="!previewUrl"
+            (click)="openInNewWindow()"
+            matTooltip="在新窗口打开预览"
+          >
+            <mat-icon>open_in_new</mat-icon>
+            <span>新窗口</span>
+          </button>
         </div>
-
+      </mat-card-header>
+      <mat-card-content class="preview-content">
         <div class="map-toolbar">
           <div class="map-info">
             <span class="map-name">{{ layer.title || layer.name }}</span>
