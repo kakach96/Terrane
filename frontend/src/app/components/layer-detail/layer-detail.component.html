@@ -108,23 +108,16 @@
         <mat-icon matCardAvatar>map</mat-icon>
         <mat-card-title>地图预览</mat-card-title>
         <div class="preview-actions">
-          <button
-            mat-stroked-button
-            color="primary"
-            (click)="downloadGeoJson()"
-            matTooltip="下载 GeoJSON"
-          >
-            <mat-icon>download</mat-icon>
-            GeoJSON
-          </button>
-          <button mat-stroked-button color="accent" (click)="downloadCsv()" matTooltip="下载 CSV">
-            <mat-icon>table_chart</mat-icon>
-            CSV
-          </button>
-          <button mat-stroked-button (click)="openInPreviewPage()" matTooltip="在图层预览页打开">
-            <mat-icon>open_in_new</mat-icon>
-            在预览页打开
-          </button>
+          <mat-form-field appearance="outline" class="download-field">
+            <mat-label>下载</mat-label>
+            <mat-select
+              [value]="downloadValue"
+              (selectionChange)="onDownloadSelect($event.value)"
+            >
+              <mat-option value="geojson">GeoJSON</mat-option>
+              <mat-option value="csv">CSV</mat-option>
+            </mat-select>
+          </mat-form-field>
         </div>
       </mat-card-header>
       <mat-card-content class="preview-content">
@@ -182,22 +175,18 @@
           </mat-checkbox>
 
           <div class="toolbar-actions">
-            <button
-              mat-icon-button
-              (click)="refreshPreview()"
-              matTooltip="刷新预览"
-              aria-label="刷新预览"
-            >
+            <button mat-stroked-button (click)="refreshPreview()" matTooltip="刷新预览">
               <mat-icon>refresh</mat-icon>
+              <span>刷新预览</span>
             </button>
             <button
-              mat-icon-button
+              mat-stroked-button
               [disabled]="!previewUrl"
               (click)="openInNewWindow()"
               matTooltip="在新窗口打开预览"
-              aria-label="在新窗口打开预览"
             >
               <mat-icon>open_in_new</mat-icon>
+              <span>在新窗口打开</span>
             </button>
           </div>
         </div>

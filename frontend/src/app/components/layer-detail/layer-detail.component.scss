@@ -89,6 +89,30 @@
     display: flex;
     align-items: center;
     gap: 8px;
+
+    .download-field {
+      width: 140px;
+      height: 48px;
+
+      --mdc-outlined-text-field-outline-color: var(--border-color);
+      --mdc-outlined-text-field-hover-outline-color: var(--border-color);
+      --mdc-outlined-text-field-focus-outline-color: var(--primary-color);
+      --mdc-outlined-text-field-active-outline-color: var(--primary-color);
+
+      ::ng-deep .mat-mdc-text-field-wrapper {
+        height: 48px;
+        flex: none;
+      }
+
+      ::ng-deep .mat-mdc-form-field-infix {
+        padding-top: 12px;
+        padding-bottom: 8px;
+      }
+
+      ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+        display: none;
+      }
+    }
   }
 
   .preview-toolbar {
@@ -102,7 +126,7 @@
 
     .format-field,
     .crs-field {
-      width: 180px;
+      width: 120px;
     }
 
     .size-field {
@@ -141,13 +165,14 @@
       margin-left: auto;
 
       button {
-        width: 48px;
         height: 48px;
+        font-size: 13px;
+        white-space: nowrap;
 
         mat-icon {
-          font-size: 20px;
-          width: 20px;
-          height: 20px;
+          font-size: 18px;
+          width: 18px;
+          height: 18px;
         }
       }
     }

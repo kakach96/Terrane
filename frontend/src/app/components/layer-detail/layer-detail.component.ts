@@ -119,11 +119,6 @@ export class LayerDetailComponent implements OnInit {
     this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
   }
 
-  openInPreviewPage(): void {
-    if (!this.layer) return;
-    this.router.navigate(['/layer-preview'], { queryParams: { layer: this.layer.name } });
-  }
-
   updatePreviewParam(param: string, value: number | boolean | string): void {
     (this.previewOptions as Record<string, number | boolean | string>)[param] = value;
     this.refreshPreview();
@@ -208,6 +203,17 @@ export class LayerDetailComponent implements OnInit {
       },
       error: () => this.notificationService.error('下载 CSV 失败'),
     });
+  }
+
+  downloadValue = '';
+
+  onDownloadSelect(value: string): void {
+    this.downloadValue = '';
+    if (value === 'geojson') {
+      this.downloadGeoJson();
+    } else if (value === 'csv') {
+      this.downloadCsv();
+    }
   }
 
   openInNewWindow(): void {
