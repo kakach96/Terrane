@@ -12,20 +12,15 @@ import {
   PropertyDef,
   StyleInfo,
   ApiResponse,
-  DashboardStats,
   PreviewOptions,
   Workspace,
   CreateWorkspaceRequest,
   UpdateWorkspaceRequest,
-  Namespace,
-  CreateNamespaceRequest,
-  UpdateNamespaceRequest,
   SqlView,
   CreateSqlViewRequest,
   UpdateSqlViewRequest,
   Permission,
   CreatePermissionRequest,
-  ServerStatus,
   DataSource,
   CreateDataSourceRequest,
   UpdateDataSourceRequest,
@@ -35,7 +30,6 @@ import {
   MonitorStats,
   RequestRecord,
   AuditLogEntry,
-  Store,
   SqlViewParameter,
   TileCacheStats,
   TileCacheResult,
@@ -183,17 +177,6 @@ export class GeoserverService {
     return `/wms?${params}`;
   }
 
-  getDashboardStats(): Observable<DashboardStats> {
-    return this.getLayers().pipe(
-      map((layers) => ({
-        layerCount: layers.length,
-        featureCount: 0,
-        activeLayerCount: layers.filter((l) => l.enabled).length,
-        workspaceCount: new Set(layers.map((l) => l.workspace)).size,
-      })),
-    );
-  }
-
   getWorkspaces(): Observable<string[]> {
     return this.getLayers().pipe(map((layers) => [...new Set(layers.map((l) => l.workspace))]));
   }
@@ -226,26 +209,6 @@ export class GeoserverService {
     return this.http
       .delete<ApiResponse<void>>(`${this.apiUrl}/workspaces/${name}`)
       .pipe(map(() => void 0));
-  }
-
-  // ---- 存储 (Stores) ----
-
-  getStores(): Observable<Store[]> {
-    return this.http
-      .get<ApiResponse<Store[]>>(`${this.apiUrl}/stores`)
-      .pipe(map((response) => response.data || []));
-  }
-
-  getStore(name: string): Observable<Store> {
-    return this.http
-      .get<ApiResponse<Store>>(`${this.apiUrl}/stores/${name}`)
-      .pipe(map((response) => response.data as Store));
-  }
-
-  getWorkspaceStores(workspace: string): Observable<Store[]> {
-    return this.http
-      .get<ApiResponse<Store[]>>(`${this.apiUrl}/workspaces/${workspace}/stores`)
-      .pipe(map((response) => response.data || []));
   }
 
   // ---- 瓦片缓存 (GeoWebCache) ----
@@ -305,38 +268,6 @@ export class GeoserverService {
       .pipe(map((response) => response.data || []));
   }
 
-  // ---- 命名空间 ----
-
-  getNamespaces(): Observable<Namespace[]> {
-    return this.http
-      .get<ApiResponse<Namespace[]>>(`${this.apiUrl}/namespaces`)
-      .pipe(map((response) => response.data || []));
-  }
-
-  getNamespace(prefix: string): Observable<Namespace> {
-    return this.http
-      .get<ApiResponse<Namespace>>(`${this.apiUrl}/namespaces/${prefix}`)
-      .pipe(map((response) => response.data as Namespace));
-  }
-
-  createNamespace(request: CreateNamespaceRequest): Observable<Namespace> {
-    return this.http
-      .post<ApiResponse<Namespace>>(`${this.apiUrl}/namespaces`, request)
-      .pipe(map((response) => response.data as Namespace));
-  }
-
-  updateNamespace(prefix: string, updates: UpdateNamespaceRequest): Observable<void> {
-    return this.http
-      .put<ApiResponse<void>>(`${this.apiUrl}/namespaces/${prefix}`, updates)
-      .pipe(map(() => void 0));
-  }
-
-  deleteNamespace(prefix: string): Observable<void> {
-    return this.http
-      .delete<ApiResponse<void>>(`${this.apiUrl}/namespaces/${prefix}`)
-      .pipe(map(() => void 0));
-  }
-
   // ---- 权限 ----
 
   getPermissions(): Observable<Permission[]> {
@@ -364,12 +295,6 @@ export class GeoserverService {
         `${this.apiUrl}/permissions/check/${type}/${name}${modeParam}`,
       )
       .pipe(map((response) => response.data as Record<string, unknown>));
-  }
-
-  getServerStatus(): Observable<ServerStatus> {
-    return this.http
-      .get<ApiResponse<ServerStatus>>(`${this.apiUrl}/server/status`)
-      .pipe(map((response) => response.data as ServerStatus));
   }
 
   getDataSources(): Observable<DataSource[]> {

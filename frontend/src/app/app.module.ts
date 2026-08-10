@@ -29,7 +29,6 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 
 import { AppComponent } from './app.component';
-import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { LayersComponent } from './components/layers/layers.component';
 import { LayerDetailComponent } from './components/layer-detail/layer-detail.component';
 import { LayerCreateComponent } from './components/layer-create/layer-create.component';
@@ -40,14 +39,10 @@ import { WorkspaceDialogComponent } from './components/workspaces/workspace-dial
 import { DataSourcesComponent } from './components/data-sources/data-sources.component';
 import { DataSourceDialogComponent } from './components/data-sources/data-source-dialog/data-source-dialog.component';
 import { TileLayersComponent } from './components/tile-layers/tile-layers.component';
-import { ServerStatusComponent } from './components/server-status/server-status.component';
 import { StylesComponent } from './components/styles/styles.component';
 import { StyleEditorDialogComponent } from './components/styles/style-editor-dialog.component';
 import { LayerGroupsComponent } from './components/layer-groups/layer-groups.component';
 import { CreateLayerGroupDialogComponent } from './components/layer-groups/create-layer-group-dialog.component';
-import { NamespacesComponent } from './components/namespaces/namespaces.component';
-import { NamespaceDialogComponent } from './components/namespaces/namespace-dialog.component';
-import { StoresComponent } from './components/stores/stores.component';
 import { LoginComponent } from './components/login/login.component';
 import { MonitorComponent } from './components/monitor/monitor.component';
 import { UsersComponent } from './components/users/users.component';
@@ -55,12 +50,9 @@ import { PermissionsComponent } from './components/permissions/permissions.compo
 import { AuthInterceptor } from './services/auth.interceptor';
 
 const routes: Routes = [
-  { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
-  { path: 'dashboard', component: DashboardComponent },
+  { path: '', redirectTo: '/layer-preview', pathMatch: 'full' },
   { path: 'workspaces', component: WorkspacesComponent },
-  { path: 'namespaces', component: NamespacesComponent },
   { path: 'data-sources', component: DataSourcesComponent },
-  { path: 'stores', component: StoresComponent },
   { path: 'layers', component: LayersComponent },
   { path: 'layers/create', component: LayerCreateComponent },
   { path: 'layers/:name', component: LayerDetailComponent },
@@ -68,7 +60,6 @@ const routes: Routes = [
   { path: 'layer-groups', component: LayerGroupsComponent },
   { path: 'styles', component: StylesComponent },
   { path: 'tile-layers', component: TileLayersComponent },
-  { path: 'server-status', component: ServerStatusComponent },
   { path: 'monitor', component: MonitorComponent },
   { path: 'users', component: UsersComponent },
   { path: 'permissions', component: PermissionsComponent },
@@ -77,7 +68,6 @@ const routes: Routes = [
 @NgModule({
   declarations: [
     AppComponent,
-    DashboardComponent,
     LayersComponent,
     LayerDetailComponent,
     LayerCreateComponent,
@@ -88,14 +78,10 @@ const routes: Routes = [
     DataSourcesComponent,
     DataSourceDialogComponent,
     TileLayersComponent,
-    ServerStatusComponent,
     StylesComponent,
     StyleEditorDialogComponent,
     LayerGroupsComponent,
     CreateLayerGroupDialogComponent,
-    NamespacesComponent,
-    NamespaceDialogComponent,
-    StoresComponent,
     LoginComponent,
     MonitorComponent,
     UsersComponent,

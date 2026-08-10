@@ -102,18 +102,60 @@
       border-top-color: #e2e8f0;
     }
 
-    /* 分组标签 */
-    .nav-section-label {
-      padding: 8px 24px 4px;
-      font-size: 11px;
-      font-weight: 700;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      user-select: none;
+    /* 分组（对标 GeoServer 菜单分组） */
+    .nav-group {
+      margin: 4px 12px;
+
+      .nav-group-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 8px 6px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.2s ease;
+
+        &:hover {
+          color: #64748b;
+        }
+
+        .group-icon {
+          font-size: 16px;
+          width: 16px;
+          height: 16px;
+          color: #94a3b8;
+        }
+
+        .group-arrow {
+          margin-left: auto;
+          font-size: 18px;
+          width: 18px;
+          height: 18px;
+          transition: transform 0.25s ease;
+          color: #94a3b8;
+        }
+      }
+
+      .nav-group-body {
+        overflow: hidden;
+        max-height: 600px;
+        visibility: visible;
+        /* visibility hidden is applied at the end of the collapse transition so
+           collapsed items are removed from the accessibility tree & tab order */
+        transition:
+          max-height 0.3s ease,
+          visibility 0.3s ease;
+
+        &.collapsed {
+          max-height: 0;
+          visibility: hidden;
+        }
+      }
     }
   }
 

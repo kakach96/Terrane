@@ -9,79 +9,132 @@
       </div>
 
       <mat-nav-list class="nav-menu">
-        <a mat-list-item routerLink="/layer-preview" routerLinkActive="active">
-          <mat-icon matListItemIcon>visibility</mat-icon>
-          <span matListItemTitle>图层预览</span>
-        </a>
-
         <ng-container *ngIf="auth.isLoggedIn()">
-          <a mat-list-item routerLink="/dashboard" routerLinkActive="active">
-            <mat-icon matListItemIcon>dashboard</mat-icon>
-            <span matListItemTitle>仪表盘</span>
-          </a>
+          <!-- 数据（对标 GeoServer「数据」菜单） -->
+          <div class="nav-group" [class.open]="isGroupOpen('data')">
+            <div
+              class="nav-group-header"
+              role="button"
+              tabindex="0"
+              (click)="toggleGroup('data')"
+              (keydown.enter)="toggleGroup('data')"
+              (keydown.space)="toggleGroup('data')"
+            >
+              <mat-icon class="group-icon">folder</mat-icon>
+              <span>数据</span>
+              <mat-icon class="group-arrow">{{
+                isGroupOpen('data') ? 'expand_more' : 'chevron_right'
+              }}</mat-icon>
+            </div>
+            <div class="nav-group-body" [class.collapsed]="!isGroupOpen('data')">
+              <a mat-list-item routerLink="/layer-preview" routerLinkActive="active">
+                <mat-icon matListItemIcon>visibility</mat-icon>
+                <span matListItemTitle>图层预览</span>
+              </a>
 
-          <a mat-list-item routerLink="/workspaces" routerLinkActive="active">
-            <mat-icon matListItemIcon>folder</mat-icon>
-            <span matListItemTitle>工作空间</span>
-          </a>
+              <a mat-list-item routerLink="/workspaces" routerLinkActive="active">
+                <mat-icon matListItemIcon>folder</mat-icon>
+                <span matListItemTitle>工作空间</span>
+              </a>
 
-          <a mat-list-item routerLink="/namespaces" routerLinkActive="active">
-            <mat-icon matListItemIcon>font_download</mat-icon>
-            <span matListItemTitle>命名空间</span>
-          </a>
+              <a mat-list-item routerLink="/data-sources" routerLinkActive="active">
+                <mat-icon matListItemIcon>storage</mat-icon>
+                <span matListItemTitle>数据源</span>
+              </a>
 
-          <a mat-list-item routerLink="/data-sources" routerLinkActive="active">
-            <mat-icon matListItemIcon>storage</mat-icon>
-            <span matListItemTitle>数据源</span>
-          </a>
+              <a mat-list-item routerLink="/layers" routerLinkActive="active">
+                <mat-icon matListItemIcon>layers</mat-icon>
+                <span matListItemTitle>图层</span>
+              </a>
 
-          <a mat-list-item routerLink="/stores" routerLinkActive="active">
-            <mat-icon matListItemIcon>dns</mat-icon>
-            <span matListItemTitle>存储管理</span>
-          </a>
+              <a mat-list-item routerLink="/layer-groups" routerLinkActive="active">
+                <mat-icon matListItemIcon>folder_special</mat-icon>
+                <span matListItemTitle>图层组</span>
+              </a>
 
-          <a mat-list-item routerLink="/layers" routerLinkActive="active">
-            <mat-icon matListItemIcon>layers</mat-icon>
-            <span matListItemTitle>图层</span>
-          </a>
+              <a mat-list-item routerLink="/styles" routerLinkActive="active">
+                <mat-icon matListItemIcon>brush</mat-icon>
+                <span matListItemTitle>样式管理</span>
+              </a>
+            </div>
+          </div>
 
-          <a mat-list-item routerLink="/tile-layers" routerLinkActive="active">
-            <mat-icon matListItemIcon>grid_view</mat-icon>
-            <span matListItemTitle>切片图层</span>
-          </a>
+          <!-- 瓦片（对标 GeoServer「瓦片」菜单） -->
+          <div class="nav-group" [class.open]="isGroupOpen('tiles')">
+            <div
+              class="nav-group-header"
+              role="button"
+              tabindex="0"
+              (click)="toggleGroup('tiles')"
+              (keydown.enter)="toggleGroup('tiles')"
+              (keydown.space)="toggleGroup('tiles')"
+            >
+              <mat-icon class="group-icon">grid_view</mat-icon>
+              <span>瓦片</span>
+              <mat-icon class="group-arrow">{{
+                isGroupOpen('tiles') ? 'expand_more' : 'chevron_right'
+              }}</mat-icon>
+            </div>
+            <div class="nav-group-body" [class.collapsed]="!isGroupOpen('tiles')">
+              <a mat-list-item routerLink="/tile-layers" routerLinkActive="active">
+                <mat-icon matListItemIcon>grid_view</mat-icon>
+                <span matListItemTitle>切片图层</span>
+              </a>
+            </div>
+          </div>
 
-          <a mat-list-item routerLink="/layer-groups" routerLinkActive="active">
-            <mat-icon matListItemIcon>folder_special</mat-icon>
-            <span matListItemTitle>图层组</span>
-          </a>
+          <!-- 服务器（对标 GeoServer「服务器」菜单） -->
+          <div class="nav-group" [class.open]="isGroupOpen('server')">
+            <div
+              class="nav-group-header"
+              role="button"
+              tabindex="0"
+              (click)="toggleGroup('server')"
+              (keydown.enter)="toggleGroup('server')"
+              (keydown.space)="toggleGroup('server')"
+            >
+              <mat-icon class="group-icon">monitoring</mat-icon>
+              <span>服务器</span>
+              <mat-icon class="group-arrow">{{
+                isGroupOpen('server') ? 'expand_more' : 'chevron_right'
+              }}</mat-icon>
+            </div>
+            <div class="nav-group-body" [class.collapsed]="!isGroupOpen('server')">
+              <a mat-list-item routerLink="/monitor" routerLinkActive="active">
+                <mat-icon matListItemIcon>bar_chart</mat-icon>
+                <span matListItemTitle>监控面板</span>
+              </a>
+            </div>
+          </div>
 
-          <a mat-list-item routerLink="/styles" routerLinkActive="active">
-            <mat-icon matListItemIcon>brush</mat-icon>
-            <span matListItemTitle>样式管理</span>
-          </a>
+          <!-- 安全（对标 GeoServer「安全」菜单） -->
+          <div class="nav-group" [class.open]="isGroupOpen('security')">
+            <div
+              class="nav-group-header"
+              role="button"
+              tabindex="0"
+              (click)="toggleGroup('security')"
+              (keydown.enter)="toggleGroup('security')"
+              (keydown.space)="toggleGroup('security')"
+            >
+              <mat-icon class="group-icon">security</mat-icon>
+              <span>安全</span>
+              <mat-icon class="group-arrow">{{
+                isGroupOpen('security') ? 'expand_more' : 'chevron_right'
+              }}</mat-icon>
+            </div>
+            <div class="nav-group-body" [class.collapsed]="!isGroupOpen('security')">
+              <a mat-list-item routerLink="/users" routerLinkActive="active">
+                <mat-icon matListItemIcon>people</mat-icon>
+                <span matListItemTitle>用户管理</span>
+              </a>
 
-          <a mat-list-item routerLink="/server-status" routerLinkActive="active">
-            <mat-icon matListItemIcon>monitoring</mat-icon>
-            <span matListItemTitle>服务器状态</span>
-          </a>
-
-          <a mat-list-item routerLink="/monitor" routerLinkActive="active">
-            <mat-icon matListItemIcon>bar_chart</mat-icon>
-            <span matListItemTitle>监控面板</span>
-          </a>
-
-          <mat-divider></mat-divider>
-          <div class="nav-section-label">系统管理</div>
-
-          <a mat-list-item routerLink="/users" routerLinkActive="active">
-            <mat-icon matListItemIcon>people</mat-icon>
-            <span matListItemTitle>用户管理</span>
-          </a>
-
-          <a mat-list-item routerLink="/permissions" routerLinkActive="active">
-            <mat-icon matListItemIcon>security</mat-icon>
-            <span matListItemTitle>权限管理</span>
-          </a>
+              <a mat-list-item routerLink="/permissions" routerLinkActive="active">
+                <mat-icon matListItemIcon>security</mat-icon>
+                <span matListItemTitle>权限管理</span>
+              </a>
+            </div>
+          </div>
         </ng-container>
       </mat-nav-list>
     </mat-sidenav>

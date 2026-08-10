@@ -89,13 +89,6 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
-export interface DashboardStats {
-  layerCount: number;
-  featureCount: number;
-  activeLayerCount: number;
-  workspaceCount: number;
-}
-
 export interface PreviewOptions {
   width?: number;
   height?: number;
@@ -122,21 +115,6 @@ export interface UpdateWorkspaceRequest {
   title?: string;
   description?: string;
   enabled?: boolean;
-}
-
-export interface ServerStatus {
-  uptime: string;
-  memory: {
-    used: number;
-    total: number;
-    percent: number;
-  };
-  cpu: number;
-  requests: number;
-  errors: number;
-  layerCount: number;
-  enabledLayers: number;
-  workspaceCount: number;
 }
 
 export interface DataSource {
@@ -191,29 +169,6 @@ export interface LayerGroup {
   title: string;
   layers: string[];
   styles?: (string | null)[];
-}
-
-/** 命名空间 */
-export interface Namespace {
-  prefix: string;
-  uri: string;
-  isolated: boolean;
-  workspace?: string;
-  created?: string;
-  modified?: string;
-}
-
-export interface CreateNamespaceRequest {
-  prefix: string;
-  uri: string;
-  workspace?: string;
-  isolated?: boolean;
-}
-
-export interface UpdateNamespaceRequest {
-  uri?: string;
-  isolated?: boolean;
-  workspace?: string;
 }
 
 /** SQL 视图 */
@@ -345,17 +300,6 @@ export interface User {
   username: string;
   role: string;
   enabled: boolean;
-  created?: string;
-  modified?: string;
-}
-
-/** 存储 (Store) */
-export interface Store {
-  name: string;
-  type: 'DataStore' | 'CoverageStore' | string;
-  workspace: string | null;
-  enabled: boolean;
-  connection?: DataSourceConnection;
   created?: string;
   modified?: string;
 }

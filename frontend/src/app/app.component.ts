@@ -12,25 +12,37 @@ import { LoginComponent } from './components/login/login.component';
 })
 export class AppComponent implements OnInit {
   title = 'Terrane';
-  pageTitle = '仪表盘';
+  pageTitle = '图层预览';
   sidenavOpened = true;
 
   private menuTitles: { [key: string]: string } = {
-    '/dashboard': '仪表盘',
     '/workspaces': '工作空间',
-    '/namespaces': '命名空间',
     '/data-sources': '数据源',
-    '/stores': '存储管理',
     '/layers': '图层',
     '/layer-preview': '图层预览',
     '/tile-layers': '切片图层',
     '/layer-groups': '图层组',
     '/styles': '样式管理',
-    '/server-status': '服务器状态',
     '/monitor': '监控面板',
     '/users': '用户管理',
     '/permissions': '权限管理',
   };
+
+  // 导航分组展开状态（对标 GeoServer 菜单分组）
+  private navGroups: { [key: string]: boolean } = {
+    data: true,
+    tiles: true,
+    server: true,
+    security: true,
+  };
+
+  isGroupOpen(group: string): boolean {
+    return !!this.navGroups[group];
+  }
+
+  toggleGroup(group: string): void {
+    this.navGroups[group] = !this.navGroups[group];
+  }
 
   constructor(
     private router: Router,
