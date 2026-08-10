@@ -675,14 +675,7 @@ async fn query_postgis_features_optimized(
          FROM \"{}\".\"{}\" \
          WHERE {} && {} \
          LIMIT {}",
-        geom_expr,
-        geom_col,
-        bbox_env,
-        schema,
-        table_name,
-        geom_col,
-        bbox_env,
-        max_features
+        geom_expr, geom_col, bbox_env, schema, table_name, geom_col, bbox_env, max_features
     );
 
     debug!("[PostGIS] 执行SQL: {}", sql);
