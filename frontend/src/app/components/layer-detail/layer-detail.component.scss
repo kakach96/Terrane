@@ -161,7 +161,11 @@
 
       &:hover {
         border-color: var(--primary-color);
-        background: rgba(102, 126, 234, 0.06);
+      }
+
+      ::ng-deep .mat-mdc-button-persistent-ripple::before,
+      ::ng-deep .mat-mdc-focus-indicator::before {
+        border-radius: 10px;
       }
     }
   }
