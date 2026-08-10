@@ -1,5 +1,8 @@
 use crate::error::GeoServerError;
-use crate::models::{Bounds, DataSourceType, Feature, GeoJsonGeometry, METADATA_DATA_SOURCE};
+use crate::models::{
+    Bounds, DataSource, DataSourceConnection, DataSourceType, Feature, GeoJsonGeometry,
+    METADATA_DATA_SOURCE,
+};
 use crate::state::AppState;
 use crate::utils::wkb;
 use tracing::info;
@@ -18,15 +21,8 @@ pub async fn query_layer_features(
     let layer = layer
         .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
-    // 内置 metadata 数据源: 数据发布平台不再持久化要素, 返回空
-    if layer.store == METADATA_DATA_SOURCE {
-        info!(
-            "[Features] 图层 '{}' 使用内置 metadata 数据源, 已不再持久化要素, 返回空",
-            layer_name
-        );
-        return Ok(Vec::new());
-    }
-
+    // 解析图层数据源。内置 metadata 数据源被当作普通数据源看待: 它除了存储元数据外,
+    // 也可发布其承载的业务数据 (postgres 元数据模式复用同一 PG, 走 PostGIS 查询)。
     let data_source = if let Some(store) = &state.store {
         store
             .get_data_source(&layer.store)
@@ -35,6 +31,8 @@ pub async fn query_layer_features(
     } else {
         None
     };
+    // 内置 metadata 数据源不持久化在元数据库中, 按需合成 (与 REST 层 builtin 呈现一致)
+    let data_source = data_source.or_else(|| builtin_metadata_data_source(state));
 
     if let Some(ref ds) = data_source {
         match ds.data_source_type {
@@ -98,7 +96,7 @@ pub async fn query_layer_features(
             },
             DataSourceType::Metadata => {
                 info!(
-                    "[Features] metadata 数据源 '{}' 已不再持久化要素, 返回空",
+                    "[Features] metadata 数据源 '{}' (sqlite 元数据) 不承载业务表, 返回空",
                     ds.name
                 );
                 return Ok(Vec::new());
@@ -112,6 +110,46 @@ pub async fn query_layer_features(
         layer_name, layer.store
     );
     Ok(Vec::new())
+}
+
+/// 构造内置 metadata 数据源 (不持久化在元数据库中, 按需合成)。
+///
+/// 内置 metadata 数据源被当作普通数据源看待, 与其它数据源无异:
+/// - postgres 元数据模式: 复用同一 PG, 类型为 PostGIS (postgis 语义, 可发布业务表)
+/// - sqlite 元数据模式: 不承载业务表, 类型为 Metadata (要素查询返回空)
+pub(crate) fn builtin_metadata_data_source(state: &AppState) -> Option<DataSource> {
+    let mc = &state.config.metadata;
+    if mc.kind == "postgres" {
+        let pg = &mc.postgres;
+        Some(DataSource {
+            name: METADATA_DATA_SOURCE.to_string(),
+            data_source_type: DataSourceType::Postgis,
+            workspace: None,
+            enabled: true,
+            connection: Some(DataSourceConnection {
+                host: Some(pg.host.clone()),
+                port: Some(pg.port),
+                database: Some(pg.instance.clone()),
+                schema: Some(pg.schema.clone()),
+                username: Some(pg.user.clone()),
+                password: Some(pg.password.clone()),
+                file_path: None,
+                file_storage_type: None,
+            }),
+            created: None,
+            modified: None,
+        })
+    } else {
+        Some(DataSource {
+            name: METADATA_DATA_SOURCE.to_string(),
+            data_source_type: DataSourceType::Metadata,
+            workspace: None,
+            enabled: true,
+            connection: None,
+            created: None,
+            modified: None,
+        })
+    }
 }
 
 /// 从 GeoJSON 数据源查询要素。

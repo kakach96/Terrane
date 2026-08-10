@@ -10,9 +10,11 @@ use std::time::Instant;
 
 /// 构造内置 metadata 数据源的 JSON 表示 (内置默认选项, 不可编辑/删除)。
 ///
+/// 内置 metadata 数据源被当作普通数据源看待: 它除了存储元数据外, 也可发布其
+/// 承载的业务数据。
 /// - 元数据存储为 postgres 时 type 显示为 postgis, connection 展示元数据 postgres
 ///   连接 (复用同一 PG 发布业务表)
-/// - 元数据存储为 sqlite 时 type 显示为 metadata (已不再持久化要素, 空发布)
+/// - 元数据存储为 sqlite 时 type 显示为 metadata (不承载业务表, 要素查询返回空)
 fn builtin_metadata_data_source(state: &AppState) -> Option<serde_json::Value> {
     let mc = &state.config.metadata;
     let (ds_type, connection) = if mc.kind == "postgres" {
@@ -416,7 +418,7 @@ pub async fn get_data_source_tables(
     tracing::debug!("[get_data_source_tables] 开始处理, name={}", name);
 
     // 内置 metadata 数据源: 元数据为 postgres 时复用同一 PG 列出业务表 (postgis 语义);
-    // sqlite 元数据已不再持久化要素, 返回空表列表
+    // sqlite 元数据不承载业务表, 返回空表列表
     if is_builtin_metadata(name) {
         if state.config.metadata.kind == "postgres" {
             let mc = &state.config.metadata;

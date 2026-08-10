@@ -203,9 +203,9 @@ impl AppState {
         }
 
         let features_layers = if all_layers.is_empty() {
-            // 开箱即用: 自动创建内置 world 图层 (store = metadata, 空发布)。
-            // metadata 数据源为内置选项 (postgres 元数据复用同一 PG / sqlite 空发布),
-            // 数据由外部数据源发布, 此处仅提供可用的图层定义。
+            // 开箱即用: 自动创建内置 world 图层 (store = metadata)。
+            // metadata 数据源为内置选项, 被当作普通数据源看待: postgres 元数据模式
+            // 复用同一 PG 发布业务表 / sqlite 元数据模式不承载业务表。
             let world_layer = Layer::new(
                 "world".to_string(),
                 "World".to_string(),
