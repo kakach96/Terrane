@@ -180,6 +180,26 @@
           >
             透明背景
           </mat-checkbox>
+
+          <div class="toolbar-actions">
+            <button
+              mat-icon-button
+              (click)="refreshPreview()"
+              matTooltip="刷新预览"
+              aria-label="刷新预览"
+            >
+              <mat-icon>refresh</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              [disabled]="!previewUrl"
+              (click)="openInNewWindow()"
+              matTooltip="在新窗口打开预览"
+              aria-label="在新窗口打开预览"
+            >
+              <mat-icon>open_in_new</mat-icon>
+            </button>
+          </div>
         </div>
 
         <div class="map-toolbar">
@@ -190,21 +210,6 @@
               <mat-icon>label</mat-icon>
               {{ featureCount }} 个要素
             </span>
-          </div>
-          <div class="map-actions">
-            <button mat-stroked-button (click)="refreshPreview()" matTooltip="刷新预览">
-              <mat-icon>refresh</mat-icon>
-              <span>刷新预览</span>
-            </button>
-            <button
-              mat-stroked-button
-              [disabled]="!previewUrl"
-              (click)="openInNewWindow()"
-              matTooltip="在新窗口打开预览"
-            >
-              <mat-icon>open_in_new</mat-icon>
-              <span>在新窗口打开</span>
-            </button>
           </div>
         </div>
 
