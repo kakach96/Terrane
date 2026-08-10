@@ -111,12 +111,18 @@ if %BUILD_MODE%==release (
 if not exist "!ARTIFACT_DIR!" (
     mkdir "!ARTIFACT_DIR!"
 )
-if exist "terrane.toml" (
-    copy /y "terrane.toml" "!ARTIFACT_DIR!\terrane.toml" >nul
-    echo Config copied: !ARTIFACT_DIR!\terrane.toml
+rem Keep an existing config next to the artifact (users maintain target\<mode>\terrane.toml);
+rem only seed it from the repo root or the example template when it does not exist yet.
+if exist "!ARTIFACT_DIR!\terrane.toml" (
+    echo Config kept: !ARTIFACT_DIR!\terrane.toml
 ) else (
-    copy /y "terrane.toml.example" "!ARTIFACT_DIR!\terrane.toml" >nul
-    echo Config template copied as: !ARTIFACT_DIR!\terrane.toml
+    if exist "terrane.toml" (
+        copy /y "terrane.toml" "!ARTIFACT_DIR!\terrane.toml" >nul
+        echo Config copied: !ARTIFACT_DIR!\terrane.toml
+    ) else (
+        copy /y "terrane.toml.example" "!ARTIFACT_DIR!\terrane.toml" >nul
+        echo Config template copied as: !ARTIFACT_DIR!\terrane.toml
+    )
 )
 echo.
 
