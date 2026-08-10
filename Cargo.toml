@@ -56,6 +56,7 @@ serde_yaml = "0.9"
 async-trait = "0.1"
 # zlib 压缩 (WMS PDF 输出内嵌 FlateDecode 图像)
 flate2 = "1"
+proj4rs = { version = "0.1.10", features = ["crs-definitions"] }
 
 [dev-dependencies]
 actix-rt = "2"

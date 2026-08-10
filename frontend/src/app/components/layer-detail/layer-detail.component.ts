@@ -57,7 +57,7 @@ export class LayerDetailComponent implements OnInit {
     { value: 'image/jpeg', label: 'JPEG' },
   ];
 
-  previewCrsOptions = ['EPSG:4326', 'EPSG:3857'];
+  previewCrsOptions = ['EPSG:4326', 'EPSG:3857', 'EPSG:4490'];
 
   get isStaticPreview(): boolean {
     return this.previewOptions.format !== 'application/openlayers';

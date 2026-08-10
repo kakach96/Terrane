@@ -41,6 +41,7 @@ import {
   TileCacheResult,
   User,
 } from '../models/geoserver.models';
+import { transformBounds } from '../utils/coords';
 
 @Injectable({
   providedIn: 'root',
@@ -115,7 +116,10 @@ export class GeoserverService {
   ): string {
     const bounds: LayerBounds = layer.native_bounds?.bounds || layer.bounds;
     if (!bounds) return '';
-    const srs = options?.crs || layer.native_bounds?.crs || layer.srs || 'EPSG:4326';
+    const nativeCrs = layer.native_bounds?.crs || layer.srs || 'EPSG:4326';
+    const srs = options?.crs || nativeCrs;
+    // WMS 约定 BBOX 处于请求 SRS 下: 目标 SRS 与图层原生 SRS 不一致时转换 bbox
+    const bbox = transformBounds(bounds, nativeCrs, srs);
     // 使用 WMS 1.1.1 避免 EPSG:4326 轴序问题
     const params = new URLSearchParams({
       service: 'WMS',
@@ -123,7 +127,7 @@ export class GeoserverService {
       request: 'GetMap',
       layers: layer.name,
       srs: srs,
-      bbox: `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`,
+      bbox: `${bbox.minx},${bbox.miny},${bbox.maxx},${bbox.maxy}`,
       width: (options?.width || 600).toString(),
       height: (options?.height || 400).toString(),
       format: options?.format || 'application/openlayers',
@@ -144,14 +148,17 @@ export class GeoserverService {
       styles?: string;
     },
   ): string {
-    const crs = options?.crs || layer.native_bounds?.crs || layer.srs || 'EPSG:4326';
+    const nativeCrs = layer.native_bounds?.crs || layer.srs || 'EPSG:4326';
+    const crs = options?.crs || nativeCrs;
 
-    // 优先使用显式传入的 bbox，其次从图层中读取
+    // 优先使用显式传入的 bbox; 否则从图层原生边界读取, 并在请求 SRS 与
+    // 图层原生 SRS 不一致时转换 (WMS 约定 BBOX 处于请求 SRS 下)
     let bbox = options?.bbox;
     if (!bbox) {
       const bounds: LayerBounds = layer.native_bounds?.bounds || layer.bounds;
       if (!bounds) return '';
-      bbox = `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`;
+      const converted = transformBounds(bounds, nativeCrs, crs);
+      bbox = `${converted.minx},${converted.miny},${converted.maxx},${converted.maxy}`;
     }
 
     const layerName = layer.name.includes(':') ? layer.name : `${layer.workspace}:${layer.name}`;

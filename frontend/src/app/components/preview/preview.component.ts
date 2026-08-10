@@ -3,6 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { GeoserverService } from '../../services/geoserver.service';
 import { Layer, LayerGroup } from '../../models/geoserver.models';
+import { transformBounds } from '../../utils/coords';
 
 interface Bounds {
   minx: number;
@@ -209,13 +210,16 @@ export class PreviewComponent implements OnInit {
         this.previewUrl = '';
         return;
       }
+      const nativeCrs = this.displayCrs;
+      // WMS 约定 BBOX 处于请求 SRS 下, 切换坐标系时转换图层原生边界
+      const converted = transformBounds(bounds, nativeCrs, this.previewOptions.crs);
       const params = new URLSearchParams({
         service: 'WMS',
         version: '1.1.1',
         request: 'GetMap',
         layers: group.layers.join(','),
         srs: this.previewOptions.crs,
-        bbox: `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`,
+        bbox: `${converted.minx},${converted.miny},${converted.maxx},${converted.maxy}`,
         width: this.previewOptions.width.toString(),
         height: this.previewOptions.height.toString(),
         format: this.previewOptions.format,

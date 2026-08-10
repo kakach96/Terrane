@@ -1,6 +1,7 @@
 use crate::models::{Bounds, GeoJsonGeometry};
 use geo::{Area, BoundingRect, Contains, Coord, GeodesicDistance, HaversineLength, Intersects};
 use geo_types::{Geometry, Rect};
+use proj4rs::proj::Proj;
 
 pub fn calculate_bounds<T: IntoIterator<Item = Geometry<f64>>>(geometries: T) -> Option<Bounds> {
     let rect: Option<Rect<f64>> = geometries
@@ -184,6 +185,11 @@ pub fn calculate_length(geometry: &GeoJsonGeometry) -> f64 {
     }
 }
 
+/// 将坐标从 `from_srs` 转换到 `to_srs`。
+///
+/// 优先使用 proj4rs 进行通用 EPSG 转换 (支持任意已定义的坐标系, 如
+/// EPSG:4326 / 3857 / 4490 / 900913 / UTM 等); 当 EPSG 无法解析时回退到
+/// 内置的 WGS84/Web-Mercator 数学变换。
 pub fn transform_coordinates(
     coords: &[f64],
     from_srs: &str,
@@ -197,8 +203,13 @@ pub fn transform_coordinates(
         return Err("Insufficient coordinates".to_string());
     }
 
-    let (x, y) = (coords[0], coords[1]);
+    // 1) 通用 proj4rs 转换 (支持其他坐标系)
+    if let (Ok(from), Ok(to)) = (proj_from_epsg(from_srs), proj_from_epsg(to_srs)) {
+        return proj4_transform(coords[0], coords[1], &from, &to);
+    }
 
+    // 2) 回退: 内置 4326 <-> 3857 数学变换
+    let (x, y) = (coords[0], coords[1]);
     match (from_srs, to_srs) {
         ("EPSG:4326", "EPSG:3857") | ("4326", "3857") => {
             let lon = x;
@@ -222,6 +233,45 @@ pub fn transform_coordinates(
             from_srs, to_srs
         )),
     }
+}
+
+/// 从 EPSG 字符串 (如 "EPSG:4326" / "4326") 构建 proj4rs 投影 (crs-definitions 特性)。
+fn proj_from_epsg(srs: &str) -> Result<Proj, String> {
+    let trimmed = srs
+        .trim()
+        .trim_start_matches("EPSG:")
+        .trim_start_matches("epsg:");
+    let code: u32 = trimmed
+        .parse()
+        .map_err(|_| format!("Invalid EPSG code: {}", srs))?;
+    // EPSG:900913 是 Web Mercator 的别名, 归一化为 EPSG:3857
+    let code = if code == 900913 { 3857 } else { code };
+    let code_u16: u16 =
+        u16::try_from(code).map_err(|_| format!("EPSG code out of range: {}", srs))?;
+    Proj::from_epsg_code(code_u16)
+        .map_err(|e| format!("Unsupported EPSG:{} ({}): {}", code, srs, e))
+}
+
+/// 使用 proj4rs 转换单个点。
+///
+/// proj4rs 中经纬度 (longlat) 投影使用弧度, 需要做度/弧度换算。
+fn proj4_transform(x: f64, y: f64, from: &Proj, to: &Proj) -> Result<Vec<f64>, String> {
+    // 输入: 源为经纬度投影 (弧度制) 时 度 -> 弧度
+    let (mut x, mut y) = (x, y);
+    if from.is_latlong() {
+        x = x.to_radians();
+        y = y.to_radians();
+    }
+    let mut point = (x, y, 0.0);
+    proj4rs::transform::transform(from, to, &mut point)
+        .map_err(|e| format!("Projection transform failed: {}", e))?;
+    let (mut ox, mut oy) = (point.0, point.1);
+    // 输出: 目标为经纬度投影时 弧度 -> 度
+    if to.is_latlong() {
+        ox = ox.to_degrees();
+        oy = oy.to_degrees();
+    }
+    Ok(vec![ox, oy])
 }
 
 #[cfg(test)]

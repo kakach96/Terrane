@@ -364,9 +364,13 @@ async fn resolve_layer_metadata(
             None
         };
 
-        // 内置 metadata 数据源: 图层要素从业务存储读取
+        // 内置 metadata 数据源被当作普通数据源看待: 复用内置合成数据源
+        // (postgres 元数据 → PostGIS 优化查询路径, 含请求坐标系 bbox 转换;
+        //  sqlite 元数据 → Metadata 类型, 走默认查询回落)
         let (data_source_type, connection) = if layer.store == crate::models::METADATA_DATA_SOURCE {
-            (DataSourceType::Metadata, None)
+            crate::handlers::features::builtin_metadata_data_source(state)
+                .map(|ds| (ds.data_source_type, ds.connection))
+                .unwrap_or((DataSourceType::Metadata, None))
         } else {
             data_source
                 .map(|ds| (ds.data_source_type, ds.connection))
@@ -653,26 +657,31 @@ async fn query_postgis_features_optimized(
         }
     };
 
+    // 请求 bbox 处于请求坐标系 (output_srid) 下; 空间过滤需转换到存储坐标系 (storage_srid)
+    let bbox_env = if needs_transform {
+        format!(
+            "ST_Transform(ST_MakeEnvelope({}, {}, {}, {}, {}), {})",
+            bbox.minx, bbox.miny, bbox.maxx, bbox.maxy, output_srid, storage_srid
+        )
+    } else {
+        format!(
+            "ST_MakeEnvelope({}, {}, {}, {}, {})",
+            bbox.minx, bbox.miny, bbox.maxx, bbox.maxy, storage_srid
+        )
+    };
+
     let sql = format!(
-        "SELECT {} as geom_wkb, {} && ST_MakeEnvelope({}, {}, {}, {}, {}) as _in_bbox \
+        "SELECT {} as geom_wkb, {} && {} as _in_bbox \
          FROM \"{}\".\"{}\" \
-         WHERE {} && ST_MakeEnvelope({}, {}, {}, {}, {}) \
+         WHERE {} && {} \
          LIMIT {}",
         geom_expr,
         geom_col,
-        bbox.minx,
-        bbox.miny,
-        bbox.maxx,
-        bbox.maxy,
-        storage_srid,
+        bbox_env,
         schema,
         table_name,
         geom_col,
-        bbox.minx,
-        bbox.miny,
-        bbox.maxx,
-        bbox.maxy,
-        storage_srid,
+        bbox_env,
         max_features
     );
 
@@ -928,24 +937,44 @@ fn render_openlayers_preview(
     // 使用相对 URL，通过前端代理或同源访问 WMS
     let wms_url = "/wms?";
 
-    // 如果输出 CRS 不是 Web Mercator，用 EPSG:4326 作为备用
-    let view_crs = if context.output_crs.to_uppercase().contains("3857")
-        || context.output_crs.to_uppercase().contains("900913")
-    {
-        context.output_crs.clone()
-    } else {
-        // 默认使用 EPSG:4326，但 TileWMS 在 4326 下格子显示不正常
-        // 改用 ImageWMS 方式，通过单次请求渲染
-        "EPSG:4326".to_string()
+    // OpenLayers 原生支持的投影 (无需 proj4js)。请求 bbox 处于请求 SRS 下,
+    // 对 ol 原生投影直接使用; 其他投影将 bbox 转换到 EPSG:4326 渲染。
+    let ol_native = {
+        let c = context.output_crs.to_uppercase();
+        c.contains("3857") || c.contains("900913") || c.contains("4326")
     };
 
-    let center_x = (context.bounds.minx + context.bounds.maxx) / 2.0;
-    let center_y = (context.bounds.miny + context.bounds.maxy) / 2.0;
-    let zoom = calculate_openlayers_zoom(&context.bounds, &view_crs);
+    let (view_crs, view_bounds) = if ol_native {
+        (context.output_crs.clone(), context.bounds.clone())
+    } else {
+        // 非 ol 原生投影: 将请求 bbox (请求 SRS 下) 转换到 EPSG:4326
+        let from = &context.bounds;
+        let b1 = crate::utils::geometry::transform_coordinates(
+            &[from.minx, from.miny],
+            &context.output_crs,
+            "EPSG:4326",
+        );
+        let b2 = crate::utils::geometry::transform_coordinates(
+            &[from.maxx, from.maxy],
+            &context.output_crs,
+            "EPSG:4326",
+        );
+        match (b1, b2) {
+            (Ok(p1), Ok(p2)) => (
+                "EPSG:4326".to_string(),
+                crate::models::Bounds::new(p1[0], p1[1], p2[0], p2[1]),
+            ),
+            _ => (context.output_crs.clone(), context.bounds.clone()),
+        }
+    };
+
+    let center_x = (view_bounds.minx + view_bounds.maxx) / 2.0;
+    let center_y = (view_bounds.miny + view_bounds.maxy) / 2.0;
+    let zoom = calculate_openlayers_zoom(&view_bounds, &view_crs);
     let layers_json = serde_json::to_string(&context.layers).unwrap_or_default();
     let extent = format!(
         "{}, {}, {}, {}",
-        context.bounds.minx, context.bounds.miny, context.bounds.maxx, context.bounds.maxy
+        view_bounds.minx, view_bounds.miny, view_bounds.maxx, view_bounds.maxy
     );
 
     let html = format!(
@@ -1015,7 +1044,7 @@ fn render_openlayers_preview(
   </div>
   <script>
     var layers = {layers_json};
-    var extent = ol.proj.transformExtent([{extent}], 'EPSG:4326', '{view_crs}');
+    var extent = [{extent}];
 
     var wmsSource = new ol.source.ImageWMS({{
       url: '{wms_url}',
@@ -1039,7 +1068,7 @@ fn render_openlayers_preview(
       ],
       view: new ol.View({{
         projection: '{view_crs}',
-        center: ol.proj.fromLonLat([{center_x}, {center_y}], '{view_crs}'),
+        center: [{center_x}, {center_y}],
         zoom: {zoom},
         extent: extent
       }})

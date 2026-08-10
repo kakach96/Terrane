@@ -38,6 +38,27 @@ reserved via `FileStore`). Tile + session cache stay local by default. This keep
 "structured data → database, raster → file storage, session/cache → Redis" scaling
 vision without a complex multi-section config.
 
+> **Built-in `metadata` data source**: treated as an ordinary data source — besides
+> storing catalog metadata it also publishes business data. In `postgres` metadata mode
+> it reuses the same PG with PostGIS semantics (`layer.store = "metadata"`, `native_name`
+> = table name); in `sqlite` mode it carries no business tables (feature queries return empty).
+
+### Coordinate reference systems & preview
+
+- **Backend reprojection is generic**: WMS raster output + feature queries use PostGIS
+  `ST_Transform` (storage CRS → request CRS), and the request `BBOX` is reprojected from
+  the request CRS to the storage CRS before spatial filtering. Any EPSG registered in the
+  metadata PostGIS (`spatial_ref_sys`) is supported (e.g. EPSG:4326, EPSG:3857, EPSG:4490,
+  UTM zones). For file-based data sources and in-process math, `src/utils/geometry.rs`
+  `transform_coordinates` is backed by `proj4rs` (generic EPSG via `crs-definitions`) with
+  a built-in WGS84/Web-Mercator fallback.
+- **WMS `BBOX` is always in the request SRS** (standard). The Angular frontend converts the
+  layer native bounds to the selected CRS via `frontend/src/app/utils/coords.ts`
+  (`transformBounds`) before building a WMS request, so previews stay in range after
+  switching CRS. The OpenLayers preview uses the request CRS as the view projection; for
+  projections not natively shipped by OpenLayers, the backend reprojects the BBOX to
+  EPSG:4326 so the map still renders in the correct location.
+
 ## 3. Module Dependency Graph
 
 ```mermaid
