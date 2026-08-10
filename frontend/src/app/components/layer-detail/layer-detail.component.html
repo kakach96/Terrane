@@ -103,100 +103,33 @@
       </mat-card-content>
     </mat-card>
 
-    <mat-card class="feature-type-card">
-      <mat-card-header>
-        <mat-icon matCardAvatar>category</mat-icon>
-        <mat-card-title>要素类型</mat-card-title>
-        <span class="feature-count">{{ features.length }} 个要素</span>
-        <span class="spacer"></span>
-        <button
-          mat-stroked-button
-          color="primary"
-          (click)="downloadGeoJson()"
-          matTooltip="下载 GeoJSON"
-        >
-          <mat-icon>download</mat-icon>
-          GeoJSON
-        </button>
-        &nbsp;
-        <button mat-stroked-button color="accent" (click)="downloadCsv()" matTooltip="下载 CSV">
-          <mat-icon>table_chart</mat-icon>
-          CSV
-        </button>
-      </mat-card-header>
-      <mat-card-content>
-        <div *ngIf="properties.length === 0" class="empty-features">
-          <mat-icon>layers_clear</mat-icon>
-          <p>暂无属性定义</p>
-        </div>
-
-        <div *ngIf="properties.length > 0">
-          <div class="geom-types">
-            <span *ngFor="let t of getGeometryTypes()" class="geom-chip">
-              <mat-icon>{{
-                t === 'Point'
-                  ? 'location_on'
-                  : t === 'LineString'
-                    ? 'timeline'
-                    : t === 'Polygon'
-                      ? 'polygon'
-                      : 'category'
-              }}</mat-icon>
-              {{ t }}
-            </span>
-          </div>
-
-          <table mat-table [dataSource]="properties" class="properties-table">
-            <ng-container matColumnDef="name">
-              <th mat-header-cell *matHeaderCellDef>属性</th>
-              <td mat-cell *matCellDef="let prop">{{ prop.name }}</td>
-            </ng-container>
-
-            <ng-container matColumnDef="type">
-              <th mat-header-cell *matHeaderCellDef>类型</th>
-              <td mat-cell *matCellDef="let prop">
-                <mat-chip class="type-chip">{{ prop.type }}</mat-chip>
-              </td>
-            </ng-container>
-
-            <ng-container matColumnDef="length">
-              <th mat-header-cell *matHeaderCellDef>长度</th>
-              <td mat-cell *matCellDef="let prop">{{ prop.length ?? '-' }}</td>
-            </ng-container>
-
-            <ng-container matColumnDef="nullable">
-              <th mat-header-cell *matHeaderCellDef>是否允许为空</th>
-              <td mat-cell *matCellDef="let prop">
-                <mat-chip [class.nullable-yes]="prop.nullable" [class.nullable-no]="!prop.nullable">
-                  {{ prop.nullable ? '是' : '否' }}
-                </mat-chip>
-              </td>
-            </ng-container>
-
-            <tr mat-header-row *matHeaderRowDef="['name', 'type', 'length', 'nullable']"></tr>
-            <tr mat-row *matRowDef="let row; columns: ['name', 'type', 'length', 'nullable']"></tr>
-          </table>
-        </div>
-      </mat-card-content>
-    </mat-card>
-
     <mat-card class="preview-card" *ngIf="previewUrl">
       <mat-card-header>
         <mat-icon matCardAvatar>map</mat-icon>
         <mat-card-title>地图预览</mat-card-title>
         <div class="preview-actions">
+          <button
+            mat-stroked-button
+            color="primary"
+            (click)="downloadGeoJson()"
+            matTooltip="下载 GeoJSON"
+          >
+            <mat-icon>download</mat-icon>
+            GeoJSON
+          </button>
+          <button mat-stroked-button color="accent" (click)="downloadCsv()" matTooltip="下载 CSV">
+            <mat-icon>table_chart</mat-icon>
+            CSV
+          </button>
           <button mat-stroked-button (click)="openInPreviewPage()" matTooltip="在图层预览页打开">
             <mat-icon>open_in_new</mat-icon>
             在预览页打开
           </button>
-          <button mat-icon-button (click)="refreshPreview()" matTooltip="刷新预览">
-            <mat-icon>refresh</mat-icon>
-          </button>
         </div>
       </mat-card-header>
       <mat-card-content class="preview-content">
-        <div class="preview-controls">
-          <mat-form-field appearance="outline" class="preview-control">
+        <div class="preview-toolbar">
+          <mat-form-field appearance="outline" class="format-field">
             <mat-label>格式</mat-label>
             <mat-select
               [value]="previewOptions.format"
@@ -208,8 +141,8 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="preview-control" *ngIf="isStaticPreview">
-            <mat-label>宽度</mat-label>
+          <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticPreview">
+            <mat-label>宽</mat-label>
             <input
               matInput
               type="number"
@@ -218,8 +151,8 @@
             />
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="preview-control" *ngIf="isStaticPreview">
-            <mat-label>高度</mat-label>
+          <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticPreview">
+            <mat-label>高</mat-label>
             <input
               matInput
               type="number"
@@ -228,7 +161,7 @@
             />
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="preview-control">
+          <mat-form-field appearance="outline" class="crs-field">
             <mat-label>坐标系</mat-label>
             <mat-select
               [value]="previewOptions.crs"
@@ -248,18 +181,45 @@
             透明背景
           </mat-checkbox>
         </div>
-        <div class="preview-image-container">
+
+        <div class="map-toolbar">
+          <div class="map-info">
+            <span class="map-name">{{ layer.title || layer.name }}</span>
+            <span class="map-crs">{{ previewOptions.crs }}</span>
+            <span class="feature-count" *ngIf="featureCount > 0">
+              <mat-icon>label</mat-icon>
+              {{ featureCount }} 个要素
+            </span>
+          </div>
+          <div class="map-actions">
+            <button mat-stroked-button (click)="refreshPreview()" matTooltip="刷新预览">
+              <mat-icon>refresh</mat-icon>
+              <span>刷新预览</span>
+            </button>
+            <button
+              mat-stroked-button
+              [disabled]="!previewUrl"
+              (click)="openInNewWindow()"
+              matTooltip="在新窗口打开预览"
+            >
+              <mat-icon>open_in_new</mat-icon>
+              <span>在新窗口打开</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="map-container">
           <iframe
             *ngIf="!isStaticPreview"
             [src]="safePreviewUrl"
-            class="preview-iframe"
+            class="map-frame"
             title="地图预览"
           ></iframe>
           <img
             *ngIf="isStaticPreview"
             [src]="previewUrl"
             alt="地图预览"
-            class="preview-image"
+            class="map-image"
             (error)="onPreviewError()"
           />
         </div>

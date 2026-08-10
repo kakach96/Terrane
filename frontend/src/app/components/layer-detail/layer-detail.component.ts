@@ -3,7 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
-import { Layer, Feature, PropertyDef } from '../../models/geoserver.models';
+import { Layer } from '../../models/geoserver.models';
 
 @Component({
   selector: 'app-layer-detail',
@@ -12,8 +12,7 @@ import { Layer, Feature, PropertyDef } from '../../models/geoserver.models';
 })
 export class LayerDetailComponent implements OnInit {
   layer: Layer | null = null;
-  features: Feature[] = [];
-  properties: PropertyDef[] = [];
+  featureCount = 0;
   previewUrl = '';
   safePreviewUrl: SafeResourceUrl = '';
   styleNames: string[] = [];
@@ -76,7 +75,6 @@ export class LayerDetailComponent implements OnInit {
     if (layerName) {
       this.loadLayer(layerName);
       this.loadFeatures(layerName);
-      this.loadFeatureType(layerName);
       this.loadStyleNames();
     }
   }
@@ -134,21 +132,9 @@ export class LayerDetailComponent implements OnInit {
   loadFeatures(layerName: string): void {
     this.geoserverService.getLayerFeatures(layerName).subscribe({
       next: (collection) => {
-        this.features = collection.features;
+        this.featureCount = collection.features.length;
       },
-    });
-  }
-
-  loadFeatureType(layerName: string): void {
-    this.geoserverService.getLayerFeatureType(layerName).subscribe({
-      next: (props) => {
-        this.properties = props;
-      },
-      error: () => {
-        if (this.features.length > 0) {
-          this.properties = this.deriveProperties(this.features);
-        }
-      },
+      error: () => (this.featureCount = 0),
     });
   }
 
@@ -177,33 +163,6 @@ export class LayerDetailComponent implements OnInit {
       },
       error: () => this.notificationService.error('加载样式失败'),
     });
-  }
-
-  deriveProperties(features: Feature[]): PropertyDef[] {
-    const keyTypes = new Map<string, string>();
-    for (const feature of features) {
-      for (const [key, value] of Object.entries(feature.properties)) {
-        if (!keyTypes.has(key)) {
-          keyTypes.set(key, this.inferType(value));
-        }
-      }
-    }
-    return Array.from(keyTypes.entries()).map(([name, type]) => ({ name, type, nullable: true }));
-  }
-
-  inferType(value: unknown): string {
-    if (value === null || value === undefined) return 'string';
-    if (typeof value === 'number') return Number.isInteger(value) ? 'integer' : 'float';
-    if (typeof value === 'boolean') return 'boolean';
-    if (typeof value === 'string') {
-      if (/^\d{4}-\d{2}-\d{2}/.test(value)) return 'date';
-      return 'string';
-    }
-    return typeof value;
-  }
-
-  getGeometryTypes(): string[] {
-    return [...new Set(this.features.map((f) => f.geometry.type))];
   }
 
   onPreviewError(): void {
@@ -249,5 +208,11 @@ export class LayerDetailComponent implements OnInit {
       },
       error: () => this.notificationService.error('下载 CSV 失败'),
     });
+  }
+
+  openInNewWindow(): void {
+    if (this.previewUrl) {
+      window.open(this.previewUrl, '_blank');
+    }
   }
 }
