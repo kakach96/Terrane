@@ -170,14 +170,8 @@
             <mat-icon>download</mat-icon>
           </button>
           <mat-menu #downloadMenu="matMenu">
-            <button mat-menu-item (click)="downloadGeoJson()">
-              <mat-icon>download</mat-icon>
-              <span>GeoJSON</span>
-            </button>
-            <button mat-menu-item (click)="downloadCsv()">
-              <mat-icon>table_chart</mat-icon>
-              <span>CSV</span>
-            </button>
+            <button mat-menu-item (click)="downloadGeoJson()">GeoJSON</button>
+            <button mat-menu-item (click)="downloadCsv()">CSV</button>
           </mat-menu>
         </div>
       </mat-card-header>

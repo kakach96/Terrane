@@ -96,7 +96,10 @@
     flex-wrap: wrap;
     gap: 10px;
 
-    .format-field,
+    .format-field {
+      width: 180px;
+    }
+
     .crs-field {
       width: 140px;
     }
