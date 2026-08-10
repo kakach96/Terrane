@@ -73,6 +73,14 @@ pub fn add_routes(scope: Scope) -> Scope {
             web::post().to(crate::handlers::test_connection),
         )
         .route(
+            "/data-sources/browse",
+            web::get().to(crate::handlers::browse_local),
+        )
+        .route(
+            "/data-sources/s3/browse",
+            web::post().to(crate::handlers::browse_s3),
+        )
+        .route(
             "/data-sources/{name}/tables",
             web::get().to(crate::handlers::get_data_source_tables),
         )

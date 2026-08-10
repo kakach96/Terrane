@@ -109,6 +109,11 @@ impl PostgresStore {
                 password TEXT,
                 file_path TEXT,
                 file_storage_type TEXT DEFAULT 'local',
+                s3_endpoint TEXT,
+                s3_region TEXT,
+                s3_bucket TEXT,
+                s3_access_key TEXT,
+                s3_secret_key TEXT,
                 created TEXT,
                 modified TEXT
             );
@@ -222,6 +227,13 @@ impl PostgresStore {
                 WHERE username = '*' AND role = 'admin' AND resource_type = '*'
                   AND resource_name = '*' AND access_mode = 'admin' AND effect = 'allow'
             );
+
+            -- S3 object-storage columns (migrate existing data_sources tables)
+            ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_endpoint TEXT;
+            ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_region TEXT;
+            ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_bucket TEXT;
+            ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_access_key TEXT;
+            ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_secret_key TEXT;
             "#,
         )
         .await?;
@@ -237,8 +249,13 @@ impl PostgresStore {
         let password: Option<String> = row.try_get(9)?;
         let file_path: Option<String> = row.try_get(10)?;
         let file_storage: Option<String> = row.try_get(11)?;
-        let created: Option<String> = row.try_get(12)?;
-        let modified: Option<String> = row.try_get(13)?;
+        let s3_endpoint: Option<String> = row.try_get(12)?;
+        let s3_region: Option<String> = row.try_get(13)?;
+        let s3_bucket: Option<String> = row.try_get(14)?;
+        let s3_access_key: Option<String> = row.try_get(15)?;
+        let s3_secret_key: Option<String> = row.try_get(16)?;
+        let created: Option<String> = row.try_get(17)?;
+        let modified: Option<String> = row.try_get(18)?;
 
         Ok(DataSource {
             name: row.try_get(0)?,
@@ -254,6 +271,11 @@ impl PostgresStore {
                 password,
                 file_path,
                 file_storage_type: file_storage,
+                s3_endpoint,
+                s3_region,
+                s3_bucket,
+                s3_access_key,
+                s3_secret_key,
             }),
             created,
             modified,
@@ -523,7 +545,8 @@ impl Store for PostgresStore {
         let rows = client
             .query(
                 "SELECT name, type, workspace, enabled, host, port, database_name, schema_name,
-                        username, password, file_path, file_storage_type, created, modified
+                        username, password, file_path, file_storage_type, s3_endpoint, s3_region,
+                        s3_bucket, s3_access_key, s3_secret_key, created, modified
                  FROM data_sources WHERE name = $1",
                 &[&name],
             )
@@ -540,7 +563,8 @@ impl Store for PostgresStore {
         let rows = client
             .query(
                 "SELECT name, type, workspace, enabled, host, port, database_name, schema_name,
-                        username, password, file_path, file_storage_type, created, modified
+                        username, password, file_path, file_storage_type, s3_endpoint, s3_region,
+                        s3_bucket, s3_access_key, s3_secret_key, created, modified
                  FROM data_sources ORDER BY name",
                 &[],
             )
@@ -562,8 +586,10 @@ impl Store for PostgresStore {
         client
             .execute(
                 "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name,
-                        schema_name, username, password, file_path, file_storage_type, created, modified)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+                        schema_name, username, password, file_path, file_storage_type,
+                        s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key,
+                        created, modified)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
                 &[
                     &name,
                     &data_source_type.to_string().to_lowercase(),
@@ -577,6 +603,11 @@ impl Store for PostgresStore {
                     &connection.password,
                     &connection.file_path,
                     &connection.file_storage_type,
+                    &connection.s3_endpoint,
+                    &connection.s3_region,
+                    &connection.s3_bucket,
+                    &connection.s3_access_key,
+                    &connection.s3_secret_key,
                     &ts,
                     &ts,
                 ],
@@ -635,6 +666,16 @@ impl Store for PostgresStore {
             sets.push(format!("file_path = ${}", params.len()));
             params.push(Box::new(c.file_storage_type.clone()));
             sets.push(format!("file_storage_type = ${}", params.len()));
+            params.push(Box::new(c.s3_endpoint.clone()));
+            sets.push(format!("s3_endpoint = ${}", params.len()));
+            params.push(Box::new(c.s3_region.clone()));
+            sets.push(format!("s3_region = ${}", params.len()));
+            params.push(Box::new(c.s3_bucket.clone()));
+            sets.push(format!("s3_bucket = ${}", params.len()));
+            params.push(Box::new(c.s3_access_key.clone()));
+            sets.push(format!("s3_access_key = ${}", params.len()));
+            params.push(Box::new(c.s3_secret_key.clone()));
+            sets.push(format!("s3_secret_key = ${}", params.len()));
         }
         params.push(Box::new(name.to_string()));
         let sql = format!(

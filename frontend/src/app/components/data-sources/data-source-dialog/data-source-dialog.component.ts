@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { GeoserverService } from '../../../services/geoserver.service';
 import { NotificationService } from '../../../services/notification.service';
 import {
@@ -9,7 +9,12 @@ import {
   UpdateDataSourceRequest,
   ConnectionTestResult,
   Workspace,
+  S3BrowseRequest,
 } from '../../../models/geoserver.models';
+import {
+  DirectoryBrowserComponent,
+  DirectoryBrowserResult,
+} from '../../shared/directory-browser/directory-browser.component';
 
 @Component({
   selector: 'app-data-source-dialog',
@@ -32,9 +37,8 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'arcgrid', label: 'ArcGrid' },
   ];
   fileStorageTypes = [
-    { value: 'local', label: '本地目录 (local)' },
-    { value: 's3', label: '对象存储 S3 (预留)' },
-    { value: 'oss', label: '对象存储 OSS (预留)' },
+    { value: 'local', label: '嵌入', description: '使用服务器本地目录' },
+    { value: 's3', label: 'S3', description: '使用对象存储目录' },
   ];
   isTesting = false;
   selectedFile: File | null = null;
@@ -42,6 +46,7 @@ export class DataSourceDialogComponent implements OnInit {
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { mode: 'create' | 'edit'; dataSource?: DataSource },
     private dialogRef: MatDialogRef<DataSourceDialogComponent>,
+    private dialog: MatDialog,
     private fb: FormBuilder,
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
@@ -60,6 +65,11 @@ export class DataSourceDialogComponent implements OnInit {
       password: [''],
       file_path: [''],
       file_storage_type: ['local'],
+      s3_endpoint: [''],
+      s3_region: ['us-east-1'],
+      s3_bucket: [''],
+      s3_access_key: [''],
+      s3_secret_key: [''],
       enabled: [true],
     });
   }
@@ -79,6 +89,11 @@ export class DataSourceDialogComponent implements OnInit {
         username: this.dataSource.connection?.username || '',
         file_path: this.dataSource.connection?.file_path || '',
         file_storage_type: this.dataSource.connection?.file_storage_type || 'local',
+        s3_endpoint: this.dataSource.connection?.s3_endpoint || '',
+        s3_region: this.dataSource.connection?.s3_region || 'us-east-1',
+        s3_bucket: this.dataSource.connection?.s3_bucket || '',
+        s3_access_key: this.dataSource.connection?.s3_access_key || '',
+        s3_secret_key: this.dataSource.connection?.s3_secret_key || '',
         enabled: this.dataSource.enabled,
       });
       this.form.get('name')?.disable();
@@ -104,6 +119,14 @@ export class DataSourceDialogComponent implements OnInit {
     return this.form.get('type')?.value;
   }
 
+  get selectedStorageType(): string {
+    return this.form.get('file_storage_type')?.value || 'local';
+  }
+
+  get isS3(): boolean {
+    return this.selectedStorageType === 's3';
+  }
+
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
@@ -114,6 +137,71 @@ export class DataSourceDialogComponent implements OnInit {
         nameCtrl.setValue(this.selectedFile.name.replace(/\.[^.]+$/, ''));
       }
     }
+  }
+
+  /** 打开本地服务器目录选择器 */
+  browseLocal(): void {
+    const dialogRef = this.dialog.open(DirectoryBrowserComponent, {
+      width: '580px',
+      data: {
+        mode: 'local',
+        initialPath: this.initialBrowsePath(),
+      },
+    });
+    dialogRef.afterClosed().subscribe((result?: DirectoryBrowserResult) => {
+      if (result) {
+        this.form.get('file_path')?.setValue(result.path);
+      }
+    });
+  }
+
+  /** 打开 S3 bucket 目录选择器 (携带已填写的连接配置) */
+  browseS3(): void {
+    const connection: S3BrowseRequest = {
+      s3_endpoint: this.form.get('s3_endpoint')?.value || undefined,
+      s3_region: this.form.get('s3_region')?.value || undefined,
+      s3_bucket: this.form.get('s3_bucket')?.value || undefined,
+      s3_access_key: this.form.get('s3_access_key')?.value || undefined,
+      s3_secret_key: this.form.get('s3_secret_key')?.value || undefined,
+    };
+    if (!connection.s3_bucket) {
+      this.notificationService.warning('请先填写 S3 bucket 名称');
+      return;
+    }
+    const dialogRef = this.dialog.open(DirectoryBrowserComponent, {
+      width: '580px',
+      data: {
+        mode: 's3',
+        initialPath: this.initialBrowsePath(),
+        s3Connection: connection,
+      },
+    });
+    dialogRef.afterClosed().subscribe((result?: DirectoryBrowserResult) => {
+      if (result) {
+        this.form.get('file_path')?.setValue(result.path);
+      }
+    });
+  }
+
+  /** 从当前 file_path 推导初始浏览目录 (取其所在目录/前缀) */
+  private initialBrowsePath(): string {
+    const raw = (this.form.get('file_path')?.value as string) || '';
+    if (!raw) {
+      return '';
+    }
+    if (this.isS3) {
+      // S3: 前缀以 '/' 结尾视为目录, 否则取其所在目录 (兼容 / 与 \ 分隔符),
+      // 并去掉 ./ 等根前缀, 避免把本地路径残留当作 S3 前缀
+      if (raw.endsWith('/')) {
+        return raw;
+      }
+      const idx = Math.max(raw.lastIndexOf('/'), raw.lastIndexOf('\\'));
+      const base = idx >= 0 ? raw.slice(0, idx + 1) : '';
+      return base.replace(/^[.\\/]+/, '');
+    }
+    const trimmed = raw.replace(/[\\/]+$/, '');
+    const idx = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+    return idx >= 0 ? trimmed.slice(0, idx) : '';
   }
 
   testConnection(): void {
@@ -170,10 +258,19 @@ export class DataSourceDialogComponent implements OnInit {
       };
     } else {
       const filePath = this.form.get('file_path')?.value || this.selectedFile?.name;
-      if (filePath) {
+      if (filePath || this.isS3) {
         request.connection = {
           file_path: filePath,
-          file_storage_type: this.form.get('file_storage_type')?.value || 'local',
+          file_storage_type: this.selectedStorageType,
+          ...(this.isS3
+            ? {
+                s3_endpoint: this.form.get('s3_endpoint')?.value || undefined,
+                s3_region: this.form.get('s3_region')?.value || undefined,
+                s3_bucket: this.form.get('s3_bucket')?.value || undefined,
+                s3_access_key: this.form.get('s3_access_key')?.value || undefined,
+                s3_secret_key: this.form.get('s3_secret_key')?.value || undefined,
+              }
+            : {}),
         };
       }
     }
@@ -200,10 +297,19 @@ export class DataSourceDialogComponent implements OnInit {
       };
     } else {
       const filePath = this.form.get('file_path')?.value;
-      if (filePath) {
+      if (filePath || this.isS3) {
         request.connection = {
           file_path: filePath,
-          file_storage_type: this.form.get('file_storage_type')?.value || 'local',
+          file_storage_type: this.selectedStorageType,
+          ...(this.isS3
+            ? {
+                s3_endpoint: this.form.get('s3_endpoint')?.value || undefined,
+                s3_region: this.form.get('s3_region')?.value || undefined,
+                s3_bucket: this.form.get('s3_bucket')?.value || undefined,
+                s3_access_key: this.form.get('s3_access_key')?.value || undefined,
+                s3_secret_key: this.form.get('s3_secret_key')?.value || undefined,
+              }
+            : {}),
         };
       }
     }
@@ -219,8 +325,15 @@ export class DataSourceDialogComponent implements OnInit {
 
     const type = this.form.get('type')?.value;
 
-    // geojson 数据源走普通创建 (指定 file_path + file_storage_type), 不走文件上传
-    if (this.mode === 'create' && type !== 'postgis' && type !== 'geojson' && this.selectedFile) {
+    // geojson 数据源走普通创建 (指定 file_path + file_storage_type), 不走文件上传;
+    // S3 存储同样不走本地文件上传 (直接引用已存在的对象)
+    if (
+      this.mode === 'create' &&
+      type !== 'postgis' &&
+      type !== 'geojson' &&
+      !this.isS3 &&
+      this.selectedFile
+    ) {
       // 文件型数据源：通过上传接口创建
       const dsName = this.form.get('name')?.value;
       const upload$ =

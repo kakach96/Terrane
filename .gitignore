@@ -37,3 +37,7 @@ geoserver.sqlite
 
 # Runtime data
 data/
+
+# Runtime logs
+terrane.out.log
+terrane.err.log

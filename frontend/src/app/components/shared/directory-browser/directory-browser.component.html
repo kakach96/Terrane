@@ -1,0 +1,89 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+<mat-dialog-content class="browser-content">
+  <p class="browser-hint">{{ rootHint }}</p>
+
+  <div class="browser-toolbar">
+    <button
+      mat-icon-button
+      type="button"
+      matTooltip="上级目录"
+      [disabled]="breadcrumbs.length === 0 || loading"
+      (click)="goUp()"
+    >
+      <mat-icon>arrow_upward</mat-icon>
+    </button>
+    <div class="breadcrumbs" *ngIf="breadcrumbs.length > 0">
+      <span
+        *ngFor="let crumb of breadcrumbs; let last = last"
+        class="crumb"
+        [class.crumb-current]="last"
+        role="button"
+        [attr.tabindex]="last ? -1 : 0"
+        (click)="!last && load(crumb.path)"
+        (keydown.enter)="!last && load(crumb.path)"
+        (keydown.space)="!last && load(crumb.path)"
+      >
+        {{ crumb.label }}
+        <mat-icon *ngIf="!last" class="crumb-sep">chevron_right</mat-icon>
+      </span>
+    </div>
+    <mat-progress-bar
+      *ngIf="loading"
+      mode="indeterminate"
+      class="browser-progress"
+    ></mat-progress-bar>
+  </div>
+
+  <div class="browser-error" *ngIf="error">{{ error }}</div>
+
+  <div class="entry-list">
+    <div
+      *ngFor="let entry of entries"
+      class="entry-row"
+      [class.entry-selected]="entry.path === selectedPath"
+      (dblclick)="navigate(entry)"
+    >
+      <mat-icon class="entry-icon" [class.entry-icon-dir]="entry.is_dir">
+        {{ entry.is_dir ? 'folder' : 'insert_drive_file' }}
+      </mat-icon>
+      <span
+        class="entry-name"
+        role="button"
+        tabindex="0"
+        (click)="navigate(entry)"
+        (keydown.enter)="navigate(entry)"
+        (keydown.space)="navigate(entry)"
+        [matTooltip]="entry.path"
+      >
+        {{ entry.name }}
+      </span>
+      <span class="entry-size" *ngIf="!entry.is_dir">
+        {{ entry.size > 0 ? (entry.size / 1024).toFixed(1) + ' KB' : '—' }}
+      </span>
+      <button
+        type="button"
+        mat-icon-button
+        class="entry-action"
+        [matTooltip]="entry.is_dir ? '进入目录' : '选择此文件'"
+        (click)="select(entry)"
+      >
+        <mat-icon>{{ entry.is_dir ? 'subdirectory_arrow_right' : 'check' }}</mat-icon>
+      </button>
+    </div>
+
+    <div *ngIf="!loading && entries.length === 0" class="empty-hint">此目录为空</div>
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="onCancel()">取消</button>
+  <button
+    mat-raised-button
+    color="primary"
+    type="button"
+    (click)="selectCurrent()"
+    [disabled]="!currentPath && !selectedPath"
+  >
+    <mat-icon>check</mat-icon>
+    {{ mode === 'local' ? '选择此目录' : '选择当前目录' }}
+  </button>
+</mat-dialog-actions>

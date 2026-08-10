@@ -96,9 +96,26 @@ pub struct DataSourceConnection {
     /// 文件路径 (shapefile .shp / geotiff .tif / geojson .geojson)
     #[serde(default)]
     pub file_path: Option<String>,
-    /// 文件存储类型: "local" (服务数据目录) / "s3" / "oss" (对象存储, 预留)
+    /// 文件存储类型: "local" (服务数据目录) / "s3" / "oss" (对象存储)
     #[serde(default = "default_file_storage")]
     pub file_storage_type: Option<String>,
+
+    // -- S3 对象存储字段 (file_storage_type = "s3" 时生效) --
+    /// S3 endpoint URL (例如 MinIO: http://localhost:9000; AWS 可留空走区域默认端点)
+    #[serde(default)]
+    pub s3_endpoint: Option<String>,
+    /// S3 region (默认 "us-east-1")
+    #[serde(default)]
+    pub s3_region: Option<String>,
+    /// S3 bucket 名称
+    #[serde(default)]
+    pub s3_bucket: Option<String>,
+    /// S3 access key
+    #[serde(default)]
+    pub s3_access_key: Option<String>,
+    /// S3 secret key
+    #[serde(default)]
+    pub s3_secret_key: Option<String>,
 }
 
 fn default_schema() -> Option<String> {
@@ -109,18 +126,34 @@ fn default_file_storage() -> Option<String> {
     Some("local".to_string())
 }
 
-impl DataSourceConnection {
-    /// 快速创建一个文件型连接
-    pub fn file(file_path: impl Into<String>) -> Self {
+impl Default for DataSourceConnection {
+    fn default() -> Self {
         DataSourceConnection {
             host: None,
             port: None,
             database: None,
-            schema: Some("public".to_string()),
+            schema: None,
             username: None,
             password: None,
+            file_path: None,
+            file_storage_type: None,
+            s3_endpoint: None,
+            s3_region: None,
+            s3_bucket: None,
+            s3_access_key: None,
+            s3_secret_key: None,
+        }
+    }
+}
+
+impl DataSourceConnection {
+    /// 快速创建一个文件型连接
+    pub fn file(file_path: impl Into<String>) -> Self {
+        DataSourceConnection {
+            schema: Some("public".to_string()),
             file_path: Some(file_path.into()),
             file_storage_type: Some("local".to_string()),
+            ..Default::default()
         }
     }
 
@@ -139,8 +172,7 @@ impl DataSourceConnection {
             schema: Some("public".to_string()),
             username: Some(username.into()),
             password,
-            file_path: None,
-            file_storage_type: None,
+            ..Default::default()
         }
     }
 }

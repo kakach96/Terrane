@@ -299,8 +299,7 @@ pub async fn test_data_source_connection(
                     schema: Some(pg.schema.clone()),
                     username: Some(pg.user.clone()),
                     password: Some(pg.password.clone()),
-                    file_path: None,
-                    file_storage_type: None,
+                    ..Default::default()
                 }),
                 created: None,
                 modified: None,
@@ -429,8 +428,7 @@ pub async fn get_data_source_tables(
                 schema: Some(mc.postgres.schema.clone()),
                 username: Some(mc.postgres.user.clone()),
                 password: Some(mc.postgres.password.clone()),
-                file_path: None,
-                file_storage_type: None,
+                ..Default::default()
             };
             let pool = state.get_pg_pool(METADATA_DATA_SOURCE, &conn);
             let tables = list_postgis_tables_from_pool(&pool, &conn).await;
@@ -450,17 +448,21 @@ pub async fn get_data_source_tables(
                 );
 
                 if data_source.data_source_type == DataSourceType::Geopackage {
-                    // GeoPackage: 列出文件中的要素表
-                    let file_path = data_source
-                        .connection
-                        .as_ref()
-                        .and_then(|c| c.file_path.clone())
-                        .ok_or_else(|| {
+                    // GeoPackage: 列出文件中的要素表 (local / s3)
+                    let conn = data_source.connection.as_ref().ok_or_else(|| {
+                        GeoServerError::BadRequest(
+                            "GeoPackage data source has no connection".to_string(),
+                        )
+                    })?;
+                    let materialized = crate::store::materialize_file(conn).await?.ok_or_else(
+                        || {
                             GeoServerError::BadRequest(
                                 "GeoPackage data source has no file path".to_string(),
                             )
-                        })?;
-                    let tables = crate::utils::geopackage::read_geopackage_layers(&file_path)
+                        },
+                    )?;
+                    let local_path = materialized.path.to_string_lossy().to_string();
+                    let tables = crate::utils::geopackage::read_geopackage_layers(&local_path)
                         .map(|layers| {
                             layers
                                 .iter()
@@ -646,20 +648,20 @@ pub async fn get_layer_feature_type(
                 ))
             }
         } else if data_source.data_source_type == DataSourceType::Geopackage {
-            // GeoPackage: 从 .gpkg 文件的要素表读取列定义
+            // GeoPackage: 从 .gpkg 文件的要素表读取列定义 (local / s3)
             let table_name = layer.native_name.as_ref().ok_or_else(|| {
                 GeoServerError::BadRequest("Layer has no native table name configured".to_string())
             })?;
-            let file_path = data_source
-                .connection
-                .as_ref()
-                .and_then(|c| c.file_path.clone())
-                .ok_or_else(|| {
-                    GeoServerError::BadRequest(
-                        "GeoPackage data source has no file path".to_string(),
-                    )
-                })?;
-            let columns = get_geopackage_table_columns(&file_path, table_name)
+            let conn = data_source.connection.as_ref().ok_or_else(|| {
+                GeoServerError::BadRequest(
+                    "GeoPackage data source has no connection".to_string(),
+                )
+            })?;
+            let materialized = crate::store::materialize_file(conn).await?.ok_or_else(|| {
+                GeoServerError::BadRequest("GeoPackage data source has no file path".to_string())
+            })?;
+            let local_path = materialized.path.to_string_lossy().to_string();
+            let columns = get_geopackage_table_columns(&local_path, table_name)
                 .await
                 .map_err(|e| {
                     GeoServerError::BadRequest(format!("Failed to read GeoPackage: {}", e))

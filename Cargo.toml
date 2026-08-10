@@ -57,6 +57,9 @@ async-trait = "0.1"
 # zlib 压缩 (WMS PDF 输出内嵌 FlateDecode 图像)
 flate2 = "1"
 proj4rs = { version = "0.1.10", features = ["crs-definitions"] }
+# S3 对象存储 (AWS S3 / MinIO 等 S3 兼容服务); http-credentials 启用
+# Credentials::new 以便按数据源传入 access/secret key
+rust-s3 = { version = "0.34", features = ["http-credentials"] }
 
 [dev-dependencies]
 actix-rt = "2"

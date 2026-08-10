@@ -13,6 +13,18 @@ use async_trait::async_trait;
 
 use crate::store::StoreError;
 
+/// A directory-listing entry returned by the browse endpoints.
+///
+/// - Local browse: `path` is an absolute filesystem path.
+/// - S3 browse: `path` is the object key / common prefix.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StoreEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: u64,
+}
+
 /// File store abstraction — raw file byte persistence.
 ///
 /// Implement this trait (e.g. an S3/MinIO backend) to add a new backend; the

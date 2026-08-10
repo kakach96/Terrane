@@ -21,17 +21,24 @@ pub async fn handle_wcs_request(
     }
 }
 
-/// 解析栅格文件的本地路径: 数据源连接里记录的 file_path 即文件位置
-/// (本地存储后端); 对象存储后端 ("s3"/"oss") 预留, 后续经 FileStore 解析。
-fn resolve_raster_path(
-    _state: &AppState,
-    _ds_name: &str,
-    conn_file_path: Option<&String>,
-) -> Option<std::path::PathBuf> {
-    conn_file_path.map(|f| std::path::PathBuf::from(f))
+/// 解析栅格数据源文件到本地路径 (支持 local / s3)。
+///
+/// WorldImage 需要读取 .wld 世界文件伴生对象, 走 `materialize_dir`;
+/// GeoTIFF / ArcGrid 单文件, 走 `materialize_file`。
+async fn materialize_raster(
+    conn: &crate::models::DataSourceConnection,
+    ds_type: &DataSourceType,
+) -> Result<Option<crate::store::file_resolver::MaterializedFile>, GeoServerError> {
+    match ds_type {
+        DataSourceType::WorldImage => crate::store::materialize_dir(conn).await,
+        _ => crate::store::materialize_file(conn).await,
+    }
 }
 
-/// 从数据源中查找栅格覆盖数据 (GeoTIFF / WorldImage / ArcGrid)
+/// 从数据源中查找栅格覆盖数据 (GeoTIFF / WorldImage / ArcGrid)。
+///
+/// local 后端要求文件真实存在; s3 后端乐观纳入 (真实读取在 GetCoverage
+/// 时经 materialize 校验), 避免每次 GetCapabilities 都下载对象。
 async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::path::PathBuf)> {
     let mut coverages = Vec::new();
 
@@ -43,11 +50,15 @@ async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::pa
                     || ds.data_source_type == DataSourceType::ArcGrid
                 {
                     if let Some(conn) = &ds.connection {
-                        if let Some(path) =
-                            resolve_raster_path(state, &ds.name, conn.file_path.as_ref())
-                        {
-                            if path.exists() {
-                                coverages.push((ds.name.clone(), ds.name.clone(), path));
+                        if let Some(file_path) = conn.file_path.as_ref() {
+                            let is_local = crate::store::storage_type(conn) == "local";
+                            let exists = !is_local || std::path::Path::new(file_path).exists();
+                            if exists {
+                                coverages.push((
+                                    ds.name.clone(),
+                                    ds.name.clone(),
+                                    std::path::PathBuf::from(file_path),
+                                ));
                             }
                         }
                     }
@@ -105,9 +116,10 @@ async fn handle_describe_coverage(
         if let Some(store) = &state.store {
             if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
                 if let Some(conn) = &ds.connection {
-                    if let Some(path) =
-                        resolve_raster_path(state, &ds.name, conn.file_path.as_ref())
+                    if let Ok(Some(materialized)) =
+                        materialize_raster(conn, &ds.data_source_type).await
                     {
+                        let path = materialized.path;
                         match ds.data_source_type {
                             DataSourceType::Geotiff => {
                                 if let Ok(meta) = geotiff::read_geotiff_metadata(&path) {
@@ -206,9 +218,10 @@ async fn handle_get_coverage(
                 || ds.data_source_type == DataSourceType::ArcGrid;
             if is_raster {
                 if let Some(conn) = &ds.connection {
-                    if let Some(path) =
-                        resolve_raster_path(state, &ds.name, conn.file_path.as_ref())
+                    if let Ok(Some(materialized)) =
+                        materialize_raster(conn, &ds.data_source_type).await
                     {
+                        let path = materialized.path;
                         info!("[WCS] 从 {:?} 读取覆盖: {:?}", ds.data_source_type, path);
                         match ds.data_source_type {
                             DataSourceType::Geotiff => {

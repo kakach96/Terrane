@@ -58,13 +58,13 @@ pub async fn query_layer_features(
                 return Ok(Vec::new());
             },
             DataSourceType::Shapefile => {
-                return query_shapefile_features(ds, bbox, limit, offset);
+                return query_shapefile_features(ds, bbox, limit, offset).await;
             },
             DataSourceType::GeoJson => {
-                return query_geojson_features(ds, bbox, limit, offset);
+                return query_geojson_features(ds, bbox, limit, offset).await;
             },
             DataSourceType::Geopackage => {
-                return query_geopackage_features(ds, bbox, limit, offset);
+                return query_geopackage_features(ds, bbox, limit, offset).await;
             },
             DataSourceType::Geotiff => {
                 info!(
@@ -133,8 +133,7 @@ pub(crate) fn builtin_metadata_data_source(state: &AppState) -> Option<DataSourc
                 schema: Some(pg.schema.clone()),
                 username: Some(pg.user.clone()),
                 password: Some(pg.password.clone()),
-                file_path: None,
-                file_storage_type: None,
+                ..Default::default()
             }),
             created: None,
             modified: None,
@@ -154,9 +153,8 @@ pub(crate) fn builtin_metadata_data_source(state: &AppState) -> Option<DataSourc
 
 /// 从 GeoJSON 数据源查询要素。
 ///
-/// 仅支持 `file_storage_type = "local"` 的本地文件; 对象存储后端
-/// ("s3" / "oss") 预留, 未实现时返回明确错误。
-fn query_geojson_features(
+/// 从 GeoJSON 数据源查询要素 (支持 local / s3)。
+async fn query_geojson_features(
     ds: &crate::models::DataSource,
     bbox: Option<&Bounds>,
     limit: Option<u64>,
@@ -170,18 +168,14 @@ fn query_geojson_features(
         .file_path
         .as_ref()
         .ok_or_else(|| GeoServerError::BadRequest("GeoJSON 数据源缺少文件路径".to_string()))?;
-    let storage = conn.file_storage_type.as_deref().unwrap_or("local");
-    if storage != "local" {
-        return Err(GeoServerError::NotImplemented(format!(
-            "GeoJSON 对象存储后端 '{}' 尚未实现, 请使用本地文件 (local)",
-            storage
-        )));
-    }
 
     info!("[Features] 从 GeoJSON 读取要素: {}", file_path);
 
-    let raw = std::fs::read_to_string(file_path)
-        .map_err(|e| GeoServerError::InternalError(format!("读取 GeoJSON 失败: {}", e)))?;
+    let bytes = crate::store::read_bytes(conn).await?.ok_or_else(|| {
+        GeoServerError::NotFound(format!("GeoJSON 文件不存在: {}", file_path))
+    })?;
+    let raw = String::from_utf8(bytes)
+        .map_err(|e| GeoServerError::InternalError(format!("GeoJSON 编码错误: {}", e)))?;
     let root: serde_json::Value = serde_json::from_str(&raw)
         .map_err(|e| GeoServerError::InternalError(format!("解析 GeoJSON 失败: {}", e)))?;
 
@@ -211,22 +205,28 @@ fn query_geojson_features(
     Ok(filtered)
 }
 
-/// 从 Shapefile 数据源查询要素
-fn query_shapefile_features(
+/// 从 Shapefile 数据源查询要素 (支持 local / s3)。
+async fn query_shapefile_features(
     ds: &crate::models::DataSource,
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     offset: Option<u64>,
 ) -> Result<Vec<Feature>, GeoServerError> {
-    let file_path = ds
+    let conn = ds
         .connection
         .as_ref()
-        .and_then(|c| c.file_path.as_ref())
+        .ok_or_else(|| GeoServerError::BadRequest("Shapefile 数据源缺少连接信息".to_string()))?;
+    let file_path = conn
+        .file_path
+        .as_ref()
         .ok_or_else(|| GeoServerError::BadRequest("Shapefile 数据源缺少文件路径".to_string()))?;
 
     info!("[Features] 从 Shapefile 读取要素: {}", file_path);
 
-    let result = crate::utils::shapefile::read_shapefile(file_path)
+    let materialized = crate::store::materialize_dir(conn).await?.ok_or_else(|| {
+        GeoServerError::NotFound(format!("Shapefile 文件不存在: {}", file_path))
+    })?;
+    let result = crate::utils::shapefile::read_shapefile(&materialized.path)
         .map_err(|e| GeoServerError::InternalError(format!("读取 Shapefile 失败: {}", e)))?;
 
     let mut features = result.features;
@@ -393,23 +393,31 @@ async fn get_geometry_column(
     None
 }
 
-/// 从 GeoPackage 查询要素
-fn query_geopackage_features(
+/// 从 GeoPackage 查询要素 (支持 local / s3)。
+async fn query_geopackage_features(
     ds: &crate::models::DataSource,
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     offset: Option<u64>,
 ) -> Result<Vec<Feature>, GeoServerError> {
-    let file_path = ds
+    let conn = ds
         .connection
         .as_ref()
-        .and_then(|c| c.file_path.as_ref())
+        .ok_or_else(|| GeoServerError::BadRequest("GeoPackage 数据源缺少连接信息".to_string()))?;
+    let file_path = conn
+        .file_path
+        .as_ref()
         .ok_or_else(|| GeoServerError::BadRequest("GeoPackage 数据源缺少文件路径".to_string()))?;
 
     info!("[Features] 从 GeoPackage 读取要素: {}", file_path);
 
+    let materialized = crate::store::materialize_file(conn).await?.ok_or_else(|| {
+        GeoServerError::NotFound(format!("GeoPackage 文件不存在: {}", file_path))
+    })?;
+    let local_path = materialized.path.as_path();
+
     // 读取所有图层（取第一个有数据的图层）
-    let layers = crate::utils::geopackage::read_geopackage_layers(file_path)
+    let layers = crate::utils::geopackage::read_geopackage_layers(local_path)
         .map_err(|e| GeoServerError::InternalError(format!("读取 GeoPackage 失败: {}", e)))?;
 
     if layers.is_empty() {
@@ -421,7 +429,7 @@ fn query_geopackage_features(
     // 使用第一个图层
     let first_layer = &layers[0];
     let result = crate::utils::geopackage::read_geopackage_layer_features(
-        file_path,
+        local_path,
         &first_layer.table_name,
         limit,
     )

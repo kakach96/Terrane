@@ -18,7 +18,7 @@
 | Web framework   | Actix-web                 | High-throughput async HTTP, mature middleware (CORS, multipart), clean route/scope model          |
 | Async runtime   | Tokio                     | Industry-standard async runtime (`full` features: signals, timers, filesystem, IO)                |
 | Metadata store  | SQLite / PostgreSQL       | SQLite: zero-config standalone; PostgreSQL: HA + PostGIS spatial types for cluster deployments    |
-| Data sources    | Per-datasource file backends (local / s3 / oss reserved) | File data sources record `file_path` + `file_storage_type`; PostGIS via deadpool pools; object storage reserved via `FileStore` |
+| Data sources    | Per-datasource file backends (local / s3) | File data sources record `file_path` + `file_storage_type` + `s3_*`; PostGIS via deadpool pools; S3 via `S3FileStore` (rust-s3) |
 | Cache store     | Local disk (tile) + in-memory (session)  | Tile cache on disk with TTL; session fast-path in memory; future Redis backend                 |
 | Geometry        | geo / geo-types           | Pure-Rust geometry model and spatial predicates                                                   |
 | Raster rendering| image                     | Pure-Rust image encode/decode (PNG/JPEG map output, GeoTIFF read)                                 |
@@ -33,8 +33,15 @@ Terrane is a **read-only data publishing platform**: business data lives in exte
 stores (PostGIS tables / data files) registered **per data source** in the metadata
 store (workspaces, data sources, layer definitions, styles, permissions). The
 configuration file only keeps `[metadata]` (SQLite / PostgreSQL); file data sources
-record `file_path` + `file_storage_type` (local / s3 / oss — object-storage backends
-reserved via `FileStore`). Tile + session cache stay local by default. This keeps the
+record `file_path` + `file_storage_type` (`local` / `s3` / `oss`). `local` stores the
+absolute path on the server; `s3` stores an object key and carries `s3_endpoint` /
+`s3_region` / `s3_bucket` / `s3_access_key` / `s3_secret_key` (persisted in
+`data_sources`). Reads are routed through `src/store/file_resolver.rs`: GeoJSON is
+streamed from bytes, multi-file formats (Shapefile / WorldImage) and raster readers
+(GeoPackage / GeoTIFF / ArcGrid / WCS) materialize the objects to a temp file when they
+need a filesystem path. Browse endpoints (`GET /data-sources/browse` + `POST
+/data-sources/s3/browse`) power the frontend directory picker. Tile + session cache
+stay local by default. This keeps the
 "structured data → database, raster → file storage, session/cache → Redis" scaling
 vision without a complex multi-section config.
 

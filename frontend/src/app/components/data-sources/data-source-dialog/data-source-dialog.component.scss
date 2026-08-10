@@ -34,4 +34,16 @@
     color: var(--text-secondary);
     font-size: 13px;
   }
+
+  .browse-row {
+    align-items: center;
+
+    .flex-field {
+      flex: 1;
+
+      input {
+        cursor: pointer;
+      }
+    }
+  }
 }

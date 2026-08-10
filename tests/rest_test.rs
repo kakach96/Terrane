@@ -386,6 +386,60 @@ async fn test_rest_data_sources_crud() {
     );
 }
 
+#[actix_rt::test]
+async fn test_browse_local_directory() {
+    let app = build_test_app!();
+
+    // 建一个临时目录, 内含子目录与文件
+    let dir = std::env::temp_dir().join(format!("terrane-browse-{}", std::process::id()));
+    let sub = dir.join("subdir");
+    std::fs::create_dir_all(&sub).unwrap();
+    std::fs::write(dir.join("a.geojson"), b"{}").unwrap();
+    std::fs::write(sub.join("b.txt"), b"hi").unwrap();
+
+    // Windows 路径用正斜杠编码进查询串
+    let url = format!(
+        "/geoserver/data-sources/browse?path={}",
+        dir.to_string_lossy().replace('\\', "/")
+    );
+    let req = test::TestRequest::get().uri(&url).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "本地浏览应返回 200");
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let entries = body["data"]["entries"].as_array().unwrap();
+    // 目录优先排序, 应同时包含子目录与文件
+    assert!(
+        entries
+            .iter()
+            .any(|e| e["name"] == "subdir" && e["is_dir"].as_bool() == Some(true)),
+        "应包含子目录 subdir"
+    );
+    assert!(
+        entries
+            .iter()
+            .any(|e| e["name"] == "a.geojson" && e["is_dir"].as_bool() == Some(false)),
+        "应包含文件 a.geojson"
+    );
+
+    // 子目录浏览
+    let url2 = format!(
+        "/geoserver/data-sources/browse?path={}",
+        sub.to_string_lossy().replace('\\', "/")
+    );
+    let req2 = test::TestRequest::get().uri(&url2).to_request();
+    let resp2 = test::call_service(&app, req2).await;
+    assert!(resp2.status().is_success(), "子目录浏览应返回 200");
+    let body2: serde_json::Value = test::read_body_json(resp2).await;
+    let entries2 = body2["data"]["entries"].as_array().unwrap();
+    assert!(
+        entries2.iter().any(|e| e["name"] == "b.txt"),
+        "子目录应包含 b.txt"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 // ---------------------------------------------------------------------------
 // MVT vector tiles
 // ---------------------------------------------------------------------------

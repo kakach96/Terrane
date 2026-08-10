@@ -76,6 +76,13 @@ impl SqliteStore {
                 database_name TEXT,
                 username TEXT,
                 password TEXT,
+                file_path TEXT,
+                file_storage_type TEXT DEFAULT 'local',
+                s3_endpoint TEXT,
+                s3_region TEXT,
+                s3_bucket TEXT,
+                s3_access_key TEXT,
+                s3_secret_key TEXT,
                 created TEXT,
                 modified TEXT
             )",
@@ -101,6 +108,22 @@ impl SqliteStore {
                 "ALTER TABLE data_sources ADD COLUMN file_storage_type TEXT DEFAULT 'local'",
                 [],
             )?;
+        }
+
+        // 检查并添加 S3 对象存储列 (file_storage_type = "s3" 时使用)
+        for s3_col in [
+            "s3_endpoint",
+            "s3_region",
+            "s3_bucket",
+            "s3_access_key",
+            "s3_secret_key",
+        ] {
+            if !column_exists(conn, "data_sources", s3_col) {
+                conn.execute(
+                    &format!("ALTER TABLE data_sources ADD COLUMN {} TEXT", s3_col),
+                    [],
+                )?;
+            }
         }
 
         conn.execute(
@@ -492,6 +515,7 @@ impl SqliteStore {
         row: &rusqlite::Row,
         has_schema: bool,
         has_file: bool,
+        has_s3: bool,
     ) -> rusqlite::Result<DataSource> {
         let host: Option<String> = row.get(4)?;
         let port: Option<u16> = row.get(5)?;
@@ -505,7 +529,11 @@ impl SqliteStore {
         };
 
         let (user_idx, pass_idx, file_path_idx, file_storage_idx, created_idx, modified_idx) =
-            if has_file {
+            if has_s3 {
+                // name,type,ws,enabled,host,port,db,schema,user,pass,file_path,file_storage,
+                // s3_endpoint,s3_region,s3_bucket,s3_access_key,s3_secret_key,created,modified
+                (8, 9, 10, 11, 17, 18)
+            } else if has_file {
                 // name,type,workspace,enabled,host,port,db,schema,user,pass,file_path,file_storage,created,modified
                 (8, 9, 10, 11, 12, 13)
             } else if has_schema {
@@ -534,6 +562,18 @@ impl SqliteStore {
             None
         };
 
+        let (s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key) = if has_s3 {
+            (
+                row.get(12)?,
+                row.get(13)?,
+                row.get(14)?,
+                row.get(15)?,
+                row.get(16)?,
+            )
+        } else {
+            (None, None, None, None, None)
+        };
+
         let created: Option<String> = row.get(created_idx)?;
         let modified: Option<String> = row.get(modified_idx)?;
 
@@ -551,6 +591,11 @@ impl SqliteStore {
                 password,
                 file_path,
                 file_storage_type: file_storage,
+                s3_endpoint,
+                s3_region,
+                s3_bucket,
+                s3_access_key,
+                s3_secret_key,
             }),
             created,
             modified,
@@ -562,8 +607,12 @@ impl SqliteStore {
 
         let has_schema = column_exists(&conn, "data_sources", "schema_name");
         let has_file = column_exists(&conn, "data_sources", "file_path");
+        let has_s3 = column_exists(&conn, "data_sources", "s3_bucket");
 
-        let sql = if has_file {
+        let sql = if has_s3 {
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, created, modified
+             FROM data_sources WHERE name = ?"
+        } else if has_file {
             "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, created, modified
              FROM data_sources WHERE name = ?"
         } else if has_schema {
@@ -577,7 +626,12 @@ impl SqliteStore {
         let mut stmt = conn.prepare(sql)?;
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
-            Ok(Some(Self::row_to_data_source(row, has_schema, has_file)?))
+            Ok(Some(Self::row_to_data_source(
+                row,
+                has_schema,
+                has_file,
+                has_s3,
+            )?))
         } else {
             Ok(None)
         }
@@ -588,8 +642,12 @@ impl SqliteStore {
 
         let has_schema = column_exists(&conn, "data_sources", "schema_name");
         let has_file = column_exists(&conn, "data_sources", "file_path");
+        let has_s3 = column_exists(&conn, "data_sources", "s3_bucket");
 
-        let sql = if has_file {
+        let sql = if has_s3 {
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, created, modified
+             FROM data_sources ORDER BY name"
+        } else if has_file {
             "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, created, modified
              FROM data_sources ORDER BY name"
         } else if has_schema {
@@ -603,8 +661,9 @@ impl SqliteStore {
         let mut stmt = conn.prepare(sql)?;
         let has_schema_ref = has_schema;
         let has_file_ref = has_file;
+        let has_s3_ref = has_s3;
         let rows = stmt.query_map([], move |row| {
-            Self::row_to_data_source(row, has_schema_ref, has_file_ref)
+            Self::row_to_data_source(row, has_schema_ref, has_file_ref, has_s3_ref)
         })?;
 
         rows.collect()
@@ -622,8 +681,35 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
 
         let has_file = column_exists(&conn, "data_sources", "file_path");
+        let has_s3 = column_exists(&conn, "data_sources", "s3_bucket");
 
-        if has_file {
+        if has_s3 {
+            conn.execute(
+                "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, created, modified)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    name,
+                    format!("{}", data_source_type).to_lowercase(),
+                    workspace,
+                    enabled as i32,
+                    connection.host,
+                    connection.port,
+                    connection.database,
+                    connection.schema,
+                    connection.username,
+                    connection.password,
+                    connection.file_path,
+                    connection.file_storage_type,
+                    connection.s3_endpoint,
+                    connection.s3_region,
+                    connection.s3_bucket,
+                    connection.s3_access_key,
+                    connection.s3_secret_key,
+                    now.clone(),
+                    now
+                ],
+            )?;
+        } else if has_file {
             conn.execute(
                 "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, created, modified)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -688,6 +774,7 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
 
         let has_file = column_exists(&conn, "data_sources", "file_path");
+        let has_s3 = column_exists(&conn, "data_sources", "s3_bucket");
 
         let mut updates: Vec<String> = vec!["modified = ?".to_string()];
         let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now)];
@@ -722,6 +809,18 @@ impl SqliteStore {
                 values.push(Box::new(c.file_path));
                 updates.push("file_storage_type = ?".to_string());
                 values.push(Box::new(c.file_storage_type));
+            }
+            if has_s3 {
+                updates.push("s3_endpoint = ?".to_string());
+                values.push(Box::new(c.s3_endpoint));
+                updates.push("s3_region = ?".to_string());
+                values.push(Box::new(c.s3_region));
+                updates.push("s3_bucket = ?".to_string());
+                values.push(Box::new(c.s3_bucket));
+                updates.push("s3_access_key = ?".to_string());
+                values.push(Box::new(c.s3_access_key));
+                updates.push("s3_secret_key = ?".to_string());
+                values.push(Box::new(c.s3_secret_key));
             }
         }
 

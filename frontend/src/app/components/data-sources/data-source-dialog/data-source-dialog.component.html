@@ -81,33 +81,128 @@
 
       <h3 class="section-title">文件配置</h3>
 
-      <mat-form-field class="form-field" *ngIf="mode === 'edit' || selectedType === 'geojson'">
-        <mat-label>文件路径</mat-label>
-        <input matInput formControlName="file_path" placeholder="数据文件路径" />
-      </mat-form-field>
-
+      <!-- 存储类型下拉 (放在文件配置最前) -->
       <mat-form-field class="form-field">
         <mat-label>存储类型</mat-label>
         <mat-select formControlName="file_storage_type">
-          <mat-option *ngFor="let st of fileStorageTypes" [value]="st.value">
+          <mat-option
+            *ngFor="let st of fileStorageTypes"
+            [value]="st.value"
+            [matTooltip]="st.description"
+            matTooltipPosition="right"
+          >
             {{ st.label }}
           </mat-option>
         </mat-select>
       </mat-form-field>
 
-      <div class="form-row file-upload-row" *ngIf="mode === 'create' && selectedType !== 'geojson'">
-        <input
-          #fileInput
-          type="file"
-          (change)="onFileSelected($event)"
-          accept=".zip,.tif,.tiff"
-          class="file-input"
-        />
-        <button type="button" mat-raised-button color="accent" (click)="fileInput.click()">
-          <mat-icon>upload_file</mat-icon> 选择文件
-        </button>
-        <span class="file-name">{{ selectedFile ? selectedFile.name : '未选择文件' }}</span>
-      </div>
+      <!-- 嵌入 (使用服务器本地目录) -->
+      <ng-container *ngIf="!isS3">
+        <div class="form-row browse-row">
+          <mat-form-field class="form-field flex-field">
+            <mat-label>文件路径</mat-label>
+            <input
+              matInput
+              formControlName="file_path"
+              placeholder="点击选择服务器目录或文件"
+              readonly
+              (click)="browseLocal()"
+            />
+          </mat-form-field>
+          <button
+            type="button"
+            mat-icon-button
+            matTooltip="浏览服务器目录"
+            aria-label="浏览服务器目录"
+            (click)="browseLocal()"
+          >
+            <mat-icon>folder_open</mat-icon>
+          </button>
+        </div>
+
+        <div
+          class="form-row file-upload-row"
+          *ngIf="mode === 'create' && selectedType !== 'geojson'"
+        >
+          <input
+            #fileInput
+            type="file"
+            (change)="onFileSelected($event)"
+            accept=".zip,.tif,.tiff"
+            class="file-input"
+          />
+          <button type="button" mat-raised-button color="accent" (click)="fileInput.click()">
+            <mat-icon>upload_file</mat-icon> 选择文件
+          </button>
+          <span class="file-name">{{ selectedFile ? selectedFile.name : '未选择文件' }}</span>
+        </div>
+      </ng-container>
+
+      <!-- S3 (使用对象存储目录) -->
+      <ng-container *ngIf="isS3">
+        <div class="form-row">
+          <mat-form-field class="form-field">
+            <mat-label>Endpoint</mat-label>
+            <input
+              matInput
+              formControlName="s3_endpoint"
+              placeholder="http://localhost:9000 (MinIO)"
+            />
+          </mat-form-field>
+
+          <mat-form-field class="form-field">
+            <mat-label>Region</mat-label>
+            <input matInput formControlName="s3_region" placeholder="us-east-1" />
+          </mat-form-field>
+        </div>
+
+        <mat-form-field class="form-field">
+          <mat-label>Bucket *</mat-label>
+          <input matInput formControlName="s3_bucket" placeholder="bucket 名称" required />
+          <mat-error *ngIf="isS3 && !form.get('s3_bucket')?.value">
+            请填写 S3 bucket 名称
+          </mat-error>
+        </mat-form-field>
+
+        <div class="form-row">
+          <mat-form-field class="form-field">
+            <mat-label>Access Key</mat-label>
+            <input matInput formControlName="s3_access_key" placeholder="访问密钥" />
+          </mat-form-field>
+
+          <mat-form-field class="form-field">
+            <mat-label>Secret Key</mat-label>
+            <input
+              matInput
+              formControlName="s3_secret_key"
+              type="password"
+              placeholder="私有密钥"
+            />
+          </mat-form-field>
+        </div>
+
+        <div class="form-row browse-row">
+          <mat-form-field class="form-field flex-field">
+            <mat-label>已选对象 / 前缀</mat-label>
+            <input
+              matInput
+              formControlName="file_path"
+              placeholder="点击选择 S3 对象或前缀"
+              readonly
+              (click)="browseS3()"
+            />
+          </mat-form-field>
+          <button
+            type="button"
+            mat-icon-button
+            matTooltip="浏览 S3 目录"
+            aria-label="浏览 S3 目录"
+            (click)="browseS3()"
+          >
+            <mat-icon>folder_open</mat-icon>
+          </button>
+        </div>
+      </ng-container>
 
       <div class="form-row">
         <mat-slide-toggle formControlName="enabled"> 启用数据源 </mat-slide-toggle>

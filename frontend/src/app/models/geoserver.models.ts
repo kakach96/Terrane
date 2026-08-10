@@ -140,6 +140,36 @@ export interface DataSourceConnection {
   // 文件型字段
   file_path?: string;
   file_storage_type?: string;
+  // S3 对象存储字段 (file_storage_type = 's3' 时生效)
+  s3_endpoint?: string;
+  s3_region?: string;
+  s3_bucket?: string;
+  s3_access_key?: string;
+  s3_secret_key?: string;
+}
+
+/** 目录浏览返回的条目 (本地目录 / S3 对象) */
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+}
+
+/** 目录浏览响应 (本地与 S3 共用) */
+export interface BrowseResponse {
+  path: string;
+  entries: FileEntry[];
+}
+
+/** S3 目录浏览请求体 (携带连接配置与要列出的前缀) */
+export interface S3BrowseRequest {
+  s3_endpoint?: string;
+  s3_region?: string;
+  s3_bucket?: string;
+  s3_access_key?: string;
+  s3_secret_key?: string;
+  prefix?: string;
 }
 
 export interface CreateDataSourceRequest {

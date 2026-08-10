@@ -25,6 +25,8 @@ import {
   CreateDataSourceRequest,
   UpdateDataSourceRequest,
   ConnectionTestResult,
+  FileEntry,
+  S3BrowseRequest,
   UploadResult,
   LayerGroup,
   MonitorStats,
@@ -339,6 +341,27 @@ export class GeoserverService {
     return this.http
       .get<ApiResponse<string[]>>(`${this.apiUrl}/data-sources/${dataSourceName}/tables`)
       .pipe(map((response) => response.data || []));
+  }
+
+  /** 浏览服务器本地目录 (目录 + 文件) */
+  browseLocalDirectory(path?: string): Observable<FileEntry[]> {
+    const params = new HttpParams().set('path', path || '');
+    return this.http
+      .get<ApiResponse<{ path: string; entries: FileEntry[] }>>(
+        `${this.apiUrl}/data-sources/browse`,
+        { params },
+      )
+      .pipe(map((response) => response.data?.entries || []));
+  }
+
+  /** 浏览 S3 bucket 目录 (携带连接配置) */
+  browseS3Directory(request: S3BrowseRequest): Observable<FileEntry[]> {
+    return this.http
+      .post<ApiResponse<{ path: string; entries: FileEntry[] }>>(
+        `${this.apiUrl}/data-sources/s3/browse`,
+        request,
+      )
+      .pipe(map((response) => response.data?.entries || []));
   }
 
   getStyles(): Observable<StyleInfo[]> {

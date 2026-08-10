@@ -1,14 +1,18 @@
 pub mod cache;
 pub mod error;
+pub mod file_resolver;
 pub mod file_store;
 pub mod postgres_store;
+pub mod s3_file_store;
 pub mod sqlite_store;
 pub mod types;
 
 pub use cache::{build_session_cache, SessionCache};
 pub use error::StoreError;
-pub use file_store::{FileStore, LocalFileStore};
+pub use file_resolver::{materialize_dir, materialize_file, read_bytes, storage_type};
+pub use file_store::{FileStore, LocalFileStore, StoreEntry};
 pub use postgres_store::PostgresStore;
+pub use s3_file_store::S3FileStore;
 pub use sqlite_store::SqliteStore;
 pub use types::{
     AuditLogRecord, Layer, LayerGroupRecord, NamespaceRecord, SessionRecord, StyleRecord, Workspace,

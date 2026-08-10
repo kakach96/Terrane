@@ -167,6 +167,7 @@ mod tests {
             password: None,
             file_path: None,
             file_storage_type: Some("local".to_string()),
+            ..Default::default()
         }
     }
 

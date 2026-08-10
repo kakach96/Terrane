@@ -18,6 +18,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
@@ -39,6 +40,7 @@ import { WorkspacesComponent } from './components/workspaces/workspaces.componen
 import { WorkspaceDialogComponent } from './components/workspaces/workspace-dialog.component';
 import { DataSourcesComponent } from './components/data-sources/data-sources.component';
 import { DataSourceDialogComponent } from './components/data-sources/data-source-dialog/data-source-dialog.component';
+import { DirectoryBrowserComponent } from './components/shared/directory-browser/directory-browser.component';
 import { TileLayersComponent } from './components/tile-layers/tile-layers.component';
 import { StylesComponent } from './components/styles/styles.component';
 import { StyleEditorDialogComponent } from './components/styles/style-editor-dialog.component';
@@ -80,6 +82,7 @@ const routes: Routes = [
     WorkspaceDialogComponent,
     DataSourcesComponent,
     DataSourceDialogComponent,
+    DirectoryBrowserComponent,
     TileLayersComponent,
     StylesComponent,
     StyleEditorDialogComponent,
@@ -111,6 +114,7 @@ const routes: Routes = [
     MatDialogModule,
     MatSnackBarModule,
     MatProgressSpinnerModule,
+    MatProgressBarModule,
     MatChipsModule,
     MatTooltipModule,
     MatDividerModule,

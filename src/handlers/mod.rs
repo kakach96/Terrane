@@ -1,5 +1,6 @@
 pub mod auth_handler;
 pub mod backup_handler;
+pub mod browse_handler;
 pub mod csw_handler;
 pub mod data_source_handler;
 pub mod feature_handler;
@@ -31,6 +32,7 @@ pub mod wps_handler;
 
 pub use auth_handler::*;
 pub use backup_handler::*;
+pub use browse_handler::*;
 pub use csw_handler::*;
 pub use data_source_handler::*;
 pub use feature_handler::*;
