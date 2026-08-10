@@ -10,6 +10,30 @@
 
       <mat-nav-list class="nav-menu">
         <ng-container *ngIf="auth.isLoggedIn()">
+          <!-- 服务（已实现服务总览，默认首页） -->
+          <div class="nav-group" [class.open]="isGroupOpen('services')">
+            <div
+              class="nav-group-header"
+              role="button"
+              tabindex="0"
+              (click)="toggleGroup('services')"
+              (keydown.enter)="toggleGroup('services')"
+              (keydown.space)="toggleGroup('services')"
+            >
+              <mat-icon class="group-icon">dns</mat-icon>
+              <span>服务</span>
+              <mat-icon class="group-arrow">{{
+                isGroupOpen('services') ? 'expand_more' : 'chevron_right'
+              }}</mat-icon>
+            </div>
+            <div class="nav-group-body" [class.collapsed]="!isGroupOpen('services')">
+              <a mat-list-item routerLink="/services" routerLinkActive="active">
+                <mat-icon matListItemIcon>hub</mat-icon>
+                <span matListItemTitle>服务概览</span>
+              </a>
+            </div>
+          </div>
+
           <!-- 数据（对标 GeoServer「数据」菜单） -->
           <div class="nav-group" [class.open]="isGroupOpen('data')">
             <div

@@ -29,6 +29,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 
 import { AppComponent } from './app.component';
+import { ServicesComponent } from './components/services/services.component';
 import { LayersComponent } from './components/layers/layers.component';
 import { LayerDetailComponent } from './components/layer-detail/layer-detail.component';
 import { LayerCreateComponent } from './components/layer-create/layer-create.component';
@@ -50,7 +51,8 @@ import { PermissionsComponent } from './components/permissions/permissions.compo
 import { AuthInterceptor } from './services/auth.interceptor';
 
 const routes: Routes = [
-  { path: '', redirectTo: '/layer-preview', pathMatch: 'full' },
+  { path: '', redirectTo: '/services', pathMatch: 'full' },
+  { path: 'services', component: ServicesComponent },
   { path: 'workspaces', component: WorkspacesComponent },
   { path: 'data-sources', component: DataSourcesComponent },
   { path: 'layers', component: LayersComponent },
@@ -68,6 +70,7 @@ const routes: Routes = [
 @NgModule({
   declarations: [
     AppComponent,
+    ServicesComponent,
     LayersComponent,
     LayerDetailComponent,
     LayerCreateComponent,

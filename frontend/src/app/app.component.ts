@@ -16,6 +16,7 @@ export class AppComponent implements OnInit {
   sidenavOpened = true;
 
   private menuTitles: { [key: string]: string } = {
+    '/services': '服务概览',
     '/workspaces': '工作空间',
     '/data-sources': '数据源',
     '/layers': '图层',
@@ -30,6 +31,7 @@ export class AppComponent implements OnInit {
 
   // 导航分组展开状态（对标 GeoServer 菜单分组）
   private navGroups: { [key: string]: boolean } = {
+    services: true,
     data: true,
     tiles: true,
     server: true,

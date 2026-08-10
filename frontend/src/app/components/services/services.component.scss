@@ -1,0 +1,203 @@
+.services-page {
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  // 概览统计
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+
+    .stat-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+      text-align: center;
+      transition:
+        box-shadow 0.3s ease,
+        transform 0.3s ease;
+
+      .stat-value {
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--primary-color);
+        line-height: 1;
+        margin-bottom: 8px;
+      }
+
+      .stat-label {
+        font-size: 13px;
+        color: var(--text-secondary);
+        font-weight: 500;
+      }
+
+      &.clickable {
+        cursor: pointer;
+
+        &:hover,
+        &:focus-visible {
+          box-shadow: var(--shadow-md);
+          transform: translateY(-2px);
+          outline: none;
+        }
+      }
+    }
+  }
+
+  // 服务分组
+  .service-group {
+    margin-bottom: 28px;
+
+    .group-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+
+      .group-header-icon {
+        color: var(--primary-color);
+      }
+
+      h2 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+      }
+
+      .group-count {
+        background: var(--primary-light);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 999px;
+        padding: 2px 10px;
+      }
+    }
+
+    .service-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 16px;
+    }
+  }
+
+  // 服务卡片
+  .service-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition:
+      box-shadow 0.3s ease,
+      transform 0.3s ease;
+
+    &:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+
+      .service-icon {
+        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        border-radius: var(--radius-sm);
+        background: rgba(63, 81, 181, 0.1);
+        color: var(--primary-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        mat-icon {
+          font-size: 24px;
+          width: 24px;
+          height: 24px;
+        }
+      }
+
+      .service-meta {
+        flex: 1;
+        min-width: 0;
+
+        .service-name {
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+
+        .service-full {
+          font-size: 12px;
+          color: var(--text-secondary);
+          margin-top: 2px;
+        }
+      }
+    }
+
+    .service-desc {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      margin: 0;
+    }
+
+    .versions-block {
+      .versions-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .versions-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .version-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+        color: var(--primary-color);
+        background: rgba(63, 81, 181, 0.08);
+        border: 1px solid rgba(63, 81, 181, 0.3);
+        border-radius: 999px;
+        padding: 4px 10px;
+        text-decoration: none;
+        cursor: pointer;
+        transition:
+          background 0.2s ease,
+          box-shadow 0.2s ease;
+
+        .version-open-icon {
+          font-size: 14px;
+          width: 14px;
+          height: 14px;
+        }
+
+        &:hover {
+          background: rgba(63, 81, 181, 0.16);
+          box-shadow: var(--shadow-sm);
+        }
+      }
+    }
+  }
+}
