@@ -108,17 +108,6 @@
         <mat-icon matCardAvatar>map</mat-icon>
         <mat-card-title>地图预览</mat-card-title>
         <div class="preview-actions">
-          <mat-form-field appearance="outline" class="download-field">
-            <mat-label>下载</mat-label>
-            <mat-select
-              [value]="downloadValue"
-              (selectionChange)="onDownloadSelect($event.value)"
-            >
-              <mat-option value="geojson">GeoJSON</mat-option>
-              <mat-option value="csv">CSV</mat-option>
-            </mat-select>
-          </mat-form-field>
-
           <mat-form-field appearance="outline" class="format-field">
             <mat-label>格式</mat-label>
             <mat-select
@@ -170,6 +159,26 @@
           >
             透明背景
           </mat-checkbox>
+
+          <button
+            mat-icon-button
+            [matMenuTriggerFor]="downloadMenu"
+            matTooltip="下载"
+            aria-label="下载"
+            class="download-btn"
+          >
+            <mat-icon>download</mat-icon>
+          </button>
+          <mat-menu #downloadMenu="matMenu">
+            <button mat-menu-item (click)="downloadGeoJson()">
+              <mat-icon>download</mat-icon>
+              <span>GeoJSON</span>
+            </button>
+            <button mat-menu-item (click)="downloadCsv()">
+              <mat-icon>table_chart</mat-icon>
+              <span>CSV</span>
+            </button>
+          </mat-menu>
         </div>
       </mat-card-header>
       <mat-card-content class="preview-content">

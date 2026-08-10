@@ -205,17 +205,6 @@ export class LayerDetailComponent implements OnInit {
     });
   }
 
-  downloadValue = '';
-
-  onDownloadSelect(value: string): void {
-    this.downloadValue = '';
-    if (value === 'geojson') {
-      this.downloadGeoJson();
-    } else if (value === 'csv') {
-      this.downloadCsv();
-    }
-  }
-
   openInNewWindow(): void {
     if (this.previewUrl) {
       window.open(this.previewUrl, '_blank');

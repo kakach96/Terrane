@@ -96,7 +96,6 @@
     flex-wrap: wrap;
     gap: 10px;
 
-    .download-field,
     .format-field,
     .crs-field {
       width: 140px;
@@ -106,7 +105,6 @@
       width: 80px;
     }
 
-    .download-field,
     .format-field,
     .crs-field,
     .size-field {
@@ -144,6 +142,23 @@
 
       ::ng-deep .mat-mdc-form-field-subscript-wrapper {
         display: none;
+      }
+    }
+
+    .download-btn {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary-color);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      box-sizing: border-box;
+
+      &:hover {
+        border-color: var(--primary-color);
+        background: rgba(102, 126, 234, 0.06);
       }
     }
   }
