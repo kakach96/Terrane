@@ -16,6 +16,7 @@ mod backup;
 mod config;
 mod error;
 mod handlers;
+mod i18n;
 mod models;
 mod routes;
 mod services;

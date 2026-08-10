@@ -6,7 +6,7 @@
     <button
       mat-icon-button
       type="button"
-      matTooltip="上级目录"
+      matTooltip="{{ 'directoryBrowser.goUpTooltip' | translate }}"
       [disabled]="breadcrumbs.length === 0 || loading"
       (click)="goUp()"
     >
@@ -64,18 +64,26 @@
         type="button"
         mat-icon-button
         class="entry-action"
-        [matTooltip]="entry.is_dir ? '进入目录' : '选择此文件'"
+        [matTooltip]="
+          entry.is_dir
+            ? ('directoryBrowser.enterDirTooltip' | translate)
+            : ('directoryBrowser.selectFileTooltip' | translate)
+        "
         (click)="select(entry)"
       >
         <mat-icon>{{ entry.is_dir ? 'subdirectory_arrow_right' : 'check' }}</mat-icon>
       </button>
     </div>
 
-    <div *ngIf="!loading && entries.length === 0" class="empty-hint">此目录为空</div>
+    <div *ngIf="!loading && entries.length === 0" class="empty-hint">
+      {{ 'directoryBrowser.emptyDir' | translate }}
+    </div>
   </div>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
-  <button mat-button type="button" (click)="onCancel()">取消</button>
+  <button mat-button type="button" (click)="onCancel()">
+    {{ 'directoryBrowser.cancel' | translate }}
+  </button>
   <button
     mat-raised-button
     color="primary"
@@ -84,6 +92,10 @@
     [disabled]="!currentPath && !selectedPath"
   >
     <mat-icon>check</mat-icon>
-    {{ mode === 'local' ? '选择此目录' : '选择当前目录' }}
+    {{
+      mode === 'local'
+        ? ('directoryBrowser.selectDirLocal' | translate)
+        : ('directoryBrowser.selectDirS3' | translate)
+    }}
   </button>
 </mat-dialog-actions>

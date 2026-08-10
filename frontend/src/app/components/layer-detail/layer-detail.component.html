@@ -9,7 +9,7 @@
     </div>
     <div class="header-actions">
       <mat-chip [class.enabled]="layer.enabled">
-        {{ layer.enabled ? '启用' : '禁用' }}
+        {{ layer.enabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}
       </mat-chip>
     </div>
   </div>
@@ -18,25 +18,25 @@
     <mat-card class="info-card">
       <mat-card-header>
         <mat-icon matCardAvatar>info</mat-icon>
-        <mat-card-title>基本信息</mat-card-title>
+        <mat-card-title>{{ 'layerDetail.basicInfo' | translate }}</mat-card-title>
       </mat-card-header>
       <mat-card-content>
         <div class="info-grid">
           <div class="info-item">
-            <span class="label">工作空间</span>
+            <span class="label">{{ 'layerDetail.workspace' | translate }}</span>
             <span class="value">{{ layer.workspace }}</span>
           </div>
           <div class="info-item">
-            <span class="label">数据源</span>
+            <span class="label">{{ 'layerDetail.dataSource' | translate }}</span>
             <span class="value">{{ layer.store }}</span>
           </div>
           <div class="info-item">
-            <span class="label">坐标系统</span>
+            <span class="label">{{ 'layerDetail.crs' | translate }}</span>
             <span class="value">{{ layer.srs }}</span>
           </div>
         </div>
         <div class="info-item">
-          <span class="label">样式</span>
+          <span class="label">{{ 'layerDetail.style' | translate }}</span>
           <span class="value">
             <mat-select
               *ngIf="styleNames.length > 0"
@@ -50,11 +50,11 @@
           </span>
         </div>
         <div class="native-name full-width">
-          <span class="label">原生表名</span>
+          <span class="label">{{ 'layerDetail.nativeName' | translate }}</span>
           <span class="value">{{ layer.native_name || '-' }}</span>
         </div>
         <div *ngIf="layer.abstract" class="abstract">
-          <span class="label">描述</span>
+          <span class="label">{{ 'layerDetail.description' | translate }}</span>
           <p>{{ layer.abstract }}</p>
         </div>
       </mat-card-content>
@@ -63,42 +63,42 @@
     <mat-card class="bounds-card">
       <mat-card-header>
         <mat-icon matCardAvatar>fullscreen</mat-icon>
-        <mat-card-title>边界范围</mat-card-title>
+        <mat-card-title>{{ 'layerDetail.bounds' | translate }}</mat-card-title>
         <div class="header-badges">
           <mat-chip class="bounds-source" *ngIf="isDefaultBounds" color="warn" selected>
-            默认值
+            {{ 'layerDetail.defaultBounds' | translate }}
           </mat-chip>
           <mat-chip class="bounds-source" *ngIf="!isDefaultBounds" color="primary" selected>
-            已设定
+            {{ 'layerDetail.customBounds' | translate }}
           </mat-chip>
         </div>
       </mat-card-header>
       <mat-card-content>
         <div class="bounds-grid">
           <div class="bounds-item">
-            <span class="label">最小经度</span>
+            <span class="label">{{ 'layerDetail.minLon' | translate }}</span>
             <span class="value mono">{{ displayBounds.minx | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item">
-            <span class="label">最小纬度</span>
+            <span class="label">{{ 'layerDetail.minLat' | translate }}</span>
             <span class="value mono">{{ displayBounds.miny | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item">
-            <span class="label">最大经度</span>
+            <span class="label">{{ 'layerDetail.maxLon' | translate }}</span>
             <span class="value mono">{{ displayBounds.maxx | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item">
-            <span class="label">最大纬度</span>
+            <span class="label">{{ 'layerDetail.maxLat' | translate }}</span>
             <span class="value mono">{{ displayBounds.maxy | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item crs">
-            <span class="label">坐标系</span>
+            <span class="label">{{ 'layerDetail.crsLabel' | translate }}</span>
             <span class="value">{{ displayCrs }}</span>
           </div>
         </div>
         <p class="bounds-hint" *ngIf="isDefaultBounds">
           <mat-icon>info</mat-icon>
-          此边界为默认范围，建议创建时指定精确边界或从数据源自动计算。
+          {{ 'layerDetail.boundsHint' | translate }}
         </p>
       </mat-card-content>
     </mat-card>
@@ -106,10 +106,10 @@
     <mat-card class="preview-card" *ngIf="previewUrl">
       <mat-card-header class="preview-header">
         <mat-icon matCardAvatar>map</mat-icon>
-        <mat-card-title>地图预览</mat-card-title>
+        <mat-card-title>{{ 'layerDetail.mapPreview' | translate }}</mat-card-title>
         <div class="preview-actions">
           <mat-form-field appearance="outline" class="format-field">
-            <mat-label>格式</mat-label>
+            <mat-label>{{ 'layerDetail.format' | translate }}</mat-label>
             <mat-select
               [value]="previewOptions.format"
               (selectionChange)="updatePreviewParam('format', $event.value)"
@@ -121,7 +121,7 @@
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="crs-field">
-            <mat-label>坐标系</mat-label>
+            <mat-label>{{ 'layerDetail.crsLabel' | translate }}</mat-label>
             <mat-select
               [value]="previewOptions.crs"
               (selectionChange)="updatePreviewParam('crs', $event.value)"
@@ -133,7 +133,7 @@
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticPreview">
-            <mat-label>宽</mat-label>
+            <mat-label>{{ 'layerDetail.width' | translate }}</mat-label>
             <input
               matInput
               type="number"
@@ -143,7 +143,7 @@
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticPreview">
-            <mat-label>高</mat-label>
+            <mat-label>{{ 'layerDetail.height' | translate }}</mat-label>
             <input
               matInput
               type="number"
@@ -157,14 +157,14 @@
             [checked]="previewOptions.transparent"
             (change)="onTransparentChange($event)"
           >
-            透明背景
+            {{ 'layerDetail.transparent' | translate }}
           </mat-checkbox>
 
           <button
             mat-icon-button
             [matMenuTriggerFor]="downloadMenu"
-            matTooltip="下载"
-            aria-label="下载"
+            matTooltip="{{ 'layerDetail.download' | translate }}"
+            [attr.aria-label]="'layerDetail.downloadAria' | translate"
             class="download-btn"
           >
             <mat-icon>download</mat-icon>
@@ -182,22 +182,26 @@
             <span class="map-crs">{{ previewOptions.crs }}</span>
             <span class="feature-count" *ngIf="featureCount > 0">
               <mat-icon>label</mat-icon>
-              {{ featureCount }} 个要素
+              {{ 'layerDetail.featureCount' | translate: { count: featureCount } }}
             </span>
           </div>
           <div class="map-actions">
-            <button mat-stroked-button (click)="refreshPreview()" matTooltip="刷新预览">
+            <button
+              mat-stroked-button
+              (click)="refreshPreview()"
+              matTooltip="{{ 'layerDetail.refreshPreviewTooltip' | translate }}"
+            >
               <mat-icon>refresh</mat-icon>
-              <span>刷新预览</span>
+              <span>{{ 'layerDetail.refreshPreview' | translate }}</span>
             </button>
             <button
               mat-stroked-button
               [disabled]="!previewUrl"
               (click)="openInNewWindow()"
-              matTooltip="在新窗口打开预览"
+              matTooltip="{{ 'layerDetail.openInNewWindowTooltip' | translate }}"
             >
               <mat-icon>open_in_new</mat-icon>
-              <span>在新窗口打开</span>
+              <span>{{ 'layerDetail.openInNewWindow' | translate }}</span>
             </button>
           </div>
         </div>
@@ -207,12 +211,12 @@
             *ngIf="!isStaticPreview"
             [src]="safePreviewUrl"
             class="map-frame"
-            title="地图预览"
+            title="{{ 'layerDetail.mapPreviewTitle' | translate }}"
           ></iframe>
           <img
             *ngIf="isStaticPreview"
             [src]="previewUrl"
-            alt="地图预览"
+            alt="{{ 'layerDetail.mapPreviewTitle' | translate }}"
             class="map-image"
             (error)="onPreviewError()"
           />

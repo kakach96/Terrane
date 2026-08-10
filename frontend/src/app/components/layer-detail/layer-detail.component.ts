@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Layer } from '../../models/geoserver.models';
@@ -50,11 +51,16 @@ export class LayerDetailComponent implements OnInit {
     crs: 'EPSG:4326',
   };
 
-  previewFormats = [
-    { value: 'application/openlayers', label: 'OpenLayers 交互地图' },
-    { value: 'image/png', label: 'PNG (透明)' },
-    { value: 'image/jpeg', label: 'JPEG' },
-  ];
+  get previewFormats(): { value: string; label: string }[] {
+    return [
+      {
+        value: 'application/openlayers',
+        label: this.translate.instant('layerDetail.formatOpenLayers'),
+      },
+      { value: 'image/png', label: this.translate.instant('layerDetail.formatPng') },
+      { value: 'image/jpeg', label: this.translate.instant('layerDetail.formatJpeg') },
+    ];
+  }
 
   previewCrsOptions = ['EPSG:4326', 'EPSG:3857', 'EPSG:4490'];
 
@@ -68,6 +74,7 @@ export class LayerDetailComponent implements OnInit {
     private sanitizer: DomSanitizer,
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -89,7 +96,7 @@ export class LayerDetailComponent implements OnInit {
         this.loading = false;
       },
       error: () => {
-        this.notificationService.error('加载图层失败');
+        this.notificationService.error(this.translate.instant('layerDetail.loadFail'));
         this.loading = false;
       },
     });
@@ -149,14 +156,18 @@ export class LayerDetailComponent implements OnInit {
           this.geoserverService.updateLayerStyle(this.layer!.name, style.content).subscribe({
             next: () => {
               this.currentStyleName = styleName;
-              this.notificationService.success(`样式已切换为 ${style.title}`);
+              this.notificationService.success(
+                this.translate.instant('layerDetail.styleSwitchSuccess', { title: style.title }),
+              );
               this.refreshPreview();
             },
-            error: () => this.notificationService.error('样式切换失败'),
+            error: () =>
+              this.notificationService.error(this.translate.instant('layerDetail.styleSwitchFail')),
           });
         }
       },
-      error: () => this.notificationService.error('加载样式失败'),
+      error: () =>
+        this.notificationService.error(this.translate.instant('layerDetail.styleLoadFail')),
     });
   }
 
@@ -183,9 +194,12 @@ export class LayerDetailComponent implements OnInit {
         a.download = `${this.layer!.name}.geojson`;
         a.click();
         window.URL.revokeObjectURL(url);
-        this.notificationService.success('GeoJSON 已下载');
+        this.notificationService.success(
+          this.translate.instant('layerDetail.downloadGeoJsonSuccess'),
+        );
       },
-      error: () => this.notificationService.error('下载 GeoJSON 失败'),
+      error: () =>
+        this.notificationService.error(this.translate.instant('layerDetail.downloadGeoJsonFail')),
     });
   }
 
@@ -199,9 +213,10 @@ export class LayerDetailComponent implements OnInit {
         a.download = `${this.layer!.name}.csv`;
         a.click();
         window.URL.revokeObjectURL(url);
-        this.notificationService.success('CSV 已下载');
+        this.notificationService.success(this.translate.instant('layerDetail.downloadCsvSuccess'));
       },
-      error: () => this.notificationService.error('下载 CSV 失败'),
+      error: () =>
+        this.notificationService.error(this.translate.instant('layerDetail.downloadCsvFail')),
     });
   }
 

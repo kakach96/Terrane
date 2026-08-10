@@ -1,12 +1,12 @@
 <div class="data-sources fade-in">
   <div class="page-header">
     <div>
-      <h1>数据源</h1>
-      <p class="subtitle">管理空间数据存储连接</p>
+      <h1>{{ 'dataSources.title' | translate }}</h1>
+      <p class="subtitle">{{ 'dataSources.subtitle' | translate }}</p>
     </div>
     <button mat-raised-button color="primary" (click)="openCreateDialog()">
       <mat-icon>add</mat-icon>
-      创建数据源
+      {{ 'dataSources.create' | translate }}
     </button>
   </div>
 
@@ -17,9 +17,9 @@
   <mat-card *ngIf="!loading && dataSources.length === 0" class="empty-card">
     <div class="empty-state">
       <mat-icon class="empty-icon">database</mat-icon>
-      <p>暂无数据源</p>
+      <p>{{ 'dataSources.empty' | translate }}</p>
       <button mat-raised-button color="primary" (click)="openCreateDialog()">
-        创建第一个数据源
+        {{ 'dataSources.emptyCreate' | translate }}
       </button>
     </div>
   </mat-card>
@@ -27,14 +27,18 @@
   <mat-card *ngIf="!loading && dataSources.length > 0" class="data-table-card">
     <mat-table [dataSource]="dataSources" class="full-width-table">
       <ng-container matColumnDef="name">
-        <mat-header-cell *matHeaderCellDef>名称</mat-header-cell>
+        <mat-header-cell *matHeaderCellDef>{{
+          'dataSources.nameLabel' | translate
+        }}</mat-header-cell>
         <mat-cell *matCellDef="let ds">
           <div class="cell-content">
             <mat-icon class="type-icon">{{ getTypeIcon(ds.type) }}</mat-icon>
             <div>
               <div>
                 {{ ds.name }}
-                <span *ngIf="ds.builtin" class="builtin-badge">内置</span>
+                <span *ngIf="ds.builtin" class="builtin-badge">{{
+                  'common.builtin' | translate
+                }}</span>
               </div>
               <div class="cell-subtitle" *ngIf="ds.connection?.file_path">
                 {{ ds.connection?.file_path }}
@@ -48,19 +52,23 @@
       </ng-container>
 
       <ng-container matColumnDef="type">
-        <mat-header-cell *matHeaderCellDef>类型</mat-header-cell>
+        <mat-header-cell *matHeaderCellDef>{{
+          'dataSources.typeLabel' | translate
+        }}</mat-header-cell>
         <mat-cell *matCellDef="let ds">
           <mat-chip [color]="getTypeColor(ds.type)">{{ getTypeLabel(ds.type) }}</mat-chip>
         </mat-cell>
       </ng-container>
 
       <ng-container matColumnDef="workspace">
-        <mat-header-cell *matHeaderCellDef>工作空间</mat-header-cell>
+        <mat-header-cell *matHeaderCellDef>{{
+          'dataSources.workspaceLabel' | translate
+        }}</mat-header-cell>
         <mat-cell *matCellDef="let ds">{{ ds.workspace || '-' }}</mat-cell>
       </ng-container>
 
       <ng-container matColumnDef="enabled">
-        <mat-header-cell *matHeaderCellDef>状态</mat-header-cell>
+        <mat-header-cell *matHeaderCellDef>{{ 'common.status' | translate }}</mat-header-cell>
         <mat-cell *matCellDef="let ds">
           <mat-slide-toggle
             [checked]="ds.enabled"
@@ -71,25 +79,30 @@
       </ng-container>
 
       <ng-container matColumnDef="actions">
-        <mat-header-cell *matHeaderCellDef>操作</mat-header-cell>
+        <mat-header-cell *matHeaderCellDef>{{ 'common.actions' | translate }}</mat-header-cell>
         <mat-cell *matCellDef="let ds">
           <button
             mat-icon-button
             color="primary"
             (click)="openEditDialog(ds)"
-            title="编辑"
+            title="{{ 'dataSources.tooltipEdit' | translate }}"
             [disabled]="ds.builtin"
           >
             <mat-icon>edit</mat-icon>
           </button>
-          <button mat-icon-button color="accent" (click)="testConnection(ds)" title="测试连接">
+          <button
+            mat-icon-button
+            color="accent"
+            (click)="testConnection(ds)"
+            title="{{ 'dataSources.tooltipTest' | translate }}"
+          >
             <mat-icon>network_check</mat-icon>
           </button>
           <button
             mat-icon-button
             color="warn"
             (click)="deleteDataSource(ds.name)"
-            title="删除"
+            title="{{ 'dataSources.tooltipDelete' | translate }}"
             [disabled]="ds.builtin"
           >
             <mat-icon>delete</mat-icon>

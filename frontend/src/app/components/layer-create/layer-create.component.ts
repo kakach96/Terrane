@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Workspace, DataSource } from '../../models/geoserver.models';
@@ -26,6 +27,7 @@ export class LayerCreateComponent implements OnInit {
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
     private router: Router,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -148,7 +150,7 @@ export class LayerCreateComponent implements OnInit {
 
   onSubmit(): void {
     if (this.layerForm.invalid) {
-      this.notificationService.error('请检查表单填写');
+      this.notificationService.error(this.translate.instant('layerCreate.formInvalid'));
       return;
     }
 
@@ -172,12 +174,18 @@ export class LayerCreateComponent implements OnInit {
 
     this.geoserverService.createLayer(layerData).subscribe({
       next: (layer) => {
-        this.notificationService.success(`图层 "${layer.name}" 创建成功`);
+        this.notificationService.success(
+          this.translate.instant('layerCreate.success', { name: layer.name }),
+        );
         this.loading = false;
         this.router.navigate(['/layers', layer.name]);
       },
       error: (error) => {
-        this.notificationService.error('创建失败: ' + (error.message || '未知错误'));
+        this.notificationService.error(
+          this.translate.instant('layerCreate.createFail', {
+            message: error.message || this.translate.instant('common.unknown'),
+          }),
+        );
         this.loading = false;
       },
     });

@@ -1,8 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import { AuthService } from './services/auth.service';
+import { LanguageService, SupportedLanguage } from './services/language.service';
 import { LoginComponent } from './components/login/login.component';
 
 @Component({
@@ -10,23 +13,26 @@ import { LoginComponent } from './components/login/login.component';
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   title = 'Terrane';
-  pageTitle = '图层预览';
+  pageTitle = 'Terrane';
   sidenavOpened = true;
+  currentLang: SupportedLanguage = 'zh-CN';
+  private langSub!: Subscription;
 
-  private menuTitles: { [key: string]: string } = {
-    '/services': '服务概览',
-    '/workspaces': '工作空间',
-    '/data-sources': '数据源',
-    '/layers': '图层',
-    '/layer-preview': '图层预览',
-    '/tile-layers': '切片图层',
-    '/layer-groups': '图层组',
-    '/styles': '样式管理',
-    '/monitor': '监控面板',
-    '/users': '用户管理',
-    '/permissions': '权限管理',
+  // Translate keys for the toolbar page title (indexed by route path).
+  private menuTitleKeys: { [key: string]: string } = {
+    '/services': 'nav.servicesOverview',
+    '/workspaces': 'nav.workspaces',
+    '/data-sources': 'nav.dataSources',
+    '/layers': 'nav.layers',
+    '/layer-preview': 'nav.layerPreview',
+    '/tile-layers': 'nav.tileLayers',
+    '/layer-groups': 'nav.layerGroups',
+    '/styles': 'nav.styles',
+    '/monitor': 'nav.monitor',
+    '/users': 'nav.users',
+    '/permissions': 'nav.permissions',
   };
 
   // 导航分组展开状态（对标 GeoServer 菜单分组）
@@ -50,9 +56,17 @@ export class AppComponent implements OnInit {
     private router: Router,
     public auth: AuthService,
     private dialog: MatDialog,
+    private translate: TranslateService,
+    public languageService: LanguageService,
   ) {}
 
   ngOnInit(): void {
+    this.currentLang = this.languageService.currentLang;
+    this.langSub = this.translate.onLangChange.subscribe((event) => {
+      this.currentLang = event.lang as SupportedLanguage;
+      this.updatePageTitle(this.router.url);
+    });
+
     this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe((event) => {
@@ -62,9 +76,18 @@ export class AppComponent implements OnInit {
     this.updatePageTitle(this.router.url);
   }
 
+  ngOnDestroy(): void {
+    this.langSub?.unsubscribe();
+  }
+
+  setLanguage(lang: SupportedLanguage): void {
+    this.languageService.setLanguage(lang);
+  }
+
   private updatePageTitle(url: string): void {
     const basePath = url.split('?')[0];
-    this.pageTitle = this.menuTitles[basePath] || 'Terrane';
+    const key = this.menuTitleKeys[basePath];
+    this.pageTitle = key ? this.translate.instant(key) : 'Terrane';
   }
 
   openLoginDialog(): void {

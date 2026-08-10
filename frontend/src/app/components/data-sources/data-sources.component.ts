@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { DataSourceDialogComponent } from './data-source-dialog/data-source-dialog.component';
@@ -19,6 +20,7 @@ export class DataSourcesComponent implements OnInit {
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
     private dialog: MatDialog,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -35,7 +37,7 @@ export class DataSourcesComponent implements OnInit {
       error: (err) => {
         console.error('Failed to load data sources:', err);
         this.loading = false;
-        this.notificationService.error('加载数据源失败');
+        this.notificationService.error(this.translate.instant('dataSources.loadFail'));
       },
     });
   }
@@ -68,17 +70,20 @@ export class DataSourcesComponent implements OnInit {
 
   deleteDataSource(name: string): void {
     this.notificationService
-      .confirm('确认删除', `确定要删除数据源 "${name}" 吗？`)
+      .confirm(
+        this.translate.instant('dataSources.deleteConfirmTitle'),
+        this.translate.instant('dataSources.deleteConfirmMessage', { name }),
+      )
       .subscribe((confirmed: boolean) => {
         if (confirmed) {
           this.geoserverService.deleteDataSource(name).subscribe({
             next: () => {
-              this.notificationService.success('删除成功');
+              this.notificationService.success(this.translate.instant('dataSources.deleteSuccess'));
               this.loadDataSources();
             },
             error: (err) => {
               console.error('Failed to delete data source:', err);
-              this.notificationService.error('删除失败');
+              this.notificationService.error(this.translate.instant('dataSources.deleteFail'));
             },
           });
         }
@@ -89,14 +94,16 @@ export class DataSourcesComponent implements OnInit {
     this.geoserverService.testDataSourceConnection(dataSource.name).subscribe({
       next: (result) => {
         if (result.success) {
-          this.notificationService.success('连接测试成功');
+          this.notificationService.success(this.translate.instant('dataSources.testSuccess'));
         } else {
-          this.notificationService.warning(`连接测试失败: ${result.message}`);
+          this.notificationService.warning(
+            this.translate.instant('dataSources.testFailWithMessage', { message: result.message }),
+          );
         }
       },
       error: (err) => {
         console.error('Failed to test connection:', err);
-        this.notificationService.error('连接测试失败');
+        this.notificationService.error(this.translate.instant('dataSources.testFail'));
       },
     });
   }
@@ -106,11 +113,17 @@ export class DataSourcesComponent implements OnInit {
     this.geoserverService.updateDataSource(dataSource.name, { enabled }).subscribe({
       next: () => {
         dataSource.enabled = enabled;
-        this.notificationService.success(`数据源已${enabled ? '启用' : '禁用'}`);
+        this.notificationService.success(
+          this.translate.instant('dataSources.toggleStatusSuccess', {
+            status: enabled
+              ? this.translate.instant('common.enabled')
+              : this.translate.instant('common.disabled'),
+          }),
+        );
       },
       error: (err) => {
         console.error('Failed to update data source:', err);
-        this.notificationService.error('更新失败');
+        this.notificationService.error(this.translate.instant('dataSources.updateFail'));
       },
     });
   }
@@ -137,7 +150,7 @@ export class DataSourcesComponent implements OnInit {
       case 'postgis':
         return 'PostGIS';
       case 'metadata':
-        return '元数据存储';
+        return this.translate.instant('dataSources.metadataLabel');
       case 'shapefile':
         return 'Shapefile';
       case 'geotiff':

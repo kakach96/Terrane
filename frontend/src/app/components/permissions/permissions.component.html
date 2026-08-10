@@ -1,8 +1,8 @@
 <div class="perms-container">
   <div class="page-header">
-    <h1><mat-icon>security</mat-icon> 权限管理</h1>
+    <h1><mat-icon>security</mat-icon> {{ 'permissions.title' | translate }}</h1>
     <button mat-raised-button color="primary" (click)="showCreateForm = !showCreateForm">
-      <mat-icon>add</mat-icon> 新建权限
+      <mat-icon>add</mat-icon> {{ 'permissions.createPerm' | translate }}
     </button>
   </div>
 
@@ -10,55 +10,57 @@
   <mat-card *ngIf="showCreateForm" class="form-card">
     <mat-card-header>
       <mat-icon mat-card-avatar>add_moderator</mat-icon>
-      <mat-card-title>新建权限规则</mat-card-title>
+      <mat-card-title>{{ 'permissions.createFormTitle' | translate }}</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <div class="form-grid">
         <mat-form-field appearance="outline">
-          <mat-label>资源类型</mat-label>
+          <mat-label>{{ 'permissions.resourceType' | translate }}</mat-label>
           <mat-select [(ngModel)]="newPerm.resourceType">
             <mat-option *ngFor="let t of typeOptions" [value]="t">{{ t }}</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>资源名称（可用 * 通配）</mat-label>
+          <mat-label>{{ 'permissions.resourceName' | translate }}</mat-label>
           <input matInput [(ngModel)]="newPerm.resourceName" placeholder="*" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>访问模式</mat-label>
+          <mat-label>{{ 'permissions.accessMode' | translate }}</mat-label>
           <mat-select [(ngModel)]="newPerm.accessMode">
             <mat-option *ngFor="let m of modeOptions" [value]="m">{{ m }}</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>效果</mat-label>
+          <mat-label>{{ 'permissions.effect' | translate }}</mat-label>
           <mat-select [(ngModel)]="newPerm.effect">
             <mat-option *ngFor="let e of effectOptions" [value]="e">{{
-              e === 'allow' ? '允许' : '拒绝'
+              e === 'allow' ? ('permissions.allow' | translate) : ('permissions.deny' | translate)
             }}</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>用户名（可选）</mat-label>
+          <mat-label>{{ 'permissions.usernameOptional' | translate }}</mat-label>
           <input matInput [(ngModel)]="newPerm.username" placeholder="username" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>角色（可选）</mat-label>
+          <mat-label>{{ 'permissions.roleOptional' | translate }}</mat-label>
           <mat-select [(ngModel)]="newPerm.role">
-            <mat-option value="">不限</mat-option>
+            <mat-option value="">{{ 'permissions.none' | translate }}</mat-option>
             <mat-option *ngFor="let r of roleOptions" [value]="r">{{ r }}</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>优先级</mat-label>
+          <mat-label>{{ 'permissions.priority' | translate }}</mat-label>
           <input matInput type="number" [(ngModel)]="newPerm.priority" />
         </mat-form-field>
       </div>
     </mat-card-content>
     <mat-card-actions>
-      <button mat-button (click)="showCreateForm = false">取消</button>
+      <button mat-button (click)="showCreateForm = false">
+        {{ 'permissions.cancel' | translate }}
+      </button>
       <button mat-raised-button color="primary" (click)="createPermission()">
-        <mat-icon>check</mat-icon> 创建
+        <mat-icon>check</mat-icon> {{ 'permissions.create' | translate }}
       </button>
     </mat-card-actions>
   </mat-card>
@@ -74,21 +76,23 @@
   <mat-card>
     <mat-card-header>
       <mat-icon mat-card-avatar>list</mat-icon>
-      <mat-card-title>权限规则 ({{ permissions.length }})</mat-card-title>
+      <mat-card-title>{{
+        'permissions.permList' | translate: { count: permissions.length }
+      }}</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <div class="table-container">
         <table class="data-table">
           <thead>
             <tr>
-              <th>优先级</th>
-              <th>资源类型</th>
-              <th>资源名称</th>
-              <th>访问模式</th>
-              <th>效果</th>
-              <th>用户</th>
-              <th>角色</th>
-              <th>操作</th>
+              <th>{{ 'permissions.columnPriority' | translate }}</th>
+              <th>{{ 'permissions.columnResourceType' | translate }}</th>
+              <th>{{ 'permissions.columnResourceName' | translate }}</th>
+              <th>{{ 'permissions.columnAccessMode' | translate }}</th>
+              <th>{{ 'permissions.columnEffect' | translate }}</th>
+              <th>{{ 'permissions.columnUser' | translate }}</th>
+              <th>{{ 'permissions.columnRole' | translate }}</th>
+              <th>{{ 'permissions.columnActions' | translate }}</th>
             </tr>
           </thead>
           <tbody>
@@ -101,13 +105,22 @@
                 <code>{{ p.resourceName }}</code>
               </td>
               <td>
-                <mat-icon *ngIf="p.accessMode === 'read'" matTooltip="只读" style="color: #1565c0"
+                <mat-icon
+                  *ngIf="p.accessMode === 'read'"
+                  matTooltip="{{ 'permissions.readTooltip' | translate }}"
+                  style="color: #1565c0"
                   >visibility</mat-icon
                 >
-                <mat-icon *ngIf="p.accessMode === 'write'" matTooltip="读写" style="color: #e65100"
+                <mat-icon
+                  *ngIf="p.accessMode === 'write'"
+                  matTooltip="{{ 'permissions.writeTooltip' | translate }}"
+                  style="color: #e65100"
                   >edit</mat-icon
                 >
-                <mat-icon *ngIf="p.accessMode === 'admin'" matTooltip="管理" style="color: #c62828"
+                <mat-icon
+                  *ngIf="p.accessMode === 'admin'"
+                  matTooltip="{{ 'permissions.adminTooltip' | translate }}"
+                  style="color: #c62828"
                   >admin_panel_settings</mat-icon
                 >
                 {{ p.accessMode }}
@@ -118,7 +131,11 @@
                   [style.color]="getEffectColor(p.effect)"
                   [style.background]="p.effect === 'allow' ? '#e8f5e9' : '#ffebee'"
                 >
-                  {{ p.effect === 'allow' ? '允许' : '拒绝' }}
+                  {{
+                    p.effect === 'allow'
+                      ? ('permissions.allow' | translate)
+                      : ('permissions.deny' | translate)
+                  }}
                 </span>
               </td>
               <td>{{ p.username || '-' }}</td>
@@ -131,7 +148,7 @@
                   mat-icon-button
                   color="warn"
                   (click)="deletePermission(p)"
-                  matTooltip="删除"
+                  matTooltip="{{ 'permissions.deleteTooltip' | translate }}"
                 >
                   <mat-icon>delete</mat-icon>
                 </button>

@@ -5,6 +5,7 @@ pub mod backup;
 pub mod config;
 pub mod error;
 pub mod handlers;
+pub mod i18n;
 pub mod models;
 pub mod routes;
 pub mod services;

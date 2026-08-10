@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { Layer, LayerGroup } from '../../models/geoserver.models';
 import { transformBounds } from '../../utils/coords';
@@ -43,16 +44,22 @@ export class PreviewComponent implements OnInit {
     crs: 'EPSG:4326',
   };
 
-  formatOptions = [
-    { value: 'application/openlayers', label: 'OpenLayers 交互地图' },
-    { value: 'image/png', label: 'PNG' },
-    { value: 'image/jpeg', label: 'JPEG' },
-  ];
+  get formatOptions(): { value: string; label: string }[] {
+    return [
+      {
+        value: 'application/openlayers',
+        label: this.translate.instant('preview.formatOpenLayers'),
+      },
+      { value: 'image/png', label: this.translate.instant('preview.formatPng') },
+      { value: 'image/jpeg', label: this.translate.instant('preview.formatJpeg') },
+    ];
+  }
 
   constructor(
     private route: ActivatedRoute,
     private geoserverService: GeoserverService,
     private sanitizer: DomSanitizer,
+    private translate: TranslateService,
   ) {}
 
   get isStaticFormat(): boolean {

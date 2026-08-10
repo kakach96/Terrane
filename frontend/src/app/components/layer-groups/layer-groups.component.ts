@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
@@ -21,6 +22,7 @@ export class LayerGroupsComponent implements OnInit {
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
     private dialog: MatDialog,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -38,7 +40,7 @@ export class LayerGroupsComponent implements OnInit {
         this.loading = false;
       },
       error: () => {
-        this.notificationService.error('加载图层组失败');
+        this.notificationService.error(this.translate.instant('layerGroups.loadFail'));
         this.loading = false;
       },
     });
@@ -57,18 +59,21 @@ export class LayerGroupsComponent implements OnInit {
   deleteGroup(group: LayerGroup): void {
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       data: {
-        title: '删除图层组',
-        message: `确定要删除图层组 "${group.title || group.name}" 吗？`,
+        title: this.translate.instant('layerGroups.deleteTitle'),
+        message: this.translate.instant('layerGroups.deleteMessage', {
+          name: group.title || group.name,
+        }),
       },
     });
     dialogRef.afterClosed().subscribe((confirmed) => {
       if (!confirmed) return;
       this.geoserverService.deleteLayerGroup(group.name).subscribe({
         next: () => {
-          this.notificationService.success('图层组已删除');
+          this.notificationService.success(this.translate.instant('layerGroups.deleteSuccess'));
           this.loadGroups();
         },
-        error: () => this.notificationService.error('删除失败'),
+        error: () =>
+          this.notificationService.error(this.translate.instant('layerGroups.deleteFail')),
       });
     });
   }

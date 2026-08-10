@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { MonitorStats, RequestRecord, AuditLogEntry } from '../../models/geoserver.models';
 
@@ -20,7 +21,10 @@ export class MonitorComponent implements OnInit, OnDestroy {
   requestHistory: number[] = [];
   requestLabels: string[] = [];
 
-  constructor(private geoserver: GeoserverService) {}
+  constructor(
+    private geoserver: GeoserverService,
+    private translate: TranslateService,
+  ) {}
 
   ngOnInit(): void {
     this.loadData();
@@ -42,7 +46,7 @@ export class MonitorComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
       error: (e) => {
-        this.error = '加载监控数据失败: ' + e.message;
+        this.error = this.translate.instant('monitor.loadFail', { message: e.message });
         this.loading = false;
       },
     });
@@ -66,10 +70,10 @@ export class MonitorComponent implements OnInit, OnDestroy {
     const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
     const parts: string[] = [];
-    if (d > 0) parts.push(`${d}天`);
-    if (h > 0) parts.push(`${h}小时`);
-    if (m > 0) parts.push(`${m}分`);
-    parts.push(`${sec}秒`);
+    if (d > 0) parts.push(this.translate.instant('monitor.uptimeDay', { count: d }));
+    if (h > 0) parts.push(this.translate.instant('monitor.uptimeHour', { count: h }));
+    if (m > 0) parts.push(this.translate.instant('monitor.uptimeMinute', { count: m }));
+    parts.push(this.translate.instant('monitor.uptimeSecond', { count: sec }));
     return parts.join(' ');
   }
 
@@ -105,10 +109,11 @@ export class MonitorComponent implements OnInit, OnDestroy {
   }
 
   resetStats(): void {
-    if (confirm('确认重置监控统计？')) {
+    if (confirm(this.translate.instant('monitor.confirmReset'))) {
       this.geoserver.resetMonitorStats().subscribe({
         next: () => this.loadData(),
-        error: (e) => (this.error = '重置失败: ' + e.message),
+        error: (e) =>
+          (this.error = this.translate.instant('monitor.resetFail', { message: e.message })),
       });
     }
   }

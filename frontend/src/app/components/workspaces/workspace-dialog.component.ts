@@ -1,6 +1,7 @@
 import { Component, Inject } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import {
   Workspace,
   CreateWorkspaceRequest,
@@ -21,9 +22,12 @@ export class WorkspaceDialogComponent {
     private fb: FormBuilder,
     public dialogRef: MatDialogRef<WorkspaceDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { workspace?: Workspace },
+    private translate: TranslateService,
   ) {
     this.isEdit = !!data?.workspace;
-    this.title = this.isEdit ? '编辑工作空间' : '新建工作空间';
+    this.title = this.isEdit
+      ? this.translate.instant('workspaces.dialogTitleEdit')
+      : this.translate.instant('workspaces.dialogTitleCreate');
     this.form = this.fb.group({
       name: [
         { value: data?.workspace?.name || '', disabled: this.isEdit },

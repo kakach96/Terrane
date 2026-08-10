@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { TileCacheStats } from '../../models/geoserver.models';
@@ -17,6 +18,7 @@ export class TileLayersComponent implements OnInit {
   constructor(
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -48,7 +50,10 @@ export class TileLayersComponent implements OnInit {
 
   clearAllCache(): void {
     this.notificationService
-      .confirm('确认清除', '确定要清除所有瓦片缓存吗？此操作不可恢复。')
+      .confirm(
+        this.translate.instant('tileLayers.confirmClearTitle'),
+        this.translate.instant('tileLayers.confirmClearMessage'),
+      )
       .subscribe((confirmed) => {
         if (confirmed) {
           this.loading = true;
@@ -56,7 +61,9 @@ export class TileLayersComponent implements OnInit {
           const clearNext = (idx: number) => {
             if (idx >= this.availableLayers.length) {
               this.loading = false;
-              this.notificationService.success(`已清除所有缓存`);
+              this.notificationService.success(
+                this.translate.instant('tileLayers.clearAllSuccess'),
+              );
               this.loadCacheStats();
               return;
             }
@@ -79,12 +86,14 @@ export class TileLayersComponent implements OnInit {
     this.loading = true;
     this.geoserverService.clearTileCache(this.selectedLayer).subscribe({
       next: (res) => {
-        this.notificationService.success(res.message || '缓存已清除');
+        this.notificationService.success(
+          res.message || this.translate.instant('tileLayers.cacheCleared'),
+        );
         this.loadCacheStats();
         this.loading = false;
       },
       error: () => {
-        this.notificationService.error('清除缓存失败');
+        this.notificationService.error(this.translate.instant('tileLayers.clearFail'));
         this.loading = false;
       },
     });

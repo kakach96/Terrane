@@ -21,7 +21,7 @@
               (keydown.space)="toggleGroup('services')"
             >
               <mat-icon class="group-icon">dns</mat-icon>
-              <span>服务</span>
+              <span>{{ 'nav.services' | translate }}</span>
               <mat-icon class="group-arrow">{{
                 isGroupOpen('services') ? 'expand_more' : 'chevron_right'
               }}</mat-icon>
@@ -29,7 +29,7 @@
             <div class="nav-group-body" [class.collapsed]="!isGroupOpen('services')">
               <a mat-list-item routerLink="/services" routerLinkActive="active">
                 <mat-icon matListItemIcon>hub</mat-icon>
-                <span matListItemTitle>服务概览</span>
+                <span matListItemTitle>{{ 'nav.servicesOverview' | translate }}</span>
               </a>
             </div>
           </div>
@@ -45,7 +45,7 @@
               (keydown.space)="toggleGroup('data')"
             >
               <mat-icon class="group-icon">folder</mat-icon>
-              <span>数据</span>
+              <span>{{ 'nav.data' | translate }}</span>
               <mat-icon class="group-arrow">{{
                 isGroupOpen('data') ? 'expand_more' : 'chevron_right'
               }}</mat-icon>
@@ -53,32 +53,32 @@
             <div class="nav-group-body" [class.collapsed]="!isGroupOpen('data')">
               <a mat-list-item routerLink="/layer-preview" routerLinkActive="active">
                 <mat-icon matListItemIcon>visibility</mat-icon>
-                <span matListItemTitle>图层预览</span>
+                <span matListItemTitle>{{ 'nav.layerPreview' | translate }}</span>
               </a>
 
               <a mat-list-item routerLink="/workspaces" routerLinkActive="active">
                 <mat-icon matListItemIcon>folder</mat-icon>
-                <span matListItemTitle>工作空间</span>
+                <span matListItemTitle>{{ 'nav.workspaces' | translate }}</span>
               </a>
 
               <a mat-list-item routerLink="/data-sources" routerLinkActive="active">
                 <mat-icon matListItemIcon>storage</mat-icon>
-                <span matListItemTitle>数据源</span>
+                <span matListItemTitle>{{ 'nav.dataSources' | translate }}</span>
               </a>
 
               <a mat-list-item routerLink="/layers" routerLinkActive="active">
                 <mat-icon matListItemIcon>layers</mat-icon>
-                <span matListItemTitle>图层</span>
+                <span matListItemTitle>{{ 'nav.layers' | translate }}</span>
               </a>
 
               <a mat-list-item routerLink="/layer-groups" routerLinkActive="active">
                 <mat-icon matListItemIcon>folder_special</mat-icon>
-                <span matListItemTitle>图层组</span>
+                <span matListItemTitle>{{ 'nav.layerGroups' | translate }}</span>
               </a>
 
               <a mat-list-item routerLink="/styles" routerLinkActive="active">
                 <mat-icon matListItemIcon>brush</mat-icon>
-                <span matListItemTitle>样式管理</span>
+                <span matListItemTitle>{{ 'nav.styles' | translate }}</span>
               </a>
             </div>
           </div>
@@ -94,7 +94,7 @@
               (keydown.space)="toggleGroup('tiles')"
             >
               <mat-icon class="group-icon">grid_view</mat-icon>
-              <span>瓦片</span>
+              <span>{{ 'nav.tiles' | translate }}</span>
               <mat-icon class="group-arrow">{{
                 isGroupOpen('tiles') ? 'expand_more' : 'chevron_right'
               }}</mat-icon>
@@ -102,7 +102,7 @@
             <div class="nav-group-body" [class.collapsed]="!isGroupOpen('tiles')">
               <a mat-list-item routerLink="/tile-layers" routerLinkActive="active">
                 <mat-icon matListItemIcon>grid_view</mat-icon>
-                <span matListItemTitle>切片图层</span>
+                <span matListItemTitle>{{ 'nav.tileLayers' | translate }}</span>
               </a>
             </div>
           </div>
@@ -118,7 +118,7 @@
               (keydown.space)="toggleGroup('server')"
             >
               <mat-icon class="group-icon">monitoring</mat-icon>
-              <span>服务器</span>
+              <span>{{ 'nav.server' | translate }}</span>
               <mat-icon class="group-arrow">{{
                 isGroupOpen('server') ? 'expand_more' : 'chevron_right'
               }}</mat-icon>
@@ -126,7 +126,7 @@
             <div class="nav-group-body" [class.collapsed]="!isGroupOpen('server')">
               <a mat-list-item routerLink="/monitor" routerLinkActive="active">
                 <mat-icon matListItemIcon>bar_chart</mat-icon>
-                <span matListItemTitle>监控面板</span>
+                <span matListItemTitle>{{ 'nav.monitor' | translate }}</span>
               </a>
             </div>
           </div>
@@ -142,7 +142,7 @@
               (keydown.space)="toggleGroup('security')"
             >
               <mat-icon class="group-icon">security</mat-icon>
-              <span>安全</span>
+              <span>{{ 'nav.security' | translate }}</span>
               <mat-icon class="group-arrow">{{
                 isGroupOpen('security') ? 'expand_more' : 'chevron_right'
               }}</mat-icon>
@@ -150,12 +150,12 @@
             <div class="nav-group-body" [class.collapsed]="!isGroupOpen('security')">
               <a mat-list-item routerLink="/users" routerLinkActive="active">
                 <mat-icon matListItemIcon>people</mat-icon>
-                <span matListItemTitle>用户管理</span>
+                <span matListItemTitle>{{ 'nav.users' | translate }}</span>
               </a>
 
               <a mat-list-item routerLink="/permissions" routerLinkActive="active">
                 <mat-icon matListItemIcon>security</mat-icon>
-                <span matListItemTitle>权限管理</span>
+                <span matListItemTitle>{{ 'nav.permissions' | translate }}</span>
               </a>
             </div>
           </div>
@@ -170,6 +170,23 @@
         </button>
         <span class="toolbar-title">{{ pageTitle }}</span>
         <span class="spacer"></span>
+        <button
+          mat-icon-button
+          [matMenuTriggerFor]="langMenu"
+          matTooltip="{{ 'app.language' | translate }}"
+        >
+          <mat-icon>language</mat-icon>
+        </button>
+        <mat-menu #langMenu="matMenu">
+          <button mat-menu-item (click)="setLanguage('zh-CN')">
+            <mat-icon *ngIf="currentLang === 'zh-CN'">check</mat-icon>
+            <span>{{ 'app.chinese' | translate }}</span>
+          </button>
+          <button mat-menu-item (click)="setLanguage('en-US')">
+            <mat-icon *ngIf="currentLang === 'en-US'">check</mat-icon>
+            <span>{{ 'app.english' | translate }}</span>
+          </button>
+        </mat-menu>
         <button mat-icon-button [matMenuTriggerFor]="menu">
           <mat-icon>account_circle</mat-icon>
         </button>
@@ -181,11 +198,11 @@
           <mat-divider *ngIf="auth.isLoggedIn()"></mat-divider>
           <button mat-menu-item *ngIf="auth.isLoggedIn()" (click)="logout()">
             <mat-icon>logout</mat-icon>
-            <span>退出登录</span>
+            <span>{{ 'app.logout' | translate }}</span>
           </button>
           <button mat-menu-item *ngIf="!auth.isLoggedIn()" (click)="openLoginDialog()">
             <mat-icon>login</mat-icon>
-            <span>登录</span>
+            <span>{{ 'app.login' | translate }}</span>
           </button>
         </mat-menu>
       </mat-toolbar>

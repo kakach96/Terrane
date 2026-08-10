@@ -1,79 +1,122 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { StyleInfo } from '../../models/geoserver.models';
 
 @Component({
   template: `
-    <h2 mat-dialog-title>{{ data.mode === 'create' ? '新建样式' : '编辑样式' }}</h2>
+    <h2 mat-dialog-title>
+      {{
+        data.mode === 'create'
+          ? ('styles.dialogTitleCreate' | translate)
+          : ('styles.dialogTitleEdit' | translate)
+      }}
+    </h2>
     <mat-dialog-content>
       <div class="form-row">
         <mat-form-field appearance="outline" class="name-field">
-          <mat-label>样式名称</mat-label>
+          <mat-label>{{ 'styles.nameLabel' | translate }}</mat-label>
           <input
             matInput
             [(ngModel)]="name"
-            placeholder="my-style"
+            placeholder="{{ 'styles.namePlaceholder' | translate }}"
             [readonly]="data.mode === 'edit'"
           />
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="format-field">
-          <mat-label>格式</mat-label>
+          <mat-label>{{ 'styles.formatLabel' | translate }}</mat-label>
           <mat-select [(ngModel)]="format" (selectionChange)="onFormatChange()">
-            <mat-option value="SLD">SLD (XML)</mat-option>
+            <mat-option value="SLD">{{ 'styles.formatSldXml' | translate }}</mat-option>
             <mat-option value="CSS">CSS</mat-option>
-            <mat-option value="YSLD">YSLD (YAML)</mat-option>
+            <mat-option value="YSLD">{{ 'styles.formatYaml' | translate }}</mat-option>
             <mat-option value="MBStyle">Mapbox Style</mat-option>
           </mat-select>
         </mat-form-field>
       </div>
 
       <mat-form-field appearance="outline" class="full-width">
-        <mat-label>标题</mat-label>
-        <input matInput [(ngModel)]="title" placeholder="我的样式" />
+        <mat-label>{{ 'styles.titleLabel' | translate }}</mat-label>
+        <input
+          matInput
+          [(ngModel)]="title"
+          placeholder="{{ 'styles.titlePlaceholder' | translate }}"
+        />
       </mat-form-field>
 
       <div class="template-buttons" *ngIf="data.mode === 'create'">
-        <span class="label">快速模板：</span>
+        <span class="label">{{ 'styles.templateLabel' | translate }}</span>
         <ng-container [ngSwitch]="format">
           <ng-container *ngSwitchCase="'SLD'">
-            <button mat-stroked-button (click)="applyTemplate('point')">点样式</button>
-            <button mat-stroked-button (click)="applyTemplate('line')">线样式</button>
-            <button mat-stroked-button (click)="applyTemplate('polygon')">面样式</button>
-            <button mat-stroked-button (click)="applyTemplate('raster')">栅格样式</button>
-            <button mat-stroked-button (click)="applyTemplate('labeled')">标注样式</button>
+            <button mat-stroked-button (click)="applyTemplate('point')">
+              {{ 'styles.point' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('line')">
+              {{ 'styles.line' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('polygon')">
+              {{ 'styles.polygon' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('raster')">
+              {{ 'styles.raster' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('labeled')">
+              {{ 'styles.labeled' | translate }}
+            </button>
           </ng-container>
           <ng-container *ngSwitchCase="'CSS'">
-            <button mat-stroked-button (click)="applyTemplate('css-point')">点样式</button>
-            <button mat-stroked-button (click)="applyTemplate('css-line')">线样式</button>
-            <button mat-stroked-button (click)="applyTemplate('css-polygon')">面样式</button>
-            <button mat-stroked-button (click)="applyTemplate('css-scale')">比例尺过滤</button>
+            <button mat-stroked-button (click)="applyTemplate('css-point')">
+              {{ 'styles.point' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('css-line')">
+              {{ 'styles.line' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('css-polygon')">
+              {{ 'styles.polygon' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('css-scale')">
+              {{ 'styles.scaleFilter' | translate }}
+            </button>
           </ng-container>
           <ng-container *ngSwitchCase="'YSLD'">
-            <button mat-stroked-button (click)="applyTemplate('ysld-point')">点样式</button>
-            <button mat-stroked-button (click)="applyTemplate('ysld-line')">线样式</button>
-            <button mat-stroked-button (click)="applyTemplate('ysld-polygon')">面样式</button>
-            <button mat-stroked-button (click)="applyTemplate('ysld-scale')">比例尺过滤</button>
+            <button mat-stroked-button (click)="applyTemplate('ysld-point')">
+              {{ 'styles.point' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('ysld-line')">
+              {{ 'styles.line' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('ysld-polygon')">
+              {{ 'styles.polygon' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('ysld-scale')">
+              {{ 'styles.scaleFilter' | translate }}
+            </button>
           </ng-container>
           <ng-container *ngSwitchCase="'MBStyle'">
-            <button mat-stroked-button (click)="applyTemplate('mb-fill')">面样式</button>
-            <button mat-stroked-button (click)="applyTemplate('mb-line')">线样式</button>
-            <button mat-stroked-button (click)="applyTemplate('mb-circle')">点样式</button>
+            <button mat-stroked-button (click)="applyTemplate('mb-fill')">
+              {{ 'styles.polygon' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('mb-line')">
+              {{ 'styles.line' | translate }}
+            </button>
+            <button mat-stroked-button (click)="applyTemplate('mb-circle')">
+              {{ 'styles.point' | translate }}
+            </button>
           </ng-container>
         </ng-container>
       </div>
 
       <mat-form-field appearance="outline" class="full-width code-editor">
-        <mat-label>{{ formatLabel }} 内容</mat-label>
+        <mat-label>{{ 'styles.contentLabel' | translate: { format: formatLabel } }}</mat-label>
         <textarea matInput [(ngModel)]="content" rows="20" class="code-textarea"></textarea>
       </mat-form-field>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button (click)="cancel()">取消</button>
+      <button mat-button (click)="cancel()">{{ 'styles.cancel' | translate }}</button>
       <button mat-raised-button color="primary" (click)="save()" [disabled]="!name || !content">
-        {{ data.mode === 'create' ? '创建' : '保存' }}
+        {{ data.mode === 'create' ? ('styles.create' | translate) : ('styles.save' | translate) }}
       </button>
     </mat-dialog-actions>
   `,
@@ -135,6 +178,7 @@ export class StyleEditorDialogComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: { mode: 'create' | 'edit'; style?: StyleInfo },
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
+    private translate: TranslateService,
   ) {}
 
   get formatLabel(): string {
@@ -142,11 +186,11 @@ export class StyleEditorDialogComponent implements OnInit {
       case 'CSS':
         return 'CSS';
       case 'YSLD':
-        return 'YSLD (YAML)';
+        return this.translate.instant('styles.formatYaml');
       case 'MBStyle':
-        return 'Mapbox Style JSON';
+        return this.translate.instant('styles.formatMb');
       default:
-        return 'SLD XML';
+        return this.translate.instant('styles.formatSld');
     }
   }
 
@@ -193,11 +237,15 @@ export class StyleEditorDialogComponent implements OnInit {
         })
         .subscribe({
           next: () => {
-            this.notificationService.success('样式创建成功');
+            this.notificationService.success(this.translate.instant('styles.createSuccess'));
             this.dialogRef.close(true);
           },
           error: (e) =>
-            this.notificationService.error('创建失败: ' + (e.error?.message || e.message)),
+            this.notificationService.error(
+              this.translate.instant('styles.createFail', {
+                message: this.notificationService.fromError(e),
+              }),
+            ),
         });
     } else {
       this.geoserverService
@@ -208,11 +256,15 @@ export class StyleEditorDialogComponent implements OnInit {
         })
         .subscribe({
           next: () => {
-            this.notificationService.success('样式已保存');
+            this.notificationService.success(this.translate.instant('styles.saveSuccess'));
             this.dialogRef.close(true);
           },
           error: (e) =>
-            this.notificationService.error('保存失败: ' + (e.error?.message || e.message)),
+            this.notificationService.error(
+              this.translate.instant('styles.saveFail', {
+                message: this.notificationService.fromError(e),
+              }),
+            ),
         });
     }
   }

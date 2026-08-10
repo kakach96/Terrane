@@ -1,6 +1,7 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../../services/geoserver.service';
 import { NotificationService } from '../../../services/notification.service';
 import {
@@ -33,12 +34,12 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'geopackage', label: 'GeoPackage' },
     { value: 'geojson', label: 'GeoJSON' },
     { value: 'worldimage', label: 'WorldImage' },
-    { value: 'cascaded_wms', label: '级联 WMS' },
+    { value: 'cascaded_wms', label: 'Cascaded WMS' },
     { value: 'arcgrid', label: 'ArcGrid' },
   ];
   fileStorageTypes = [
-    { value: 'local', label: '嵌入', description: '使用服务器本地目录' },
-    { value: 's3', label: 'S3', description: '使用对象存储目录' },
+    { value: 'local', label: 'Local', description: 'Server-local directory' },
+    { value: 's3', label: 'S3', description: 'Object storage directory' },
   ];
   isTesting = false;
   selectedFile: File | null = null;
@@ -50,6 +51,7 @@ export class DataSourceDialogComponent implements OnInit {
     private fb: FormBuilder,
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
+    private translate: TranslateService,
   ) {
     this.mode = data.mode;
     this.dataSource = data.dataSource;
@@ -76,6 +78,28 @@ export class DataSourceDialogComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadWorkspaces();
+    this.dataSourceTypes = [
+      { value: 'postgis', label: 'PostGIS' },
+      { value: 'shapefile', label: 'Shapefile' },
+      { value: 'geotiff', label: 'GeoTIFF' },
+      { value: 'geopackage', label: 'GeoPackage' },
+      { value: 'geojson', label: 'GeoJSON' },
+      { value: 'worldimage', label: 'WorldImage' },
+      { value: 'cascaded_wms', label: this.translate.instant('dataSources.cascadedWms') },
+      { value: 'arcgrid', label: 'ArcGrid' },
+    ];
+    this.fileStorageTypes = [
+      {
+        value: 'local',
+        label: this.translate.instant('dataSources.storageTypeLocal'),
+        description: this.translate.instant('dataSources.storageTypeLocalDesc'),
+      },
+      {
+        value: 's3',
+        label: this.translate.instant('dataSources.storageTypeS3'),
+        description: this.translate.instant('dataSources.storageTypeS3Desc'),
+      },
+    ];
 
     if (this.mode === 'edit' && this.dataSource) {
       this.form.patchValue({
@@ -112,7 +136,9 @@ export class DataSourceDialogComponent implements OnInit {
   }
 
   get title(): string {
-    return this.mode === 'create' ? '创建数据源' : '编辑数据源';
+    return this.mode === 'create'
+      ? this.translate.instant('dataSources.dialogTitleCreate')
+      : this.translate.instant('dataSources.dialogTitleEdit');
   }
 
   get selectedType(): string {
@@ -165,7 +191,7 @@ export class DataSourceDialogComponent implements OnInit {
       s3_secret_key: this.form.get('s3_secret_key')?.value || undefined,
     };
     if (!connection.s3_bucket) {
-      this.notificationService.warning('请先填写 S3 bucket 名称');
+      this.notificationService.warning(this.translate.instant('dataSources.s3BucketWarning'));
       return;
     }
     const dialogRef = this.dialog.open(DirectoryBrowserComponent, {
@@ -206,18 +232,18 @@ export class DataSourceDialogComponent implements OnInit {
 
   testConnection(): void {
     if (this.selectedType !== 'postgis') {
-      this.notificationService.info('仅 PostGIS 支持连接测试');
+      this.notificationService.info(this.translate.instant('dataSources.postgisOnlyTest'));
       return;
     }
     if (!this.form.valid) {
-      this.notificationService.warning('请填写必填字段');
+      this.notificationService.warning(this.translate.instant('dataSources.requiredFields'));
       return;
     }
 
     this.isTesting = true;
     const request = this.buildCreateRequest();
     if (!request.connection) {
-      this.notificationService.error('缺少连接配置');
+      this.notificationService.error(this.translate.instant('dataSources.missingConnection'));
       this.isTesting = false;
       return;
     }
@@ -225,15 +251,17 @@ export class DataSourceDialogComponent implements OnInit {
       next: (result: ConnectionTestResult) => {
         this.isTesting = false;
         if (result.success) {
-          this.notificationService.success('连接测试成功');
+          this.notificationService.success(this.translate.instant('dataSources.testSuccess'));
         } else {
-          this.notificationService.error(`连接测试失败: ${result.message}`);
+          this.notificationService.error(
+            this.translate.instant('dataSources.testFailWithMessage', { message: result.message }),
+          );
         }
       },
       error: (err) => {
         this.isTesting = false;
         console.error('Connection test failed:', err);
-        this.notificationService.error('连接测试失败');
+        this.notificationService.error(this.translate.instant('dataSources.testFail'));
       },
     });
   }
@@ -319,7 +347,7 @@ export class DataSourceDialogComponent implements OnInit {
 
   onSubmit(): void {
     if (!this.form.valid) {
-      this.notificationService.warning('请填写必填字段');
+      this.notificationService.warning(this.translate.instant('dataSources.requiredFields'));
       return;
     }
 
@@ -344,24 +372,26 @@ export class DataSourceDialogComponent implements OnInit {
       upload$.subscribe({
         next: () => {
           this.notificationService.success(
-            `${type === 'shapefile' ? 'Shapefile' : 'GeoTIFF'} 上传并创建成功`,
+            this.translate.instant('dataSources.uploadCreateSuccess', {
+              type: type === 'shapefile' ? 'Shapefile' : 'GeoTIFF',
+            }),
           );
           this.dialogRef.close(true);
         },
         error: (err) => {
           console.error('Upload failed:', err);
-          this.notificationService.error(err.error?.message || '上传创建失败');
+          this.notificationService.error(this.notificationService.fromError(err));
         },
       });
     } else if (this.mode === 'create') {
       this.geoserverService.createDataSource(this.buildCreateRequest()).subscribe({
         next: () => {
-          this.notificationService.success('创建成功');
+          this.notificationService.success(this.translate.instant('dataSources.createSuccess'));
           this.dialogRef.close(true);
         },
         error: (err) => {
           console.error('Create failed:', err);
-          this.notificationService.error('创建失败');
+          this.notificationService.error(this.translate.instant('dataSources.createFail'));
         },
       });
     } else {
@@ -369,12 +399,12 @@ export class DataSourceDialogComponent implements OnInit {
         .updateDataSource(this.dataSource!.name, this.buildUpdateRequest())
         .subscribe({
           next: () => {
-            this.notificationService.success('更新成功');
+            this.notificationService.success(this.translate.instant('dataSources.updateSuccess'));
             this.dialogRef.close(true);
           },
           error: (err) => {
             console.error('Update failed:', err);
-            this.notificationService.error('更新失败');
+            this.notificationService.error(this.translate.instant('dataSources.updateFail'));
           },
         });
     }

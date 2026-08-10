@@ -5,7 +5,9 @@ use crate::auth::{
     generate_salt, generate_token, hash_password, verify_password, verify_token, UserRole,
 };
 use crate::error::GeoServerError;
+use crate::i18n;
 use crate::state::AppState;
+use actix_web::http::StatusCode;
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use tracing::info;
@@ -47,6 +49,7 @@ pub async fn login(
     req: HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
     let ip = req_ip(&req);
+    let lang = i18n::from_accept_language(&req.headers());
 
     if let Some(store) = &state.store {
         match store.get_user(&body.username).await {
@@ -61,7 +64,11 @@ pub async fn login(
                             ip.as_deref(),
                         )
                         .await;
-                    return Err(GeoServerError::BadRequest("账号已被禁用".to_string()));
+                    return Err(GeoServerError::localized(
+                        "LOGIN_DISABLED",
+                        StatusCode::BAD_REQUEST,
+                        i18n::tr(lang, "login.disabled", &[]),
+                    ));
                 }
 
                 if verify_password(&body.password, &user.salt, &user.password_hash) {
@@ -111,7 +118,7 @@ pub async fn login(
                             "token": token,
                             "username": user.username,
                             "role": user.role.to_string(),
-                            "message": "登录成功",
+                            "message": i18n::tr(lang, "login.success", &[]),
                         }))),
                     )
                 } else {
@@ -124,17 +131,33 @@ pub async fn login(
                             ip.as_deref(),
                         )
                         .await;
-                    Err(GeoServerError::BadRequest("用户名或密码错误".to_string()))
+                    Err(GeoServerError::localized(
+                        "LOGIN_INVALID_CREDENTIALS",
+                        StatusCode::BAD_REQUEST,
+                        i18n::tr(lang, "login.invalid_credentials", &[]),
+                    ))
                 }
             },
-            Ok(None) => Err(GeoServerError::BadRequest("用户名或密码错误".to_string())),
+            Ok(None) => Err(GeoServerError::localized(
+                "LOGIN_INVALID_CREDENTIALS",
+                StatusCode::BAD_REQUEST,
+                i18n::tr(lang, "login.invalid_credentials", &[]),
+            )),
             Err(e) => {
                 eprintln!("[Auth] 查询用户失败: {}", e);
-                Err(GeoServerError::InternalError("登录失败".to_string()))
+                Err(GeoServerError::localized(
+                    "LOGIN_FAILED",
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    i18n::tr(lang, "login.failed", &[]),
+                ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(GeoServerError::localized(
+            "LOGIN_DB_UNAVAILABLE",
+            StatusCode::SERVICE_UNAVAILABLE,
+            i18n::tr(lang, "login.db_unavailable", &[]),
+        ))
     }
 }
 
@@ -143,6 +166,7 @@ pub async fn logout(
     req: HttpRequest,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
+    let lang = i18n::from_accept_language(&req.headers());
     let auth_header = req
         .headers()
         .get("Authorization")
@@ -169,7 +193,7 @@ pub async fn logout(
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-            "message": "已退出登录",
+            "message": i18n::tr(lang, "logout.success", &[]),
         }))),
     )
 }

@@ -1,5 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../../services/geoserver.service';
 import { FileEntry, S3BrowseRequest } from '../../../models/geoserver.models';
 
@@ -35,6 +36,7 @@ export class DirectoryBrowserComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: DirectoryBrowserData,
     private dialogRef: MatDialogRef<DirectoryBrowserComponent>,
     private geoserverService: GeoserverService,
+    private translate: TranslateService,
   ) {
     this.mode = data.mode;
     this.currentPath = data.initialPath || '';
@@ -45,13 +47,15 @@ export class DirectoryBrowserComponent implements OnInit {
   }
 
   get title(): string {
-    return this.mode === 'local' ? '选择服务器目录' : '选择 S3 目录';
+    return this.mode === 'local'
+      ? this.translate.instant('directoryBrowser.titleLocal')
+      : this.translate.instant('directoryBrowser.titleS3');
   }
 
   get rootHint(): string {
     return this.mode === 'local'
-      ? '浏览服务器本地目录，选中目录或文件作为数据源文件路径'
-      : '浏览对象存储目录，选中目录或对象作为数据源文件路径';
+      ? this.translate.instant('directoryBrowser.rootHintLocal')
+      : this.translate.instant('directoryBrowser.rootHintS3');
   }
 
   load(path: string): void {
@@ -73,7 +77,7 @@ export class DirectoryBrowserComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        this.error = err.error?.message || '目录浏览失败';
+        this.error = err.error?.message || this.translate.instant('directoryBrowser.loadFail');
       },
     });
   }

@@ -6,7 +6,7 @@
 <div class="login-content">
   <form (ngSubmit)="onSubmit()" #loginForm="ngForm">
     <mat-form-field appearance="outline" class="full-width">
-      <mat-label>用户名</mat-label>
+      <mat-label>{{ 'login.username' | translate }}</mat-label>
       <input
         matInput
         [(ngModel)]="username"
@@ -19,7 +19,7 @@
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="full-width">
-      <mat-label>密码</mat-label>
+      <mat-label>{{ 'login.password' | translate }}</mat-label>
       <input
         matInput
         [(ngModel)]="password"
@@ -47,7 +47,7 @@
         [disabled]="loading"
       >
         <mat-spinner diameter="20" *ngIf="loading" class="spinner"></mat-spinner>
-        <span *ngIf="!loading">登 录</span>
+        <span *ngIf="!loading">{{ 'login.submit' | translate }}</span>
       </button>
     </div>
   </form>

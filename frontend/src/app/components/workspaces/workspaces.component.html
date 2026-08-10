@@ -1,12 +1,12 @@
 <div class="workspaces fade-in">
   <div class="page-header">
     <div>
-      <h1>工作空间</h1>
-      <p class="subtitle">管理工作空间</p>
+      <h1>{{ 'workspaces.title' | translate }}</h1>
+      <p class="subtitle">{{ 'workspaces.subtitle' | translate }}</p>
     </div>
     <button mat-raised-button color="primary" (click)="openCreateDialog()">
       <mat-icon>add</mat-icon>
-      新建工作空间
+      {{ 'workspaces.create' | translate }}
     </button>
   </div>
 
@@ -18,22 +18,22 @@
 
       <table mat-table [dataSource]="workspaces" *ngIf="!loading" class="full-width">
         <ng-container matColumnDef="name">
-          <th mat-header-cell *matHeaderCellDef>名称</th>
+          <th mat-header-cell *matHeaderCellDef>{{ 'workspaces.nameLabel' | translate }}</th>
           <td mat-cell *matCellDef="let workspace">{{ workspace.name }}</td>
         </ng-container>
 
         <ng-container matColumnDef="title">
-          <th mat-header-cell *matHeaderCellDef>标题</th>
+          <th mat-header-cell *matHeaderCellDef>{{ 'workspaces.titleLabel' | translate }}</th>
           <td mat-cell *matCellDef="let workspace">{{ workspace.title || '-' }}</td>
         </ng-container>
 
         <ng-container matColumnDef="layerCount">
-          <th mat-header-cell *matHeaderCellDef>图层数</th>
+          <th mat-header-cell *matHeaderCellDef>{{ 'common.layerCount' | translate }}</th>
           <td mat-cell *matCellDef="let workspace">{{ workspace.layerCount }}</td>
         </ng-container>
 
         <ng-container matColumnDef="status">
-          <th mat-header-cell *matHeaderCellDef>状态</th>
+          <th mat-header-cell *matHeaderCellDef>{{ 'common.status' | translate }}</th>
           <td mat-cell *matCellDef="let workspace">
             <button
               mat-chip
@@ -42,18 +42,20 @@
               (click)="toggleStatus(workspace)"
               class="clickable-chip"
             >
-              {{ workspace.enabled ? '启用' : '禁用' }}
+              {{
+                workspace.enabled ? ('common.enabled' | translate) : ('common.disabled' | translate)
+              }}
             </button>
           </td>
         </ng-container>
 
         <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef>操作</th>
+          <th mat-header-cell *matHeaderCellDef>{{ 'common.actions' | translate }}</th>
           <td mat-cell *matCellDef="let workspace">
             <button
               mat-icon-button
               color="primary"
-              matTooltip="编辑"
+              matTooltip="{{ 'workspaces.tooltipEdit' | translate }}"
               (click)="openEditDialog(workspace)"
             >
               <mat-icon>edit</mat-icon>
@@ -61,7 +63,7 @@
             <button
               mat-icon-button
               color="warn"
-              matTooltip="删除"
+              matTooltip="{{ 'workspaces.tooltipDelete' | translate }}"
               (click)="deleteWorkspace(workspace)"
               [disabled]="workspace.layerCount > 0"
               [matTooltipDisabled]="workspace.layerCount > 0"
@@ -77,9 +79,9 @@
 
       <div *ngIf="!loading && workspaces.length === 0" class="empty-state">
         <mat-icon class="empty-icon">folder_open</mat-icon>
-        <p>暂无工作空间</p>
+        <p>{{ 'workspaces.empty' | translate }}</p>
         <button mat-raised-button color="primary" (click)="openCreateDialog()">
-          创建第一个工作空间
+          {{ 'workspaces.emptyCreate' | translate }}
         </button>
       </div>
     </div>

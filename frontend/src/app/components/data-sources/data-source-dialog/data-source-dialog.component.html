@@ -3,15 +3,19 @@
   <form [formGroup]="form" class="data-source-form">
     <div class="form-row">
       <mat-form-field class="form-field">
-        <mat-label>名称</mat-label>
-        <input matInput formControlName="name" placeholder="输入数据源名称" />
+        <mat-label>{{ 'dataSources.nameLabel' | translate }}</mat-label>
+        <input
+          matInput
+          formControlName="name"
+          placeholder="{{ 'dataSources.namePlaceholder' | translate }}"
+        />
         <mat-error *ngIf="form.get('name')?.invalid && form.get('name')?.touched">
-          名称不能为空
+          {{ 'dataSources.nameRequired' | translate }}
         </mat-error>
       </mat-form-field>
 
       <mat-form-field class="form-field">
-        <mat-label>类型</mat-label>
+        <mat-label>{{ 'dataSources.typeLabel' | translate }}</mat-label>
         <mat-select formControlName="type">
           <mat-option *ngFor="let type of dataSourceTypes" [value]="type.value">
             {{ type.label }}
@@ -21,56 +25,84 @@
     </div>
 
     <mat-form-field class="form-field">
-      <mat-label>工作空间</mat-label>
+      <mat-label>{{ 'dataSources.workspaceLabel' | translate }}</mat-label>
       <mat-select formControlName="workspace">
-        <mat-option value="" disabled>-- 请选择 --</mat-option>
+        <mat-option value="" disabled>{{
+          'dataSources.workspacePlaceholder' | translate
+        }}</mat-option>
         <mat-option *ngFor="let ws of workspaces" [value]="ws.name">
           {{ ws.title || ws.name }}
         </mat-option>
       </mat-select>
       <mat-error *ngIf="form.get('workspace')?.invalid && form.get('workspace')?.touched">
-        请选择工作空间
+        {{ 'dataSources.workspaceRequired' | translate }}
       </mat-error>
     </mat-form-field>
 
     <ng-container *ngIf="selectedType === 'postgis'">
       <mat-divider></mat-divider>
 
-      <h3 class="section-title">PostGIS 连接配置</h3>
+      <h3 class="section-title">{{ 'dataSources.postgisSection' | translate }}</h3>
 
       <div class="form-row">
         <mat-form-field class="form-field">
-          <mat-label>主机</mat-label>
-          <input matInput formControlName="host" placeholder="localhost" />
+          <mat-label>{{ 'dataSources.host' | translate }}</mat-label>
+          <input
+            matInput
+            formControlName="host"
+            placeholder="{{ 'dataSources.hostPlaceholder' | translate }}"
+          />
         </mat-form-field>
 
         <mat-form-field class="form-field">
-          <mat-label>端口</mat-label>
-          <input matInput formControlName="port" type="number" placeholder="5432" />
+          <mat-label>{{ 'dataSources.port' | translate }}</mat-label>
+          <input
+            matInput
+            formControlName="port"
+            type="number"
+            placeholder="{{ 'dataSources.portPlaceholder' | translate }}"
+          />
         </mat-form-field>
       </div>
 
       <div class="form-row">
         <mat-form-field class="form-field">
-          <mat-label>数据库</mat-label>
-          <input matInput formControlName="database" placeholder="数据库名称" />
+          <mat-label>{{ 'dataSources.database' | translate }}</mat-label>
+          <input
+            matInput
+            formControlName="database"
+            placeholder="{{ 'dataSources.databasePlaceholder' | translate }}"
+          />
         </mat-form-field>
 
         <mat-form-field class="form-field">
-          <mat-label>Schema</mat-label>
-          <input matInput formControlName="schema" placeholder="public" />
+          <mat-label>{{ 'dataSources.schema' | translate }}</mat-label>
+          <input
+            matInput
+            formControlName="schema"
+            placeholder="{{ 'dataSources.schemaPlaceholder' | translate }}"
+          />
         </mat-form-field>
       </div>
 
       <div class="form-row">
         <mat-form-field class="form-field">
-          <mat-label>用户名</mat-label>
-          <input matInput formControlName="username" placeholder="用户名" />
+          <mat-label>{{ 'dataSources.username' | translate }}</mat-label>
+          <input
+            matInput
+            formControlName="username"
+            placeholder="{{ 'dataSources.usernamePlaceholder' | translate }}"
+          />
         </mat-form-field>
 
         <mat-form-field class="form-field">
-          <mat-label>密码</mat-label>
-          <input matInput formControlName="password" type="password" placeholder="密码" />
+          <mat-label>{{ 'dataSources.password' | translate }}</mat-label>
+          <input
+            matInput
+            formControlName="password"
+            type="password"
+            placeholder="{{ 'dataSources.passwordPlaceholder' | translate }}"
+          />
         </mat-form-field>
       </div>
     </ng-container>
@@ -79,11 +111,11 @@
     <ng-container *ngIf="selectedType !== 'postgis'">
       <mat-divider></mat-divider>
 
-      <h3 class="section-title">文件配置</h3>
+      <h3 class="section-title">{{ 'dataSources.fileSection' | translate }}</h3>
 
       <!-- 存储类型下拉 (放在文件配置最前) -->
       <mat-form-field class="form-field">
-        <mat-label>存储类型</mat-label>
+        <mat-label>{{ 'dataSources.storageType' | translate }}</mat-label>
         <mat-select formControlName="file_storage_type">
           <mat-option
             *ngFor="let st of fileStorageTypes"
@@ -100,11 +132,11 @@
       <ng-container *ngIf="!isS3">
         <div class="form-row browse-row">
           <mat-form-field class="form-field flex-field">
-            <mat-label>文件路径</mat-label>
+            <mat-label>{{ 'dataSources.filePath' | translate }}</mat-label>
             <input
               matInput
               formControlName="file_path"
-              placeholder="点击选择服务器目录或文件"
+              placeholder="{{ 'dataSources.filePathPlaceholder' | translate }}"
               readonly
               (click)="browseLocal()"
             />
@@ -112,8 +144,8 @@
           <button
             type="button"
             mat-icon-button
-            matTooltip="浏览服务器目录"
-            aria-label="浏览服务器目录"
+            matTooltip="{{ 'dataSources.browseServerDir' | translate }}"
+            [attr.aria-label]="'dataSources.browseServerDirAria' | translate"
             (click)="browseLocal()"
           >
             <mat-icon>folder_open</mat-icon>
@@ -132,9 +164,11 @@
             class="file-input"
           />
           <button type="button" mat-raised-button color="accent" (click)="fileInput.click()">
-            <mat-icon>upload_file</mat-icon> 选择文件
+            <mat-icon>upload_file</mat-icon> {{ 'dataSources.selectFile' | translate }}
           </button>
-          <span class="file-name">{{ selectedFile ? selectedFile.name : '未选择文件' }}</span>
+          <span class="file-name">{{
+            selectedFile ? selectedFile.name : ('dataSources.noFileSelected' | translate)
+          }}</span>
         </div>
       </ng-container>
 
@@ -142,52 +176,65 @@
       <ng-container *ngIf="isS3">
         <div class="form-row">
           <mat-form-field class="form-field">
-            <mat-label>Endpoint</mat-label>
+            <mat-label>{{ 'dataSources.s3Endpoint' | translate }}</mat-label>
             <input
               matInput
               formControlName="s3_endpoint"
-              placeholder="http://localhost:9000 (MinIO)"
+              placeholder="{{ 'dataSources.s3EndpointPlaceholder' | translate }}"
             />
           </mat-form-field>
 
           <mat-form-field class="form-field">
-            <mat-label>Region</mat-label>
-            <input matInput formControlName="s3_region" placeholder="us-east-1" />
+            <mat-label>{{ 'dataSources.s3Region' | translate }}</mat-label>
+            <input
+              matInput
+              formControlName="s3_region"
+              placeholder="{{ 'dataSources.s3RegionPlaceholder' | translate }}"
+            />
           </mat-form-field>
         </div>
 
         <mat-form-field class="form-field">
-          <mat-label>Bucket *</mat-label>
-          <input matInput formControlName="s3_bucket" placeholder="bucket 名称" required />
+          <mat-label>{{ 'dataSources.s3Bucket' | translate }}</mat-label>
+          <input
+            matInput
+            formControlName="s3_bucket"
+            placeholder="{{ 'dataSources.s3BucketPlaceholder' | translate }}"
+            required
+          />
           <mat-error *ngIf="isS3 && !form.get('s3_bucket')?.value">
-            请填写 S3 bucket 名称
+            {{ 'dataSources.s3BucketRequired' | translate }}
           </mat-error>
         </mat-form-field>
 
         <div class="form-row">
           <mat-form-field class="form-field">
-            <mat-label>Access Key</mat-label>
-            <input matInput formControlName="s3_access_key" placeholder="访问密钥" />
+            <mat-label>{{ 'dataSources.s3AccessKey' | translate }}</mat-label>
+            <input
+              matInput
+              formControlName="s3_access_key"
+              placeholder="{{ 'dataSources.s3AccessKeyPlaceholder' | translate }}"
+            />
           </mat-form-field>
 
           <mat-form-field class="form-field">
-            <mat-label>Secret Key</mat-label>
+            <mat-label>{{ 'dataSources.s3SecretKey' | translate }}</mat-label>
             <input
               matInput
               formControlName="s3_secret_key"
               type="password"
-              placeholder="私有密钥"
+              placeholder="{{ 'dataSources.s3SecretKeyPlaceholder' | translate }}"
             />
           </mat-form-field>
         </div>
 
         <div class="form-row browse-row">
           <mat-form-field class="form-field flex-field">
-            <mat-label>已选对象 / 前缀</mat-label>
+            <mat-label>{{ 'dataSources.selectedObject' | translate }}</mat-label>
             <input
               matInput
               formControlName="file_path"
-              placeholder="点击选择 S3 对象或前缀"
+              placeholder="{{ 'dataSources.selectedObjectPlaceholder' | translate }}"
               readonly
               (click)="browseS3()"
             />
@@ -195,8 +242,8 @@
           <button
             type="button"
             mat-icon-button
-            matTooltip="浏览 S3 目录"
-            aria-label="浏览 S3 目录"
+            matTooltip="{{ 'dataSources.browseS3Dir' | translate }}"
+            [attr.aria-label]="'dataSources.browseS3DirAria' | translate"
             (click)="browseS3()"
           >
             <mat-icon>folder_open</mat-icon>
@@ -205,7 +252,9 @@
       </ng-container>
 
       <div class="form-row">
-        <mat-slide-toggle formControlName="enabled"> 启用数据源 </mat-slide-toggle>
+        <mat-slide-toggle formControlName="enabled">
+          {{ 'dataSources.enableDataSource' | translate }}
+        </mat-slide-toggle>
       </div>
     </ng-container>
   </form>
@@ -217,10 +266,10 @@
     [disabled]="isTesting || selectedType !== 'postgis'"
   >
     <mat-icon>{{ isTesting ? 'hourglass_empty' : 'network_check' }}</mat-icon>
-    {{ isTesting ? '测试中...' : '测试连接' }}
+    {{ isTesting ? ('dataSources.testing' | translate) : ('common.testConnection' | translate) }}
   </button>
-  <button mat-button (click)="onCancel()">取消</button>
+  <button mat-button (click)="onCancel()">{{ 'common.cancel' | translate }}</button>
   <button mat-raised-button color="primary" (click)="onSubmit()">
-    {{ mode === 'create' ? '创建' : '更新' }}
+    {{ mode === 'create' ? ('dataSources.create' | translate) : ('common.update' | translate) }}
   </button>
 </mat-dialog-actions>

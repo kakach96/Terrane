@@ -3,38 +3,46 @@ import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/materia
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
+import { TranslateModule } from '@ngx-translate/core';
 import { Feature } from '../../models/geoserver.models';
 import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-feature-detail-dialog',
   standalone: true,
-  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatChipsModule],
+  imports: [
+    CommonModule,
+    MatDialogModule,
+    MatButtonModule,
+    MatIconModule,
+    MatChipsModule,
+    TranslateModule,
+  ],
   template: `
-    <h2 mat-dialog-title>要素详情</h2>
+    <h2 mat-dialog-title>{{ 'featureDetail.title' | translate }}</h2>
     <mat-dialog-content>
       <div class="feature-detail">
         <div class="detail-section">
-          <h3>基本信息</h3>
+          <h3>{{ 'featureDetail.basicInfo' | translate }}</h3>
           <div class="info-item">
             <span class="label">ID</span>
             <span class="value mono">{{ feature.id }}</span>
           </div>
           <div class="info-item">
-            <span class="label">类型</span>
+            <span class="label">{{ 'common.type' | translate }}</span>
             <mat-chip>{{ feature.geometry.type }}</mat-chip>
           </div>
         </div>
 
         <div class="detail-section">
-          <h3>几何信息</h3>
+          <h3>{{ 'featureDetail.geometry' | translate }}</h3>
           <div class="geometry-display mono">
             {{ formatGeometry(feature.geometry) }}
           </div>
         </div>
 
         <div class="detail-section" *ngIf="hasProperties">
-          <h3>属性信息</h3>
+          <h3>{{ 'featureDetail.properties' | translate }}</h3>
           <div class="properties-grid">
             <div class="property-item" *ngFor="let key of propertyKeys">
               <span class="property-key">{{ key }}</span>
@@ -45,7 +53,7 @@ import { CommonModule } from '@angular/common';
       </div>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button mat-dialog-close>关闭</button>
+      <button mat-button mat-dialog-close>{{ 'featureDetail.close' | translate }}</button>
     </mat-dialog-actions>
   `,
   styles: [

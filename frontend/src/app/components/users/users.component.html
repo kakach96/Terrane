@@ -1,12 +1,12 @@
 <div class="users-container">
   <div class="page-header">
-    <h1><mat-icon>people</mat-icon> 用户管理</h1>
+    <h1><mat-icon>people</mat-icon> {{ 'users.title' | translate }}</h1>
     <div class="header-actions">
       <button mat-raised-button color="primary" (click)="showCreateForm = !showCreateForm">
-        <mat-icon>person_add</mat-icon> 创建用户
+        <mat-icon>person_add</mat-icon> {{ 'users.createUser' | translate }}
       </button>
       <button mat-raised-button (click)="showPasswordForm = !showPasswordForm">
-        <mat-icon>lock</mat-icon> 修改密码
+        <mat-icon>lock</mat-icon> {{ 'users.changePassword' | translate }}
       </button>
     </div>
   </div>
@@ -15,38 +15,38 @@
   <mat-card *ngIf="showCreateForm" class="form-card">
     <mat-card-header>
       <mat-icon mat-card-avatar>person_add</mat-icon>
-      <mat-card-title>创建新用户</mat-card-title>
+      <mat-card-title>{{ 'users.createFormTitle' | translate }}</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <div class="form-row">
         <mat-form-field appearance="outline">
-          <mat-label>用户名</mat-label>
+          <mat-label>{{ 'users.username' | translate }}</mat-label>
           <input matInput [(ngModel)]="newUsername" placeholder="username" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>密码</mat-label>
+          <mat-label>{{ 'users.password' | translate }}</mat-label>
           <input matInput type="password" [(ngModel)]="newPassword" placeholder="••••••" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>角色</mat-label>
+          <mat-label>{{ 'users.role' | translate }}</mat-label>
           <mat-select [(ngModel)]="newRole">
-            <mat-option value="admin">管理员</mat-option>
-            <mat-option value="manager">经理</mat-option>
-            <mat-option value="user">用户</mat-option>
-            <mat-option value="guest">访客</mat-option>
+            <mat-option value="admin">{{ 'users.roleAdmin' | translate }}</mat-option>
+            <mat-option value="manager">{{ 'users.roleManager' | translate }}</mat-option>
+            <mat-option value="user">{{ 'users.roleUser' | translate }}</mat-option>
+            <mat-option value="guest">{{ 'users.roleGuest' | translate }}</mat-option>
           </mat-select>
         </mat-form-field>
       </div>
     </mat-card-content>
     <mat-card-actions>
-      <button mat-button (click)="showCreateForm = false">取消</button>
+      <button mat-button (click)="showCreateForm = false">{{ 'users.cancel' | translate }}</button>
       <button
         mat-raised-button
         color="primary"
         (click)="createUser()"
         [disabled]="!newUsername || !newPassword"
       >
-        <mat-icon>check</mat-icon> 创建
+        <mat-icon>check</mat-icon> {{ 'users.create' | translate }}
       </button>
     </mat-card-actions>
   </mat-card>
@@ -55,33 +55,35 @@
   <mat-card *ngIf="showPasswordForm" class="form-card">
     <mat-card-header>
       <mat-icon mat-card-avatar>lock</mat-icon>
-      <mat-card-title>修改当前用户密码</mat-card-title>
+      <mat-card-title>{{ 'users.changePasswordTitle' | translate }}</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <div class="form-row">
         <mat-form-field appearance="outline">
-          <mat-label>当前密码</mat-label>
+          <mat-label>{{ 'users.currentPassword' | translate }}</mat-label>
           <input matInput type="password" [(ngModel)]="oldPassword" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>新密码</mat-label>
+          <mat-label>{{ 'users.newPassword' | translate }}</mat-label>
           <input matInput type="password" [(ngModel)]="newPassword1" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>确认新密码</mat-label>
+          <mat-label>{{ 'users.confirmNewPassword' | translate }}</mat-label>
           <input matInput type="password" [(ngModel)]="newPassword2" />
         </mat-form-field>
       </div>
     </mat-card-content>
     <mat-card-actions>
-      <button mat-button (click)="showPasswordForm = false">取消</button>
+      <button mat-button (click)="showPasswordForm = false">
+        {{ 'users.cancel' | translate }}
+      </button>
       <button
         mat-raised-button
         color="primary"
         (click)="changePassword()"
         [disabled]="!oldPassword || !newPassword1"
       >
-        <mat-icon>check</mat-icon> 确认修改
+        <mat-icon>check</mat-icon> {{ 'users.confirmChange' | translate }}
       </button>
     </mat-card-actions>
   </mat-card>
@@ -97,18 +99,18 @@
   <mat-card>
     <mat-card-header>
       <mat-icon mat-card-avatar>list</mat-icon>
-      <mat-card-title>用户列表 ({{ users.length }})</mat-card-title>
+      <mat-card-title>{{ 'users.userList' | translate: { count: users.length } }}</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <div class="table-container">
         <table class="data-table">
           <thead>
             <tr>
-              <th>用户名</th>
-              <th>角色</th>
-              <th>状态</th>
-              <th>创建时间</th>
-              <th>操作</th>
+              <th>{{ 'users.columnUsername' | translate }}</th>
+              <th>{{ 'users.columnRole' | translate }}</th>
+              <th>{{ 'users.columnStatus' | translate }}</th>
+              <th>{{ 'users.columnCreated' | translate }}</th>
+              <th>{{ 'users.columnActions' | translate }}</th>
             </tr>
           </thead>
           <tbody>
@@ -126,22 +128,14 @@
                     u.role === 'admin' ? '#c62828' : u.role === 'manager' ? '#1565c0' : '#2e7d32'
                   "
                 >
-                  {{
-                    u.role === 'admin'
-                      ? '管理员'
-                      : u.role === 'manager'
-                        ? '经理'
-                        : u.role === 'guest'
-                          ? '访客'
-                          : '用户'
-                  }}
+                  {{ roleLabel(u.role) }}
                 </span>
               </td>
               <td>
                 <mat-icon [style.color]="u.enabled ? '#2e7d32' : '#c62828'">{{
                   u.enabled ? 'check_circle' : 'cancel'
                 }}</mat-icon>
-                {{ u.enabled ? '启用' : '禁用' }}
+                {{ statusLabel(u.enabled) }}
               </td>
               <td class="time-cell">{{ u.created || '-' }}</td>
               <td>
@@ -150,7 +144,7 @@
                   color="warn"
                   (click)="deleteUser(u.username)"
                   [disabled]="u.username === 'admin'"
-                  matTooltip="删除用户"
+                  matTooltip="{{ 'users.deleteUserTooltip' | translate }}"
                 >
                   <mat-icon>delete</mat-icon>
                 </button>

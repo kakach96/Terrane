@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { StyleInfo } from '../../models/geoserver.models';
@@ -18,6 +19,7 @@ export class StylesComponent implements OnInit {
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
     private dialog: MatDialog,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -32,7 +34,7 @@ export class StylesComponent implements OnInit {
         this.loading = false;
       },
       error: () => {
-        this.notificationService.error('加载样式列表失败');
+        this.notificationService.error(this.translate.instant('styles.loadListFail'));
         this.loading = false;
       },
     });
@@ -63,22 +65,22 @@ export class StylesComponent implements OnInit {
             if (result) this.loadStyles();
           });
       },
-      error: () => this.notificationService.error('加载样式失败'),
+      error: () => this.notificationService.error(this.translate.instant('styles.loadFail')),
     });
   }
 
   deleteStyle(style: StyleInfo): void {
     if (style.is_builtin) {
-      this.notificationService.info('内置样式不能删除');
+      this.notificationService.info(this.translate.instant('styles.builtinNotDeletable'));
       return;
     }
-    if (!confirm(`确定要删除样式 "${style.title}" 吗？`)) return;
+    if (!confirm(this.translate.instant('styles.deleteConfirm', { title: style.title }))) return;
     this.geoserverService.deleteStyle(style.name).subscribe({
       next: () => {
-        this.notificationService.success('样式已删除');
+        this.notificationService.success(this.translate.instant('styles.deleteSuccess'));
         this.loadStyles();
       },
-      error: () => this.notificationService.error('删除失败'),
+      error: () => this.notificationService.error(this.translate.instant('styles.deleteFail')),
     });
   }
 }

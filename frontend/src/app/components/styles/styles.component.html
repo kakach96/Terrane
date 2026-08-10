@@ -1,12 +1,12 @@
 <div class="styles-page fade-in">
   <div class="page-header">
     <div>
-      <h1>样式管理</h1>
-      <p class="subtitle">管理图层样式 (SLD / CSS / YSLD / Mapbox Style)</p>
+      <h1>{{ 'styles.title' | translate }}</h1>
+      <p class="subtitle">{{ 'styles.subtitle' | translate }}</p>
     </div>
     <button mat-raised-button color="primary" (click)="createStyle()">
       <mat-icon>add</mat-icon>
-      新建样式
+      {{ 'styles.create' | translate }}
     </button>
   </div>
 
@@ -16,22 +16,22 @@
 
   <div *ngIf="!loading && styles.length === 0" class="empty-state">
     <mat-icon>style</mat-icon>
-    <p>暂无样式</p>
+    <p>{{ 'styles.empty' | translate }}</p>
   </div>
 
   <table *ngIf="!loading && styles.length > 0" mat-table [dataSource]="styles" class="styles-table">
     <ng-container matColumnDef="name">
-      <th mat-header-cell *matHeaderCellDef>名称</th>
+      <th mat-header-cell *matHeaderCellDef>{{ 'common.name' | translate }}</th>
       <td mat-cell *matCellDef="let s">{{ s.name }}</td>
     </ng-container>
 
     <ng-container matColumnDef="title">
-      <th mat-header-cell *matHeaderCellDef>标题</th>
+      <th mat-header-cell *matHeaderCellDef>{{ 'common.title' | translate }}</th>
       <td mat-cell *matCellDef="let s">{{ s.title }}</td>
     </ng-container>
 
     <ng-container matColumnDef="format">
-      <th mat-header-cell *matHeaderCellDef>格式</th>
+      <th mat-header-cell *matHeaderCellDef>{{ 'common.format' | translate }}</th>
       <td mat-cell *matCellDef="let s">
         <mat-chip [class]="'format-chip format-' + (s.format?.toLowerCase() || 'sld')">
           {{ s.format || 'SLD' }}
@@ -40,18 +40,23 @@
     </ng-container>
 
     <ng-container matColumnDef="type">
-      <th mat-header-cell *matHeaderCellDef>类型</th>
+      <th mat-header-cell *matHeaderCellDef>{{ 'common.type' | translate }}</th>
       <td mat-cell *matCellDef="let s">
         <mat-chip [class.builtin]="s.is_builtin" [class.custom]="!s.is_builtin">
-          {{ s.is_builtin ? '内置' : '自定义' }}
+          {{ s.is_builtin ? ('common.builtin' | translate) : ('common.custom' | translate) }}
         </mat-chip>
       </td>
     </ng-container>
 
     <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef>操作</th>
+      <th mat-header-cell *matHeaderCellDef>{{ 'common.actions' | translate }}</th>
       <td mat-cell *matCellDef="let s">
-        <button mat-icon-button color="primary" (click)="editStyle(s)" matTooltip="编辑">
+        <button
+          mat-icon-button
+          color="primary"
+          (click)="editStyle(s)"
+          matTooltip="{{ 'styles.tooltipEdit' | translate }}"
+        >
           <mat-icon>edit</mat-icon>
         </button>
         <button
@@ -59,7 +64,7 @@
           color="warn"
           (click)="deleteStyle(s)"
           [disabled]="s.is_builtin"
-          matTooltip="删除"
+          matTooltip="{{ 'styles.tooltipDelete' | translate }}"
         >
           <mat-icon>delete</mat-icon>
         </button>

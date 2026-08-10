@@ -1,7 +1,8 @@
 import { Component, OnInit } from '@angular/core';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { AuthService } from '../../services/auth.service';
+import { NotificationService } from '../../services/notification.service';
 import { User } from '../../models/geoserver.models';
 
 @Component({
@@ -29,7 +30,8 @@ export class UsersComponent implements OnInit {
   constructor(
     private geoserver: GeoserverService,
     private auth: AuthService,
-    private snackBar: MatSnackBar,
+    private notificationService: NotificationService,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -44,7 +46,7 @@ export class UsersComponent implements OnInit {
         this.loading = false;
       },
       error: () => {
-        this.error = '加载用户列表失败';
+        this.error = this.translate.instant('users.loadFail');
         this.loading = false;
       },
     });
@@ -54,46 +56,46 @@ export class UsersComponent implements OnInit {
     if (!this.newUsername || !this.newPassword) return;
     this.geoserver.createUser(this.newUsername, this.newPassword, this.newRole).subscribe({
       next: () => {
-        this.snackBar.open('用户创建成功', '关闭', { duration: 3000 });
+        this.notificationService.success(this.translate.instant('users.createSuccess'));
         this.showCreateForm = false;
         this.newUsername = '';
         this.newPassword = '';
         this.newRole = 'user';
         this.loadUsers();
       },
-      error: (e) => this.snackBar.open(e.error?.message || '创建失败', '关闭', { duration: 5000 }),
+      error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
     });
   }
 
   deleteUser(username: string): void {
     if (username === 'admin') {
-      this.snackBar.open('不能删除默认管理员', '关闭', { duration: 3000 });
+      this.notificationService.warning(this.translate.instant('users.cannotDeleteAdmin'));
       return;
     }
-    if (!confirm(`确认删除用户「${username}」？`)) return;
+    if (!confirm(this.translate.instant('users.deleteUserConfirm', { username }))) return;
     this.geoserver.deleteUser(username).subscribe({
       next: () => {
-        this.snackBar.open('用户已删除', '关闭', { duration: 3000 });
+        this.notificationService.success(this.translate.instant('users.deleteSuccess'));
         this.loadUsers();
       },
-      error: (e) => this.snackBar.open(e.error?.message || '删除失败', '关闭', { duration: 5000 }),
+      error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
     });
   }
 
   changePassword(): void {
     if (this.newPassword1 !== this.newPassword2) {
-      this.snackBar.open('两次密码不一致', '关闭', { duration: 3000 });
+      this.notificationService.warning(this.translate.instant('users.passwordMismatch'));
       return;
     }
     this.geoserver.changePassword(this.oldPassword, this.newPassword1).subscribe({
       next: () => {
-        this.snackBar.open('密码修改成功', '关闭', { duration: 3000 });
+        this.notificationService.success(this.translate.instant('users.passwordChangeSuccess'));
         this.showPasswordForm = false;
         this.oldPassword = '';
         this.newPassword1 = '';
         this.newPassword2 = '';
       },
-      error: (e) => this.snackBar.open(e.error?.message || '修改失败', '关闭', { duration: 5000 }),
+      error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
     });
   }
 
@@ -108,5 +110,26 @@ export class UsersComponent implements OnInit {
       default:
         return '';
     }
+  }
+
+  /** Localized role label for a user role. */
+  roleLabel(role: string): string {
+    switch (role) {
+      case 'admin':
+        return this.translate.instant('users.roleAdmin');
+      case 'manager':
+        return this.translate.instant('users.roleManager');
+      case 'guest':
+        return this.translate.instant('users.roleGuest');
+      default:
+        return this.translate.instant('users.roleUser');
+    }
+  }
+
+  /** Localized enabled/disabled label. */
+  statusLabel(enabled: boolean): string {
+    return enabled
+      ? this.translate.instant('common.enabled')
+      : this.translate.instant('common.disabled');
   }
 }

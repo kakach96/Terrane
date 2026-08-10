@@ -1,11 +1,11 @@
 <div class="page-header">
   <div>
-    <h1>切片图层 &amp; 瓦片缓存</h1>
-    <p class="subtitle">GeoWebCache — 瓦片缓存引擎</p>
+    <h1>{{ 'tileLayers.title' | translate }}</h1>
+    <p class="subtitle">{{ 'tileLayers.subtitle' | translate }}</p>
   </div>
   <button mat-raised-button color="warn" (click)="clearAllCache()" [disabled]="loading">
     <mat-icon>delete_sweep</mat-icon>
-    清除全部缓存
+    {{ 'tileLayers.clearAll' | translate }}
   </button>
 </div>
 
@@ -14,31 +14,31 @@
   <mat-card class="stat-card">
     <mat-card-content>
       <div class="stat-value">{{ cacheStats.hits }}</div>
-      <div class="stat-label">缓存命中</div>
+      <div class="stat-label">{{ 'tileLayers.statHits' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
     <mat-card-content>
       <div class="stat-value">{{ cacheStats.misses }}</div>
-      <div class="stat-label">缓存未命中</div>
+      <div class="stat-label">{{ 'tileLayers.statMisses' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
     <mat-card-content>
       <div class="stat-value">{{ (cacheStats.hitRate * 100).toFixed(1) }}%</div>
-      <div class="stat-label">命中率</div>
+      <div class="stat-label">{{ 'tileLayers.statHitRate' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
     <mat-card-content>
       <div class="stat-value">{{ cacheStats.totalTiles }}</div>
-      <div class="stat-label">缓存瓦片数</div>
+      <div class="stat-label">{{ 'tileLayers.statTotalTiles' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
     <mat-card-content>
       <div class="stat-value">{{ cacheStats.cacheSizeMb || '0 MB' }}</div>
-      <div class="stat-label">缓存大小</div>
+      <div class="stat-label">{{ 'tileLayers.statCacheSize' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
@@ -48,7 +48,13 @@
           {{ cacheStats.enabled ? 'check_circle' : 'cancel' }}
         </mat-icon>
       </div>
-      <div class="stat-label">{{ cacheStats.enabled ? '缓存已启用' : '缓存未启用' }}</div>
+      <div class="stat-label">
+        {{
+          cacheStats.enabled
+            ? ('tileLayers.cacheEnabled' | translate)
+            : ('tileLayers.cacheDisabled' | translate)
+        }}
+      </div>
     </mat-card-content>
   </mat-card>
 </div>
@@ -56,12 +62,12 @@
 <!-- 缓存管理 -->
 <mat-card class="manage-card">
   <mat-card-header>
-    <mat-card-title>瓦片缓存管理</mat-card-title>
+    <mat-card-title>{{ 'tileLayers.manageTitle' | translate }}</mat-card-title>
   </mat-card-header>
   <mat-card-content>
     <div class="cache-controls">
       <mat-form-field appearance="outline" class="layer-select">
-        <mat-label>选择图层</mat-label>
+        <mat-label>{{ 'tileLayers.selectLayer' | translate }}</mat-label>
         <mat-select [(ngModel)]="selectedLayer">
           <mat-option *ngFor="let layer of availableLayers" [value]="layer">
             {{ layer }}
@@ -76,12 +82,12 @@
         [disabled]="!selectedLayer || loading"
       >
         <mat-icon>cleaning_services</mat-icon>
-        清除选定图层缓存
+        {{ 'tileLayers.clearLayer' | translate }}
       </button>
 
       <button mat-raised-button (click)="loadCacheStats()" [disabled]="loading">
         <mat-icon>refresh</mat-icon>
-        刷新统计
+        {{ 'tileLayers.refreshStats' | translate }}
       </button>
     </div>
   </mat-card-content>
@@ -90,25 +96,22 @@
 <!-- 瓦片图层服务 -->
 <mat-card class="layers-card">
   <mat-card-header>
-    <mat-card-title>瓦片服务</mat-card-title>
-    <mat-card-subtitle
-      >通过 /tiles/&#123;layer&#125;/&#123;z&#125;/&#123;x&#125;/&#123;y&#125; 访问瓦片，支持
-      gridset 参数</mat-card-subtitle
-    >
+    <mat-card-title>{{ 'tileLayers.tileServiceTitle' | translate }}</mat-card-title>
+    <mat-card-subtitle>{{ 'tileLayers.tileServiceSubtitle' | translate }}</mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
     <div class="endpoint-info">
-      <h3>瓦片 URL 格式</h3>
+      <h3>{{ 'tileLayers.urlFormat' | translate }}</h3>
       <code
         >/tiles/&#123;layer&#125;/&#123;z&#125;/&#123;x&#125;/&#123;y&#125;?gridset=EPSG:4326</code
       >
-      <h3>支持的 Gridset</h3>
+      <h3>{{ 'tileLayers.gridsets' | translate }}</h3>
       <ul>
-        <li><code>EPSG:4326</code> — 全球地理坐标系</li>
-        <li><code>EPSG:3857</code> — Web Mercator</li>
+        <li><code>EPSG:4326</code> — {{ 'tileLayers.grid4326' | translate }}</li>
+        <li><code>EPSG:3857</code> — {{ 'tileLayers.grid3857' | translate }}</li>
       </ul>
-      <h3>WMTS 服务</h3>
-      <p>OGC WMTS 1.0.0 标准服务已启用，支持以下操作：</p>
+      <h3>{{ 'tileLayers.wmtsService' | translate }}</h3>
+      <p>{{ 'tileLayers.wmtsDesc' | translate }}</p>
       <ul>
         <li>
           <strong>GetCapabilities</strong> —

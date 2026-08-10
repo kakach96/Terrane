@@ -1,8 +1,8 @@
 <div class="services-page fade-in">
   <div class="page-header">
     <div>
-      <h1>服务概览</h1>
-      <p class="subtitle">Terrane已实现的服务与版本一览</p>
+      <h1>{{ 'nav.servicesOverview' | translate }}</h1>
+      <p class="subtitle">{{ 'services.subtitle' | translate }}</p>
     </div>
   </div>
 
@@ -10,7 +10,7 @@
   <div class="stats-row">
     <div class="stat-card">
       <div class="stat-value">{{ totalCount }}</div>
-      <div class="stat-label">服务总数</div>
+      <div class="stat-label">{{ 'services.totalServices' | translate }}</div>
     </div>
     <div
       class="stat-card clickable"
@@ -21,7 +21,7 @@
       (keydown.space)="scrollToGroup('ogc')"
     >
       <div class="stat-value">{{ groupCount('ogc') }}</div>
-      <div class="stat-label">OGC 标准服务</div>
+      <div class="stat-label">{{ 'services.ogcStandard' | translate }}</div>
     </div>
     <div
       class="stat-card clickable"
@@ -32,7 +32,7 @@
       (keydown.space)="scrollToGroup('ogcapi')"
     >
       <div class="stat-value">{{ groupCount('ogcapi') }}</div>
-      <div class="stat-label">OGC API 服务</div>
+      <div class="stat-label">{{ 'services.ogcApi' | translate }}</div>
     </div>
     <div
       class="stat-card clickable"
@@ -43,7 +43,7 @@
       (keydown.space)="scrollToGroup('tile')"
     >
       <div class="stat-value">{{ groupCount('tile') }}</div>
-      <div class="stat-label">瓦片与缓存服务</div>
+      <div class="stat-label">{{ 'services.tilesAndCache' | translate }}</div>
     </div>
   </div>
 
@@ -51,7 +51,7 @@
   <section *ngFor="let group of groups" class="service-group" [attr.id]="'group-' + group.id">
     <div class="group-header">
       <mat-icon class="group-header-icon">{{ group.icon }}</mat-icon>
-      <h2>{{ group.title }}</h2>
+      <h2>{{ group.title | translate }}</h2>
       <span class="group-count">{{ group.items.length }}</span>
     </div>
 
@@ -62,15 +62,15 @@
             <mat-icon>{{ s.icon }}</mat-icon>
           </div>
           <div class="service-meta">
-            <div class="service-name">{{ s.name }}</div>
-            <div class="service-full">{{ s.fullName }}</div>
+            <div class="service-name">{{ s.name | translate }}</div>
+            <div class="service-full">{{ s.fullName | translate }}</div>
           </div>
         </div>
 
-        <p class="service-desc">{{ s.description }}</p>
+        <p class="service-desc">{{ s.description | translate }}</p>
 
         <div class="versions-block" *ngIf="s.versions && s.versions.length > 0">
-          <span class="versions-label">已实现版本</span>
+          <span class="versions-label">{{ 'services.implementedVersions' | translate }}</span>
           <div class="versions-row">
             <a
               *ngFor="let v of s.versions"
@@ -79,11 +79,15 @@
               target="_blank"
               rel="noopener"
               [matTooltip]="
-                '在新标签页打开 ' +
-                s.name +
-                ' ' +
-                v.version +
-                (v.note ? ' ' + v.note : ' GetCapabilities')
+                'services.openInNewTab'
+                  | translate
+                    : {
+                        name: s.name,
+                        version: v.version,
+                        note: v.note
+                          ? ' ' + (v.note | translate)
+                          : ('services.noteCapabilities' | translate),
+                      }
               "
             >
               {{ v.version }}

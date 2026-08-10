@@ -1,8 +1,8 @@
 <div class="preview-page fade-in">
   <div class="page-header">
     <div>
-      <h1>图层预览</h1>
-      <p class="subtitle">交互式地图预览 — 支持 WMS 图层与图层组</p>
+      <h1>{{ 'preview.title' | translate }}</h1>
+      <p class="subtitle">{{ 'preview.subtitle' | translate }}</p>
     </div>
   </div>
 
@@ -12,25 +12,29 @@
       (change)="onModeChange()"
       class="mode-toggle"
     >
-      <mat-button-toggle value="layer">图层</mat-button-toggle>
-      <mat-button-toggle value="group">图层组</mat-button-toggle>
+      <mat-button-toggle value="layer">{{ 'preview.modeLayer' | translate }}</mat-button-toggle>
+      <mat-button-toggle value="group">{{ 'preview.modeGroup' | translate }}</mat-button-toggle>
     </mat-button-toggle-group>
 
     <mat-form-field appearance="outline" class="format-field">
-      <mat-label>预览格式</mat-label>
+      <mat-label>{{ 'preview.formatLabel' | translate }}</mat-label>
       <mat-select [(ngModel)]="previewOptions.format" (selectionChange)="refreshPreview()">
         <mat-option *ngFor="let f of formatOptions" [value]="f.value">{{ f.label }}</mat-option>
       </mat-select>
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="search-field">
-      <mat-label>搜索</mat-label>
+      <mat-label>{{ 'preview.searchLabel' | translate }}</mat-label>
       <mat-icon matPrefix>search</mat-icon>
-      <input matInput [(ngModel)]="searchQuery" placeholder="搜索图层 / 图层组" />
+      <input
+        matInput
+        [(ngModel)]="searchQuery"
+        placeholder="{{ 'preview.searchPlaceholder' | translate }}"
+      />
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat">
-      <mat-label>宽</mat-label>
+      <mat-label>{{ 'preview.width' | translate }}</mat-label>
       <input
         matInput
         type="number"
@@ -40,7 +44,7 @@
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat">
-      <mat-label>高</mat-label>
+      <mat-label>{{ 'preview.height' | translate }}</mat-label>
       <input
         matInput
         type="number"
@@ -54,14 +58,18 @@
       [(ngModel)]="previewOptions.transparent"
       (change)="refreshPreview()"
     >
-      透明背景
+      {{ 'preview.transparent' | translate }}
     </mat-checkbox>
   </div>
 
   <div class="preview-main">
     <aside class="layer-panel">
       <div class="panel-header">
-        <span class="panel-title">{{ previewMode === 'layer' ? '图层列表' : '图层组列表' }}</span>
+        <span class="panel-title">{{
+          previewMode === 'layer'
+            ? ('preview.layerList' | translate)
+            : ('preview.groupList' | translate)
+        }}</span>
         <span class="panel-count">{{
           previewMode === 'layer' ? filteredLayers.length : filteredGroups.length
         }}</span>
@@ -84,7 +92,7 @@
             <div class="item-sub">{{ layer.workspace }} · {{ layer.store }} · {{ layer.srs }}</div>
           </div>
           <mat-chip class="item-chip" [class.enabled]="layer.enabled">
-            {{ layer.enabled ? '启用' : '禁用' }}
+            {{ layer.enabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}
           </mat-chip>
         </div>
       </div>
@@ -103,7 +111,9 @@
           <mat-icon class="item-icon">folder</mat-icon>
           <div class="item-info">
             <div class="item-title">{{ group.title || group.name }}</div>
-            <div class="item-sub">{{ group.layers.length }} 个图层</div>
+            <div class="item-sub">
+              {{ 'preview.featureCount' | translate: { count: group.layers.length } }}
+            </div>
           </div>
         </div>
       </div>
@@ -113,7 +123,18 @@
         *ngIf="(previewMode === 'layer' ? filteredLayers.length : filteredGroups.length) === 0"
       >
         <mat-icon>search_off</mat-icon>
-        <p>未找到匹配的{{ previewMode === 'layer' ? '图层' : '图层组' }}</p>
+        <p>
+          {{
+            'preview.noMatch'
+              | translate
+                : {
+                    type:
+                      previewMode === 'layer'
+                        ? ('preview.layerItem' | translate)
+                        : ('preview.groupItem' | translate),
+                  }
+          }}
+        </p>
       </div>
     </aside>
 
@@ -133,22 +154,26 @@
           </span>
           <span class="feature-count" *ngIf="previewMode === 'layer'">
             <mat-icon>label</mat-icon>
-            {{ featureCount }} 个要素
+            {{ 'preview.featureCountMap' | translate: { count: featureCount } }}
           </span>
         </div>
         <div class="map-actions">
-          <button mat-stroked-button (click)="refreshPreview()" matTooltip="刷新预览">
+          <button
+            mat-stroked-button
+            (click)="refreshPreview()"
+            matTooltip="{{ 'preview.refreshPreviewTooltip' | translate }}"
+          >
             <mat-icon>refresh</mat-icon>
-            <span>刷新预览</span>
+            <span>{{ 'preview.refreshPreview' | translate }}</span>
           </button>
           <button
             mat-stroked-button
             [disabled]="!previewUrl"
             (click)="openInNewWindow()"
-            matTooltip="在新窗口打开预览"
+            matTooltip="{{ 'preview.openInNewWindowTooltip' | translate }}"
           >
             <mat-icon>open_in_new</mat-icon>
-            <span>在新窗口打开</span>
+            <span>{{ 'preview.openInNewWindow' | translate }}</span>
           </button>
         </div>
       </div>
@@ -158,14 +183,30 @@
           *ngIf="!isStaticFormat"
           [src]="safePreviewUrl"
           class="map-frame"
-          title="地图预览"
+          title="{{ 'preview.mapPreviewTitle' | translate }}"
         ></iframe>
-        <img *ngIf="isStaticFormat" [src]="previewUrl" alt="地图预览" class="map-image" />
+        <img
+          *ngIf="isStaticFormat"
+          [src]="previewUrl"
+          alt="{{ 'preview.mapPreviewTitle' | translate }}"
+          class="map-image"
+        />
       </div>
 
       <div class="empty-state" *ngIf="!previewUrl">
         <mat-icon>map</mat-icon>
-        <p>请从左侧选择一个{{ previewMode === 'layer' ? '图层' : '图层组' }}开始预览</p>
+        <p>
+          {{
+            'preview.selectHint'
+              | translate
+                : {
+                    type:
+                      previewMode === 'layer'
+                        ? ('preview.layerItem' | translate)
+                        : ('preview.groupItem' | translate),
+                  }
+          }}
+        </p>
       </div>
     </section>
   </div>

@@ -1,8 +1,8 @@
 <div class="create-layer fade-in">
   <div class="page-header">
     <div>
-      <h1>创建图层</h1>
-      <p class="subtitle">添加新的地理空间图层</p>
+      <h1>{{ 'layerCreate.title' | translate }}</h1>
+      <p class="subtitle">{{ 'layerCreate.subtitle' | translate }}</p>
     </div>
   </div>
 
@@ -10,27 +10,31 @@
     <mat-card-content>
       <form [formGroup]="layerForm" (ngSubmit)="onSubmit()">
         <div class="form-section">
-          <h3>数据源配置</h3>
-          <p class="section-hint">选择工作空间和数据源来配置图层数据源</p>
+          <h3>{{ 'layerCreate.dataSourceConfig' | translate }}</h3>
+          <p class="section-hint">{{ 'layerCreate.dataSourceHint' | translate }}</p>
 
           <div class="form-row">
             <mat-form-field appearance="outline">
-              <mat-label>工作空间</mat-label>
+              <mat-label>{{ 'layerCreate.workspaceLabel' | translate }}</mat-label>
               <mat-select formControlName="workspace">
-                <mat-option value="" disabled>-- 请选择工作空间 --</mat-option>
+                <mat-option value="" disabled>{{
+                  'layerCreate.workspacePlaceholder' | translate
+                }}</mat-option>
                 <mat-option *ngFor="let ws of workspaces" [value]="ws.name">
                   {{ ws.title || ws.name }}
                 </mat-option>
               </mat-select>
               <mat-error *ngIf="layerForm.get('workspace')?.hasError('required')">
-                请选择工作空间
+                {{ 'layerCreate.workspaceRequired' | translate }}
               </mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>数据源</mat-label>
+              <mat-label>{{ 'layerCreate.dataSourceLabel' | translate }}</mat-label>
               <mat-select formControlName="dataSource">
-                <mat-option value="" disabled>-- 请先选择工作空间 --</mat-option>
+                <mat-option value="" disabled>{{
+                  'layerCreate.dataSourcePlaceholder' | translate
+                }}</mat-option>
                 <mat-option
                   *ngFor="let ds of dataSources"
                   [value]="ds.name"
@@ -38,14 +42,16 @@
                 >
                   <span [class.disabled-option]="!ds.enabled">
                     {{ ds.name }}
-                    <span *ngIf="!ds.enabled"> (已禁用)</span>
+                    <span *ngIf="!ds.enabled"> {{ 'layerCreate.disabledOption' | translate }}</span>
                   </span>
                 </mat-option>
               </mat-select>
               <mat-error *ngIf="layerForm.get('dataSource')?.hasError('required')">
-                请选择数据源
+                {{ 'layerCreate.dataSourceRequired' | translate }}
               </mat-error>
-              <mat-hint *ngIf="loadingDataSources">加载中...</mat-hint>
+              <mat-hint *ngIf="loadingDataSources">{{
+                'layerCreate.loadingDataSources' | translate
+              }}</mat-hint>
             </mat-form-field>
           </div>
 
@@ -54,52 +60,62 @@
             class="full-width"
             *ngIf="tables.length > 0 || loadingTables"
           >
-            <mat-label>数据表</mat-label>
+            <mat-label>{{ 'layerCreate.tableLabel' | translate }}</mat-label>
             <mat-select formControlName="table">
-              <mat-option value="" disabled>-- 请选择数据表 --</mat-option>
+              <mat-option value="" disabled>{{
+                'layerCreate.tablePlaceholder' | translate
+              }}</mat-option>
               <mat-option *ngFor="let table of tables" [value]="table">
                 {{ table }}
               </mat-option>
             </mat-select>
             <mat-error *ngIf="layerForm.get('table')?.hasError('required')">
-              请选择数据表
+              {{ 'layerCreate.tableRequired' | translate }}
             </mat-error>
-            <mat-hint *ngIf="loadingTables">加载表列表中...</mat-hint>
+            <mat-hint *ngIf="loadingTables">{{ 'layerCreate.loadingTables' | translate }}</mat-hint>
           </mat-form-field>
         </div>
 
         <div class="form-section">
-          <h3>基本信息</h3>
+          <h3>{{ 'layerCreate.basicInfo' | translate }}</h3>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>图层名称</mat-label>
-            <input matInput formControlName="name" placeholder="例如: world_cities" />
-            <mat-hint>只能使用小写字母、数字和下划线</mat-hint>
+            <mat-label>{{ 'layerCreate.layerNameLabel' | translate }}</mat-label>
+            <input
+              matInput
+              formControlName="name"
+              placeholder="{{ 'layerCreate.layerNamePlaceholder' | translate }}"
+            />
+            <mat-hint>{{ 'layerCreate.layerNameHint' | translate }}</mat-hint>
             <mat-error *ngIf="layerForm.get('name')?.hasError('required')">
-              图层名称是必填项
+              {{ 'layerCreate.layerNameRequired' | translate }}
             </mat-error>
             <mat-error *ngIf="layerForm.get('name')?.hasError('pattern')">
-              只能使用小写字母、数字和下划线
+              {{ 'layerCreate.layerNamePattern' | translate }}
             </mat-error>
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>显示标题</mat-label>
-            <input matInput formControlName="title" placeholder="例如: World Cities" />
-            <mat-error>显示标题是必填项</mat-error>
+            <mat-label>{{ 'layerCreate.titleLabel' | translate }}</mat-label>
+            <input
+              matInput
+              formControlName="title"
+              placeholder="{{ 'layerCreate.titlePlaceholder' | translate }}"
+            />
+            <mat-error>{{ 'layerCreate.titleRequired' | translate }}</mat-error>
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>描述</mat-label>
+            <mat-label>{{ 'layerCreate.descLabel' | translate }}</mat-label>
             <textarea matInput formControlName="abstract" rows="3"></textarea>
           </mat-form-field>
         </div>
 
         <div class="form-section">
-          <h3>空间参考</h3>
+          <h3>{{ 'layerCreate.srsSection' | translate }}</h3>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>坐标系统 (SRS)</mat-label>
+            <mat-label>{{ 'layerCreate.srsLabel' | translate }}</mat-label>
             <mat-select formControlName="srs">
               <mat-option value="EPSG:4326">EPSG:4326 (WGS84)</mat-option>
               <mat-option value="EPSG:3857">EPSG:3857 (Web Mercator)</mat-option>
@@ -108,38 +124,44 @@
         </div>
 
         <div class="form-section">
-          <h3>边界范围</h3>
+          <h3>{{ 'layerCreate.boundsSection' | translate }}</h3>
 
           <div class="bounds-grid">
             <mat-form-field appearance="outline">
-              <mat-label>最小 X</mat-label>
+              <mat-label>{{ 'layerCreate.minX' | translate }}</mat-label>
               <input matInput type="number" formControlName="minx" />
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>最小 Y</mat-label>
+              <mat-label>{{ 'layerCreate.minY' | translate }}</mat-label>
               <input matInput type="number" formControlName="miny" />
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>最大 X</mat-label>
+              <mat-label>{{ 'layerCreate.maxX' | translate }}</mat-label>
               <input matInput type="number" formControlName="maxx" />
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>最大 Y</mat-label>
+              <mat-label>{{ 'layerCreate.maxY' | translate }}</mat-label>
               <input matInput type="number" formControlName="maxy" />
             </mat-form-field>
           </div>
         </div>
 
         <div class="form-actions">
-          <button mat-button type="button" (click)="goBack()">取消</button>
-          <button mat-stroked-button type="button" (click)="resetForm()">重置</button>
+          <button mat-button type="button" (click)="goBack()">
+            {{ 'layerCreate.cancel' | translate }}
+          </button>
+          <button mat-stroked-button type="button" (click)="resetForm()">
+            {{ 'layerCreate.reset' | translate }}
+          </button>
           <button mat-raised-button color="primary" type="submit" [disabled]="loading">
             <mat-icon *ngIf="!loading">add_circle</mat-icon>
             <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
-            {{ loading ? '创建中...' : '创建图层' }}
+            {{
+              loading ? ('layerCreate.creating' | translate) : ('layerCreate.submit' | translate)
+            }}
           </button>
         </div>
       </form>

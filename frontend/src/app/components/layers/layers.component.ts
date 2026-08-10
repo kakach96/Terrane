@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Layer } from '../../models/geoserver.models';
@@ -21,6 +22,7 @@ export class LayersComponent implements OnInit {
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
     private dialog: MatDialog,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -36,7 +38,7 @@ export class LayersComponent implements OnInit {
         this.loading = false;
       },
       error: () => {
-        this.notificationService.error('加载图层失败');
+        this.notificationService.error(this.translate.instant('layers.loadFail'));
         this.loading = false;
       },
     });
@@ -58,8 +60,8 @@ export class LayersComponent implements OnInit {
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       width: '400px',
       data: {
-        title: '删除图层',
-        message: `确定要删除图层 "${layer.name}" 吗？此操作不可撤销。`,
+        title: this.translate.instant('layers.deleteTitle'),
+        message: this.translate.instant('layers.deleteMessage', { name: layer.name }),
       },
     });
 
@@ -67,11 +69,13 @@ export class LayersComponent implements OnInit {
       if (result) {
         this.geoserverService.deleteLayer(layer.name).subscribe({
           next: () => {
-            this.notificationService.success('图层删除成功');
+            this.notificationService.success(this.translate.instant('layers.deleteSuccess'));
             this.loadLayers();
           },
           error: (error) => {
-            this.notificationService.error('删除失败: ' + error.message);
+            this.notificationService.error(
+              this.translate.instant('layers.deleteFail', { message: error.message }),
+            );
           },
         });
       }

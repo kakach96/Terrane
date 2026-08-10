@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
+import { NotificationService } from '../../services/notification.service';
 import { Permission, CreatePermissionRequest } from '../../models/geoserver.models';
 
 @Component({
@@ -33,7 +34,8 @@ export class PermissionsComponent implements OnInit {
 
   constructor(
     private geoserver: GeoserverService,
-    private snackBar: MatSnackBar,
+    private notificationService: NotificationService,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -48,7 +50,7 @@ export class PermissionsComponent implements OnInit {
         this.loading = false;
       },
       error: () => {
-        this.error = '加载权限列表失败';
+        this.error = this.translate.instant('permissions.loadFail');
         this.loading = false;
       },
     });
@@ -56,30 +58,30 @@ export class PermissionsComponent implements OnInit {
 
   createPermission(): void {
     if (!this.newPerm.resourceName) {
-      this.snackBar.open('请填写资源名称', '关闭', { duration: 3000 });
+      this.notificationService.warning(this.translate.instant('permissions.resourceNameRequired'));
       return;
     }
     this.geoserver.createPermission(this.newPerm).subscribe({
       next: () => {
-        this.snackBar.open('权限创建成功', '关闭', { duration: 3000 });
+        this.notificationService.success(this.translate.instant('permissions.createSuccess'));
         this.showCreateForm = false;
         this.resetForm();
         this.loadPermissions();
       },
-      error: (e) => this.snackBar.open(e.error?.message || '创建失败', '关闭', { duration: 5000 }),
+      error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
     });
   }
 
   deletePermission(perm: Permission): void {
     if (!perm.id) return;
     const label = `${perm.effect} ${perm.accessMode} ${perm.resourceType}:${perm.resourceName}`;
-    if (!confirm(`确认删除权限「${label}」？`)) return;
+    if (!confirm(this.translate.instant('permissions.deleteConfirm', { label }))) return;
     this.geoserver.deletePermission(perm.id).subscribe({
       next: () => {
-        this.snackBar.open('权限已删除', '关闭', { duration: 3000 });
+        this.notificationService.success(this.translate.instant('permissions.deleteSuccess'));
         this.loadPermissions();
       },
-      error: (e) => this.snackBar.open(e.error?.message || '删除失败', '关闭', { duration: 5000 }),
+      error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
     });
   }
 

@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import { TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../services/auth.service';
 import { NotificationService } from '../../services/notification.service';
 import { MatDialogRef } from '@angular/material/dialog';
@@ -19,6 +20,7 @@ export class LoginComponent {
     private authService: AuthService,
     private notificationService: NotificationService,
     private dialogRef: MatDialogRef<LoginComponent>,
+    private translate: TranslateService,
   ) {
     if (this.authService.isLoggedIn()) {
       this.dialogRef.close();
@@ -32,11 +34,12 @@ export class LoginComponent {
 
     this.authService.login(this.username, this.password).subscribe({
       next: () => {
-        this.notificationService.success('登录成功');
+        this.notificationService.success(this.translate.instant('login.success'));
         this.dialogRef.close();
       },
       error: (err) => {
-        this.errorMessage = err.error?.message || '登录失败，请检查用户名和密码';
+        this.errorMessage =
+          this.notificationService.fromError(err) || this.translate.instant('login.fail');
         this.loading = false;
       },
     });
