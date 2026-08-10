@@ -149,7 +149,10 @@ async fn test_s3_geojson_data_source_features() {
             { "type": "Feature", "id": "2", "geometry": { "type": "Point", "coordinates": [30, 40] }, "properties": { "name": "B" } }
         ]
     }"#;
-    store.put("points.geojson", geojson.as_bytes()).await.unwrap();
+    store
+        .put("points.geojson", geojson.as_bytes())
+        .await
+        .unwrap();
 
     // 测试 app (内存 SQLite + 路由)
     let config = common::create_test_config();

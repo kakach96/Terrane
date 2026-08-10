@@ -53,10 +53,12 @@ pub fn file_store_from_connection(
     conn: &DataSourceConnection,
 ) -> Result<Box<dyn FileStore>, GeoServerError> {
     match storage_type(conn) {
-        "local" => Ok(Box::new(crate::store::LocalFileStore::new(
-            PathBuf::from("."),
-        ))),
-        "s3" => Ok(Box::new(S3FileStore::from_connection(conn).map_err(map_store_err)?)),
+        "local" => Ok(Box::new(crate::store::LocalFileStore::new(PathBuf::from(
+            ".",
+        )))),
+        "s3" => Ok(Box::new(
+            S3FileStore::from_connection(conn).map_err(map_store_err)?,
+        )),
         other => Err(GeoServerError::NotImplemented(format!(
             "Unsupported file storage type: {}",
             other
@@ -69,9 +71,7 @@ pub fn file_store_from_connection(
 /// - local: reads `file_path` from disk.
 /// - s3: downloads the object.
 /// Returns `None` when the connection has no usable `file_path`.
-pub async fn read_bytes(
-    conn: &DataSourceConnection,
-) -> Result<Option<Vec<u8>>, GeoServerError> {
+pub async fn read_bytes(conn: &DataSourceConnection) -> Result<Option<Vec<u8>>, GeoServerError> {
     let file_path = match file_path_of(conn) {
         Some(p) => p,
         None => return Ok(None),

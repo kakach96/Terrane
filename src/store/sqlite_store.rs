@@ -627,10 +627,7 @@ impl SqliteStore {
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
             Ok(Some(Self::row_to_data_source(
-                row,
-                has_schema,
-                has_file,
-                has_s3,
+                row, has_schema, has_file, has_s3,
             )?))
         } else {
             Ok(None)

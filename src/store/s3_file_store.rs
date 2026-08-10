@@ -44,9 +44,9 @@ impl S3FileStore {
                 region: region_name.to_string(),
                 endpoint: endpoint.to_string(),
             },
-            None => region_name.parse().map_err(|_| {
-                StoreError::Other(format!("Invalid S3 region: {}", region_name))
-            })?,
+            None => region_name
+                .parse()
+                .map_err(|_| StoreError::Other(format!("Invalid S3 region: {}", region_name)))?,
         };
 
         let credentials = {
@@ -59,12 +59,10 @@ impl S3FileStore {
                 .as_deref()
                 .filter(|s| !s.trim().is_empty());
             match (ak, sk) {
-                (None, None) => Credentials::anonymous().map_err(|e| {
-                    StoreError::Other(format!("S3 credentials error: {}", e))
-                })?,
-                _ => Credentials::new(ak, sk, None, None, None).map_err(|e| {
-                    StoreError::Other(format!("S3 credentials error: {}", e))
-                })?,
+                (None, None) => Credentials::anonymous()
+                    .map_err(|e| StoreError::Other(format!("S3 credentials error: {}", e)))?,
+                _ => Credentials::new(ak, sk, None, None, None)
+                    .map_err(|e| StoreError::Other(format!("S3 credentials error: {}", e)))?,
             }
         };
 

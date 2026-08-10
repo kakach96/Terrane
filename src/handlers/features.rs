@@ -171,9 +171,9 @@ async fn query_geojson_features(
 
     info!("[Features] 从 GeoJSON 读取要素: {}", file_path);
 
-    let bytes = crate::store::read_bytes(conn).await?.ok_or_else(|| {
-        GeoServerError::NotFound(format!("GeoJSON 文件不存在: {}", file_path))
-    })?;
+    let bytes = crate::store::read_bytes(conn)
+        .await?
+        .ok_or_else(|| GeoServerError::NotFound(format!("GeoJSON 文件不存在: {}", file_path)))?;
     let raw = String::from_utf8(bytes)
         .map_err(|e| GeoServerError::InternalError(format!("GeoJSON 编码错误: {}", e)))?;
     let root: serde_json::Value = serde_json::from_str(&raw)
@@ -223,9 +223,9 @@ async fn query_shapefile_features(
 
     info!("[Features] 从 Shapefile 读取要素: {}", file_path);
 
-    let materialized = crate::store::materialize_dir(conn).await?.ok_or_else(|| {
-        GeoServerError::NotFound(format!("Shapefile 文件不存在: {}", file_path))
-    })?;
+    let materialized = crate::store::materialize_dir(conn)
+        .await?
+        .ok_or_else(|| GeoServerError::NotFound(format!("Shapefile 文件不存在: {}", file_path)))?;
     let result = crate::utils::shapefile::read_shapefile(&materialized.path)
         .map_err(|e| GeoServerError::InternalError(format!("读取 Shapefile 失败: {}", e)))?;
 
@@ -411,9 +411,9 @@ async fn query_geopackage_features(
 
     info!("[Features] 从 GeoPackage 读取要素: {}", file_path);
 
-    let materialized = crate::store::materialize_file(conn).await?.ok_or_else(|| {
-        GeoServerError::NotFound(format!("GeoPackage 文件不存在: {}", file_path))
-    })?;
+    let materialized = crate::store::materialize_file(conn)
+        .await?
+        .ok_or_else(|| GeoServerError::NotFound(format!("GeoPackage 文件不存在: {}", file_path)))?;
     let local_path = materialized.path.as_path();
 
     // 读取所有图层（取第一个有数据的图层）

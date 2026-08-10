@@ -37,8 +37,7 @@ function lonLatToMercator(lon: number, lat: number): [number, number] {
 function mercatorToLonLat(x: number, y: number): [number, number] {
   const lon = (x / MERCATOR_EXTENT) * 180;
   let lat = (y / MERCATOR_EXTENT) * 180;
-  lat =
-    (180 / Math.PI) * (2 * Math.atan(Math.exp((lat * Math.PI) / 180)) - Math.PI / 2);
+  lat = (180 / Math.PI) * (2 * Math.atan(Math.exp((lat * Math.PI) / 180)) - Math.PI / 2);
   return [lon, lat];
 }
 
@@ -48,11 +47,7 @@ function mercatorToLonLat(x: number, y: number): [number, number] {
  * WMS 的 BBOX 参数始终处于请求 SRS 下, 因此切换预览坐标系时需要用本函数
  * 把图层的原生边界 (通常为 EPSG:4326) 转换到目标坐标系后再传给 WMS。
  */
-export function transformBounds(
-  bounds: LayerBounds,
-  fromCrs: string,
-  toCrs: string,
-): LayerBounds {
+export function transformBounds(bounds: LayerBounds, fromCrs: string, toCrs: string): LayerBounds {
   const from = normalizeCrs(fromCrs);
   const to = normalizeCrs(toCrs);
   if (from === to) return bounds;

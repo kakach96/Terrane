@@ -454,13 +454,12 @@ pub async fn get_data_source_tables(
                             "GeoPackage data source has no connection".to_string(),
                         )
                     })?;
-                    let materialized = crate::store::materialize_file(conn).await?.ok_or_else(
-                        || {
+                    let materialized =
+                        crate::store::materialize_file(conn).await?.ok_or_else(|| {
                             GeoServerError::BadRequest(
                                 "GeoPackage data source has no file path".to_string(),
                             )
-                        },
-                    )?;
+                        })?;
                     let local_path = materialized.path.to_string_lossy().to_string();
                     let tables = crate::utils::geopackage::read_geopackage_layers(&local_path)
                         .map(|layers| {
@@ -653,9 +652,7 @@ pub async fn get_layer_feature_type(
                 GeoServerError::BadRequest("Layer has no native table name configured".to_string())
             })?;
             let conn = data_source.connection.as_ref().ok_or_else(|| {
-                GeoServerError::BadRequest(
-                    "GeoPackage data source has no connection".to_string(),
-                )
+                GeoServerError::BadRequest("GeoPackage data source has no connection".to_string())
             })?;
             let materialized = crate::store::materialize_file(conn).await?.ok_or_else(|| {
                 GeoServerError::BadRequest("GeoPackage data source has no file path".to_string())

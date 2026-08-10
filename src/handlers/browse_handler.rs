@@ -80,16 +80,16 @@ pub async fn browse_local(
     }
     entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(BrowseResponse {
-        path: root.to_string_lossy().to_string(),
-        entries,
-    })))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(BrowseResponse {
+            path: root.to_string_lossy().to_string(),
+            entries,
+        })),
+    )
 }
 
 /// List an S3 bucket directory using the connection details in the request.
-pub async fn browse_s3(
-    body: web::Json<BrowseS3Request>,
-) -> Result<HttpResponse, GeoServerError> {
+pub async fn browse_s3(body: web::Json<BrowseS3Request>) -> Result<HttpResponse, GeoServerError> {
     let conn = DataSourceConnection {
         file_storage_type: Some("s3".to_string()),
         s3_endpoint: body.connection.s3_endpoint.clone(),
@@ -104,12 +104,15 @@ pub async fn browse_s3(
         .map_err(|e| GeoServerError::BadRequest(format!("S3 configuration error: {}", e)))?;
 
     let prefix = body.prefix.clone().unwrap_or_default();
-    let entries = store.browse(&prefix).await.map_err(|e| {
-        GeoServerError::BadRequest(format!("S3 browse error: {}", e))
-    })?;
+    let entries = store
+        .browse(&prefix)
+        .await
+        .map_err(|e| GeoServerError::BadRequest(format!("S3 browse error: {}", e)))?;
 
-    Ok(HttpResponse::Ok().json(ApiResponse::success(BrowseResponse {
-        path: prefix,
-        entries,
-    })))
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(BrowseResponse {
+            path: prefix,
+            entries,
+        })),
+    )
 }
