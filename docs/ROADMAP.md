@@ -73,9 +73,9 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - **Tile cache backend is disk-only** (`./data/gwc`, `src/store/cache/tile.rs`) — the `TileCacheBackend` trait exists but no Redis / S3 backend yet.
 - **Uploads on local disk** (`./data`) — no shared volume / object storage.
 - **Sessions persisted in the metadata DB** (SQLite / PostgreSQL) with a local in-memory `SessionCache` fast-path — Redis backend pending.
-- **No CI pipeline / image registry push** (`.github/` missing).
+- **No CI pipeline / image registry push** (`.github/workflows/ci.yml` created — fmt + clippy + test + frontend build + GHCR push; not yet exercised against a real repository).
 - **Human-readable stdout logs only** — no structured JSON, no OpenTelemetry.
-- **Resilience gaps**: no rate limiting / request-timeout / circuit breaking; no retry/backoff for cascaded WMS upstreams.
+- **Resilience gaps**: rate limiting + request timeout middleware added (`src/middleware.rs`, `[server]` config, HTTP 429/504); no circuit breaking and no retry/backoff for cascaded WMS upstreams yet.
 - **No test suite** (no test deps in `Cargo.toml`; Angular `ng test` untested).
 - **Security-sensitive defaults**: CORS `["*"]` and hardcoded JWT secret — revisit before production.
 - **Broken doc link**: README referenced `BUILD_INTEGRATION.md`, which did not exist (fixed in this docs pass).

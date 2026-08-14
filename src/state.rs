@@ -149,19 +149,18 @@ impl AppState {
                                         &layer_config.srs,
                                     ),
                                 )
-                                .with_bounds(
-                                    crate::models::BoundingBox::new(
-                                        crate::models::CoordinateReferenceSystem::from_epsg(
-                                            &layer_config.srs,
-                                        ),
-                                        crate::models::Bounds::new(
-                                            layer_config.bounds.minx,
-                                            layer_config.bounds.miny,
-                                            layer_config.bounds.maxx,
-                                            layer_config.bounds.maxy,
-                                        ),
+                                .with_bounds(crate::models::BoundingBox::new(
+                                    crate::models::CoordinateReferenceSystem::from_epsg(
+                                        &layer_config.srs,
                                     ),
-                                )
+                                    crate::models::Bounds::new(
+                                        layer_config.bounds.minx,
+                                        layer_config.bounds.miny,
+                                        layer_config.bounds.maxx,
+                                        layer_config.bounds.maxy,
+                                    ),
+                                ))
+                                .with_style(layer_config.style.clone())
                             })
                             .collect::<Vec<_>>()
                     })

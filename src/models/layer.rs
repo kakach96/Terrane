@@ -63,6 +63,14 @@ impl Layer {
         self.lat_lon_bounds = bounds;
         self
     }
+
+    /// Attach the configured default style (from the config `style` key).
+    pub fn with_style(mut self, style: Option<String>) -> Self {
+        if let Some(name) = style {
+            self.styles = vec![StyleRef { name, href: None }];
+        }
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

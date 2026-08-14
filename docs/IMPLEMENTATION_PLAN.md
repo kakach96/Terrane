@@ -195,7 +195,7 @@ Overall progress █████████░░░░░░░  58%
 |---|------|------|:---------:|
 | 25 | **WPS (Web Processing Service)** | Geoprocessing services: buffer, union/intersection/difference, coordinate transforms, etc. | ✅ **Completed** (first surface: vec:Centroid / vec:Buffer / gs:Bounds) |
 | 26 | **CSW (Catalog Service)** | Catalog service: data discovery and metadata management | ✅ **Completed** (first surface: GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain) |
-| 27 | **OGC API series** | Features / Tiles / Maps / Coverages / Processes / Styles | ⏳ Features Core + Tiles ✅ (batch 19/20); Maps + Processes ✅ (batch 21); Coverages/Styles 2-3 weeks each |
+| 27 | **OGC API series** | Features / Tiles / Maps / Coverages / Processes / Styles | ⏳ Features Core + Tiles ✅ (batch 19/20); Maps + Processes ✅ (batch 21); **Coverages + Styles ✅ (batch 22)** |
 | 28 | **Vector Tiles** | MVT (Mapbox Vector Tile) format output | ✅ **Completed** |
 | 29 | **KML output** | Map/feature export in KML/KMZ format | 1-2 weeks |
 | 30 | **Printing module** | PDF map printing service | 3-4 weeks |
@@ -302,7 +302,7 @@ Overall progress █████████░░░░░░░  58%
 | **Observability** | stdout logs (tracing); `/health` + 拆分 `/health/live` & `/health/ready`; Prometheus `/metrics` (请求/错误、方法/状态码/端点、瓦片命中率、PG 池水位、系统资源) | 无 structured JSON logs, 无 OpenTelemetry tracing | **P1 ✅** |
 | **Lifecycle** | SIGTERM/SIGINT 优雅关闭 + `shutdown_timeout_secs` 在途请求排空 (`main.rs`) | — | **P1 ✅** |
 | **CI/CD & security** | No CI pipeline, no image registry push | Missing GitHub Actions/GitLab CI, image vulnerability scanning, dependency update automation | **P2** |
-| **Resilience** | CORS defaults to `["*"]`; no rate-limiting/request-timeout middleware; no backoff-retry for cascaded WMS upstreams | No circuit breaking or protection under high concurrency | **P2** |
+| **Resilience** | CORS defaults to `["*"]`; rate limiting / request-timeout middleware **done** (`src/middleware.rs`, `[server]` config, HTTP 429/504); no backoff-retry for cascaded WMS upstreams | Circuit breaking + upstream retry/backoff for cascaded WMS still pending | **P2 ⚠️** |
 
 ### 6.2 Phased Roadmap
 
@@ -336,10 +336,10 @@ Overall progress █████████░░░░░░░  58%
 
 #### Phase 3: CI/CD & Security Hardening
 
-- CI (GitHub Actions / GitLab CI): `cargo fmt + clippy + test` + frontend build + docker build/push
+- ⚠️ CI (GitHub Actions) 已创建 (`.github/workflows/ci.yml`): `cargo fmt + clippy + test` + frontend build + docker build/push (ghcr, 按 git sha 打标签); 尚未在真实仓库验证
 - Tag images by git sha; image scanning with Trivy; Dependabot / Renovate dependency updates
 - Credential management: data source passwords injectable via env, never logged; integrate with K8s Secrets
-- Resilience hardening: backoff-retry for cascaded WMS upstreams, request-timeout and rate-limiting middleware, circuit breaking
+- ✅ 韧性中间件: 请求超时 (504) + 滑动窗口速率限制 (429, 按客户端 IP / X-Forwarded-For) — `src/middleware.rs`, 经 `[server]` 配置 (`request_timeout_secs` / `rate_limit_max_requests` / `rate_limit_window_secs`) 启用; 待办: 级联 WMS 上游 backoff-retry 与熔断
 
 ### 6.3 Target Deployment Architecture
 

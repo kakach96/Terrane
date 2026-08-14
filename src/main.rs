@@ -2,7 +2,7 @@
 
 use actix_cors::Cors;
 use actix_files::Files;
-use actix_web::{middleware, web, App, HttpResponse, HttpServer};
+use actix_web::{web, App, HttpResponse, HttpServer};
 use chrono::{Datelike, Local, Timelike};
 use clap::Parser;
 use tokio::fs;
@@ -17,6 +17,7 @@ mod config;
 mod error;
 mod handlers;
 mod i18n;
+mod middleware;
 mod models;
 mod routes;
 mod services;
@@ -157,6 +158,20 @@ async fn main() -> std::io::Result<()> {
 
     let cors_config = app_state.config.cors.clone();
     let shutdown_timeout = app_state.config.server.shutdown_timeout_secs;
+    let request_timeout_secs = app_state.config.server.request_timeout_secs;
+    let rate_limit_max = app_state.config.server.rate_limit_max_requests;
+    let rate_limit_window = app_state.config.server.rate_limit_window_secs;
+
+    if request_timeout_secs > 0 {
+        tracing::info!("Resilience: request timeout {}s", request_timeout_secs);
+    }
+    if rate_limit_max > 0 {
+        tracing::info!(
+            "Resilience: rate limit {} req / {}s per client",
+            rate_limit_max,
+            rate_limit_window
+        );
+    }
 
     HttpServer::new(move || {
         // CORS 中间件
@@ -187,11 +202,19 @@ async fn main() -> std::io::Result<()> {
             Cors::default()
         };
 
+        // 韧性中间件 (最外层): 请求超时 + 速率限制 (0 值 = 禁用)
         App::new()
             .app_data(app_state.clone())
             .wrap(cors_middleware)
-            .wrap(middleware::Logger::default())
-            .wrap(middleware::Compress::default())
+            .wrap(actix_web::middleware::Logger::default())
+            .wrap(actix_web::middleware::Compress::default())
+            .wrap(crate::middleware::RequestTimeout::new(
+                std::time::Duration::from_secs(request_timeout_secs),
+            ))
+            .wrap(crate::middleware::RateLimit::new(
+                rate_limit_max,
+                rate_limit_window,
+            ))
             .configure(|svc| routes::configure_routes(svc, &api_context))
             .service(
                 Files::new("/", &static_dir_str)

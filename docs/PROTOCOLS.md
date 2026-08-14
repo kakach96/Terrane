@@ -29,7 +29,7 @@ and *which remain to be adapted*.
 | **WFS output formats** | —                          | ✅      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV / KML / Shapefile (SHAPE-ZIP) |
 | **WPS**             | 1.0.0                          | ✅      | GetCapabilities / DescribeProcess / Execute (KVP + XML POST); built-in processes vec:Centroid / vec:Buffer / gs:Bounds |
 | **CSW**             | 2.0.2                          | ✅      | GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain; catalog = Terrane layers as Dublin Core records (KVP + XML POST) |
-| **OGC API series**  | Features (Core) / Tiles / Maps / Coverages / Processes / Styles | ⚠️ | Features Core ✅ at `/ogc/features`; Tiles ✅ at `/ogc/tiles` (tileMatrixSets + raster tiles, PNG/JPEG); **Maps ✅ at `/ogc/maps`** (map operation reuses the WMS GetMap pipeline); **Processes ✅ at `/ogc/processes`** (synchronous jobs over the WPS engine); Coverages/Styles pending |
+| **OGC API series**  | Features (Core) / Tiles / Maps / Coverages / Processes / Styles | ⚠️ | Features Core ✅ at `/ogc/features`; Tiles ✅ at `/ogc/tiles` (tileMatrixSets + raster tiles, PNG/JPEG); **Maps ✅ at `/ogc/maps`** (map operation reuses the WMS GetMap pipeline); **Processes ✅ at `/ogc/processes`** (synchronous jobs over the WPS engine); **Coverages ✅ at `/ogc/coverages`** (coverage collections = raster data sources, `coverage` operation reuses the WCS GetCoverage pipeline, GeoTIFF/PNG/JPEG + bbox crop); **Styles ✅ at `/ogc/styles`** (style list/create/get/replace/delete + metadata + layer collection linkage, SLD/CSS/YSLD/MBStyle native media types) |
 
 ## 2. WMS — Web Map Service
 
@@ -177,7 +177,7 @@ Prioritized by [ROADMAP.md](ROADMAP.md) and [IMPLEMENTATION_PLAN.md](IMPLEMENTAT
 | P2       | WFS KML / Shapefile output          | ✅ done |
 | P4       | WPS (processing)                    | ✅ first surface (Centroid/Buffer/Bounds) |
 | P4       | CSW (catalog)                       | ✅ first surface (GetCapabilities/DescribeRecord/GetRecords/GetRecordById/GetDomain) |
-| P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | ✅ Features Core + Tiles (batch 19/20) + Maps + Processes (batch 21); Coverages/Styles 2–3 weeks each |
+| P4       | OGC API Features / Tiles / Maps / Coverages / Processes / Styles | ✅ Features Core + Tiles (batch 19/20) + Maps + Processes (batch 21) + Coverages + Styles (batch 22) |
 | P4       | Printing / Importer / GeoFence      | enterprise |
 | P4       | CSS / YSLD / MBStyle styling        | medium |
 
@@ -200,8 +200,8 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **169 lib unit tests + 147 integration tests**, plus
-**5 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms) that require
+`cargo test` currently green: **189 lib unit tests + 164 integration tests**, plus
+**7 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms + 2 others) that require
 running services and are verified with `cargo test -- --ignored`.
 
 The integration tests are split by protocol into separate test crates (Rust
@@ -222,6 +222,9 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | `tests/ogc_tiles_test.rs` | 7 | OGC API Tiles (landing, conformance, tileMatrixSets + definition, collections/tilesets, tile PNG/JPEG, 404) |
 | `tests/ogc_maps_test.rs` | 8 | OGC API Maps (landing, conformance, collections, collection, styles, map PNG/JPEG + size, 400/404) |
 | `tests/ogc_processes_test.rs` | 9 | OGC API Processes (landing, conformance, process list, description, execute centroid/buffer, jobs list, results, cancel 409, 400/404) |
+| `tests/ogc_coverages_test.rs` | 9 | OGC API Coverages (landing, conformance, collections empty/with real GeoTIFF, collection detail with real 8x8 metadata + bounds, coverage GeoTIFF/PNG/JPEG, bbox crop 2x2 + resize 8x8, disjoint bbox 400, 404) |
+| `tests/ogc_styles_test.rs` | 7 | OGC API Styles (landing, conformance, style list + SLD content + 404, metadata, create 401/201, get/put(CSS content-type)/delete lifecycle, collections + layer styles) |
+| `tests/resilience_test.rs` | 4 | Resilience middleware (rate limit 429, per-client X-Forwarded-For buckets, request timeout 504, fast requests pass) |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
 has at least one request/response test validating status codes, content types,
@@ -242,6 +245,9 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 | WPS                | GetCapabilities (ServiceIdentification / OperationsMetadata / ProcessOfferings / Languages), DescribeProcess (DataInputs / ProcessOutputs + xsd:double), Execute (KVP `response=raw` → GeoJSON + document XML, POST XML with `Reference xlink:href="layer:…"`), built-in `vec:Centroid` / `vec:Buffer` / `gs:Bounds` — integration + 6 unit tests (`services/wps.rs`: KVP DataInputs, operation parse, Execute XML, capabilities structure, features_to_geojson, run_process) |
 | OGC API Maps       | Landing / conformance / collections / collection / styles, `map` operation (`bbox` + `width`/`height`, PNG/JPEG via `?f=`, `transparent` / `bgcolor` / `datetime` / `cql_filter` pass-through) reusing the shared WMS GetMap pipeline — integration + 8 unit tests (`services/ogc_maps.rs`: landing, conformance, collections, collection links, styles, bbox parse, map href formats) |
 | OGC API Processes  | Landing / conformance / process list / process description; synchronous job surface (`POST /jobs` → 201 status document, `GET /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/results`, `DELETE /jobs/{id}`) over the WPS engine, inputs as `layer:` reference / inline GeoJSON / OGC API href / literals — integration + 9 unit tests (`services/ogc_processes.rs`: landing, conformance, process list/description, job status/results, job request parse) |
+| OGC API Coverages | Landing / conformance / collections (empty + with a real 8x8 georeferenced GeoTIFF data source) / collection detail (real bounds + grid scale + band fields) / `coverage` operation (GeoTIFF default, PNG + JPEG via `?f=`, bbox crop 2×2 + width/height resample 8×8, disjoint bbox 400, unknown collection 404) — integration + 7 unit tests (`services/ogc_coverages.rs`: landing, conformance, collections, collection links/dimensions, bbox parse, coverage hrefs) |
+| OGC API Styles     | Landing / conformance / style list (built-in `default` SLD) + style content with native media type + 404 / metadata / create (401 without token, 201 with JWT) / get–put (CSS content-type after replace)–delete lifecycle / collections + layer styles — integration + 8 unit tests (`services/ogc_styles.rs`: mime mapping, landing, conformance, list, metadata, collections, layer-style resolution, hrefs) |
+| Resilience (middleware) | Rate limit (429 over limit, per-client `X-Forwarded-For` buckets) + request timeout (504 over a real HTTP server, fast requests pass) — integration + 5 unit tests (`middleware.rs`: allow/deny, disabled limiter, per-client independence, window slide, count after prune) |
 | WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | TMS                | GetCapabilities (RESTful + KVP), TileMap document (SRS / BoundingBox / Origin / TileFormat / TileSets + units-per-pixel), GetTile (global-geodetic + global-mercator, PNG + JPEG, TMS bottom-up y flip) — integration |
@@ -494,4 +500,34 @@ built-in processes reuse the WPS 1.0.0 engine (`vec:Centroid` / `vec:Buffer` /
 integration: 8 (ogc_maps_test.rs) + 9 (ogc_processes_test.rs).
 Next candidates:
 
-1. OGC API Coverages / Styles (P4)
+Batch 22 completed: **OGC API - Coverages (OGC 19-088) + OGC API - Styles
+(OGC 21-009) first surfaces + resilience hardening** — `src/services/
+ogc_coverages.rs` + `src/handlers/ogc_coverages_handler.rs` served at
+`/ogc/coverages` and `src/services/ogc_styles.rs` + `src/handlers/
+ogc_styles_handler.rs` served at `/ogc/styles` (both JSON; the reference
+GeoServer at :18080 does not ship the OGC API extension, so both follow the
+OGC API schema directly). **Coverages**: landing page, `/conformance`
+(conformsTo: core / oas30 / html / collections / coverage), `/collections`
+and `/collections/{id}` (coverage collection = one per raster data source —
+GeoTIFF / WorldImage / ArcGrid — with real bounds + grid size + band range
+fields read from the files, mirroring WCS 2.0), and the `coverage` operation
+at `/collections/{id}/coverage` (GeoTIFF default, PNG / JPEG via `?f=`,
+optional `bbox` crop + `width`/`height` rescale) — rendered through the same
+raster readers as the WCS 2.0 GetCoverage pipeline. **Styles**: landing page,
+`/conformance` (conformsTo: core / oas30 / html / styles-list / style-info /
+style-metadata / style-create-update-delete / style-search / collections),
+`/styles` (GET list + POST create, write ops require JWT auth), `/styles/
+{styleId}` (GET content in native media type — SLD XML / CSS / YSLD YAML /
+MBStyle JSON — PUT replace, DELETE), `/styles/{styleId}/metadata` and the
+collection linkage `/collections` + `/collections/{id}/styles`. **Resilience**:
+`src/middleware.rs` adds a sliding-window per-client rate limiter (HTTP 429,
+keyed by IP / X-Forwarded-For) and a request timeout (HTTP 504), both opt-in
+via `[server]` config (`rate_limit_max_requests` / `rate_limit_window_secs` /
+`request_timeout_secs`) and wired in `main.rs` around the whole app. New unit
+tests: 7 (ogc_coverages.rs) + 7 (ogc_styles.rs) + 5 (middleware.rs); new
+integration: 9 (ogc_coverages_test.rs) + 7 (ogc_styles_test.rs) + 4
+(resilience_test.rs). CI: `.github/workflows/ci.yml` (fmt + clippy + test +
+frontend build + GHCR image push on main).
+Next candidates:
+
+1. ImageMosaic / ImagePyramid data sources (P2)

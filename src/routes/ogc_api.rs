@@ -38,6 +38,20 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             ),
     )
     .service(
+        web::scope("/ogc/coverages")
+            .route("", web::get().to(crate::handlers::handle_ogc_coverages_landing))
+            .route("/conformance", web::get().to(crate::handlers::handle_ogc_coverages_conformance))
+            .route("/collections", web::get().to(crate::handlers::handle_ogc_coverages_collections))
+            .route(
+                "/collections/{collection}",
+                web::get().to(crate::handlers::handle_ogc_coverages_collection),
+            )
+            .route(
+                "/collections/{collection}/coverage",
+                web::get().to(crate::handlers::handle_ogc_coverages_coverage),
+            ),
+    )
+    .service(
         web::scope("/ogc/maps")
             .route("", web::get().to(crate::handlers::handle_ogc_maps_landing))
             .route("/conformance", web::get().to(crate::handlers::handle_ogc_maps_conformance))
@@ -53,6 +67,34 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(
                 "/collections/{collection}/map",
                 web::get().to(crate::handlers::handle_ogc_maps_map),
+            ),
+    )
+    .service(
+        web::scope("/ogc/styles")
+            .route("", web::get().to(crate::handlers::handle_ogc_styles_landing))
+            .route("/conformance", web::get().to(crate::handlers::handle_ogc_styles_conformance))
+            .route("/styles", web::get().to(crate::handlers::handle_ogc_styles_list))
+            .route("/styles", web::post().to(crate::handlers::handle_ogc_styles_create))
+            .route(
+                "/styles/{styleId}",
+                web::get().to(crate::handlers::handle_ogc_styles_style),
+            )
+            .route(
+                "/styles/{styleId}",
+                web::put().to(crate::handlers::handle_ogc_styles_put),
+            )
+            .route(
+                "/styles/{styleId}",
+                web::delete().to(crate::handlers::handle_ogc_styles_delete),
+            )
+            .route(
+                "/styles/{styleId}/metadata",
+                web::get().to(crate::handlers::handle_ogc_styles_metadata),
+            )
+            .route("/collections", web::get().to(crate::handlers::handle_ogc_styles_collections))
+            .route(
+                "/collections/{collectionId}/styles",
+                web::get().to(crate::handlers::handle_ogc_styles_collection_styles),
             ),
     )
     .service(

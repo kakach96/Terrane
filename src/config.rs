@@ -45,6 +45,15 @@ pub struct ServerConfig {
     /// 优雅关闭时等待在途请求完成的最大秒数 (默认: 30; 容器滚动更新/缩容时生效)
     #[serde(default = "default_shutdown_timeout")]
     pub shutdown_timeout_secs: u64,
+    /// 单请求超时秒数 (0 = 禁用; 默认: 60; 超时返回 504)
+    #[serde(default = "default_request_timeout")]
+    pub request_timeout_secs: u64,
+    /// 速率限制: 窗口内单客户端最大请求数 (0 = 禁用; 默认: 0)
+    #[serde(default)]
+    pub rate_limit_max_requests: u64,
+    /// 速率限制窗口 (秒; 仅 rate_limit_max_requests > 0 时生效; 默认: 1)
+    #[serde(default = "default_rate_limit_window")]
+    pub rate_limit_window_secs: u64,
 }
 
 /// 元数据存储配置 — 保存工作空间、数据源、图层、样式、权限、会话等配置元数据。
@@ -192,6 +201,9 @@ impl Default for ServerConfig {
             static_dir: default_static_dir(),
             connect_timeout_secs: default_connect_timeout(),
             shutdown_timeout_secs: default_shutdown_timeout(),
+            request_timeout_secs: default_request_timeout(),
+            rate_limit_max_requests: 0,
+            rate_limit_window_secs: default_rate_limit_window(),
         }
     }
 }
@@ -268,6 +280,14 @@ fn default_connect_timeout() -> u64 {
 
 fn default_shutdown_timeout() -> u64 {
     30
+}
+
+fn default_request_timeout() -> u64 {
+    60
+}
+
+fn default_rate_limit_window() -> u64 {
+    1
 }
 
 fn default_sqlite_path() -> PathBuf {
@@ -391,6 +411,9 @@ impl Default for GeoServerConfig {
                 static_dir: default_static_dir(),
                 connect_timeout_secs: default_connect_timeout(),
                 shutdown_timeout_secs: default_shutdown_timeout(),
+                request_timeout_secs: default_request_timeout(),
+                rate_limit_max_requests: 0,
+                rate_limit_window_secs: default_rate_limit_window(),
             },
             metadata: MetadataConfig {
                 kind: default_db_kind(),

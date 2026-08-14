@@ -61,6 +61,23 @@ connect_timeout_secs = 10
 shutdown_timeout_secs = 30
 
 # ---------------------------------------------------------------------------
+# Resilience (optional; see docs/IMPLEMENTATION_PLAN.md §6.1)
+# ---------------------------------------------------------------------------
+# Per-request timeout in seconds; requests exceeding the deadline are cancelled
+# and answered with HTTP 504. 0 disables the timeout (default: 60).
+# Env: GEOSERVER__SERVER__REQUEST_TIMEOUT_SECS
+request_timeout_secs = 60
+
+# Sliding-window rate limit per client (by IP, falling back to X-Forwarded-For).
+# Maximum requests allowed inside the window; over-limit requests are answered
+# with HTTP 429. 0 disables rate limiting (default: 0).
+# Env: GEOSERVER__SERVER__RATE_LIMIT_MAX_REQUESTS
+rate_limit_max_requests = 0
+# Rate limit window in seconds (default: 1)
+# Env: GEOSERVER__SERVER__RATE_LIMIT_WINDOW_SECS
+rate_limit_window_secs = 1
+
+# ---------------------------------------------------------------------------
 # Metadata storage (REQUIRED; default: sqlite)
 # Stores workspaces, data sources, layer definitions, styles, permissions, etc.
 # Backward compatible: the legacy section name [database] is accepted as an alias.
