@@ -43,7 +43,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Metadata + vector data on PostgreSQL (PostGIS) for HA / multi-replica
 - Session storage: Redis (cloud) / in-memory (standalone) — *deferred: session management stays simple JWT + metadata store*
 - Storage config simplified: config keeps only `[metadata]`; vector/raster file data sources registered per data source (`file_path` + `file_storage_type`) with `FileStore` abstraction (`src/store/file_store.rs`); cache stays local (`TileCacheBackend` + `SessionCache`)
-- Tile cache backend abstraction: local disk backend done; **Redis data source backend done** (`DataSourceType::Redis` + `Layer.cache_store`, shared across replicas); S3/MinIO pending
+- Tile cache backend abstraction: local disk backend done; **Redis data source backend done** (`DataSourceType::Redis` + `Layer.cache_store`, shared across replicas)
 - Raster data backend abstraction: local files backend done; MinIO / S3 pending
 - Session cache: local in-memory backend done; Redis pending (deferred — simple JWT)
 - Catalog refresh mechanism to converge in-memory caches across replicas — **periodic reload done** (`[server] catalog_refresh_secs`); **event-triggered refresh done** (REST layer update/delete now immediately reloads the in-memory catalog via `AppState::refresh_catalog`, eliminating the write-after-read-stale window for WMS/WMTS/tile paths)
@@ -70,8 +70,8 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 ## Known Technical Debt
 
 - **JWT secret hardcoded default** in `src/auth.rs` (`terrane-jwt-secret-2026`) — must be injected via `GEOSERVER__SECURITY__JWT_SECRET` in production.
-- **In-memory caches** (`Arc<RwLock<...>>` in `src/state.rs`) diverge across replicas; periodic catalog refresh added (`[server] catalog_refresh_secs`, reload layers/styles/groups from the metadata store), but refresh is best-effort (no event-triggered push).
-- **Tile cache backend**: local disk default (`./data/gwc`, `src/store/cache/tile.rs`); layer-level Redis cache data sources added (`Layer.cache_store` → `DataSourceType::Redis`, shared across replicas), S3/MinIO backends still pending.
+- **In-memory caches** (`Arc<RwLock<...>>` in `src/state.rs`) diverge across replicas; periodic catalog refresh added (`[server] catalog_refresh_secs`, reload layers/styles/groups from the metadata store) plus event-triggered refresh on REST layer writes (`AppState::refresh_catalog`) — multi-replica divergence is bounded, but refresh remains best-effort (no external event bus).
+- **Tile cache backend**: local disk default (`./data/gwc`, `src/store/cache/tile.rs`); layer-level Redis cache data sources added (`Layer.cache_store` → `DataSourceType::Redis`, shared across replicas).
 - **Uploads on local disk** (`./data`) — no shared volume / object storage.
 - **Sessions persisted in the metadata DB** (SQLite / PostgreSQL) with a local in-memory `SessionCache` fast-path — Redis session backend intentionally not implemented (simple JWT only).
 - **CI pipeline** (`.github/workflows/ci.yml` — fmt + clippy + test + frontend build + GHCR push + Trivy scan; `.github/dependabot.yml` for cargo/npm/actions) — created but not yet exercised against a real repository.

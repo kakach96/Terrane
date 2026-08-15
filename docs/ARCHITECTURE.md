@@ -19,7 +19,7 @@
 | Async runtime   | Tokio                     | Industry-standard async runtime (`full` features: signals, timers, filesystem, IO)                |
 | Metadata store  | SQLite / PostgreSQL       | SQLite: zero-config standalone; PostgreSQL: HA + PostGIS spatial types for cluster deployments    |
 | Data sources    | Per-datasource file backends (local / s3) | File data sources record `file_path` + `file_storage_type` + `s3_*`; PostGIS via deadpool pools; S3 via `S3FileStore` (rust-s3) |
-| Cache store     | Local disk (tile) + in-memory (session)  | Tile cache on disk with TTL; session fast-path in memory; future Redis backend                 |
+| Cache store     | Local disk (tile) + in-memory (session); layer-level Redis via cache data source | Tile cache on disk with TTL; session fast-path in memory; `Layer.cache_store` → Redis data source backend (shared across replicas) |
 | Geometry        | geo / geo-types           | Pure-Rust geometry model and spatial predicates                                                   |
 | Raster rendering| image                     | Pure-Rust image encode/decode (PNG/JPEG map output, GeoTIFF read)                                 |
 | DB pools        | deadpool-postgres         | Async connection pooling; pools cached per data source in `AppState.pg_pools`                     |
