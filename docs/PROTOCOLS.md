@@ -165,11 +165,12 @@ surface (the reference GeoServer has WPS disabled, so this follows the OGC WPS
 ## 8. Data sources
 
 PostGIS, **MySQL** (spatial DB connector: MBRIntersects filtering + ST_AsGeoJSON output,
-pooled connections), Shapefile, GeoTIFF, GeoPackage, WorldImage, CascadedWms, ArcGrid,
-Redis (cache backend), GeoJson, **ImageMosaic** (raster-directory mosaic: GeoTIFF /
-WorldImage / ArcGrid / PNG / JPEG granules composited into one coverage; WCS GetCoverage +
-WMS GetMap + tile pipelines), **ImagePyramid** (pyramid: numeric level subdirs `0/1/2/…`,
-level chosen by requested resolution; same WCS / WMS / tile surfaces).
+pooled connections), **MongoDB** (GeoJSON document connector: `$geoWithin` bbox filtering,
+`ping` connection test, pooled client), Shapefile, GeoTIFF, GeoPackage, WorldImage,
+CascadedWms, ArcGrid, Redis (cache backend), GeoJson, **ImageMosaic** (raster-directory
+mosaic: GeoTIFF / WorldImage / ArcGrid / PNG / JPEG granules composited into one coverage;
+WCS GetCoverage + WMS GetMap + tile pipelines), **ImagePyramid** (pyramid: numeric level
+subdirs `0/1/2/…`, level chosen by requested resolution; same WCS / WMS / tile surfaces).
 
 ### 8.1 WMS / WMS-C / WMTS rendering engine
 

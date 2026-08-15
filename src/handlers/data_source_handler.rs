@@ -357,14 +357,84 @@ pub async fn test_connection(
 }
 
 /// 按数据源类型分发连接测试: Redis → PING; ImageMosaic / ImagePyramid →
-/// 目录栅格检查; MySQL → 数据库 PING; 其余 → PostGIS 语义。
+/// 目录栅格检查; MySQL / MongoDB → 数据库 PING; 其余 → PostGIS 语义。
 async fn test_datasource_connection(ds: &DataSource) -> serde_json::Value {
     match ds.data_source_type {
         DataSourceType::Redis => test_redis_connection(ds).await,
         DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => test_mosaic_connection(ds),
         DataSourceType::Mysql => test_mysql_connection(ds).await,
+        DataSourceType::Mongo => test_mongo_connection(ds).await,
         _ => test_postgis_connection(ds).await,
     }
+}
+
+/// MongoDB 数据源连接测试: 建立客户端并 ping 验证可连通性。
+async fn test_mongo_connection(ds: &DataSource) -> serde_json::Value {
+    let conn_info = match &ds.connection {
+        Some(c) => c,
+        None => {
+            return serde_json::json!({
+                "success": false,
+                "message": "No connection configuration",
+            })
+        },
+    };
+    let host = conn_info.host.as_deref().unwrap_or("127.0.0.1");
+    let port = conn_info.port.unwrap_or(27017);
+    let database = conn_info.database.as_deref().unwrap_or("geoserver");
+    let user = conn_info.username.as_deref();
+    let password = conn_info.password.as_deref();
+
+    let uri = if let Some(u) = user {
+        format!(
+            "mongodb://{}:{}@{}:{}/{}",
+            uri_enc(u),
+            uri_enc(password.unwrap_or("")),
+            host,
+            port,
+            database
+        )
+    } else {
+        format!("mongodb://{}:{}/{}", host, port, database)
+    };
+
+    let client = match mongodb::Client::with_uri_str(&uri).await {
+        Ok(c) => c,
+        Err(e) => {
+            return serde_json::json!({
+                "success": false,
+                "message": format!("Invalid MongoDB URI: {}", e),
+            })
+        },
+    };
+    match client
+        .database(database)
+        .run_command(mongodb::bson::doc! { "ping": 1 }, None)
+        .await
+    {
+        Ok(_) => serde_json::json!({
+            "success": true,
+            "message": "MongoDB ping successful",
+        }),
+        Err(e) => serde_json::json!({
+            "success": false,
+            "message": format!("MongoDB connection failed: {}", e),
+        }),
+    }
+}
+
+/// URI 组件百分号编码 (MongoDB 连接串用户名/密码)。
+fn uri_enc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            },
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
 }
 
 /// MySQL 数据源连接测试: 建立连接并执行 `SELECT 1` 验证可连通性。

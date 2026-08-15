@@ -29,11 +29,11 @@ impl DataSource {
         )
     }
 
-    /// 判断数据源是否为 PostGIS / MySQL 数据库类型
+    /// 判断数据源是否为 PostGIS / MySQL / MongoDB 数据库类型
     pub fn is_database(&self) -> bool {
         matches!(
             self.data_source_type,
-            DataSourceType::Postgis | DataSourceType::Mysql
+            DataSourceType::Postgis | DataSourceType::Mysql | DataSourceType::Mongo
         )
     }
 
@@ -61,6 +61,10 @@ pub enum DataSourceType {
     /// ST_AsBinary 几何输出)
     #[serde(rename = "mysql")]
     Mysql,
+    /// MongoDB — GeoJSON 文档数据库 (collection 内 GeoJSON geometry 字段,
+    /// bbox 过滤 + 投影输出)
+    #[serde(rename = "mongo")]
+    Mongo,
     Shapefile,
     Geotiff,
     Geopackage,
@@ -94,6 +98,7 @@ impl std::fmt::Display for DataSourceType {
         match self {
             DataSourceType::Postgis => write!(f, "postgis"),
             DataSourceType::Mysql => write!(f, "mysql"),
+            DataSourceType::Mongo => write!(f, "mongo"),
             DataSourceType::Shapefile => write!(f, "shapefile"),
             DataSourceType::Geotiff => write!(f, "geotiff"),
             DataSourceType::Geopackage => write!(f, "geopackage"),
@@ -111,7 +116,7 @@ impl std::fmt::Display for DataSourceType {
 
 /// 数据源连接信息。
 ///
-/// - 对于 PostGIS / MySQL: 使用 host/port/database/schema/username/password
+/// - 对于 PostGIS / MySQL / MongoDB: 使用 host/port/database/schema/username/password
 /// - 对于 Shapefile/GeoTIFF: 使用 file_path/file_storage_type
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DataSourceConnection {
@@ -229,6 +234,7 @@ mod tests {
         let cases: &[(&str, DataSourceType)] = &[
             ("postgis", DataSourceType::Postgis),
             ("mysql", DataSourceType::Mysql),
+            ("mongo", DataSourceType::Mongo),
             ("shapefile", DataSourceType::Shapefile),
             ("geotiff", DataSourceType::Geotiff),
             ("geopackage", DataSourceType::Geopackage),

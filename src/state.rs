@@ -65,6 +65,8 @@ pub struct AppState {
     pub pg_pools: Arc<Mutex<HashMap<String, deadpool_postgres::Pool>>>,
     /// MySQL 连接池缓存 (按数据源名称; 惰性构建并缓存, 仿 pg_pools)
     pub mysql_pools: Arc<Mutex<HashMap<String, mysql_async::Pool>>>,
+    /// MongoDB 客户端缓存 (按数据源名称; mongodb::Client 内部自带连接池)
+    pub mongo_clients: Arc<Mutex<HashMap<String, mongodb::Client>>>,
     pub layer_groups: Arc<RwLock<Vec<LayerGroup>>>,
     pub start_time: Instant,
     pub request_count: AtomicU64,
@@ -350,6 +352,7 @@ impl AppState {
             session_cache,
             pg_pools: Arc::new(Mutex::new(HashMap::new())),
             mysql_pools: Arc::new(Mutex::new(HashMap::new())),
+            mongo_clients: Arc::new(Mutex::new(HashMap::new())),
             start_time: Instant::now(),
             request_count: AtomicU64::new(0),
             error_count: AtomicU64::new(0),
@@ -503,6 +506,55 @@ impl AppState {
         pools.insert(ds_name.to_string(), pool.clone());
         tracing::debug!("[get_mysql_pool] 新连接池已创建并缓存, ds_name={}", ds_name);
         pool
+    }
+
+    /// 获取或创建指定数据源的 MongoDB 客户端 (按数据源名称缓存)。
+    /// 获取或创建指定数据源的 MongoDB 客户端 (按数据源名称缓存)。
+    pub async fn get_mongo_client(
+        &self,
+        ds_name: &str,
+        conn_info: &crate::models::DataSourceConnection,
+    ) -> mongodb::Client {
+        {
+            let clients = self.mongo_clients.lock().unwrap();
+            if let Some(client) = clients.get(ds_name) {
+                return client.clone();
+            }
+        }
+
+        let host = conn_info.host.as_deref().unwrap_or("127.0.0.1");
+        let port = conn_info.port.unwrap_or(27017);
+        let database = conn_info.database.as_deref().unwrap_or("geoserver");
+        let user = conn_info.username.as_deref();
+        let password = conn_info.password.as_deref();
+
+        // 组装 mongodb:// URI; 含认证信息时编码进 URI。
+        let uri = if let Some(u) = user {
+            format!(
+                "mongodb://{}:{}@{}:{}/{}",
+                urlencode(u),
+                urlencode(password.unwrap_or("")),
+                host,
+                port,
+                database
+            )
+        } else {
+            format!("mongodb://{}:{}/{}", host, port, database)
+        };
+
+        let client = match mongodb::Client::with_uri_str(&uri).await {
+            Ok(c) => c,
+            Err(_) => mongodb::Client::with_uri_str("mongodb://127.0.0.1:27017")
+                .await
+                .unwrap_or_else(|_| unreachable!("default mongodb URI is valid")),
+        };
+        let mut clients = self.mongo_clients.lock().unwrap();
+        clients.insert(ds_name.to_string(), client.clone());
+        tracing::debug!(
+            "[get_mongo_client] 新客户端已创建并缓存, ds_name={}",
+            ds_name
+        );
+        client
     }
 
     pub fn increment_request_count(&self) {
@@ -746,4 +798,18 @@ async fn refresh_catalog_from_store(
     }
 
     tracing::debug!("[catalog] refreshed from metadata store");
+}
+
+/// URI 组件百分号编码 (用于 MongoDB 连接串中的用户名/密码)。
+fn urlencode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            },
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
 }

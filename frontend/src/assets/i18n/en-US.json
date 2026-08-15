@@ -216,6 +216,7 @@
     "cascadedWms": "Cascaded WMS",
     "postgisSection": "PostGIS Connection",
     "mysqlSection": "MySQL Connection",
+    "mongoSection": "MongoDB Connection",
     "redisSection": "Redis Cache Connection",
     "imageMosaicSection": "ImageMosaic raster directory (GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granules)",
     "imagePyramidSection": "ImagePyramid pyramid directory (numeric level subdirs 0/1/2… each holding granules)",

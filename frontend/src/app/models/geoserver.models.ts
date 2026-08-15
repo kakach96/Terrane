@@ -183,6 +183,7 @@ export interface CreateDataSourceRequest {
   type:
     | 'postgis'
     | 'mysql'
+    | 'mongo'
     | 'shapefile'
     | 'geotiff'
     | 'geopackage'
@@ -202,6 +203,7 @@ export interface UpdateDataSourceRequest {
   type?:
     | 'postgis'
     | 'mysql'
+    | 'mongo'
     | 'shapefile'
     | 'geotiff'
     | 'geopackage'

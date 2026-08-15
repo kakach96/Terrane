@@ -43,6 +43,7 @@
       *ngIf="
         selectedType === 'postgis' ||
         selectedType === 'mysql' ||
+        selectedType === 'mongo' ||
         selectedType === 'redis'
       "
     >
@@ -54,7 +55,9 @@
             ? 'dataSources.redisSection'
             : selectedType === 'mysql'
               ? 'dataSources.mysqlSection'
-              : 'dataSources.postgisSection'
+              : selectedType === 'mongo'
+                ? 'dataSources.mongoSection'
+                : 'dataSources.postgisSection'
           ) | translate
         }}
       </h3>
@@ -127,6 +130,7 @@
       *ngIf="
         selectedType !== 'postgis' &&
         selectedType !== 'mysql' &&
+        selectedType !== 'mongo' &&
         selectedType !== 'redis'
       "
     >
@@ -288,6 +292,7 @@
       isTesting ||
       (selectedType !== 'postgis' &&
         selectedType !== 'mysql' &&
+        selectedType !== 'mongo' &&
         selectedType !== 'redis' &&
         selectedType !== 'image_mosaic' &&
         selectedType !== 'image_pyramid')

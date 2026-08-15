@@ -216,6 +216,7 @@
     "cascadedWms": "级联 WMS",
     "postgisSection": "PostGIS 连接配置",
     "mysqlSection": "MySQL 连接配置",
+    "mongoSection": "MongoDB 连接配置",
     "redisSection": "Redis 缓存连接配置",
     "imageMosaicSection": "ImageMosaic 栅格目录 (含 GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granule)",
     "imagePyramidSection": "ImagePyramid 金字塔目录 (数字子目录 0/1/2… 各含一层 granule)",

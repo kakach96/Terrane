@@ -5,6 +5,7 @@ use crate::models::{
 };
 use crate::state::AppState;
 use crate::utils::wkb;
+use futures_util::TryStreamExt;
 use tracing::info;
 
 pub async fn query_layer_features(
@@ -66,6 +67,19 @@ pub async fn query_layer_features(
                 }
                 info!(
                     "[Features] MySQL 数据源 '{}' 缺少连接/表名, 返回空",
+                    ds.name
+                );
+                return Ok(Vec::new());
+            },
+            DataSourceType::Mongo => {
+                if let Some(ref conn) = ds.connection {
+                    if let Some(ref native_name) = layer.native_name {
+                        let client = state.get_mongo_client(&ds.name, conn).await;
+                        return query_mongo_features(&client, conn, native_name, bbox, limit).await;
+                    }
+                }
+                info!(
+                    "[Features] MongoDB 数据源 '{}' 缺少连接/集合名, 返回空",
                     ds.name
                 );
                 return Ok(Vec::new());
@@ -510,6 +524,129 @@ async fn query_mysql_features(
     }
 
     Ok(features)
+}
+
+/// 从 MongoDB 集合查询要素 (GeoJSON 文档)。
+///
+/// 集合内文档应包含 GeoJSON 几何字段 (默认 `geometry`, 可通过
+/// `layer.native_name` 之外的几何字段名? — 几何字段固定探测 `geometry`
+/// 或 `geom`, 其余字段全部作为属性输出)。bbox 过滤用 `$geoWithin` /
+/// `$box` 查询。
+async fn query_mongo_features(
+    client: &mongodb::Client,
+    conn: &crate::models::DataSourceConnection,
+    collection_name: &str,
+    bbox: Option<&Bounds>,
+    limit: Option<u64>,
+) -> Result<Vec<Feature>, GeoServerError> {
+    let database = conn
+        .database
+        .clone()
+        .unwrap_or_else(|| "geoserver".to_string());
+    let db = client.database(&database);
+    let coll = db.collection::<mongodb::bson::Document>(collection_name);
+
+    let filter = match bbox {
+        Some(b) => {
+            // $geoWithin 需要 GeoJSON 多边形; 若几何是 GeoJSON 则匹配。
+            mongodb::bson::doc! {
+                "$or": [
+                    { "geometry": { "$geoWithin": { "$box": [[b.minx, b.miny], [b.maxx, b.maxy]] } } },
+                    { "geom": { "$geoWithin": { "$box": [[b.minx, b.miny], [b.maxx, b.maxy]] } } },
+                ]
+            }
+        },
+        None => mongodb::bson::doc! {},
+    };
+
+    let limit_val = limit.unwrap_or(10000) as i64;
+    let opts = mongodb::options::FindOptions::builder()
+        .limit(Some(limit_val))
+        .build();
+    let mut cursor = coll
+        .find(filter, Some(opts))
+        .await
+        .map_err(|e| GeoServerError::InternalError(format!("MongoDB query error: {}", e)))?;
+
+    let mut features = Vec::new();
+    let mut idx = 0usize;
+    while let Ok(Some(doc)) = cursor.try_next().await {
+        let geometry =
+            extract_mongo_geometry(&doc).unwrap_or_else(|| crate::models::GeoJsonGeometry::Point {
+                coordinates: vec![0.0, 0.0],
+            });
+
+        let mut properties = std::collections::HashMap::new();
+        properties.insert(
+            "id".to_string(),
+            crate::models::PropertyValue::String(
+                doc.get("_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("feat_{}", idx)),
+            ),
+        );
+        for (key, value) in doc.iter() {
+            if key == "_id" || key == "geometry" || key == "geom" {
+                continue;
+            }
+            if let Some(s) = value.as_str() {
+                properties.insert(
+                    key.to_string(),
+                    crate::models::PropertyValue::String(s.to_string()),
+                );
+            } else if let Some(n) = value.as_f64() {
+                properties.insert(key.to_string(), crate::models::PropertyValue::Number(n));
+            } else if let Some(b) = value.as_bool() {
+                properties.insert(key.to_string(), crate::models::PropertyValue::Boolean(b));
+            } else {
+                properties.insert(
+                    key.to_string(),
+                    crate::models::PropertyValue::String(value.to_string()),
+                );
+            }
+        }
+        features.push(Feature::with_id(
+            format!("feat_{}", idx),
+            geometry,
+            properties,
+        ));
+        idx += 1;
+        if idx as i64 >= limit_val {
+            break;
+        }
+    }
+
+    Ok(features)
+}
+
+/// 从 MongoDB 文档提取 GeoJSON 几何 (字段 `geometry` 或 `geom`)。
+fn extract_mongo_geometry(doc: &mongodb::bson::Document) -> Option<crate::models::GeoJsonGeometry> {
+    let value = doc.get("geometry").or_else(|| doc.get("geom"))?;
+    let json = mongodb::bson::to_bson(value).ok()?;
+    serde_json::from_value(bson_to_json(&json)).ok()
+}
+
+/// bson::Bson → serde_json::Value (简化转换: 仅处理文档/数组/标量)。
+fn bson_to_json(bson: &mongodb::bson::Bson) -> serde_json::Value {
+    use mongodb::bson::Bson;
+    match bson {
+        Bson::Document(doc) => {
+            let mut map = serde_json::Map::new();
+            for (k, v) in doc.iter() {
+                map.insert(k.clone(), bson_to_json(v));
+            }
+            serde_json::Value::Object(map)
+        },
+        Bson::Array(arr) => serde_json::Value::Array(arr.iter().map(bson_to_json).collect()),
+        Bson::String(s) => serde_json::Value::String(s.clone()),
+        Bson::Double(n) => serde_json::json!(n),
+        Bson::Int32(n) => serde_json::json!(n),
+        Bson::Int64(n) => serde_json::json!(n),
+        Bson::Boolean(b) => serde_json::json!(b),
+        Bson::Null => serde_json::Value::Null,
+        _ => serde_json::Value::Null,
+    }
 }
 
 async fn get_table_columns(

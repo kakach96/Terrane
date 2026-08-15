@@ -63,6 +63,7 @@ rust-s3 = { version = "0.34", features = ["http-credentials"] }
 # Redis 缓存后端 (会话缓存 + 瓦片缓存; 多副本共享)
 redis = { version = "1", features = ["tokio-comp", "connection-manager"] }
 mysql_async = "0.34"
+mongodb = "2.8"
 
 [dev-dependencies]
 actix-rt = "2"

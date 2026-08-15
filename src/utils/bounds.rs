@@ -35,6 +35,7 @@ pub async fn compute_layer_bounds(
             }
         },
         DataSourceType::Mysql => Ok(None), // MySQL 边界经要素查询自动计算
+        DataSourceType::Mongo => Ok(None), // MongoDB 边界经要素查询自动计算
         DataSourceType::Geopackage => compute_geopackage_bounds(ds),
         DataSourceType::GeoJson => compute_geojson_bounds(ds),
         DataSourceType::WorldImage => compute_worldimage_bounds(ds),
