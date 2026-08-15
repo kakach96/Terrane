@@ -419,6 +419,12 @@ fn apply_css_property(style: &mut Style, prop: &str, val: &str) {
                 label.halo_radius = r.max(0.0);
             }
         },
+        // --- Compositing / blend mode (GeoServer CSS `composite`) ---
+        "composite" => {
+            if let Some(mode) = super::rendering::CompositeOp::parse(val) {
+                style.composite = mode;
+            }
+        },
         _ => {},
     }
 }

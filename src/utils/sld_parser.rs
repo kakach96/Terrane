@@ -522,11 +522,17 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                         in_halo_radius = false;
                         collect_text = false;
                     },
-                    // --- z-index vendor option ---
+                    // --- z-index / composite vendor options ---
                     "VendorOption" => {
                         if vendor_option_name == "z-index" {
                             if let Ok(v) = vendor_option_value.trim().parse::<i32>() {
                                 current_rule.style.z_index = v;
+                            }
+                        } else if vendor_option_name == "composite" {
+                            if let Some(mode) =
+                                super::rendering::CompositeOp::parse(&vendor_option_value)
+                            {
+                                current_rule.style.composite = mode;
                             }
                         }
                         vendor_option_name.clear();
@@ -1145,6 +1151,22 @@ mod tests {
 </StyledLayerDescriptor>"#;
         let rules = parse_sld(sld);
         assert_eq!(rules[0].style.z_index, 7);
+    }
+
+    #[test]
+    fn test_parse_composite_vendor_option() {
+        let sld = r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>x</Name><UserStyle><FeatureTypeStyle><Rule>
+    <VendorOption name="composite">multiply</VendorOption>
+    <PolygonSymbolizer><Fill><CssParameter name="fill">#112233</CssParameter></Fill></PolygonSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#;
+        let rules = parse_sld(sld);
+        assert_eq!(
+            rules[0].style.composite,
+            crate::utils::rendering::CompositeOp::Multiply
+        );
     }
 
     #[test]

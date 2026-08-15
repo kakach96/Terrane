@@ -176,8 +176,13 @@ tile pipelines).
   (source-over), polygon interior-ring holes (even-odd scanline), z-order (polygon → line →
   point within a layer, SLD `z-index` vendor option on top), label rendering from
   `TextSymbolizer` (built-in 5×7 bitmap font, halo + greedy collision avoidance).
+- **Compositing / blend modes**: SLD `VendorOption name="composite"` / CSS `composite`
+  (multiply / screen / overlay / darken / lighten); non-default modes draw the feature
+  onto an offscreen layer first, then composite with the mode (SVG/PDF layer semantics).
 - **SVG output** honors per-feature SLD/CSS styles (fill/stroke colors + opacity + width +
   dash array, point markers, `fill-rule="evenodd"` holes, labels with halo as text stroke).
+- **KML output** honors per-feature styles: deduplicated `<Style>` definitions referenced
+  by `styleUrl`, KML `aabbggrr` colors, label text as Placemark name + `<LabelStyle>`.
 - **Raster rendering**: GeoTIFF / WorldImage / ArcGrid / ImageMosaic layers render in
   WMS GetMap and in the shared tile pipeline (crop to BBOX + resample + source-over).
 - **Style selection**: WMS GetMap `STYLES` parameter selects the per-layer style
@@ -186,7 +191,7 @@ tile pipelines).
   WMS GetMap (previously only SLD reached the WMS renderer).
 - **SLD parsing**: TextSymbolizer (`Label` property/literal, `Font` size, `Fill`, `Halo`
   radius/color), `ogc:Filter` comparisons + `And`/`Or`/`Not` nesting, `VendorOption
-  name="z-index"`, Min/MaxScaleDenominator.
+  name="z-index"` / `name="composite"`, Min/MaxScaleDenominator.
 
 ## 9. Pending protocols (to adapt)
 

@@ -155,9 +155,13 @@ Overall progress █████████████░░░  63%
 - ✅ **SVG style-aware output**: WMS `image/svg+xml` honors per-feature styles
   (colors/opacity/width/dash + labels with halo); WMS GetMap `STYLES` parameter selects
   the per-layer style
+- ✅ **KML style-aware output**: deduplicated `<Style>` definitions + `styleUrl`
+  references, KML `aabbggrr` colors, label as Placemark name
+- ✅ **Compositing / blend modes**: SLD `VendorOption name="composite"` / CSS `composite`
+  (multiply / screen / overlay / darken / lighten) with offscreen-layer compositing
 - ✅ **WMS raster rendering**: GeoTIFF / WorldImage / ArcGrid / ImageMosaic layers render
   in WMS GetMap and the shared tile pipeline (BBOX crop + resample + source-over)
-- ⏳ Rendering transforms / compositing blend modes (still out of scope)
+- ⏳ Rendering transforms (still out of scope)
 
 ---
 

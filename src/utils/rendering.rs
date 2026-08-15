@@ -76,9 +76,17 @@ impl MapRenderer {
         let mut items: Vec<&(GeoJsonGeometry, Style)> = features.iter().collect();
         items.sort_by_key(|(g, s)| (s.z_index, geometry_type_rank(g)));
 
-        // Pass 1: geometry.
+        // Pass 1: geometry. Features with a non-default composite mode are
+        // drawn onto an offscreen layer first, then composited onto the map
+        // with their blend mode (like SVG/PDF layer compositing).
         for (geometry, style) in &items {
-            self.render_feature(&mut img, geometry, style);
+            if style.composite == CompositeOp::SourceOver {
+                self.render_feature(&mut img, geometry, style);
+            } else {
+                let mut layer = RgbaImage::new(self.options.width, self.options.height);
+                self.render_feature(&mut layer, geometry, style);
+                composite_mode(&mut img, &layer, style.composite);
+            }
         }
 
         // Pass 2: labels, with collision avoidance against already-placed ones.
@@ -791,6 +799,79 @@ fn blend_pixel(img: &mut RgbaImage, x: u32, y: u32, fg: [u8; 4]) {
     img.put_pixel(x, y, Rgba(out));
 }
 
+/// Blend two color channels with a compositing mode (separable blend modes,
+/// operating on straight-alpha colors; alpha handled by the caller).
+fn blend_channel(mode: CompositeOp, fg: u8, bg: u8) -> u8 {
+    let f = fg as f32 / 255.0;
+    let b = bg as f32 / 255.0;
+    let out = match mode {
+        CompositeOp::SourceOver => f,
+        CompositeOp::Multiply => f * b,
+        CompositeOp::Screen => f + b - f * b,
+        CompositeOp::Overlay => {
+            if b <= 0.5 {
+                2.0 * f * b
+            } else {
+                1.0 - 2.0 * (1.0 - f) * (1.0 - b)
+            }
+        },
+        CompositeOp::Darken => f.min(b),
+        CompositeOp::Lighten => f.max(b),
+    };
+    (out.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+/// Composite a whole offscreen layer onto the map with a blend mode
+/// (source-over alpha compositing of the blended color, matching the
+/// standard "isolated group" compositing model).
+fn composite_mode(dst: &mut RgbaImage, layer: &RgbaImage, mode: CompositeOp) {
+    for (y, row) in layer.rows().enumerate() {
+        for (x, px) in row.enumerate() {
+            let fg = px.0;
+            let a_fg = fg[3] as f32 / 255.0;
+            if a_fg <= 0.0 {
+                continue;
+            }
+            let bg = dst.get_pixel(x as u32, y as u32).0;
+            let a_dst = bg[3] as f32 / 255.0;
+            if mode == CompositeOp::SourceOver {
+                blend_pixel(dst, x as u32, y as u32, fg);
+                continue;
+            }
+            if a_fg >= 1.0 {
+                let out = [
+                    blend_channel(mode, fg[0], bg[0]),
+                    blend_channel(mode, fg[1], bg[1]),
+                    blend_channel(mode, fg[2], bg[2]),
+                    (a_fg * 255.0).round() as u8,
+                ];
+                dst.put_pixel(x as u32, y as u32, Rgba(out));
+                continue;
+            }
+            // cs = blend(fg, bg); co = cs*as + cb*ab*(1-as); ao = as + ab*(1-as).
+            let a_out = a_fg + a_dst * (1.0 - a_fg);
+            if a_out <= 0.0 {
+                continue;
+            }
+            let blend_c = |f: u8, b: u8| -> u8 {
+                let cs = blend_channel(mode, f, b) as f32 / 255.0;
+                ((cs * a_fg + (b as f32 / 255.0) * a_dst * (1.0 - a_fg)) / a_out * 255.0).round()
+                    as u8
+            };
+            dst.put_pixel(
+                x as u32,
+                y as u32,
+                Rgba([
+                    blend_c(fg[0], bg[0]),
+                    blend_c(fg[1], bg[1]),
+                    blend_c(fg[2], bg[2]),
+                    (a_out * 255.0).round() as u8,
+                ]),
+            );
+        }
+    }
+}
+
 /// Z-order rank of a geometry type: polygons at the bottom, then lines,
 /// then points on top (matching GeoServer's default drawing order).
 fn geometry_type_rank(g: &GeoJsonGeometry) -> i32 {
@@ -874,6 +955,36 @@ pub struct Style {
     /// Optional z-index (SLD `VendorOption name="z-index"` / GeoServer CSS
     /// `z-index`). Higher values draw on top. Defaults to 0.
     pub z_index: i32,
+    /// Compositing / blend mode (SLD `VendorOption name="composite"` /
+    /// GeoServer CSS `composite`). Defaults to `SourceOver`.
+    pub composite: CompositeOp,
+}
+
+/// Compositing / blend modes (subset of the SVG/PDF blend mode set).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CompositeOp {
+    #[default]
+    SourceOver,
+    Multiply,
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+}
+
+impl CompositeOp {
+    /// Parse a blend-mode name (SLD vendor option / CSS `composite`).
+    pub fn parse(name: &str) -> Option<CompositeOp> {
+        match name.trim().to_lowercase().as_str() {
+            "src-over" | "source-over" | "normal" | "" => Some(CompositeOp::SourceOver),
+            "multiply" => Some(CompositeOp::Multiply),
+            "screen" => Some(CompositeOp::Screen),
+            "overlay" => Some(CompositeOp::Overlay),
+            "darken" => Some(CompositeOp::Darken),
+            "lighten" => Some(CompositeOp::Lighten),
+            _ => None,
+        }
+    }
 }
 
 /// Label (TextSymbolizer) style.
@@ -917,6 +1028,7 @@ impl Style {
             mark: None,
             label: None,
             z_index: 0,
+            composite: CompositeOp::default(),
         }
     }
 
@@ -1345,7 +1457,11 @@ fn project_point(lon: f64, lat: f64, bounds: &Bounds, width: u32, height: u32) -
 // KML 渲染 — 将要素输出为 KML 格式
 // ---------------------------------------------------------------------------
 
-/// 将要素渲染为 KML 字符串
+/// 将要素渲染为 KML 字符串, 遵循每要素的 SLD/CSS 样式。
+///
+/// 样式按内容去重生成 `<Style>` 定义, Placemark 通过 `styleUrl` 引用;
+/// 标签文本用作 Placemark 名称。KML 颜色为 `aabbggrr` (alpha, blue, green,
+/// red) 顺序。
 pub fn render_to_kml(features: &[(GeoJsonGeometry, Style)], layer_name: &str) -> String {
     let mut kml = String::new();
     kml.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
@@ -1355,23 +1471,84 @@ pub fn render_to_kml(features: &[(GeoJsonGeometry, Style)], layer_name: &str) ->
         layer_name
     ));
 
-    for (i, (geometry, _style)) in features.iter().enumerate() {
+    // 样式去重: 相同内容的样式只生成一个定义。
+    let mut style_ids: Vec<(String, Style)> = Vec::new();
+    let mut style_index: Vec<String> = Vec::new();
+    let mut style_ref = |style: &Style| -> usize {
+        let key = kml_style_key(style);
+        if let Some(pos) = style_index.iter().position(|k| k == &key) {
+            return pos;
+        }
+        let id = style_ids.len();
+        style_ids.push((key.clone(), style.clone()));
+        style_index.push(key);
+        id
+    };
+
+    for (i, (geometry, style)) in features.iter().enumerate() {
+        let sid = style_ref(style);
+        let name = style
+            .label
+            .as_ref()
+            .map(|l| l.text.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .unwrap_or_else(|| format!("Feature {}", i));
         kml.push_str(&format!(
-            r#"<Placemark><name>Feature {}</name>{}</Placemark>"#,
-            i,
+            r#"<Placemark><name>{}</name><styleUrl>#{}</styleUrl>{}</Placemark>"#,
+            escape_xml(&name),
+            sid,
             geometry_to_kml(geometry)
         ));
     }
 
-    kml.push_str(
-        r#"<Style id="defaultStyle">
-<LineStyle><color>ff0000ff</color><width>2</width></LineStyle>
-<PolyStyle><color>400000ff</color></PolyStyle>
-</Style>"#,
-    );
+    // 样式定义 (仅包含实际使用到的样式)。
+    for (id, (_key, style)) in style_ids.iter().enumerate() {
+        kml.push_str(&format!(r#"<Style id="style{}">"#, id));
+        if let Some(stroke) = &style.stroke {
+            let color = style.parse_stroke_color().unwrap_or([0, 0, 0, 255]);
+            let width = stroke.width.unwrap_or(1.0);
+            kml.push_str(&format!(
+                r#"<LineStyle><color>{}</color><width>{}</width></LineStyle>"#,
+                kml_color(color),
+                width
+            ));
+        }
+        if style.fill.is_some() {
+            let color = style.parse_fill_color().unwrap_or([128, 128, 128, 255]);
+            kml.push_str(&format!(
+                r#"<PolyStyle><color>{}</color></PolyStyle>"#,
+                kml_color(color)
+            ));
+        }
+        if let Some(label) = &style.label {
+            if !label.text.trim().is_empty() {
+                let color = label.parse_color().unwrap_or([51, 51, 51, 255]);
+                let scale = label.scale();
+                kml.push_str(&format!(
+                    r#"<LabelStyle><color>{}</color><scale>{:.2}</scale></LabelStyle>"#,
+                    kml_color(color),
+                    scale
+                ));
+            }
+        }
+        kml.push_str("</Style>");
+    }
 
     kml.push_str("</Document></kml>");
     kml
+}
+
+/// 样式内容键 (用于 KML 样式去重)。
+fn kml_style_key(style: &Style) -> String {
+    format!(
+        "{:?}|{:?}|{:?}|{:?}",
+        style.fill, style.stroke, style.point_size, style.label
+    )
+}
+
+/// RGBA → KML `aabbggrr` 颜色字符串。
+fn kml_color(c: [u8; 4]) -> String {
+    format!("{:02X}{:02X}{:02X}{:02X}", c[3], c[2], c[1], c[0])
 }
 
 fn geometry_to_kml(g: &GeoJsonGeometry) -> String {
@@ -2039,6 +2216,148 @@ mod tests {
         assert!(
             svg.contains("stroke=\"#FFFFFF\""),
             "halo color as text stroke"
+        );
+    }
+
+    #[test]
+    fn test_kml_uses_style_colors_and_dedup() {
+        let mut style = Style::new();
+        style.fill = Some(FillStyle {
+            color: "#123456".to_string(),
+            opacity: 1.0,
+        });
+        style.stroke = Some(StrokeStyle {
+            color: "#ABCDEF".to_string(),
+            width: Some(3.0),
+            opacity: 1.0,
+            dash_array: None,
+        });
+        let poly = GeoJsonGeometry::Polygon {
+            coordinates: vec![vec![
+                vec![1.0, 1.0],
+                vec![1.0, 4.0],
+                vec![4.0, 4.0],
+                vec![4.0, 1.0],
+                vec![1.0, 1.0],
+            ]],
+        };
+        let p2 = GeoJsonGeometry::Point {
+            coordinates: vec![5.0, 5.0],
+        };
+        // Two features sharing one style → one <Style> definition.
+        let kml = render_to_kml(&[(poly, style.clone()), (p2, style.clone())], "shapes");
+        assert!(kml.starts_with("<?xml"));
+        assert!(kml.contains("<Document><name>shapes</name>"));
+        // KML color is aabbggrr: fill #123456 → FF563412 (alpha FF, bb=56, gg=34, rr=12).
+        assert!(kml.contains("FF563412"), "KML fill color aabbggrr: {}", kml);
+        // Stroke #ABCDEF → FFEFCDAB.
+        assert!(kml.contains("FFEFCDAB"), "KML stroke color aabbggrr");
+        assert!(kml.contains("<width>3</width>"));
+        // Both placemarks reference style0; exactly one Style block.
+        assert_eq!(kml.matches("styleUrl>#0<").count(), 2);
+        assert_eq!(kml.matches("<Style id=\"style0\">").count(), 1);
+        assert!(kml.ends_with("</Document></kml>"));
+    }
+
+    #[test]
+    fn test_kml_label_as_placemark_name() {
+        let mut style = Style::new();
+        style.label = Some(LabelStyle {
+            text: "City & Town".to_string(),
+            property: None,
+            font_size: 12.0,
+            color: "#000000".to_string(),
+            halo_color: None,
+            halo_radius: 1.0,
+        });
+        let p = point(1.0, 1.0);
+        let kml = render_to_kml(&[(p, style)], "cities");
+        assert!(
+            kml.contains("<name>City &amp; Town</name>"),
+            "label as name, escaped"
+        );
+        assert!(kml.contains("<LabelStyle>"), "label style emitted");
+    }
+
+    #[test]
+    fn test_composite_op_parse() {
+        assert_eq!(CompositeOp::parse("multiply"), Some(CompositeOp::Multiply));
+        assert_eq!(CompositeOp::parse("SCREEN"), Some(CompositeOp::Screen));
+        assert_eq!(
+            CompositeOp::parse("src-over"),
+            Some(CompositeOp::SourceOver)
+        );
+        assert_eq!(CompositeOp::parse("normal"), Some(CompositeOp::SourceOver));
+        assert_eq!(CompositeOp::parse("darken"), Some(CompositeOp::Darken));
+        assert_eq!(CompositeOp::parse("lighten"), Some(CompositeOp::Lighten));
+        assert_eq!(CompositeOp::parse("burn"), None);
+    }
+
+    #[test]
+    fn test_blend_channel_modes() {
+        // Multiply: fg * bg.
+        assert_eq!(blend_channel(CompositeOp::Multiply, 128, 128), 64);
+        assert_eq!(blend_channel(CompositeOp::Multiply, 255, 100), 100);
+        // Screen: fg + bg - fg*bg (128 → 0.502; 0.502+0.502-0.252=0.752 → 192).
+        assert_eq!(blend_channel(CompositeOp::Screen, 128, 128), 192);
+        assert_eq!(blend_channel(CompositeOp::Screen, 255, 0), 255);
+        // Darken / Lighten.
+        assert_eq!(blend_channel(CompositeOp::Darken, 200, 100), 100);
+        assert_eq!(blend_channel(CompositeOp::Lighten, 200, 100), 200);
+        // SourceOver is identity.
+        assert_eq!(blend_channel(CompositeOp::SourceOver, 200, 100), 200);
+    }
+
+    #[test]
+    fn test_composite_mode_multiply_layer() {
+        // Opaque red (255,0,0) multiplied over white → red; over blue → black.
+        let mut dst = RgbaImage::new(2, 1);
+        dst.put_pixel(0, 0, Rgba([255, 255, 255, 255]));
+        dst.put_pixel(1, 0, Rgba([0, 0, 255, 255]));
+        let mut layer = RgbaImage::new(2, 1);
+        layer.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
+        layer.put_pixel(1, 0, Rgba([255, 0, 0, 255]));
+        composite_mode(&mut dst, &layer, CompositeOp::Multiply);
+        let px0 = dst.get_pixel(0, 0).0;
+        assert_eq!((px0[0], px0[1], px0[2]), (255, 0, 0), "red * white = red");
+        let px1 = dst.get_pixel(1, 0).0;
+        assert_eq!(px1[2], 0, "red * blue → blue channel 0 (black-ish)");
+    }
+
+    #[test]
+    fn test_render_with_composite_mode() {
+        // A multiply-composited polygon over a white background keeps color.
+        let geom = GeoJsonGeometry::Polygon {
+            coordinates: vec![vec![
+                vec![1.0, 1.0],
+                vec![1.0, 4.0],
+                vec![4.0, 4.0],
+                vec![4.0, 1.0],
+                vec![1.0, 1.0],
+            ]],
+        };
+        let mut style = Style::new();
+        style.fill = Some(FillStyle {
+            color: "#ff0000".to_string(),
+            opacity: 1.0,
+        });
+        style.stroke = None;
+        style.composite = CompositeOp::Multiply;
+        let options = RenderOptions {
+            width: 100,
+            height: 100,
+            transparent: false,
+            bg_color: Some([255, 255, 255, 255]),
+            format: RenderFormat::PNG,
+        };
+        let renderer = MapRenderer::new(options, Bounds::new(0.0, 0.0, 10.0, 10.0));
+        let img = renderer.render(vec![(geom, style)]);
+        let (ix, iy) = renderer.world_to_pixel(2.0, 2.0);
+        let px = img.get_pixel(ix as u32, iy as u32).0;
+        assert_eq!(
+            (px[0], px[1], px[2]),
+            (255, 0, 0),
+            "multiply over white = color"
         );
     }
 }
