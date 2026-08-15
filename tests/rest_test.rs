@@ -2701,3 +2701,75 @@ async fn test_tiles_seed_truncate_and_validation() {
     let resp = test::call_service(&app, create).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
+
+// ---------------------------------------------------------------------------
+// T3: 瓦片条件请求 (ETag / Last-Modified → 304)
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_tile_conditional_requests() {
+    let app = build_test_app!();
+
+    // 首次请求 → 200 + ETag/Last-Modified
+    let req = test::TestRequest::get()
+        .uri("/geoserver/tiles/world/0/0/0")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "瓦片首次请求应返回 200, 实际: {}",
+        resp.status()
+    );
+    let etag = resp
+        .headers()
+        .get("ETag")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let last_modified = resp
+        .headers()
+        .get("Last-Modified")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(!etag.is_empty(), "响应应携带 ETag");
+    assert!(!last_modified.is_empty(), "响应应携带 Last-Modified");
+
+    // If-None-Match: <etag> → 304
+    let req = test::TestRequest::get()
+        .uri("/geoserver/tiles/world/0/0/0")
+        .insert_header(("If-None-Match", etag.clone()))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status().as_u16(),
+        304,
+        "If-None-Match 匹配应返回 304, 实际: {}",
+        resp.status()
+    );
+
+    // If-Modified-Since: <last_modified> → 304
+    let req = test::TestRequest::get()
+        .uri("/geoserver/tiles/world/0/0/0")
+        .insert_header(("If-Modified-Since", last_modified.clone()))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status().as_u16(),
+        304,
+        "If-Modified-Since 匹配应返回 304, 实际: {}",
+        resp.status()
+    );
+
+    // 不匹配的 ETag → 200
+    let req = test::TestRequest::get()
+        .uri("/geoserver/tiles/world/0/0/0")
+        .insert_header(("If-None-Match", "\"deadbeef\""))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "不匹配的 ETag 应返回 200, 实际: {}",
+        resp.status()
+    );
+}

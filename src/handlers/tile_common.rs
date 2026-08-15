@@ -11,6 +11,78 @@ use crate::models::Bounds;
 use crate::state::AppState;
 use crate::utils::rendering::{MapRenderer, RenderFormat, RenderOptions};
 use crate::utils::tile_grid;
+use actix_web::{HttpRequest, HttpResponse};
+
+/// FNV-1a 64-bit content hash → ETag for tile bytes.
+pub fn tile_etag(data: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in data {
+        hash ^= u64::from(*b);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01B3);
+    }
+    format!("\"{:016x}\"", hash)
+}
+
+/// Current time as an HTTP `Last-Modified` stamp.
+pub fn tile_last_modified() -> String {
+    chrono::Utc::now()
+        .format("%a, %d %b %Y %H:%M:%S GMT")
+        .to_string()
+}
+
+/// Build a `304 Not Modified` response when the request carries a matching
+/// `If-None-Match` / `If-Modified-Since`; otherwise `None` (serve normally).
+///
+/// `hit` marks the tile-cache result for the `X-Tile-Cache` header.
+pub fn conditional_tile_response(
+    req: &HttpRequest,
+    data: &[u8],
+    hit: bool,
+) -> Option<HttpResponse> {
+    let etag = tile_etag(data);
+    let last_modified = tile_last_modified();
+
+    let not_modified = |req: &HttpRequest, etag: &str, last_modified: &str| -> bool {
+        // If-None-Match: exact match (or "*") → 304.
+        if let Some(inm) = req
+            .headers()
+            .get("If-None-Match")
+            .and_then(|v| v.to_str().ok())
+        {
+            let inm = inm.trim();
+            if inm == "*"
+                || inm.trim_matches('"') == etag.trim_matches('"')
+                || inm
+                    .split(',')
+                    .any(|t| t.trim().trim_matches('"') == etag.trim_matches('"'))
+            {
+                return true;
+            }
+        }
+        // If-Modified-Since: equal to the current Last-Modified stamp → 304.
+        if let Some(ims) = req
+            .headers()
+            .get("If-Modified-Since")
+            .and_then(|v| v.to_str().ok())
+        {
+            if ims.trim() == last_modified {
+                return true;
+            }
+        }
+        false
+    };
+
+    if not_modified(req, &etag, &last_modified) {
+        return Some(
+            HttpResponse::NotModified()
+                .insert_header(("X-Tile-Cache", if hit { "HIT" } else { "MISS" }))
+                .insert_header(("ETag", etag.clone()))
+                .insert_header(("Last-Modified", last_modified.clone()))
+                .finish(),
+        );
+    }
+    None
+}
 
 /// Output format for a rendered tile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

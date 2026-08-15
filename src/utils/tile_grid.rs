@@ -12,9 +12,45 @@
 //! `MapRenderer` pipeline renders in geographic degrees.
 
 use crate::models::Bounds;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 /// The maximum zoom level exposed by the tile services.
 pub const MAX_ZOOM: u32 = 18;
+
+/// A custom gridset: global geodetic-style coverage (`-180..180 × -90..90`,
+/// top-left origin) where every zoom level has its own ground resolution
+/// (degrees per pixel). Registered at runtime via `register_custom_gridset`.
+#[derive(Debug, Clone)]
+pub struct CustomGridset {
+    pub tile_width: u32,
+    pub tile_height: u32,
+    /// Ground resolution in degrees per pixel, indexed by zoom level.
+    pub resolutions: Vec<f64>,
+}
+
+fn custom_registry() -> &'static Mutex<HashMap<String, CustomGridset>> {
+    static REGISTRY: OnceLock<Mutex<HashMap<String, CustomGridset>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Register (or replace) a custom gridset by name.
+pub fn register_custom_gridset(name: &str, grid: CustomGridset) {
+    custom_registry()
+        .lock()
+        .unwrap()
+        .insert(name.to_string(), grid);
+}
+
+/// Look up a registered custom gridset.
+pub fn custom_gridset(name: &str) -> Option<CustomGridset> {
+    custom_registry().lock().unwrap().get(name).cloned()
+}
+
+/// Whether the name refers to a registered custom gridset.
+pub fn is_custom_gridset(name: &str) -> bool {
+    custom_gridset(name).is_some()
+}
 
 /// A tile-grid profile description.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +90,13 @@ pub fn profile_label(gridset: &str) -> &'static str {
 
 /// Matrix width (columns) for a gridset at zoom `z`.
 pub fn matrix_width(gridset: &str, z: u32) -> u32 {
+    if let Some(g) = custom_gridset(gridset) {
+        let res = g.resolutions.get(z as usize).copied().unwrap_or(0.0);
+        if res <= 0.0 {
+            return 0;
+        }
+        return (360.0 / (res * g.tile_width as f64)).ceil() as u32;
+    }
     let n = 1u32 << z;
     match gridset_profile(gridset) {
         Some(GridProfile::GlobalGeodetic) => n * 2,
@@ -61,13 +104,23 @@ pub fn matrix_width(gridset: &str, z: u32) -> u32 {
     }
 }
 
-/// Matrix height (rows) for a gridset at zoom `z` (same for both profiles).
-pub fn matrix_height(_gridset: &str, z: u32) -> u32 {
+/// Matrix height (rows) for a gridset at zoom `z`.
+pub fn matrix_height(gridset: &str, z: u32) -> u32 {
+    if let Some(g) = custom_gridset(gridset) {
+        let res = g.resolutions.get(z as usize).copied().unwrap_or(0.0);
+        if res <= 0.0 {
+            return 0;
+        }
+        return (180.0 / (res * g.tile_height as f64)).ceil() as u32;
+    }
     1u32 << z
 }
 
 /// Horizontal resolution (map units per pixel) for a gridset at zoom `z`.
 pub fn units_per_pixel(gridset: &str, z: u32) -> f64 {
+    if let Some(g) = custom_gridset(gridset) {
+        return g.resolutions.get(z as usize).copied().unwrap_or(0.0);
+    }
     match gridset_profile(gridset) {
         // 360 deg across 2^(z+1) * 256 px → 0.703125 / 2^z
         Some(GridProfile::GlobalGeodetic) => 360.0 / (256.0 * (2u64 << z) as f64),
@@ -111,7 +164,23 @@ pub fn tile_bounds(gridset: &str, z: u32, col: u32, row: u32) -> Option<Bounds> 
             let maxy = mercator_lat(row as f64 / nf).min(85.0511);
             Some(Bounds::new(minx, miny, maxx, maxy))
         },
-        None => None,
+        None => {
+            if let Some(g) = custom_gridset(gridset) {
+                let res = g.resolutions.get(z as usize).copied()?;
+                if res <= 0.0 {
+                    return None;
+                }
+                let tw = res * g.tile_width as f64;
+                let th = res * g.tile_height as f64;
+                let minx = col as f64 * tw - 180.0;
+                let maxx = (col + 1) as f64 * tw - 180.0;
+                let maxy = 90.0 - row as f64 * th;
+                let miny = 90.0 - (row + 1) as f64 * th;
+                Some(Bounds::new(minx, miny, maxx, maxy))
+            } else {
+                None
+            }
+        },
     }
 }
 
@@ -128,6 +197,20 @@ pub fn tms_row_to_slippy(gridset: &str, z: u32, y_tms: u32) -> Option<u32> {
 /// Estimate the zoom level for a horizontal resolution (degrees per pixel for
 /// `EPSG:4326`, meters per pixel for the mercator gridset).
 pub fn zoom_for_resolution(gridset: &str, res: f64) -> u32 {
+    if let Some(g) = custom_gridset(gridset) {
+        return g
+            .resolutions
+            .iter()
+            .enumerate()
+            .min_by(|a, b| {
+                (a.1 - res)
+                    .abs()
+                    .partial_cmp(&(b.1 - res).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(i, _)| i as u32)
+            .unwrap_or(0);
+    }
     let z = match gridset_profile(gridset) {
         // res(z) = 0.703125 / 2^z  → z = log2(0.703125 / res)
         Some(GridProfile::GlobalGeodetic) => (0.703125 / res).log2().round(),
@@ -167,13 +250,67 @@ pub fn tile_for_bbox(gridset: &str, z: u32, bbox: &Bounds) -> Option<(u32, u32)>
                 None
             }
         },
-        None => None,
+        None => {
+            // Custom gridsets cover the globe uniformly at every zoom level, so
+            // the geodetic-style col/row derivation applies.
+            if custom_gridset(gridset).is_some() {
+                let col = (((bbox.minx + 180.0) / 360.0) * mw as f64).floor() as u32;
+                let row = (((90.0 - bbox.maxy) / 180.0) * mh as f64).floor() as u32;
+                if col < mw && row < mh {
+                    Some((col, row))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_custom_gridset_matrix_and_bounds() {
+        // z0: 1 deg/px → 256 px 宽 → 360/256 → 2 列; 180/256 → 1 行
+        // z1: 0.5 deg/px → 128 deg/瓦片 → 3 列 × 2 行
+        register_custom_gridset(
+            "CUSTOM:TEST",
+            CustomGridset {
+                tile_width: 256,
+                tile_height: 256,
+                resolutions: vec![1.0, 0.5],
+            },
+        );
+        assert!(is_custom_gridset("CUSTOM:TEST"));
+        assert_eq!(matrix_width("CUSTOM:TEST", 0), 2);
+        assert_eq!(matrix_height("CUSTOM:TEST", 0), 1);
+        assert_eq!(matrix_width("CUSTOM:TEST", 1), 3);
+        assert_eq!(matrix_height("CUSTOM:TEST", 1), 2);
+
+        // 左上角原点 (-180, 90), 瓦片 (0,0) 覆盖 [-180, 76] × [-166, 90]
+        let b = tile_bounds("CUSTOM:TEST", 0, 0, 0).unwrap();
+        assert!((b.minx - -180.0).abs() < 1e-9);
+        assert!((b.maxx - 76.0).abs() < 1e-9);
+        assert!((b.maxy - 90.0).abs() < 1e-9);
+        assert!((b.miny - -166.0).abs() < 1e-9);
+
+        // units_per_pixel / zoom_for_resolution
+        assert!((units_per_pixel("CUSTOM:TEST", 1) - 0.5).abs() < 1e-12);
+        assert_eq!(zoom_for_resolution("CUSTOM:TEST", 0.55), 1);
+
+        // 越界瓦片 → None
+        assert!(tile_bounds("CUSTOM:TEST", 0, 5, 0).is_none());
+    }
+
+    #[test]
+    fn test_unknown_custom_gridset_falls_back() {
+        // 未注册名称 → 走标准 profile 分支 (None)
+        assert!(!is_custom_gridset("EPSG:9999"));
+        assert!(tile_bounds("EPSG:9999", 0, 0, 0).is_none());
+    }
 
     #[test]
     fn test_geodetic_matrix_and_bounds() {

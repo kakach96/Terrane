@@ -571,8 +571,19 @@ pub async fn get_tile(
     // 1. 尝试从缓存获取
     if let Some(ref cache) = cache {
         if let Some(cached) = cache.get(layer_name, gridset, z, x, y).await {
+            // 条件请求 → 304
+            if let Some(resp) =
+                crate::handlers::tile_common::conditional_tile_response(&req, &cached, true)
+            {
+                return Ok(resp);
+            }
             return Ok(HttpResponse::Ok()
                 .insert_header(("X-Tile-Cache", "HIT"))
+                .insert_header(("ETag", crate::handlers::tile_common::tile_etag(&cached)))
+                .insert_header((
+                    "Last-Modified",
+                    crate::handlers::tile_common::tile_last_modified(),
+                ))
                 .content_type("image/png")
                 .body(cached));
         }
@@ -644,13 +655,25 @@ pub async fn get_tile(
 
     let tile_data = buffer.into_inner();
 
-    // 3. 写入缓存
+    // 3. 条件请求 → 304
+    if let Some(resp) =
+        crate::handlers::tile_common::conditional_tile_response(&req, &tile_data, false)
+    {
+        return Ok(resp);
+    }
+
+    // 4. 写入缓存
     if let Some(ref cache) = cache {
         cache.put(layer_name, gridset, z, x, y, &tile_data).await;
     }
 
     Ok(HttpResponse::Ok()
         .insert_header(("X-Tile-Cache", "MISS"))
+        .insert_header(("ETag", crate::handlers::tile_common::tile_etag(&tile_data)))
+        .insert_header((
+            "Last-Modified",
+            crate::handlers::tile_common::tile_last_modified(),
+        ))
         .content_type("image/png")
         .body(tile_data))
 }
