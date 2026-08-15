@@ -176,8 +176,12 @@ tile pipelines).
   (source-over), polygon interior-ring holes (even-odd scanline), z-order (polygon → line →
   point within a layer, SLD `z-index` vendor option on top), label rendering from
   `TextSymbolizer` (built-in 5×7 bitmap font, halo + greedy collision avoidance).
+- **SVG output** honors per-feature SLD/CSS styles (fill/stroke colors + opacity + width +
+  dash array, point markers, `fill-rule="evenodd"` holes, labels with halo as text stroke).
 - **Raster rendering**: GeoTIFF / WorldImage / ArcGrid / ImageMosaic layers render in
   WMS GetMap and in the shared tile pipeline (crop to BBOX + resample + source-over).
+- **Style selection**: WMS GetMap `STYLES` parameter selects the per-layer style
+  (comma-separated, empty entry = layer default), matching GeoServer semantics.
 - **Style formats**: SLD / CSS / YSLD / MBStyle all dispatch to the same rule pipeline in
   WMS GetMap (previously only SLD reached the WMS renderer).
 - **SLD parsing**: TextSymbolizer (`Label` property/literal, `Font` size, `Fill`, `Halo`

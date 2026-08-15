@@ -17,6 +17,8 @@ use tracing::{debug, info, warn};
 
 struct GetMapContext {
     layers: Vec<String>,
+    /// 请求样式列表 (逗号分隔的 STYLES 参数, 逐图层对应; 空项 = 默认样式)
+    styles: Vec<String>,
     bounds: Bounds,
     output_crs: String,
     width: u32,
@@ -295,6 +297,14 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
         .as_ref()
         .map(|fid| fid.split(',').map(|s| s.trim().to_string()).collect());
 
+    // STYLES 参数: 逐图层对应; 空项 = 默认样式。若未提供 (None) 或数量
+    // 少于图层数, 缺失项按默认样式处理。
+    let styles: Vec<String> = request
+        .styles
+        .as_ref()
+        .map(|v| v.iter().map(|s| s.trim().to_string()).collect())
+        .unwrap_or_default();
+
     // 解析 env 参数: "key1:'val1';key2:'val2'"
     let env = request.env.as_ref().map(|env_str| {
         let mut map = HashMap::new();
@@ -311,6 +321,7 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
 
     Ok(GetMapContext {
         layers: layers_param.clone(),
+        styles,
         bounds,
         output_crs,
         width,
@@ -343,7 +354,7 @@ async fn resolve_layer_metadata(
 
     let mut metadata_list = Vec::with_capacity(context.layers.len());
 
-    for layer_name in &context.layers {
+    for (idx, layer_name) in context.layers.iter().enumerate() {
         let (workspace, layer_short_name) = if layer_name.contains(':') {
             let parts: Vec<&str> = layer_name.splitn(2, ':').collect();
             (parts[0].to_string(), parts[1].to_string())
@@ -396,18 +407,25 @@ async fn resolve_layer_metadata(
 
         let native_crs = layer.srs.to_epsg();
 
+        // STYLES 参数: 第 idx 个图层使用请求中第 idx 个样式名; 空项或
+        // 未提供 → 图层默认样式 (与 GeoServer 行为一致)。
+        let requested_style = context.styles.get(idx).filter(|s| !s.is_empty());
+        let effective_style = requested_style
+            .cloned()
+            .unwrap_or_else(|| style_name_of(layer));
+
         // 按样式格式分派解析 (SLD/CSS/YSLD/MBStyle), 保证 WMS 渲染与
         // 瓦片管线 (style_handler::parse_style_content) 行为一致。
-        let style_content = request_sld_body(layer, &styles_lock);
+        let style_content = request_sld_body(&effective_style, &styles_lock);
         let style_format = styles_meta_lock
-            .get(&style_name_of(layer))
+            .get(&effective_style)
             .map(|m| m.format.clone())
             .unwrap_or_else(|| crate::models::style::detect_style_format(&style_content));
         let rules =
             crate::handlers::style_handler::parse_style_content(&style_content, &style_format);
 
-        info!("[resolve_layer_metadata] 图层 '{}' 详情: workspace='{}', layer='{}', native_name='{}', native_crs='{}', data_source_type={:?}, rules_count={}", 
-              layer_name, layer.workspace, layer.name, native_name, native_crs, data_source_type, rules.len());
+        info!("[resolve_layer_metadata] 图层 '{}' 详情: workspace='{}', layer='{}', native_name='{}', native_crs='{}', data_source_type={:?}, style='{}', rules_count={}", 
+              layer_name, layer.workspace, layer.name, native_name, native_crs, data_source_type, effective_style, rules.len());
 
         metadata_list.push(LayerMetadata {
             layer_name: layer_name.clone(),
@@ -438,11 +456,12 @@ fn style_name_of(layer: &Layer) -> String {
         .unwrap_or_default()
 }
 
-fn request_sld_body(layer: &Layer, styles: &HashMap<String, String>) -> String {
+/// 取指定样式名的样式内容; 样式不存在时回退到图层默认 SLD。
+fn request_sld_body(style_name: &str, styles: &HashMap<String, String>) -> String {
     styles
-        .get(&style_name_of(layer))
+        .get(style_name)
         .cloned()
-        .unwrap_or_else(|| sld_parser::default_sld(&layer.name))
+        .unwrap_or_else(|| sld_parser::default_sld(style_name))
 }
 
 async fn query_all_layer_features(

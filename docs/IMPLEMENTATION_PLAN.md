@@ -152,6 +152,9 @@ Overall progress █████████████░░░  63%
 - ✅ **Geometry / rendering correctness**: MultiPoint / MultiLineString / MultiPolygon /
   GeometryCollection rendering; `fill-opacity` / `stroke-opacity` alpha compositing;
   polygon interior-ring holes; z-order (polygon → line → point + SLD `z-index`)
+- ✅ **SVG style-aware output**: WMS `image/svg+xml` honors per-feature styles
+  (colors/opacity/width/dash + labels with halo); WMS GetMap `STYLES` parameter selects
+  the per-layer style
 - ✅ **WMS raster rendering**: GeoTIFF / WorldImage / ArcGrid / ImageMosaic layers render
   in WMS GetMap and the shared tile pipeline (BBOX crop + resample + source-over)
 - ⏳ Rendering transforms / compositing blend modes (still out of scope)

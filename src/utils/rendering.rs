@@ -1093,7 +1093,8 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
 // SVG 渲染 — 将地图渲染为 SVG 矢量格式
 // ---------------------------------------------------------------------------
 
-/// 将要素渲染为 SVG 字符串
+/// 将要素渲染为 SVG 字符串, 遵循每要素的 SLD/CSS 样式 (填充色/透明度、
+/// 描边色/线宽/虚线、点标记、标签)。
 pub fn render_to_svg(
     features: &[(GeoJsonGeometry, Style)],
     bounds: &Bounds,
@@ -1108,88 +1109,229 @@ pub fn render_to_svg(
         width, height, width, height
     ));
 
-    svg.push_str(
-        r#"<defs><style type="text/css"><![CDATA[
-    .fp { fill: #1565c0; stroke: #0d47a1; stroke-width: 2; }
-    .fl { fill: none; stroke: #1565c0; stroke-width: 2; }
-    .fg { fill: #bbdefb; stroke: #1565c0; stroke-width: 1.5; fill-opacity: 0.6; }
-]]></style></defs>"#,
-    );
-
     svg.push_str("<rect width=\"100%\" height=\"100%\" fill=\"#f8f8f8\"/>\n");
+    svg.push_str(&render_features_svg(features, bounds, width, height));
+    svg.push_str("</svg>");
+    svg
+}
 
-    for (geometry, _style) in features {
+/// 渲染一组要素为 SVG 片段 (无外层 <svg> 包裹), 供 GeometryCollection
+/// 递归复用 — 避免生成嵌套 SVG 文档。
+fn render_features_svg(
+    features: &[(GeoJsonGeometry, Style)],
+    bounds: &Bounds,
+    width: u32,
+    height: u32,
+) -> String {
+    let mut svg = String::new();
+    let point =
+        |lon: f64, lat: f64| -> (f64, f64) { project_point(lon, lat, bounds, width, height) };
+    let pts_str = |coords: &[Vec<f64>]| -> String {
+        coords
+            .iter()
+            .filter(|c| c.len() >= 2)
+            .map(|c| {
+                let (sx, sy) = point(c[0], c[1]);
+                format!("{},{}", sx, sy)
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+
+    for (geometry, style) in features {
+        let is_line = matches!(
+            geometry,
+            GeoJsonGeometry::LineString { .. } | GeoJsonGeometry::MultiLineString { .. }
+        );
+        let fill_attr = if is_line {
+            "fill=\"none\"".to_string()
+        } else {
+            style
+                .parse_fill_color()
+                .map(|c| {
+                    format!(
+                        "fill=\"{}\" fill-opacity=\"{}\"",
+                        rgb_hex(c),
+                        (c[3] as f64 / 255.0).clamp(0.0, 1.0)
+                    )
+                })
+                .unwrap_or_else(|| "fill=\"none\"".to_string())
+        };
+        let stroke_attr = style
+            .parse_stroke_color()
+            .map(|c| {
+                let width = style.stroke.as_ref().and_then(|s| s.width).unwrap_or(1.0);
+                let dash = style
+                    .stroke
+                    .as_ref()
+                    .and_then(|s| s.dash_array.clone())
+                    .map(|d| {
+                        format!(
+                            " stroke-dasharray=\"{}\"",
+                            d.iter()
+                                .map(|v| v.to_string())
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        )
+                    })
+                    .unwrap_or_default();
+                format!(
+                    "stroke=\"{}\" stroke-opacity=\"{}\" stroke-width=\"{}\"{}",
+                    rgb_hex(c),
+                    (c[3] as f64 / 255.0).clamp(0.0, 1.0),
+                    width,
+                    dash
+                )
+            })
+            .unwrap_or_else(|| "stroke=\"none\"".to_string());
+
         match geometry {
-            GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
-                let (sx, sy) = project_point(coordinates[0], coordinates[1], bounds, width, height);
-                svg.push_str(&format!(
-                    r#"<circle cx="{}" cy="{}" r="4" class="fp"/>"#,
-                    sx, sy
-                ));
+            GeoJsonGeometry::Point { coordinates } => {
+                if coordinates.len() >= 2 {
+                    let (sx, sy) = point(coordinates[0], coordinates[1]);
+                    let r = style.point_size.unwrap_or(6.0) / 2.0;
+                    svg.push_str(&format!(
+                        r#"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" {} {}/>"#,
+                        sx, sy, r, fill_attr, stroke_attr
+                    ));
+                }
             },
             GeoJsonGeometry::MultiPoint { coordinates } => {
                 for c in coordinates {
                     if c.len() >= 2 {
-                        let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
+                        let (sx, sy) = point(c[0], c[1]);
+                        let r = style.point_size.unwrap_or(6.0) / 2.0;
                         svg.push_str(&format!(
-                            r#"<circle cx="{}" cy="{}" r="3" class="fp"/>"#,
-                            sx, sy
+                            r#"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" {} {}/>"#,
+                            sx, sy, r, fill_attr, stroke_attr
                         ));
                     }
                 }
             },
-            GeoJsonGeometry::LineString { coordinates } if coordinates.len() >= 2 => {
-                let pts: String = coordinates
-                    .iter()
-                    .filter(|c| c.len() >= 2)
-                    .map(|c| {
-                        let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
-                        format!("{},{}", sx, sy)
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                svg.push_str(&format!(r#"<polyline points="{}" class="fl"/>"#, pts));
+            GeoJsonGeometry::LineString { coordinates } => {
+                if coordinates.len() >= 2 {
+                    let pts = pts_str(coordinates);
+                    svg.push_str(&format!(
+                        r#"<polyline points="{}" {} {}/>"#,
+                        pts, fill_attr, stroke_attr
+                    ));
+                }
+            },
+            GeoJsonGeometry::MultiLineString { coordinates } => {
+                for line in coordinates {
+                    if line.len() >= 2 {
+                        let pts = pts_str(line);
+                        svg.push_str(&format!(
+                            r#"<polyline points="{}" {} {}/>"#,
+                            pts, fill_attr, stroke_attr
+                        ));
+                    }
+                }
             },
             GeoJsonGeometry::Polygon { coordinates } => {
-                for ring in coordinates {
-                    if ring.len() >= 3 {
-                        let pts: String = ring
-                            .iter()
-                            .filter(|c| c.len() >= 2)
-                            .map(|c| {
-                                let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
-                                format!("{},{}", sx, sy)
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        svg.push_str(&format!(r#"<polygon points="{}" class="fg"/>"#, pts));
-                    }
+                if coordinates.is_empty() {
+                    continue;
+                }
+                let pts = pts_str(&coordinates[0]);
+                svg.push_str(&format!(
+                    r#"<polygon points="{}" fill-rule="evenodd" {} {}/>"#,
+                    pts, fill_attr, stroke_attr
+                ));
+                for ring in &coordinates[1..] {
+                    let pts = pts_str(ring);
+                    svg.push_str(&format!(
+                        r#"<polygon points="{}" {} {}/>"#,
+                        pts, fill_attr, stroke_attr
+                    ));
                 }
             },
             GeoJsonGeometry::MultiPolygon { coordinates } => {
                 for poly in coordinates {
-                    for ring in poly {
-                        if ring.len() >= 3 {
-                            let pts: String = ring
-                                .iter()
-                                .filter(|c| c.len() >= 2)
-                                .map(|c| {
-                                    let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
-                                    format!("{},{}", sx, sy)
-                                })
-                                .collect::<Vec<_>>()
-                                .join(" ");
-                            svg.push_str(&format!(r#"<polygon points="{}" class="fg"/>"#, pts));
-                        }
+                    if poly.is_empty() {
+                        continue;
+                    }
+                    let pts = pts_str(&poly[0]);
+                    svg.push_str(&format!(
+                        r#"<polygon points="{}" fill-rule="evenodd" {} {}/>"#,
+                        pts, fill_attr, stroke_attr
+                    ));
+                    for ring in &poly[1..] {
+                        let pts = pts_str(ring);
+                        svg.push_str(&format!(
+                            r#"<polygon points="{}" {} {}/>"#,
+                            pts, fill_attr, stroke_attr
+                        ));
                     }
                 }
             },
-            _ => {},
+            GeoJsonGeometry::GeometryCollection { geometries } => {
+                for sub in geometries {
+                    let single = [(sub.clone(), style.clone())];
+                    svg.push_str(&render_features_svg(&single, bounds, width, height));
+                }
+            },
         }
-        svg.push('\n');
+
+        // 标签 (TextSymbolizer)。
+        if let Some(label) = &style.label {
+            if !label.text.trim().is_empty() {
+                let (sx, sy) = match geometry {
+                    GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
+                        point(coordinates[0], coordinates[1])
+                    },
+                    _ => {
+                        if let Some((cx, cy)) = geometry_anchor(geometry) {
+                            point(cx, cy)
+                        } else {
+                            continue;
+                        }
+                    },
+                };
+                let color = label
+                    .parse_color()
+                    .map(rgb_hex)
+                    .unwrap_or_else(|| "#333333".to_string());
+                let halo = label
+                    .parse_halo_color()
+                    .map(|c| {
+                        format!(
+                            " stroke=\"{}\" stroke-width=\"{:.2}\"",
+                            rgb_hex(c),
+                            label.halo_radius * 2.0
+                        )
+                    })
+                    .unwrap_or_default();
+                let font_size = label.font_size.max(1.0);
+                svg.push_str(&format!(
+                    r#"<text x="{:.2}" y="{:.2}" font-family="sans-serif" font-size="{:.1}" text-anchor="middle" dominant-baseline="middle" fill="{}"{}>{}</text>"#,
+                    sx, sy, font_size, color, halo, escape_xml(&label.text)
+                ));
+            }
+        }
     }
-    svg.push_str("</svg>");
     svg
+}
+
+/// 要素的标签锚点 (线中点 / 面质心)。
+fn geometry_anchor(geometry: &GeoJsonGeometry) -> Option<(f64, f64)> {
+    match geometry {
+        GeoJsonGeometry::LineString { coordinates } => midpoint(coordinates),
+        GeoJsonGeometry::Polygon { coordinates } => polygon_centroid(coordinates),
+        _ => None,
+    }
+}
+
+/// 颜色 ([r,g,b,a]) → #RRGGBB。
+fn rgb_hex(c: [u8; 4]) -> String {
+    format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])
+}
+
+/// XML 转义 (用于 SVG 文本内容)。
+fn escape_xml(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// 地理坐标 → 屏幕坐标
@@ -1811,5 +1953,92 @@ mod tests {
         // Fully transparent: no change.
         blend_pixel(&mut img, 0, 0, [0, 0, 0, 0]);
         assert_eq!(img.get_pixel(0, 0).0, [255, 127, 127, 255]);
+    }
+
+    // ------------------------------------------------------------------
+    // SVG style-aware rendering tests.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_svg_uses_style_colors() {
+        let bounds = Bounds::new(0.0, 0.0, 10.0, 10.0);
+        let mut style = Style::new();
+        style.fill = Some(FillStyle {
+            color: "#123456".to_string(),
+            opacity: 0.5,
+        });
+        style.stroke = Some(StrokeStyle {
+            color: "#ABCDEF".to_string(),
+            width: Some(3.0),
+            opacity: 1.0,
+            dash_array: None,
+        });
+        let poly = GeoJsonGeometry::Polygon {
+            coordinates: vec![vec![
+                vec![1.0, 1.0],
+                vec![1.0, 4.0],
+                vec![4.0, 4.0],
+                vec![4.0, 1.0],
+                vec![1.0, 1.0],
+            ]],
+        };
+        let svg = render_to_svg(&[(poly, style)], &bounds, 100, 100);
+        // Style colors must appear verbatim; hardcoded CSS classes must not.
+        assert!(
+            svg.contains("fill=\"#123456\""),
+            "svg must carry fill color: {}",
+            svg
+        );
+        assert!(
+            svg.contains("stroke=\"#ABCDEF\""),
+            "svg must carry stroke color"
+        );
+        assert!(
+            svg.contains("stroke-width=\"3\""),
+            "svg must carry stroke width"
+        );
+        assert!(
+            svg.contains("fill-rule=\"evenodd\""),
+            "polygon holes use evenodd"
+        );
+        assert!(!svg.contains("class=\"fp\""), "hardcoded classes removed");
+        assert!(svg.starts_with("<?xml"));
+        assert!(svg.ends_with("</svg>"));
+    }
+
+    #[test]
+    fn test_svg_label_and_dash() {
+        let bounds = Bounds::new(0.0, 0.0, 10.0, 10.0);
+        let mut style = Style::new();
+        style.stroke = Some(StrokeStyle {
+            color: "#010203".to_string(),
+            width: Some(2.0),
+            opacity: 1.0,
+            dash_array: Some(vec![4.0, 2.0]),
+        });
+        style.label = Some(LabelStyle {
+            text: "A&B".to_string(),
+            property: None,
+            font_size: 14.0,
+            color: "#FF0000".to_string(),
+            halo_color: Some("#FFFFFF".to_string()),
+            halo_radius: 2.0,
+        });
+        let line = GeoJsonGeometry::LineString {
+            coordinates: vec![vec![1.0, 1.0], vec![9.0, 9.0]],
+        };
+        let svg = render_to_svg(&[(line, style)], &bounds, 100, 100);
+        assert!(
+            svg.contains("stroke-dasharray=\"4,2\""),
+            "dash array present"
+        );
+        assert!(svg.contains("fill=\"none\""), "lines have no fill");
+        // Label text rendered and XML-escaped.
+        assert!(svg.contains("A&amp;B"), "label text escaped");
+        assert!(svg.contains("<text"), "label element present");
+        assert!(
+            svg.contains("stroke=\"#FFFFFF\""),
+            "halo color as text stroke"
+        );
     }
 }
