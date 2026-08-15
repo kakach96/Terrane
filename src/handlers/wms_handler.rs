@@ -1097,6 +1097,12 @@ fn render_openlayers_preview(
         view_bounds.minx, view_bounds.miny, view_bounds.maxx, view_bounds.maxy
     );
 
+    // ANGLE 地图旋转: OpenLayers 使用弧度且逆时针为正; WMS ANGLE 为角度且
+    // 逆时针为正, 因此 rotation = -angle * pi / 180 才能让预览与 GetMap 一致。
+    let angle_deg = context.angle.unwrap_or(0.0);
+    let rotation_rad = -angle_deg.to_radians();
+    let has_rotation = angle_deg.abs() > 1e-6;
+
     let html = format!(
         r#"<!DOCTYPE html>
 <html>
@@ -1172,7 +1178,7 @@ fn render_openlayers_preview(
         'LAYERS': layers.join(','),
         'VERSION': '1.1.1',
         'FORMAT': 'image/png',
-        'TRANSPARENT': true
+        'TRANSPARENT': true{angle_param}
       }},
       ratio: 1,
       serverType: 'geoserver'
@@ -1190,7 +1196,7 @@ fn render_openlayers_preview(
         projection: '{view_crs}',
         center: [{center_x}, {center_y}],
         zoom: {zoom},
-        extent: extent
+        extent: extent{rotation_attr}
       }})
     }});
 
@@ -1373,6 +1379,16 @@ fn render_openlayers_preview(
         center_y = center_y,
         zoom = zoom,
         extent = extent,
+        angle_param = if has_rotation {
+            format!(", 'ANGLE': '{}'", angle_deg)
+        } else {
+            String::new()
+        },
+        rotation_attr = if has_rotation {
+            format!(", rotation: {}", rotation_rad)
+        } else {
+            String::new()
+        },
     );
 
     Ok(HttpResponse::Ok().content_type("text/html").body(html))

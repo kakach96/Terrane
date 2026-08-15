@@ -159,7 +159,8 @@ Overall progress █████████████░░░  67%
   (colors/opacity/width/dash + labels with halo); WMS GetMap `STYLES` parameter selects
   the per-layer style
 - ✅ **WMS ANGLE rotation**: GetMap `ANGLE` rotates vector geometry around the request
-  BBOX center (labels stay horizontal); passed through to cascaded upstreams
+  BBOX center (labels stay horizontal); passed through to cascaded upstreams;
+  OpenLayers preview passes `ANGLE` + sets view `rotation`
 - ✅ **GetLegendGraphic enhancements**: point-marker icons, `SCALE` rule filtering,
   `WIDTH` control, rule-name labels (bitmap font)
 - ✅ **KML style-aware output**: deduplicated `<Style>` definitions + `styleUrl`

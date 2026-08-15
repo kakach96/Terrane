@@ -543,6 +543,41 @@ async fn test_wms_get_map_angle_vendor_param() {
 }
 
 #[actix_rt::test]
+async fn test_wms_openlayers_preview_angle() {
+    let app = build_test_app!();
+
+    // OpenLayers 预览: 带 ANGLE 时应透传 ANGLE 参数并设置视图 rotation。
+    let base = GET_MAP_BASE.replace("image/png", "application/openlayers");
+    let uri = format!("{}&ANGLE=30", base);
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "OpenLayers 预览应返回 200, 实际: {}",
+        resp.status()
+    );
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("text/html"),
+        "Content-Type 应为 text/html, 实际: {}",
+        content_type
+    );
+    let body = test::read_body(resp).await;
+    let html = String::from_utf8_lossy(&body).to_string();
+    assert!(
+        html.contains("'ANGLE': '30'"),
+        "预览页 WMS 参数应透传 ANGLE, 实际: {}",
+        html
+    );
+    assert!(html.contains("rotation:"), "预览页视图应设置 rotation");
+}
+
+#[actix_rt::test]
 async fn test_wms_get_map_feature_id() {
     let app = build_test_app!();
 

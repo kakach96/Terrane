@@ -192,7 +192,8 @@ subdirs `0/1/2/…`, level chosen by requested resolution; same WCS / WMS / tile
   (comma-separated, empty entry = layer default), matching GeoServer semantics.
 - **Map rotation**: WMS GetMap `ANGLE` vendor parameter rotates the vector geometry
   around the request BBOX center (labels stay horizontal, matching GeoServer);
-  passed through to cascaded WMS upstreams.
+  passed through to cascaded WMS upstreams; the OpenLayers preview passes `ANGLE`
+  through and sets the view `rotation` so the preview matches GetMap.
 - **GetLegendGraphic**: per-rule color swatches with point-marker icons, optional
   `SCALE` scale-denominator rule filtering, `WIDTH` control, and rule-name labels
   rendered with the built-in bitmap font.
