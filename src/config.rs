@@ -29,6 +29,9 @@ pub struct GeoServerConfig {
     /// CORS 配置
     #[serde(default)]
     pub cors: CorsConfig,
+    /// WFS 服务配置 (要素锁等)
+    #[serde(default)]
+    pub wfs: WfsConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -115,6 +118,15 @@ pub struct CacheConfig {
     /// 会话缓存 TTL (秒; local 内存会话缓存生效)
     #[serde(default = "default_session_ttl")]
     pub session_ttl_secs: u64,
+}
+
+/// WFS 服务配置
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WfsConfig {
+    /// 要素锁默认超时秒数 (0 = 永不过期; 默认: 300)。
+    /// LockFeature / GetFeatureWithLock 未显式传 EXPIRY 时使用。
+    #[serde(default = "default_wfs_lock_timeout")]
+    pub lock_timeout_secs: u64,
 }
 
 /// PostgreSQL 连接配置 (仅 kind = "postgres" 时生效)
@@ -208,6 +220,10 @@ fn default_session_ttl() -> u64 {
     86400
 }
 
+fn default_wfs_lock_timeout() -> u64 {
+    300
+}
+
 impl Default for ServerConfig {
     fn default() -> Self {
         ServerConfig {
@@ -243,6 +259,14 @@ impl Default for SecurityConfig {
     fn default() -> Self {
         SecurityConfig {
             jwt_secret: default_jwt_secret(),
+        }
+    }
+}
+
+impl Default for WfsConfig {
+    fn default() -> Self {
+        WfsConfig {
+            lock_timeout_secs: default_wfs_lock_timeout(),
         }
     }
 }
@@ -481,6 +505,7 @@ impl Default for GeoServerConfig {
             data_dir: PathBuf::from("./data"),
             workspaces: vec![],
             cors: CorsConfig::default(),
+            wfs: WfsConfig::default(),
         }
     }
 }

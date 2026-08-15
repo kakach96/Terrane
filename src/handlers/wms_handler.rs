@@ -1470,7 +1470,12 @@ async fn handle_get_feature_info(
     let range = (view_bounds.maxx - view_bounds.minx).max(view_bounds.maxy - view_bounds.miny);
     let tolerance = (range / 200.0).max(0.0001);
 
-    let mut found_features: Vec<(String, String, HashMap<String, String>)> = Vec::new();
+    let mut found_features: Vec<(
+        String,
+        String,
+        crate::models::GeoJsonGeometry,
+        HashMap<String, String>,
+    )> = Vec::new();
 
     if let Some(query_layers) = &request.query_layers {
         for layer_name in query_layers {
@@ -1506,7 +1511,12 @@ async fn handle_get_feature_info(
                     for (k, v) in &feature.properties {
                         props.insert(k.clone(), v.to_string());
                     }
-                    found_features.push((layer_name.clone(), feature.id.clone(), props));
+                    found_features.push((
+                        layer_name.clone(),
+                        feature.id.clone(),
+                        feature.geometry.clone(),
+                        props,
+                    ));
                     if found_features.len() >= feature_count {
                         break;
                     }
@@ -1519,7 +1529,7 @@ async fn handle_get_feature_info(
         "application/json" => {
             let json_features: Vec<serde_json::Value> = found_features
                 .iter()
-                .map(|(layer, fid, props)| {
+                .map(|(layer, fid, _geometry, props)| {
                     serde_json::json!({
                         "layer": layer,
                         "feature_id": fid,
@@ -1533,7 +1543,7 @@ async fn handle_get_feature_info(
         "text/html" => {
             let rows: String = found_features
                 .iter()
-                .map(|(layer, fid, props)| {
+                .map(|(layer, fid, _geometry, props)| {
                     let prop_rows: String = props
                         .iter()
                         .map(|(k, v)| {
@@ -1557,9 +1567,36 @@ async fn handle_get_feature_info(
                 rows
             )
         },
+        // GML 3.1.1 要素集合 (GeoServer `application/vnd.ogc.gml` 语义):
+        // 与 WFS GetFeature 共用同一 GML 序列化器。
+        "application/vnd.ogc.gml" => {
+            let features: Vec<crate::models::Feature> = found_features
+                .iter()
+                .map(|(layer, fid, geometry, props)| {
+                    let properties: HashMap<String, crate::models::PropertyValue> = props
+                        .iter()
+                        .map(|(k, v)| (k.clone(), crate::models::PropertyValue::String(v.clone())))
+                        .collect();
+                    let mut feature =
+                        crate::models::Feature::with_id(fid.clone(), geometry.clone(), properties);
+                    // 属性中补一个图层字段, 便于客户端区分来源 (与 GeoServer 类似)
+                    feature.properties.insert(
+                        "layer".to_string(),
+                        crate::models::PropertyValue::String(layer.clone()),
+                    );
+                    feature
+                })
+                .collect();
+            let collection = crate::models::FeatureCollection::new(features);
+            crate::handlers::wfs_handler::generate_gml_response(
+                &collection,
+                "text/xml; subtype=gml/3.1.1",
+                None,
+            )
+        },
         _ => found_features
             .iter()
-            .map(|(layer, fid, props)| {
+            .map(|(layer, fid, _geometry, props)| {
                 let prop_str: String = props
                     .iter()
                     .map(|(k, v)| format!("  {} = {}", k, v))
@@ -1574,6 +1611,7 @@ async fn handle_get_feature_info(
     let content_type = match info_format {
         "application/json" => "application/json",
         "text/html" => "text/html",
+        "application/vnd.ogc.gml" => "application/vnd.ogc.gml",
         _ => "text/plain",
     };
 

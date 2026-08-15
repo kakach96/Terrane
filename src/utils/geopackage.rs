@@ -152,7 +152,8 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
         }
     }
 
-    // 构建查询
+    // 构建查询。额外读取 rowid: 要素 id 采用 GeoServer 约定的 `{表名}.{rowid}`
+    // 稳定格式 (同一要素多次读取 id 一致, 支持 WFS FEATUREID / 锁定语义)。
     let cols = if attr_columns.is_empty() {
         "*".to_string()
     } else {
@@ -160,8 +161,8 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
     };
 
     let query = match limit {
-        Some(l) => format!("SELECT {} FROM \"{}\" LIMIT {}", cols, layer_name, l),
-        None => format!("SELECT {} FROM \"{}\"", cols, layer_name),
+        Some(l) => format!("SELECT rowid, {} FROM \"{}\" LIMIT {}", cols, layer_name, l),
+        None => format!("SELECT rowid, {} FROM \"{}\"", cols, layer_name),
     };
 
     // 执行查询并解析 WKB 几何
@@ -170,12 +171,14 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
 
     if let Ok(mut stmt) = conn.prepare(&query) {
         if let Ok(rows) = stmt.query_map([], |row| {
+            // 读取 rowid (稳定要素 id 来源)
+            let rowid: i64 = row.get(0).unwrap_or(0);
             // 读取几何 (WKB)
-            let geom_blob: Option<Vec<u8>> = row.get(0).ok();
+            let geom_blob: Option<Vec<u8>> = row.get(1).ok();
             // 读取属性 (按 SQLite 实际存储的值类型还原)
             let mut props = HashMap::new();
             for (i, col_name) in attr_columns.iter().enumerate() {
-                let v: Option<rusqlite::types::Value> = row.get(i + 1).ok();
+                let v: Option<rusqlite::types::Value> = row.get(i + 2).ok();
                 if let Some(v) = v {
                     let prop = match v {
                         rusqlite::types::Value::Integer(n) => {
@@ -197,13 +200,18 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
                     props.insert(col_name.clone(), prop);
                 }
             }
-            Ok((geom_blob, props))
+            Ok((rowid, geom_blob, props))
         }) {
-            for (geom_blob, props) in rows.flatten() {
+            for (rowid, geom_blob, props) in rows.flatten() {
                 if let Some(wkb) = geom_blob {
                     let geometry = crate::utils::wkb::parse_wkb_geometry(&wkb);
                     update_bounds_from_geometry(&geometry, &mut bounds);
-                    features.push(Feature::new(geometry, props));
+                    // GeoServer 约定: 要素 id = `表名.rowid` (稳定, 与请求次数无关)
+                    features.push(Feature::with_id(
+                        format!("{}.{}", layer_name, rowid),
+                        geometry,
+                        props,
+                    ));
                 }
             }
         }
@@ -788,6 +796,10 @@ mod tests {
         let result = read_geopackage_layer_features(&path, "places", None).unwrap();
         assert_eq!(result.feature_count, 3, "往返后要素数应为 3");
         assert_eq!(result.features.len(), 3);
+
+        // 要素 id 稳定: `表名.rowid` (支持 WFS FEATUREID / 锁定语义)
+        assert_eq!(result.features[0].id, "places.1");
+        assert_eq!(result.features[2].id, "places.3");
 
         assert!(
             (result.bounds.minx - 10.0).abs() < 1e-6,

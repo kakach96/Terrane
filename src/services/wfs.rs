@@ -19,6 +19,14 @@ pub struct WfsRequest {
     pub bbox: Option<Bbox>,
     pub feature_id: Option<Vec<String>>,
     pub gml_object_id: Option<Vec<String>>,
+    /// LockFeature / GetFeatureWithLock: 锁超时 (WFS EXPIRY, 分钟; None = 用服务默认)
+    pub expiry: Option<u64>,
+    /// LockFeature: 已有锁标识 (续锁 / 释放时携带)
+    pub lock_id: Option<String>,
+    /// LockFeature: 锁行为 (ALL = 全部锁定否则失败, SOME = 锁定空闲部分; 默认 ALL)
+    pub lock_action: Option<String>,
+    /// LockFeature: 释放动作 (RELEASEACTION=ALL 释放 lock_id 的全部锁)
+    pub release_action: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +43,8 @@ pub enum WfsOperation {
     LockFeature,
     #[serde(rename = "GetPropertyValue")]
     GetPropertyValue,
+    #[serde(rename = "GetGmlObject")]
+    GetGmlObject,
     #[serde(rename = "Transaction")]
     Transaction,
 }
@@ -107,6 +117,10 @@ pub struct WfsRequestMetadata {
     pub get_capabilities: WfsOperationMetadata,
     pub describe_feature_type: WfsOperationMetadata,
     pub get_feature: WfsGetFeatureMetadata,
+    pub get_feature_with_lock: WfsOperationMetadata,
+    pub lock_feature: WfsOperationMetadata,
+    pub get_property_value: WfsOperationMetadata,
+    pub get_gml_object: WfsOperationMetadata,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +212,62 @@ impl WfsCapabilities {
                             "text/csv".to_string(),
                         ],
                         result_type: vec!["results".to_string(), "hits".to_string()],
+                        dcp_type: vec![WfsDcpType {
+                            http: WfsHttpMetadata {
+                                get: Some(WfsOnlineResource {
+                                    href: format!("{}?", base_url),
+                                }),
+                                post: Some(WfsOnlineResource {
+                                    href: base_url.to_string(),
+                                }),
+                            },
+                        }],
+                    },
+                    get_feature_with_lock: WfsOperationMetadata {
+                        output_formats: vec![
+                            "text/xml; subtype=gml/3.1.1".to_string(),
+                            "text/xml; subtype=gml/3.2".to_string(),
+                            "application/json".to_string(),
+                        ],
+                        dcp_type: vec![WfsDcpType {
+                            http: WfsHttpMetadata {
+                                get: Some(WfsOnlineResource {
+                                    href: format!("{}?", base_url),
+                                }),
+                                post: Some(WfsOnlineResource {
+                                    href: base_url.to_string(),
+                                }),
+                            },
+                        }],
+                    },
+                    lock_feature: WfsOperationMetadata {
+                        output_formats: vec!["text/xml".to_string()],
+                        dcp_type: vec![WfsDcpType {
+                            http: WfsHttpMetadata {
+                                get: Some(WfsOnlineResource {
+                                    href: format!("{}?", base_url),
+                                }),
+                                post: Some(WfsOnlineResource {
+                                    href: base_url.to_string(),
+                                }),
+                            },
+                        }],
+                    },
+                    get_property_value: WfsOperationMetadata {
+                        output_formats: vec!["application/gml+xml; version=3.2".to_string()],
+                        dcp_type: vec![WfsDcpType {
+                            http: WfsHttpMetadata {
+                                get: Some(WfsOnlineResource {
+                                    href: format!("{}?", base_url),
+                                }),
+                                post: Some(WfsOnlineResource {
+                                    href: base_url.to_string(),
+                                }),
+                            },
+                        }],
+                    },
+                    get_gml_object: WfsOperationMetadata {
+                        output_formats: vec!["application/gml+xml; version=3.2".to_string()],
                         dcp_type: vec![WfsDcpType {
                             http: WfsHttpMetadata {
                                 get: Some(WfsOnlineResource {
@@ -410,6 +480,10 @@ pub fn parse_wfs_request(
     let mut bbox = None;
     let mut feature_id = None;
     let mut gml_object_id = None;
+    let mut expiry = None;
+    let mut lock_id = None;
+    let mut lock_action = None;
+    let mut release_action = None;
 
     for (key, value) in params {
         match key.to_uppercase().as_str() {
@@ -423,6 +497,7 @@ pub fn parse_wfs_request(
                     "getfeaturewithlock" => Some(WfsOperation::GetFeatureWithLock),
                     "lockfeature" => Some(WfsOperation::LockFeature),
                     "getpropertyvalue" => Some(WfsOperation::GetPropertyValue),
+                    "getgmlobject" => Some(WfsOperation::GetGmlObject),
                     "transaction" => Some(WfsOperation::Transaction),
                     _ => {
                         return Err(crate::error::GeoServerError::BadRequest(format!(
@@ -475,6 +550,11 @@ pub fn parse_wfs_request(
             "GMLOBJECTID" => {
                 gml_object_id = Some(value.split(',').map(|s| s.trim().to_string()).collect())
             },
+            // WFS LockFeature / GetFeatureWithLock: EXPIRY 单位为分钟 (WFS 2.0 / 1.1 规范)
+            "EXPIRY" => expiry = value.trim().parse().ok(),
+            "LOCKID" => lock_id = Some(value.clone()),
+            "LOCKACTION" => lock_action = Some(value.clone()),
+            "RELEASEACTION" => release_action = Some(value.clone()),
             _ => {},
         }
     }
@@ -506,6 +586,10 @@ pub fn parse_wfs_request(
         bbox,
         feature_id,
         gml_object_id,
+        expiry,
+        lock_id,
+        lock_action,
+        release_action,
     })
 }
 

@@ -633,6 +633,41 @@ async fn test_wms_get_feature_info_html() {
 }
 
 #[actix_rt::test]
+async fn test_wms_get_feature_info_gml() {
+    let app = build_test_app!();
+
+    // capabilities 声明了 application/vnd.ogc.gml; 输出应为 GML FeatureCollection
+    let req = test::TestRequest::get()
+        .uri("/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=world&QUERY_LAYERS=world&BBOX=-180,-90,180,90&WIDTH=256&HEIGHT=256&I=128&J=128&INFO_FORMAT=application/vnd.ogc.gml")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS GetFeatureInfo (GML) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("vnd.ogc.gml"),
+        "Content-Type 应为 application/vnd.ogc.gml, 实际: {}",
+        content_type
+    );
+
+    let body = String::from_utf8_lossy(&test::read_body(resp).await).to_string();
+    assert!(
+        body.contains("wfs:FeatureCollection"),
+        "GML 输出应包含 wfs:FeatureCollection, 实际: {}",
+        body
+    );
+}
+
+#[actix_rt::test]
 async fn test_wms_get_feature_info_plain() {
     let app = build_test_app!();
 

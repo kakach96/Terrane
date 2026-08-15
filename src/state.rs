@@ -89,6 +89,8 @@ pub struct AppState {
     pub cascaded_circuits: Arc<CascadedCircuits>,
     /// OGC API - Processes 任务存储 (jobID -> OgcJob; 首版为同步执行)
     pub ogc_jobs: Arc<Mutex<HashMap<String, crate::services::ogc_processes::OgcJob>>>,
+    /// WFS 要素锁注册表 (LockFeature / GetFeatureWithLock; 进程内内存实现)
+    pub wfs_locks: Arc<crate::utils::wfs_lock::WfsLockRegistry>,
 }
 
 impl AppState {
@@ -365,6 +367,7 @@ impl AppState {
             redis_tile_caches: Arc::new(Mutex::new(HashMap::new())),
             cascaded_circuits,
             ogc_jobs: Arc::new(Mutex::new(HashMap::new())),
+            wfs_locks: Arc::new(crate::utils::wfs_lock::WfsLockRegistry::new()),
         };
 
         // 启动目录定时刷新任务 (独立 tokio 任务, 不影响请求路径):
