@@ -52,6 +52,8 @@ pub struct Layer {
     pub maxy: f64,
     pub created: String,
     pub modified: String,
+    /// 瓦片缓存后端数据源名称 (type = "redis"); 为空 = 默认内存/本地缓存
+    pub cache_store: Option<String>,
 }
 
 /// 样式记录

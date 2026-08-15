@@ -968,6 +968,127 @@ async fn test_rest_tile_cache_hit() {
 }
 
 #[actix_rt::test]
+async fn test_layer_cache_store_persists_through_api() {
+    // 创建 Redis 数据源 → 创建图层并指定 cache_store → 读取确认持久化
+    let app = build_test_app!();
+
+    // 1. 创建 Redis 缓存数据源
+    let create_ds = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(serde_json::json!({
+            "name": "my_redis_cache",
+            "type": "redis",
+            "workspace": "default",
+            "enabled": true,
+            "connection": {
+                "host": "127.0.0.1",
+                "port": 6379,
+                "database": "0"
+            }
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create_ds).await;
+    assert!(
+        resp.status().is_success(),
+        "创建 Redis 数据源应成功, 实际: {}",
+        resp.status()
+    );
+
+    // 2. 创建图层并指定 cache_store = my_redis_cache
+    let create_layer = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(serde_json::json!({
+            "name": "cached_layer",
+            "title": "Cached Layer",
+            "workspace": "default",
+            "store": "shapes",
+            "native_name": "world",
+            "cache_store": "my_redis_cache"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create_layer).await;
+    assert!(
+        resp.status().is_success(),
+        "创建图层应成功, 实际: {}",
+        resp.status()
+    );
+
+    // 3. GET /layers/{name} 应回显 cache_store
+    let get_layer = test::TestRequest::get()
+        .uri("/geoserver/layers/cached_layer")
+        .to_request();
+    let resp = test::call_service(&app, get_layer).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(
+        body["data"]["cache_store"], "my_redis_cache",
+        "图层详情应返回 cache_store, 实际: {:?}",
+        body
+    );
+
+    // 4. PUT 更新 cache_store = null (回到默认缓存)
+    let update_layer = test::TestRequest::put()
+        .uri("/geoserver/layers/cached_layer")
+        .set_json(serde_json::json!({ "cache_store": null }))
+        .to_request();
+    let resp = test::call_service(&app, update_layer).await;
+    assert!(
+        resp.status().is_success(),
+        "更新图层应成功, 实际: {}",
+        resp.status()
+    );
+
+    let get_layer = test::TestRequest::get()
+        .uri("/geoserver/layers/cached_layer")
+        .to_request();
+    let resp = test::call_service(&app, get_layer).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(
+        body["data"]["cache_store"].is_null(),
+        "清除后 cache_store 应为 null, 实际: {:?}",
+        body["data"]["cache_store"]
+    );
+}
+
+#[actix_rt::test]
+async fn test_catalog_refresh_reloads_layers() {
+    // 启用目录定时刷新 (极短周期), 验证从元数据存储重载后内存目录包含新图层
+    let mut config = common::create_test_config();
+    config.server.catalog_refresh_secs = 1;
+
+    let state = actix_web::web::Data::new(terrane::state::AppState::new(config).await);
+    let app = actix_web::test::init_service(
+        actix_web::App::new()
+            .app_data(state.clone())
+            .wrap(actix_web::middleware::Logger::default())
+            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+    )
+    .await;
+
+    // 通过 API 创建图层 (持久化到元数据存储)
+    let create_layer = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(serde_json::json!({
+            "name": "refresh_target",
+            "title": "Refresh Target",
+            "workspace": "default",
+            "store": "shapes",
+            "native_name": "world"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create_layer).await;
+    assert!(resp.status().is_success(), "创建图层应成功");
+
+    // 等待一个刷新周期, 让后台任务从存储重载
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let layers = state.layers.read().await;
+    assert!(
+        layers.iter().any(|l| l.name == "refresh_target"),
+        "目录刷新后内存缓存应包含新图层 'refresh_target'"
+    );
+}
+
+#[actix_rt::test]
 async fn test_rest_backup_import_roundtrip() {
     // App A: 创建自定义工作空间后导出备份
     let app_a = build_test_app!();

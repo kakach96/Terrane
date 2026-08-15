@@ -48,6 +48,10 @@ pub enum DataSourceType {
     /// `CascadedWms` 变成 `cascadedwms`, 这里显式覆盖为 `cascaded_wms`)
     #[serde(rename = "cascaded_wms")]
     CascadedWms,
+    /// Redis 缓存数据源 — 供切片图层选择使用 (host/port/database/password 字段;
+    /// 持久化于元数据, 图层 `cache_store` 引用其名称)
+    #[serde(rename = "redis")]
+    Redis,
     ArcGrid,
     /// GeoJSON 文件数据源 (存储位置由 connection.file_storage_type 决定: local/s3/oss)
     #[serde(rename = "geojson")]
@@ -65,6 +69,7 @@ impl std::fmt::Display for DataSourceType {
             DataSourceType::Geopackage => write!(f, "geopackage"),
             DataSourceType::WorldImage => write!(f, "worldimage"),
             DataSourceType::CascadedWms => write!(f, "cascaded_wms"),
+            DataSourceType::Redis => write!(f, "redis"),
             DataSourceType::ArcGrid => write!(f, "arcgrid"),
             DataSourceType::GeoJson => write!(f, "geojson"),
             DataSourceType::Metadata => write!(f, "metadata"),
@@ -196,6 +201,7 @@ mod tests {
             ("geopackage", DataSourceType::Geopackage),
             ("worldimage", DataSourceType::WorldImage),
             ("cascaded_wms", DataSourceType::CascadedWms),
+            ("redis", DataSourceType::Redis),
             ("arcgrid", DataSourceType::ArcGrid),
             ("geojson", DataSourceType::GeoJson),
             ("metadata", DataSourceType::Metadata),

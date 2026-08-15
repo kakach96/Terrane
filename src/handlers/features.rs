@@ -94,6 +94,13 @@ pub async fn query_layer_features(
                 );
                 return Ok(Vec::new());
             },
+            DataSourceType::Redis => {
+                info!(
+                    "[Features] Redis 数据源 '{}' 是瓦片缓存后端, 不发布要素",
+                    ds.name
+                );
+                return Ok(Vec::new());
+            },
             DataSourceType::Metadata => {
                 info!(
                     "[Features] metadata 数据源 '{}' (sqlite 元数据) 不承载业务表, 返回空",

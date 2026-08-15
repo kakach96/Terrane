@@ -54,6 +54,22 @@ pub struct ServerConfig {
     /// 速率限制窗口 (秒; 仅 rate_limit_max_requests > 0 时生效; 默认: 1)
     #[serde(default = "default_rate_limit_window")]
     pub rate_limit_window_secs: u64,
+    /// 级联 WMS: 瞬时故障 (超时/连接失败/5xx/429) 最大重试次数 (0 = 不重试; 默认: 2)
+    #[serde(default = "default_cascaded_max_retries")]
+    pub cascaded_max_retries: u32,
+    /// 级联 WMS: 重试退避基准毫秒 (指数退避 base * 2^n; 默认: 200)
+    #[serde(default = "default_cascaded_retry_base_ms")]
+    pub cascaded_retry_base_ms: u64,
+    /// 级联 WMS: 熔断连续失败阈值 (0 = 禁用熔断; 默认: 5)
+    #[serde(default = "default_cascaded_circuit_threshold")]
+    pub cascaded_circuit_threshold: u32,
+    /// 级联 WMS: 熔断打开后的重置秒数 (半开试探窗口; 默认: 30)
+    #[serde(default = "default_cascaded_circuit_reset_secs")]
+    pub cascaded_circuit_reset_secs: u64,
+    /// 目录 (catalog) 定时刷新秒数 (0 = 禁用; 多副本部署时周期性地从元数据存储
+    /// 重载图层/样式/图层组到内存缓存, 收敛副本间差异)
+    #[serde(default)]
+    pub catalog_refresh_secs: u64,
 }
 
 /// 元数据存储配置 — 保存工作空间、数据源、图层、样式、权限、会话等配置元数据。
@@ -74,10 +90,10 @@ pub struct MetadataConfig {
 ///
 /// 不作为配置文件节 (`GeoServerConfig.cache` 标记 `#[serde(skip)]`), 仅提供
 /// 内置默认 (瓦片缓存落盘 `<data_dir>/gwc`, 会话缓存内存)。代码/测试可编程覆盖。
-/// 后续可扩展 `redis` 等后端 (见 [`crate::store::cache`])。
+/// 图层级 Redis 缓存后端通过 Redis 数据源选择 (见 `Layer.cache_store`)。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CacheConfig {
-    /// 缓存后端类型: "local" (默认) | 未来 "redis"
+    /// 缓存后端类型: "local" (默认)
     #[serde(default = "default_cache_kind")]
     pub kind: String,
     /// 瓦片缓存根目录 (默认: `<data_dir>/gwc`)
@@ -204,6 +220,11 @@ impl Default for ServerConfig {
             request_timeout_secs: default_request_timeout(),
             rate_limit_max_requests: 0,
             rate_limit_window_secs: default_rate_limit_window(),
+            cascaded_max_retries: default_cascaded_max_retries(),
+            cascaded_retry_base_ms: default_cascaded_retry_base_ms(),
+            cascaded_circuit_threshold: default_cascaded_circuit_threshold(),
+            cascaded_circuit_reset_secs: default_cascaded_circuit_reset_secs(),
+            catalog_refresh_secs: 0,
         }
     }
 }
@@ -230,6 +251,7 @@ impl Default for LoggingConfig {
     fn default() -> Self {
         LoggingConfig {
             level: default_log_level(),
+            format: default_log_format(),
         }
     }
 }
@@ -268,6 +290,9 @@ pub struct LoggingConfig {
     /// 日志级别 (trace/debug/info/warn/error)
     #[serde(default = "default_log_level")]
     pub level: String,
+    /// 日志格式: "text" (人类可读, 默认) | "json" (结构化 JSON, 含 trace_id)
+    #[serde(default = "default_log_format")]
+    pub format: String,
 }
 
 fn default_static_dir() -> PathBuf {
@@ -290,12 +315,32 @@ fn default_rate_limit_window() -> u64 {
     1
 }
 
+fn default_cascaded_max_retries() -> u32 {
+    2
+}
+
+fn default_cascaded_retry_base_ms() -> u64 {
+    200
+}
+
+fn default_cascaded_circuit_threshold() -> u32 {
+    5
+}
+
+fn default_cascaded_circuit_reset_secs() -> u64 {
+    30
+}
+
 fn default_sqlite_path() -> PathBuf {
     PathBuf::from("geoserver.sqlite")
 }
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_log_format() -> String {
+    "text".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -414,6 +459,11 @@ impl Default for GeoServerConfig {
                 request_timeout_secs: default_request_timeout(),
                 rate_limit_max_requests: 0,
                 rate_limit_window_secs: default_rate_limit_window(),
+                cascaded_max_retries: default_cascaded_max_retries(),
+                cascaded_retry_base_ms: default_cascaded_retry_base_ms(),
+                cascaded_circuit_threshold: default_cascaded_circuit_threshold(),
+                cascaded_circuit_reset_secs: default_cascaded_circuit_reset_secs(),
+                catalog_refresh_secs: 0,
             },
             metadata: MetadataConfig {
                 kind: default_db_kind(),
@@ -426,6 +476,7 @@ impl Default for GeoServerConfig {
             },
             logging: LoggingConfig {
                 level: default_log_level(),
+                format: default_log_format(),
             },
             data_dir: PathBuf::from("./data"),
             workspaces: vec![],
@@ -531,7 +582,8 @@ mod tests {
     #[test]
     fn test_storage_sections_ignored() {
         // [vector]/[raster]/[cache] 不再参与配置文件: vector/raster 字段已移除,
-        // cache 为 `#[serde(skip)]` (配置文件写 [cache] 被忽略, 保持内置默认)
+        // cache 为 `#[serde(skip)]` (配置文件写 [cache] 被忽略, 保持内置默认;
+        // 图层级 Redis 缓存通过 Redis 数据源选择, 不经全局 cache 配置)
         let cfg = parse_toml(
             r#"
             [vector]

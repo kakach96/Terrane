@@ -39,6 +39,7 @@ pub async fn compute_layer_bounds(
         DataSourceType::WorldImage => compute_worldimage_bounds(ds),
         DataSourceType::CascadedWms => Ok(None),
         DataSourceType::ArcGrid => compute_arcgrid_bounds(ds),
+        DataSourceType::Redis => Ok(None),
         DataSourceType::Metadata => Ok(None),
     }
 }

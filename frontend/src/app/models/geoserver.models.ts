@@ -10,6 +10,8 @@ export interface Layer {
   enabled: boolean;
   abstract?: string;
   styles?: StyleRef[];
+  /** 瓦片缓存后端数据源名称 (type = "redis"); 缺省 = 默认内存/本地缓存 */
+  cache_store?: string | null;
 }
 
 export interface StyleRef {
@@ -74,6 +76,8 @@ export interface CreateLayerRequest {
   maxx?: number;
   maxy?: number;
   abstract?: string;
+  /** 瓦片缓存后端数据源名称 (type = "redis"); 缺省 = 默认内存/本地缓存 */
+  cache_store?: string | null;
 }
 
 export interface UpdateLayerRequest {
@@ -81,6 +85,8 @@ export interface UpdateLayerRequest {
   abstract?: string;
   native_name?: string;
   enabled?: boolean;
+  /** 瓦片缓存后端: 数据源名称, null = 默认内存/本地缓存, 缺省 = 不修改 */
+  cache_store?: string | null;
 }
 
 export interface ApiResponse<T> {
@@ -174,7 +180,16 @@ export interface S3BrowseRequest {
 
 export interface CreateDataSourceRequest {
   name: string;
-  type: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage';
+  type:
+    | 'postgis'
+    | 'shapefile'
+    | 'geotiff'
+    | 'geopackage'
+    | 'worldimage'
+    | 'cascaded_wms'
+    | 'arcgrid'
+    | 'geojson'
+    | 'redis';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;
@@ -182,7 +197,15 @@ export interface CreateDataSourceRequest {
 
 export interface UpdateDataSourceRequest {
   type?:
-    'postgis' | 'shapefile' | 'geotiff' | 'geopackage' | 'worldimage' | 'cascaded_wms' | 'arcgrid';
+    | 'postgis'
+    | 'shapefile'
+    | 'geotiff'
+    | 'geopackage'
+    | 'worldimage'
+    | 'cascaded_wms'
+    | 'arcgrid'
+    | 'geojson'
+    | 'redis';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;

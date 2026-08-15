@@ -21,6 +21,9 @@ pub struct CreateLayerRequest {
     pub maxy: Option<f64>,
     #[serde(rename = "abstract")]
     pub abstract_text: Option<String>,
+    /// 瓦片缓存后端数据源名称 (type = "redis"); 缺省/空 = 默认内存/本地缓存
+    #[serde(default)]
+    pub cache_store: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,6 +33,34 @@ pub struct UpdateLayerRequest {
     pub abstract_text: Option<String>,
     pub native_name: Option<String>,
     pub enabled: Option<bool>,
+    /// 瓦片缓存后端数据源: Some(ds) = 设置, null = 清除 (回到默认缓存), 缺省 = 不修改。
+    /// 使用自定义反序列化以区分「缺省 (不修改)」与「显式 null (清除)」。
+    #[serde(default, deserialize_with = "deserialize_optional_clear")]
+    pub cache_store: Option<Option<String>>,
+}
+
+/// 反序列化 `Option<Option<String>>` 语义的缓存后端字段:
+/// - 字段缺省 → `None` (不修改)
+/// - 显式 `null` → `Some(None)` (清除, 回到默认缓存)
+/// - 字符串 → `Some(Some(name))` (设置数据源)
+///
+/// 直接反序列化为 `Value` 以保留显式 `null` (若先包一层 `Option<Value>`,
+/// `null` 会被吞成 `None`, 无法与「缺省」区分)。
+fn deserialize_optional_clear<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::Null => Some(None),
+        serde_json::Value::String(s) => Some(Some(s)),
+        other => {
+            return Err(serde::de::Error::custom(format!(
+                "cache_store 应为字符串或 null, 实际: {}",
+                other
+            )))
+        },
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,6 +97,7 @@ pub async fn list_layers(state: web::Data<AppState>) -> Result<HttpResponse, Geo
                                 "maxy": l.maxy,
                             },
                             "enabled": l.enabled,
+                            "cache_store": l.cache_store,
                         })
                     })
                     .collect();
@@ -99,6 +131,7 @@ pub async fn list_layers(state: web::Data<AppState>) -> Result<HttpResponse, Geo
                     },
                     "styles": l.styles,
                     "enabled": l.enabled,
+                    "cache_store": l.cache_store,
                 })
             })
             .collect();
@@ -174,6 +207,14 @@ pub async fn get_layer(
                 );
                 map.insert("enabled".into(), serde_json::Value::Bool(layer.enabled));
                 map.insert("styles".into(), serde_json::Value::Array(vec![]));
+                map.insert(
+                    "cache_store".into(),
+                    layer
+                        .cache_store
+                        .clone()
+                        .map(serde_json::Value::String)
+                        .unwrap_or(serde_json::Value::Null),
+                );
                 serde_json::Value::Object(map)
             },
             Ok(None) => {
@@ -242,6 +283,14 @@ pub async fn get_layer(
             map.insert(
                 "styles".into(),
                 serde_json::to_value(&layer.styles).unwrap_or(serde_json::Value::Array(vec![])),
+            );
+            map.insert(
+                "cache_store".into(),
+                layer
+                    .cache_store
+                    .clone()
+                    .map(serde_json::Value::String)
+                    .unwrap_or(serde_json::Value::Null),
             );
             serde_json::Value::Object(map)
         } else {
@@ -340,6 +389,7 @@ pub async fn create_layer(
             miny,
             maxx,
             maxy,
+            cache_store: body.cache_store.clone(),
             created: String::new(),
             modified: String::new(),
         };
@@ -360,6 +410,7 @@ pub async fn create_layer(
                     crate::models::Bounds::new(minx, miny, maxx, maxy),
                 );
                 created.native_bounds = created.lat_lon_bounds.clone();
+                created.cache_store = created_layer.cache_store.clone();
                 state.add_layer(created).await;
 
                 let response = serde_json::json!({
@@ -410,6 +461,7 @@ pub async fn update_layer(
                 body.abstract_text.clone(),
                 body.native_name.clone(),
                 body.enabled,
+                body.cache_store.clone(),
             )
             .await
         {
@@ -430,6 +482,7 @@ pub async fn update_layer(
             title: body.title.clone(),
             abstract_text: body.abstract_text.clone(),
             enabled: body.enabled,
+            cache_store: body.cache_store.clone(),
         };
         if state.update_layer(layer_name, updates).await {
             Ok(

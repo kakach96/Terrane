@@ -32,6 +32,7 @@ fn parse_ds_type(type_str: &str) -> DataSourceType {
         "geojson" => DataSourceType::GeoJson,
         "worldimage" => DataSourceType::WorldImage,
         "cascaded_wms" => DataSourceType::CascadedWms,
+        "redis" => DataSourceType::Redis,
         "arcgrid" => DataSourceType::ArcGrid,
         _ => DataSourceType::Postgis,
     }
@@ -131,6 +132,7 @@ impl PostgresStore {
                 miny FLOAT8 DEFAULT -90,
                 maxx FLOAT8 DEFAULT 180,
                 maxy FLOAT8 DEFAULT 90,
+                cache_store TEXT,
                 created TEXT,
                 modified TEXT
             );
@@ -234,6 +236,9 @@ impl PostgresStore {
             ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_bucket TEXT;
             ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_access_key TEXT;
             ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_secret_key TEXT;
+
+            -- Layer-level tile cache backend data source (migrate existing layers tables)
+            ALTER TABLE layers ADD COLUMN IF NOT EXISTS cache_store TEXT;
             "#,
         )
         .await?;
@@ -702,7 +707,7 @@ impl Store for PostgresStore {
         let rows = client
             .query(
                 "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled,
-                        minx, miny, maxx, maxy, created, modified
+                        minx, miny, maxx, maxy, cache_store, created, modified
                  FROM layers WHERE name = $1",
                 &[&name],
             )
@@ -721,8 +726,9 @@ impl Store for PostgresStore {
                 miny: row.try_get(9)?,
                 maxx: row.try_get(10)?,
                 maxy: row.try_get(11)?,
-                created: row.try_get(12)?,
-                modified: row.try_get(13)?,
+                cache_store: row.try_get(12)?,
+                created: row.try_get(13)?,
+                modified: row.try_get(14)?,
             }))
         } else {
             Ok(None)
@@ -734,7 +740,7 @@ impl Store for PostgresStore {
         let rows = client
             .query(
                 "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled,
-                        minx, miny, maxx, maxy, created, modified
+                        minx, miny, maxx, maxy, cache_store, created, modified
                  FROM layers ORDER BY name",
                 &[],
             )
@@ -754,8 +760,9 @@ impl Store for PostgresStore {
                     miny: row.try_get(9)?,
                     maxx: row.try_get(10)?,
                     maxy: row.try_get(11)?,
-                    created: row.try_get(12)?,
-                    modified: row.try_get(13)?,
+                    cache_store: row.try_get(12)?,
+                    created: row.try_get(13)?,
+                    modified: row.try_get(14)?,
                 })
             })
             .collect()
@@ -767,12 +774,13 @@ impl Store for PostgresStore {
         client
             .execute(
                 "INSERT INTO layers (name, title, workspace, store, srs, abstract_text, native_name,
-                        enabled, minx, miny, maxx, maxy, created, modified)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+                        enabled, minx, miny, maxx, maxy, cache_store, created, modified)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
                 &[
                     &layer.name, &layer.title, &layer.workspace, &layer.store, &layer.srs,
                     &layer.abstract_text, &layer.native_name, &layer.enabled,
-                    &layer.minx, &layer.miny, &layer.maxx, &layer.maxy, &ts, &ts,
+                    &layer.minx, &layer.miny, &layer.maxx, &layer.maxy, &layer.cache_store,
+                    &ts, &ts,
                 ],
             )
             .await?;
@@ -789,6 +797,7 @@ impl Store for PostgresStore {
             miny: layer.miny,
             maxx: layer.maxx,
             maxy: layer.maxy,
+            cache_store: layer.cache_store.clone(),
             created: ts.clone(),
             modified: ts,
         })
@@ -801,6 +810,7 @@ impl Store for PostgresStore {
         abstract_text: Option<String>,
         native_name: Option<String>,
         enabled: Option<bool>,
+        cache_store: Option<Option<String>>,
     ) -> Result<(), StoreError> {
         let ts = now();
         let client = self.pool.get().await?;
@@ -821,6 +831,11 @@ impl Store for PostgresStore {
         if let Some(e) = enabled {
             params.push(Box::new(e));
             sets.push(format!("enabled = ${}", params.len()));
+        }
+        // 图层级缓存后端: Some(Some(ds)) = 设置; Some(None) = 清除(回到默认缓存)
+        if let Some(cs) = &cache_store {
+            params.push(Box::new(cs.clone()));
+            sets.push(format!("cache_store = ${}", params.len()));
         }
         params.push(Box::new(name.to_string()));
         let sql = format!(
@@ -1603,6 +1618,7 @@ mod tests {
             miny: -90.0,
             maxx: 180.0,
             maxy: 90.0,
+            cache_store: None,
             created: String::new(),
             modified: String::new(),
         };

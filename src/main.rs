@@ -61,20 +61,41 @@ struct Args {
     port: Option<u16>,
 }
 
-fn init_tracing(default_level: &str) {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| default_level.into()),
-        ))
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_timer(FriendlyTimeFormat)
-                .with_level(true)
-                .with_target(true)
-                .with_thread_ids(true)
-                .with_thread_names(true),
-        )
-        .init();
+fn init_tracing(default_level: &str, format: &str) {
+    let filter = tracing_subscriber::EnvFilter::new(
+        std::env::var("RUST_LOG").unwrap_or_else(|_| default_level.into()),
+    );
+
+    // Structured JSON logging (see docs/IMPLEMENTATION_PLAN.md §6.2 Phase 1):
+    // `[logging] format = "json"` emits machine-readable events; every event
+    // raised inside a request span carries the request `trace_id` for
+    // cross-replica correlation. The default `"text"` format stays human
+    // readable.
+    let registry = tracing_subscriber::registry().with(filter);
+    if format.eq_ignore_ascii_case("json") {
+        registry
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_timer(FriendlyTimeFormat)
+                    .with_level(true)
+                    .with_target(true)
+                    .with_thread_ids(true)
+                    .with_thread_names(true),
+            )
+            .init();
+    } else {
+        registry
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_timer(FriendlyTimeFormat)
+                    .with_level(true)
+                    .with_target(true)
+                    .with_thread_ids(true)
+                    .with_thread_names(true),
+            )
+            .init();
+    }
 }
 
 fn load_config(config_path: &str) -> GeoServerConfig {
@@ -140,7 +161,7 @@ async fn main() -> std::io::Result<()> {
     let args = Args::parse();
     let config = load_config(&args.config);
 
-    init_tracing(&config.logging.level);
+    init_tracing(&config.logging.level, &config.logging.format);
 
     let host = args.host.unwrap_or(config.server.host.clone());
     let port = args.port.unwrap_or(config.server.port);
@@ -203,6 +224,8 @@ async fn main() -> std::io::Result<()> {
         };
 
         // 韧性中间件 (最外层): 请求超时 + 速率限制 (0 值 = 禁用)
+        // TraceId 最外层: 为每个请求分配 trace_id (span + X-Trace-Id 响应头),
+        // 结构化日志可跨副本关联同一请求。
         App::new()
             .app_data(app_state.clone())
             .wrap(cors_middleware)
@@ -215,6 +238,7 @@ async fn main() -> std::io::Result<()> {
                 rate_limit_max,
                 rate_limit_window,
             ))
+            .wrap(crate::middleware::TraceId)
             .configure(|svc| routes::configure_routes(svc, &api_context))
             .service(
                 Files::new("/", &static_dir_str)

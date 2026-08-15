@@ -2,21 +2,27 @@
 //!
 //! [`crate::utils::tile_cache::TileCache`] is the cache *engine* (enabled /
 //! expiry / hit-rate statistics); the actual byte storage is delegated to a
-//! [`TileCacheBackend`]. The local backend persists tiles on disk under
-//! `<cache_dir>/<layer>/<gridset>/<z>/<x>/<y>.png`.
+//! [`TileCacheBackend`]. Backends:
+//! - **local** — tiles on disk under `<cache_dir>/<layer>/<gridset>/<z>/<x>/<y>.png`
+//!   (default, single-node / dev)
+//! - **redis** — tiles as Redis string keys (`tile:{layer}:{gridset}:{z}:{x}:{y}`,
+//!   TTL from `expire_after_secs`), shared across replicas in cloud deployments
 //!
-//! Future backends: Redis / S3.
+//! Backend selected via [`CacheConfig::kind`] (`local` | `redis`).
 
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use redis::aio::ConnectionManager;
 use serde::Serialize;
 use tokio::fs;
 
 use crate::config::CacheConfig;
 use crate::store::StoreError;
+
+use super::redis::RedisConn;
 
 /// Cache key identifying a single tile.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -238,9 +244,185 @@ impl TileCacheBackend for LocalTileCacheBackend {
 
 /// Build the tile cache backend selected by [`CacheConfig::kind`].
 ///
-/// Future: `"redis"` -> a Redis-backed [`TileCacheBackend`].
+/// The `local` backend is the built-in default. Layer-level Redis caches are
+/// built explicitly from a Redis data source (see
+/// [`RedisTileCacheBackend::new`]), not via global cache config.
 pub fn build_tile_cache_backend(config: &CacheConfig) -> Arc<dyn TileCacheBackend> {
     Arc::new(LocalTileCacheBackend::new(config.clone()))
+}
+
+/// Redis tile cache backend — tiles stored as Redis string keys.
+///
+/// Key: `tile:{layer}:{gridset}:{z}:{x}:{y}` (matches
+/// [`TileCacheKey::as_string`]). TTL derives from `expire_after_secs`
+/// (0 = no expiry). Clears scan matching prefixes so `clear_layer` /
+/// `clear_all` work on the shared store.
+pub struct RedisTileCacheBackend {
+    expire_after_secs: u64,
+    conn: RedisConn,
+}
+
+impl RedisTileCacheBackend {
+    /// Create a Redis-backed tile cache backend for the given Redis URL
+    /// (e.g. from a `type = "redis"` data source connection).
+    pub fn new(redis_url: &str, expire_after_secs: u64) -> Self {
+        RedisTileCacheBackend {
+            expire_after_secs,
+            conn: RedisConn::new(redis_url),
+        }
+    }
+}
+
+/// Redis `SCAN` cursor helper: collect keys matching `pattern` in batches.
+async fn scan_redis_keys(
+    conn: &mut ConnectionManager,
+    pattern: &str,
+    batch: u64,
+) -> Result<Vec<String>, StoreError> {
+    let mut cursor: u64 = 0;
+    let mut keys = Vec::new();
+    loop {
+        let (next, batch_keys): (u64, Vec<String>) = redis::cmd("SCAN")
+            .arg(cursor)
+            .arg("MATCH")
+            .arg(pattern)
+            .arg("COUNT")
+            .arg(batch)
+            .query_async(conn)
+            .await
+            .map_err(|e| StoreError::Other(format!("Redis SCAN failed: {}", e)))?;
+        keys.extend(batch_keys);
+        cursor = next;
+        if cursor == 0 {
+            break;
+        }
+    }
+    Ok(keys)
+}
+
+#[async_trait]
+impl TileCacheBackend for RedisTileCacheBackend {
+    async fn init(&self) -> Result<(), StoreError> {
+        self.conn.ping().await?;
+        tracing::info!(
+            "[GWC] Redis tile cache backend ready (ttl {}s)",
+            self.expire_after_secs
+        );
+        Ok(())
+    }
+
+    async fn get(&self, key: &TileCacheKey) -> Option<Vec<u8>> {
+        let mut conn = self.conn.conn().await.ok()?;
+        redis::cmd("GET")
+            .arg(key.as_string())
+            .query_async::<Option<Vec<u8>>>(&mut conn)
+            .await
+            .unwrap_or(None)
+    }
+
+    async fn put(&self, key: &TileCacheKey, data: &[u8]) {
+        let mut conn = match self.conn.conn().await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("[GWC] Redis unavailable, tile not cached: {}", e);
+                return;
+            },
+        };
+        let k = key.as_string();
+        let res = if self.expire_after_secs > 0 {
+            redis::cmd("SET")
+                .arg(&k)
+                .arg(data)
+                .arg("EX")
+                .arg(self.expire_after_secs)
+                .query_async::<String>(&mut conn)
+                .await
+        } else {
+            redis::cmd("SET")
+                .arg(&k)
+                .arg(data)
+                .query_async::<String>(&mut conn)
+                .await
+        };
+        if let Err(e) = res {
+            tracing::warn!(
+                "[GWC] Redis write error layer={} z={} x={} y={}: {}",
+                key.layer,
+                key.z,
+                key.x,
+                key.y,
+                e
+            );
+        }
+    }
+
+    async fn clear_layer(&self, layer: &str) -> Result<u64, StoreError> {
+        let mut conn = self.conn.conn().await?;
+        let pattern = format!("tile:{}:*", layer);
+        let keys = scan_redis_keys(&mut conn, &pattern, 500).await?;
+        if !keys.is_empty() {
+            redis::cmd("DEL")
+                .arg(keys.clone())
+                .query_async::<u64>(&mut conn)
+                .await
+                .map_err(|e| StoreError::Other(format!("Redis DEL failed: {}", e)))?;
+        }
+        tracing::info!(
+            "[GWC] Redis: cleared {} cached tiles for layer '{}'",
+            keys.len(),
+            layer
+        );
+        Ok(keys.len() as u64)
+    }
+
+    async fn clear_all(&self) -> Result<u64, StoreError> {
+        let mut conn = self.conn.conn().await?;
+        let keys = scan_redis_keys(&mut conn, "tile:*", 500).await?;
+        if !keys.is_empty() {
+            redis::cmd("DEL")
+                .arg(keys.clone())
+                .query_async::<u64>(&mut conn)
+                .await
+                .map_err(|e| StoreError::Other(format!("Redis DEL failed: {}", e)))?;
+        }
+        tracing::info!("[GWC] Redis: cleared all {} cached tiles", keys.len());
+        Ok(keys.len() as u64)
+    }
+
+    async fn disk_stats(&self) -> TileCacheStats {
+        let mut conn = match self.conn.conn().await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("[GWC] Redis stats unavailable: {}", e);
+                return TileCacheStats::default();
+            },
+        };
+        let keys = match scan_redis_keys(&mut conn, "tile:*", 500).await {
+            Ok(k) => k,
+            Err(e) => {
+                tracing::warn!("[GWC] Redis stats scan failed: {}", e);
+                return TileCacheStats::default();
+            },
+        };
+        // Sum value sizes via STRLEN (batched) for an approximate cache size.
+        let mut size = 0u64;
+        for chunk in keys.chunks(100) {
+            let mut pipe = redis::pipe();
+            for k in chunk {
+                pipe.cmd("STRLEN").arg(k);
+            }
+            let lens: Vec<u64> = match pipe.query_async(&mut conn).await {
+                Ok(l) => l,
+                Err(_) => break,
+            };
+            size += lens.iter().sum::<u64>();
+        }
+        TileCacheStats {
+            total_tiles: keys.len() as u64,
+            cache_size_bytes: size,
+            ..Default::default()
+        }
+    }
 }
 
 /// Recursively count files under a directory.

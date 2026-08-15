@@ -18,6 +18,9 @@ export class LayerDetailComponent implements OnInit {
   safePreviewUrl: SafeResourceUrl = '';
   styleNames: string[] = [];
   currentStyleName = '';
+  /** Redis 缓存数据源 (type = 'redis'), 供图层级缓存后端选择 */
+  redisCacheSources: { name: string }[] = [];
+  currentCacheStore = '';
   loading = true;
 
   /** 显示的边界（优先 native_bounds，回退到 bounds） */
@@ -83,6 +86,7 @@ export class LayerDetailComponent implements OnInit {
       this.loadLayer(layerName);
       this.loadFeatures(layerName);
       this.loadStyleNames();
+      this.loadRedisCacheSources();
     }
   }
 
@@ -91,6 +95,7 @@ export class LayerDetailComponent implements OnInit {
       next: (layer) => {
         this.layer = layer;
         this.currentStyleName = layer.styles?.[0]?.name || 'default';
+        this.currentCacheStore = layer.cache_store || '';
         this.previewOptions.crs = this.displayCrs;
         this.refreshPreview();
         this.loading = false;
@@ -99,6 +104,33 @@ export class LayerDetailComponent implements OnInit {
         this.notificationService.error(this.translate.instant('layerDetail.loadFail'));
         this.loading = false;
       },
+    });
+  }
+
+  /** 加载 Redis 缓存数据源 (type = 'redis') */
+  loadRedisCacheSources(): void {
+    this.geoserverService.getDataSources().subscribe({
+      next: (sources) => {
+        this.redisCacheSources = sources.filter((s) => s.type === 'redis' && s.enabled);
+      },
+    });
+  }
+
+  /** 切换图层的瓦片缓存后端 (Redis 数据源 / 默认内存缓存) */
+  onCacheStoreChange(cacheStore: string): void {
+    if (!this.layer) return;
+    // 空字符串 = 默认内存/本地缓存 (null); 否则 = 指定 Redis 数据源名称
+    const value = cacheStore || null;
+    this.geoserverService.updateLayer(this.layer.name, { cache_store: value }).subscribe({
+      next: () => {
+        this.layer!.cache_store = value;
+        this.currentCacheStore = cacheStore;
+        this.notificationService.success(
+          this.translate.instant('layerDetail.cacheStoreSuccess'),
+        );
+      },
+      error: () =>
+        this.notificationService.error(this.translate.instant('layerDetail.cacheStoreFail')),
     });
   }
 

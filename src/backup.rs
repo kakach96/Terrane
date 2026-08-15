@@ -82,6 +82,9 @@ pub struct LayerBackup {
     pub miny: f64,
     pub maxx: f64,
     pub maxy: f64,
+    /// 瓦片缓存后端数据源名称 (type = "redis"); 为空 = 默认内存/本地缓存
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_store: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,6 +205,7 @@ pub async fn export_backup(state: &crate::state::AppState) -> Result<GeoServerBa
             miny: l.miny,
             maxx: l.maxx,
             maxy: l.maxy,
+            cache_store: l.cache_store,
         })
         .collect();
 
@@ -382,6 +386,7 @@ pub async fn import_backup(
             "geopackage" => DataSourceType::Geopackage,
             "worldimage" => DataSourceType::WorldImage,
             "cascaded_wms" => DataSourceType::CascadedWms,
+            "redis" => DataSourceType::Redis,
             "arcgrid" => DataSourceType::ArcGrid,
             _ => DataSourceType::Postgis,
         };
@@ -415,6 +420,7 @@ pub async fn import_backup(
             miny: l.miny,
             maxx: l.maxx,
             maxy: l.maxy,
+            cache_store: l.cache_store.clone(),
             created: String::new(),
             modified: String::new(),
         };

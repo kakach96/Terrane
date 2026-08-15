@@ -110,14 +110,12 @@ docker compose -f build/docker-compose.yml --profile terrane up -d      # dev de
 | `GEOSERVER__RASTER__DIR`                  | `[raster] dir`                               | `<data_dir>/rasters`       |
 | `GEOSERVER__SECURITY__JWT_SECRET`         | `[security] jwt_secret`                      | `terrane-jwt-secret-2026`|
 | `GEOSERVER__LOGGING__LEVEL`               | `[logging] level`                            | `info`                     |
-| `GEOSERVER__CACHE__KIND`                  | `[cache] kind` (`local`)                     | `local`                    |
-| `GEOSERVER__CACHE__CACHE_DIR`             | `[cache] cache_dir`                          | `<data_dir>/gwc`           |
-| `GEOSERVER__CACHE__META_DIR`              | `[cache] meta_dir`                           | `<data_dir>/gwc/meta`      |
-| `GEOSERVER__CACHE__EXPIRE_AFTER_SECS`     | `[cache] expire_after_secs`                  | `86400`                    |
-| `GEOSERVER__CACHE__MAX_TILES`             | `[cache] max_tiles`                          | `100000`                   |
-| `GEOSERVER__CACHE__ENABLED`               | `[cache] enabled`                            | `true`                     |
-| `GEOSERVER__CACHE__DEFAULT_GRIDSET`       | `[cache] default_gridset`                    | `EPSG:4326`                |
-| `GEOSERVER__CACHE__SESSION_TTL_SECS`      | `[cache] session_ttl_secs`                   | `86400`                    |
+| `GEOSERVER__LOGGING__FORMAT`              | `[logging] format` (`text`\|`json`)          | `text`                     |
+| `GEOSERVER__SERVER__REQUEST_TIMEOUT_SECS` | `[server] request_timeout_secs`              | `60`                       |
+| `GEOSERVER__SERVER__RATE_LIMIT_MAX_REQUESTS` | `[server] rate_limit_max_requests`        | `0` (disabled)             |
+| `GEOSERVER__SERVER__CASCADED_MAX_RETRIES` | `[server] cascaded_max_retries`              | `2`                        |
+| `GEOSERVER__SERVER__CASCADED_CIRCUIT_THRESHOLD` | `[server] cascaded_circuit_threshold`   | `5`                        |
+| `GEOSERVER__SERVER__CATALOG_REFRESH_SECS` | `[server] catalog_refresh_secs`              | `0` (disabled)             |
 | `GEOSERVER__CORS__ENABLED`                | `[cors] enabled`                             | `true`                     |
 | `GEOSERVER__CORS__ALLOWED_ORIGINS`        | `[cors] allowed_origins`                     | `["*"]`                    |
 | `GEOSERVER__CORS__ALLOWED_METHODS`        | `[cors] allowed_methods`                     | GET/POST/PUT/DELETE/OPTIONS/PATCH |

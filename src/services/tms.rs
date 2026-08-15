@@ -241,6 +241,7 @@ mod tests {
                 path: None,
             },
             enabled: true,
+            cache_store: None,
         }
     }
 

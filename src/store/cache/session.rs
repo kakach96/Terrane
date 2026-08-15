@@ -2,7 +2,8 @@
 //!
 //! The metadata store remains the source of truth for sessions; the cache is a
 //! write-through fast layer. The local backend keeps sessions in memory with a
-//! TTL. Future backend: Redis (shared across replicas).
+//! TTL. (Redis-backed session cache intentionally not implemented — session
+//! management stays on simple JWT + metadata store, see `docs/ROADMAP.md`.)
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -88,9 +89,8 @@ impl SessionCache for LocalSessionCache {
     }
 }
 
-/// Build the session cache selected by [`CacheConfig::kind`].
-///
-/// Future: `"redis"` -> a Redis-backed [`SessionCache`].
+/// Build the session cache. Only the `local` backend exists (simple JWT mode);
+/// session management does not use Redis.
 pub fn build_session_cache(config: &CacheConfig) -> Option<Arc<dyn SessionCache>> {
     Some(Arc::new(LocalSessionCache::new(config.session_ttl_secs)))
 }

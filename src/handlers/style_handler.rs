@@ -2,6 +2,7 @@ use super::rest_handler::ApiResponse;
 use crate::error::GeoServerError;
 use crate::models::{Bounds, CoordinateReferenceSystem, GeoJsonGeometry};
 use crate::state::AppState;
+use crate::utils::tile_cache::TileCache;
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
 
@@ -486,8 +487,18 @@ pub async fn get_tile(
         })
         .unwrap_or("EPSG:4326");
 
+    // 解析图层级缓存后端 (layer.cache_store → Redis 数据源; 否则默认本地缓存)
+    let layer_obj = {
+        let layers = state.layers.read().await;
+        layers.iter().find(|l| l.name == layer_name).cloned()
+    };
+    let cache = match &layer_obj {
+        Some(l) => state.tile_cache_for(l).await,
+        None => state.tile_cache.clone(),
+    };
+
     // 1. 尝试从缓存获取
-    if let Some(ref cache) = state.tile_cache {
+    if let Some(ref cache) = cache {
         if let Some(cached) = cache.get(layer_name, gridset, z, x, y).await {
             return Ok(HttpResponse::Ok()
                 .insert_header(("X-Tile-Cache", "HIT"))
@@ -563,7 +574,7 @@ pub async fn get_tile(
     let tile_data = buffer.into_inner();
 
     // 3. 写入缓存
-    if let Some(ref cache) = state.tile_cache {
+    if let Some(ref cache) = cache {
         cache.put(layer_name, gridset, z, x, y, &tile_data).await;
     }
 
@@ -573,55 +584,92 @@ pub async fn get_tile(
         .body(tile_data))
 }
 
-/// 清除指定图层的瓦片缓存
+/// 清除指定图层的瓦片缓存 (默认本地缓存 + 所有 Redis 数据源缓存)
 pub async fn clear_tile_cache(
     req: HttpRequest,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
+    let mut total = 0u64;
+
     if let Some(ref cache) = state.tile_cache {
-        let count = cache
+        total += cache
             .clear_layer(layer_name)
             .await
             .map_err(|e| GeoServerError::InternalError(format!("清除缓存失败: {}", e)))?;
-        Ok(
-            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                "message": format!("已清除图层 '{}' 的 {} 个缓存瓦片", layer_name, count),
-                "cleared": count,
-            }))),
-        )
-    } else {
-        Err(GeoServerError::InternalError("瓦片缓存未启用".to_string()))
     }
+    // 图层级 Redis 缓存 (按数据源) 也需要清理
+    {
+        let caches: Vec<TileCache> = {
+            let lock = state.redis_tile_caches.lock().unwrap();
+            lock.values().cloned().collect()
+        };
+        for cache in &caches {
+            if let Ok(count) = cache.clear_layer(layer_name).await {
+                total += count;
+            }
+        }
+    }
+
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "message": format!("已清除图层 '{}' 的 {} 个缓存瓦片", layer_name, total),
+            "cleared": total,
+        }))),
+    )
 }
 
-/// 获取缓存统计
+/// 获取缓存统计 (默认本地缓存 + 所有 Redis 数据源缓存)
 pub async fn get_tile_cache_stats(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
+    let mut hits = 0u64;
+    let mut misses = 0u64;
+    let mut total_tiles = 0u64;
+    let mut cache_size_bytes = 0u64;
+    let mut backend_count = 0usize;
+
     if let Some(ref cache) = state.tile_cache {
-        let disk_stats = cache.calculate_disk_stats().await;
-        Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-            "enabled": true,
-            "hits": disk_stats.hits,
-            "misses": disk_stats.misses,
-            "hitRate": cache.hit_rate(),
-            "totalTiles": disk_stats.total_tiles,
-            "cacheSizeBytes": disk_stats.cache_size_bytes,
-            "cacheSizeMb": format!("{:.2} MB", disk_stats.cache_size_bytes as f64 / 1_048_576.0),
-        }))))
-    } else {
-        Ok(
-            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                "enabled": false,
-                "hits": 0,
-                "misses": 0,
-                "hitRate": 0.0,
-                "totalTiles": 0,
-                "cacheSizeBytes": 0,
-            }))),
-        )
+        let st = cache.calculate_disk_stats().await;
+        hits += st.hits;
+        misses += st.misses;
+        total_tiles += st.total_tiles;
+        cache_size_bytes += st.cache_size_bytes;
+        backend_count += 1;
     }
+    {
+        let caches: Vec<TileCache> = {
+            let lock = state.redis_tile_caches.lock().unwrap();
+            lock.values().cloned().collect()
+        };
+        for cache in &caches {
+            let st = cache.calculate_disk_stats().await;
+            hits += st.hits;
+            misses += st.misses;
+            total_tiles += st.total_tiles;
+            cache_size_bytes += st.cache_size_bytes;
+            backend_count += 1;
+        }
+    }
+
+    let hit_rate = if hits + misses > 0 {
+        hits as f64 / (hits + misses) as f64
+    } else {
+        0.0
+    };
+
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "enabled": backend_count > 0,
+            "backends": backend_count,
+            "hits": hits,
+            "misses": misses,
+            "hitRate": hit_rate,
+            "totalTiles": total_tiles,
+            "cacheSizeBytes": cache_size_bytes,
+            "cacheSizeMb": format!("{:.2} MB", cache_size_bytes as f64 / 1_048_576.0),
+        }))),
+    )
 }
 
 pub fn get_style_rules(

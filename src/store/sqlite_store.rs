@@ -30,6 +30,7 @@ fn parse_ds_type(type_str: &str) -> DataSourceType {
         "geojson" => DataSourceType::GeoJson,
         "worldimage" => DataSourceType::WorldImage,
         "cascaded_wms" => DataSourceType::CascadedWms,
+        "redis" => DataSourceType::Redis,
         "arcgrid" => DataSourceType::ArcGrid,
         _ => DataSourceType::Postgis,
     }
@@ -140,6 +141,7 @@ impl SqliteStore {
                 miny REAL DEFAULT -90,
                 maxx REAL DEFAULT 180,
                 maxy REAL DEFAULT 90,
+                cache_store TEXT,
                 created TEXT,
                 modified TEXT
             )",
@@ -149,6 +151,11 @@ impl SqliteStore {
         // 检查并添加 native_name 列（向后兼容）
         if !column_exists(conn, "layers", "native_name") {
             conn.execute("ALTER TABLE layers ADD COLUMN native_name TEXT", [])?;
+        }
+
+        // 检查并添加 cache_store 列（图层级瓦片缓存后端数据源名称; 向后兼容）
+        if !column_exists(conn, "layers", "cache_store") {
+            conn.execute("ALTER TABLE layers ADD COLUMN cache_store TEXT", [])?;
         }
 
         // 命名空间表
@@ -843,7 +850,13 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
 
         let has_native_name = column_exists(&conn, "layers", "native_name");
-        let mut stmt = if has_native_name {
+        let has_cache_store = column_exists(&conn, "layers", "cache_store");
+        let mut stmt = if has_native_name && has_cache_store {
+            conn.prepare(
+                "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, cache_store, created, modified
+                 FROM layers WHERE name = ?"
+            )?
+        } else if has_native_name {
             conn.prepare(
                 "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified
                  FROM layers WHERE name = ?"
@@ -857,7 +870,7 @@ impl SqliteStore {
 
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
-            if has_native_name {
+            if has_native_name && has_cache_store {
                 Ok(Some(Layer {
                     name: row.get(0)?,
                     title: row.get(1)?,
@@ -871,6 +884,25 @@ impl SqliteStore {
                     miny: row.get(9)?,
                     maxx: row.get(10)?,
                     maxy: row.get(11)?,
+                    cache_store: row.get(12)?,
+                    created: row.get(13)?,
+                    modified: row.get(14)?,
+                }))
+            } else if has_native_name {
+                Ok(Some(Layer {
+                    name: row.get(0)?,
+                    title: row.get(1)?,
+                    workspace: row.get(2)?,
+                    store: row.get(3)?,
+                    srs: row.get(4)?,
+                    abstract_text: row.get(5)?,
+                    native_name: row.get(6)?,
+                    enabled: row.get::<_, i32>(7)? == 1,
+                    minx: row.get(8)?,
+                    miny: row.get(9)?,
+                    maxx: row.get(10)?,
+                    maxy: row.get(11)?,
+                    cache_store: None,
                     created: row.get(12)?,
                     modified: row.get(13)?,
                 }))
@@ -888,6 +920,7 @@ impl SqliteStore {
                     miny: row.get(8)?,
                     maxx: row.get(9)?,
                     maxy: row.get(10)?,
+                    cache_store: None,
                     created: row.get(11)?,
                     modified: row.get(12)?,
                 }))
@@ -901,7 +934,13 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
 
         let has_native_name = column_exists(&conn, "layers", "native_name");
-        let mut stmt = if has_native_name {
+        let has_cache_store = column_exists(&conn, "layers", "cache_store");
+        let mut stmt = if has_native_name && has_cache_store {
+            conn.prepare(
+                "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, cache_store, created, modified
+                 FROM layers ORDER BY name"
+            )?
+        } else if has_native_name {
             conn.prepare(
                 "SELECT name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified
                  FROM layers ORDER BY name"
@@ -914,7 +953,7 @@ impl SqliteStore {
         };
 
         let rows = stmt.query_map([], move |row| {
-            if has_native_name {
+            if has_native_name && has_cache_store {
                 Ok(Layer {
                     name: row.get(0)?,
                     title: row.get(1)?,
@@ -928,6 +967,25 @@ impl SqliteStore {
                     miny: row.get(9)?,
                     maxx: row.get(10)?,
                     maxy: row.get(11)?,
+                    cache_store: row.get(12)?,
+                    created: row.get(13)?,
+                    modified: row.get(14)?,
+                })
+            } else if has_native_name {
+                Ok(Layer {
+                    name: row.get(0)?,
+                    title: row.get(1)?,
+                    workspace: row.get(2)?,
+                    store: row.get(3)?,
+                    srs: row.get(4)?,
+                    abstract_text: row.get(5)?,
+                    native_name: row.get(6)?,
+                    enabled: row.get::<_, i32>(7)? == 1,
+                    minx: row.get(8)?,
+                    miny: row.get(9)?,
+                    maxx: row.get(10)?,
+                    maxy: row.get(11)?,
+                    cache_store: None,
                     created: row.get(12)?,
                     modified: row.get(13)?,
                 })
@@ -945,6 +1003,7 @@ impl SqliteStore {
                     miny: row.get(8)?,
                     maxx: row.get(9)?,
                     maxy: row.get(10)?,
+                    cache_store: None,
                     created: row.get(11)?,
                     modified: row.get(12)?,
                 })
@@ -958,26 +1017,51 @@ impl SqliteStore {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
 
-        conn.execute(
-            "INSERT INTO layers (name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params![
-                layer.name,
-                layer.title,
-                layer.workspace,
-                layer.store,
-                layer.srs,
-                layer.abstract_text,
-                layer.native_name,
-                layer.enabled as i32,
-                layer.minx,
-                layer.miny,
-                layer.maxx,
-                layer.maxy,
-                now,
-                now
-            ],
-        )?;
+        let has_cache_store = column_exists(&conn, "layers", "cache_store");
+        if has_cache_store {
+            conn.execute(
+                "INSERT INTO layers (name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, cache_store, created, modified)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    layer.name,
+                    layer.title,
+                    layer.workspace,
+                    layer.store,
+                    layer.srs,
+                    layer.abstract_text,
+                    layer.native_name,
+                    layer.enabled as i32,
+                    layer.minx,
+                    layer.miny,
+                    layer.maxx,
+                    layer.maxy,
+                    layer.cache_store,
+                    now,
+                    now
+                ],
+            )?;
+        } else {
+            conn.execute(
+                "INSERT INTO layers (name, title, workspace, store, srs, abstract_text, native_name, enabled, minx, miny, maxx, maxy, created, modified)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    layer.name,
+                    layer.title,
+                    layer.workspace,
+                    layer.store,
+                    layer.srs,
+                    layer.abstract_text,
+                    layer.native_name,
+                    layer.enabled as i32,
+                    layer.minx,
+                    layer.miny,
+                    layer.maxx,
+                    layer.maxy,
+                    now,
+                    now
+                ],
+            )?;
+        }
 
         Ok(Layer {
             name: layer.name.clone(),
@@ -992,6 +1076,7 @@ impl SqliteStore {
             miny: layer.miny,
             maxx: layer.maxx,
             maxy: layer.maxy,
+            cache_store: layer.cache_store.clone(),
             created: now.clone(),
             modified: now,
         })
@@ -1004,6 +1089,7 @@ impl SqliteStore {
         abstract_text: Option<String>,
         native_name: Option<String>,
         enabled: Option<bool>,
+        cache_store: Option<Option<String>>,
     ) -> SqlResult<()> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
@@ -1026,6 +1112,11 @@ impl SqliteStore {
         if let Some(e) = enabled {
             updates.push("enabled = ?".to_string());
             values.push(Box::new(e as i32));
+        }
+        // 图层级缓存后端: Some(Some(ds)) = 设置; Some(None) = 清除(回到默认缓存)
+        if let Some(cs) = cache_store {
+            updates.push("cache_store = ?".to_string());
+            values.push(Box::new(cs));
         }
 
         let query = format!("UPDATE layers SET {} WHERE name = ?", updates.join(", "));
@@ -1612,10 +1703,19 @@ impl super::Store for SqliteStore {
         abstract_text: Option<String>,
         native_name: Option<String>,
         enabled: Option<bool>,
+        cache_store: Option<Option<String>>,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::update_layer(self, name, title, abstract_text, native_name, enabled)
-            .await
-            .map_err(super::StoreError::from)
+        SqliteStore::update_layer(
+            self,
+            name,
+            title,
+            abstract_text,
+            native_name,
+            enabled,
+            cache_store,
+        )
+        .await
+        .map_err(super::StoreError::from)
     }
 
     async fn delete_layer(&self, name: &str) -> Result<(), super::StoreError> {
@@ -2120,6 +2220,71 @@ mod tests {
         assert_eq!(got.username, "bob");
         store.delete_session("jti-1").await.unwrap();
         assert!(store.get_session("jti-1").await.unwrap().is_none());
+    }
+
+    #[actix_rt::test]
+    async fn test_layer_cache_store_crud() {
+        let store = new_store().await;
+
+        // 创建图层并指定 Redis 缓存数据源
+        let layer = Layer {
+            name: "redis_layer".into(),
+            title: "Redis Layer".into(),
+            workspace: "ws1".into(),
+            store: "shapes".into(),
+            srs: "EPSG:4326".into(),
+            abstract_text: None,
+            native_name: Some("redis_layer".into()),
+            enabled: true,
+            minx: -180.0,
+            miny: -90.0,
+            maxx: 180.0,
+            maxy: 90.0,
+            cache_store: Some("my_redis".into()),
+            created: String::new(),
+            modified: String::new(),
+        };
+        store.create_layer(&layer).await.unwrap();
+
+        let got = store.get_layer("redis_layer").await.unwrap().unwrap();
+        assert_eq!(
+            got.cache_store.as_deref(),
+            Some("my_redis"),
+            "cache_store 应持久化"
+        );
+
+        let all = store.get_all_layers().await.unwrap();
+        assert_eq!(
+            all.iter()
+                .find(|l| l.name == "redis_layer")
+                .and_then(|l| l.cache_store.clone())
+                .as_deref(),
+            Some("my_redis"),
+            "get_all_layers 应返回 cache_store"
+        );
+
+        // 更新: 设置新的缓存数据源
+        store
+            .update_layer(
+                "redis_layer",
+                None,
+                None,
+                None,
+                None,
+                Some(Some("other_redis".into())),
+            )
+            .await
+            .unwrap();
+        let updated = store.get_layer("redis_layer").await.unwrap().unwrap();
+        assert_eq!(updated.cache_store.as_deref(), Some("other_redis"));
+
+        // 更新: 清除缓存数据源 (回到默认内存/本地缓存)
+        store
+            .update_layer("redis_layer", None, None, None, None, Some(None))
+            .await
+            .unwrap();
+        let cleared = store.get_layer("redis_layer").await.unwrap().unwrap();
+        assert!(cleared.cache_store.is_none(), "cache_store 清除后应为 None");
     }
 
     #[actix_rt::test]

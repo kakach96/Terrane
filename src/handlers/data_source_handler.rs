@@ -317,7 +317,7 @@ pub async fn test_data_source_connection(
     if let Some(store) = &state.store {
         match store.get_data_source(name).await {
             Ok(Some(ds)) => {
-                let result = test_postgis_connection(&ds).await;
+                let result = test_datasource_connection(&ds).await;
                 Ok(HttpResponse::Ok().json(result))
             },
             Ok(None) => Err(GeoServerError::NotFound(format!(
@@ -352,8 +352,53 @@ pub async fn test_connection(
         modified: None,
     };
 
-    let result = test_postgis_connection(&ds).await;
+    let result = test_datasource_connection(&ds).await;
     Ok(HttpResponse::Ok().json(result))
+}
+
+/// 按数据源类型分发连接测试: Redis → PING; 其余 → PostGIS 语义。
+async fn test_datasource_connection(ds: &DataSource) -> serde_json::Value {
+    match ds.data_source_type {
+        DataSourceType::Redis => test_redis_connection(ds).await,
+        _ => test_postgis_connection(ds).await,
+    }
+}
+
+/// Redis 数据源连接测试: PING 验证可连通性。
+async fn test_redis_connection(ds: &DataSource) -> serde_json::Value {
+    let conn_info = match &ds.connection {
+        Some(c) => c,
+        None => {
+            return serde_json::json!({
+                "success": false,
+                "message": "No connection configuration",
+            })
+        },
+    };
+
+    let url = match crate::store::cache::redis::redis_url_from_connection(conn_info) {
+        Some(u) => u,
+        None => {
+            return serde_json::json!({
+                "success": false,
+                "message": "Redis connection requires a host",
+            })
+        },
+    };
+
+    match crate::store::cache::redis::RedisConn::new(&url)
+        .ping()
+        .await
+    {
+        Ok(()) => serde_json::json!({
+            "success": true,
+            "message": "Redis PING successful",
+        }),
+        Err(e) => serde_json::json!({
+            "success": false,
+            "message": format!("Redis connection failed: {}", e),
+        }),
+    }
 }
 
 async fn test_postgis_connection(ds: &DataSource) -> serde_json::Value {

@@ -13,25 +13,25 @@
 |---------|:-----:|:--------:|:-----:|:-----:|
 | OGC Core Services | 5/7 | 0 | 2 | **71%** |
 | REST API | 11/16 | 0 | 5 | **69%** |
-| Data Source Types | 7/15 | 0 | 8 | **47%** |
+| Data Source Types | 8/15 | 0 | 7 | **53%** |
 | Styling System | 4/5 | 0 | 1 | **80%** |
 | Tile Caching | 3/6 | 0 | 3 | **50%** |
 | Security | 3/7 | 0 | 4 | **43%** |
 | Extensions | 8/14 | 0 | 6 | **57%** |
 | Cloud-Native | 4/7 | 0 | 3 | **57%** |
-| **Overall Progress** | | | | **~58%** |
+| **Overall Progress** | | | | **~60%** |
 
 ```
 OGC services     █████████████░░░░  71%
 REST API         █████████████░░░░  69%
-Data sources     █████████░░░░░░░  47%
+Data sources     ███████████░░░░░  53%
 Styling system   ████████████████░  80%
 Tile caching     ██████████░░░░░░  50%
 Security         ████████░░░░░░░░  43%
 Extensions       █████████░░░░░░░  57%
 Cloud-Native     █████████░░░░░░░  57%
 ──────────────────────────────
-Overall progress █████████░░░░░░░  58%
+Overall progress ████████████░░░░  60%
 ```
 
 ---
@@ -89,6 +89,7 @@ Overall progress █████████░░░░░░░  58%
 | **WorldImage** | Image + world file (.pgw/.jgw/.tfw) | ✅ **P2** |
 | **CascadedWms** | Cascaded external WMS service | ✅ **P2** |
 | **ArcGrid** | ESRI ASCII Grid raster format | ✅ **P2** |
+| **Redis** | Redis 缓存数据源 — 切片图层缓存后端 (经 `Layer.cache_store` 选择) | ✅ **New** |
 
 ### 1.4 Extended REST API
 
@@ -301,8 +302,8 @@ Overall progress █████████░░░░░░░  58%
 | **Statelessness / scalability** | Config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster data sources registered per data source (persisted in metadata store, `file_path` + `file_storage_type`); cache local (`src/store/cache/`); layers/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); uploads on local disk `./data` | In-memory state diverges across replicas; SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1** |
 | **Observability** | stdout logs (tracing); `/health` + 拆分 `/health/live` & `/health/ready`; Prometheus `/metrics` (请求/错误、方法/状态码/端点、瓦片命中率、PG 池水位、系统资源) | 无 structured JSON logs, 无 OpenTelemetry tracing | **P1 ✅** |
 | **Lifecycle** | SIGTERM/SIGINT 优雅关闭 + `shutdown_timeout_secs` 在途请求排空 (`main.rs`) | — | **P1 ✅** |
-| **CI/CD & security** | No CI pipeline, no image registry push | Missing GitHub Actions/GitLab CI, image vulnerability scanning, dependency update automation | **P2** |
-| **Resilience** | CORS defaults to `["*"]`; rate limiting / request-timeout middleware **done** (`src/middleware.rs`, `[server]` config, HTTP 429/504); no backoff-retry for cascaded WMS upstreams | Circuit breaking + upstream retry/backoff for cascaded WMS still pending | **P2 ⚠️** |
+| **CI/CD & security** | GitHub Actions CI created (`.github/workflows/ci.yml`: fmt + clippy + test + frontend build + GHCR push); **Trivy 镜像扫描 + Dependabot 自动更新 added** | 未在真实仓库验证; GitLab CI 可选 | **P2 ✅** |
+| **Resilience** | CORS defaults to `["*"]`; rate limiting / request-timeout middleware **done** (`src/middleware.rs`, `[server]` config, HTTP 429/504); **cascaded WMS retry/backoff + circuit breaking done** (`src/utils/cascaded.rs`, `[server]` config `cascaded_max_retries` / `cascaded_retry_base_ms` / `cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, per-upstream 熔断器) | — | **P2 ✅** |
 
 ### 6.2 Phased Roadmap
 
@@ -319,7 +320,7 @@ Overall progress █████████░░░░░░░  58%
 - ✅ 统一配置加载: `load_from_file()` 已挂载 `config::Environment` (`GEOSERVER__` 前缀), env 覆盖文件配置
 - ⚠️ JWT secret: 支持 `GEOSERVER__SECURITY__JWT_SECRET` 注入; 默认值仍硬编码于 `src/auth.rs`, 生产必须显式注入
 - ✅ 拆分健康探针: `/health/live` (liveness) + `/health/ready` (依赖元数据/业务存储就绪, 200/503)
-- ⚠️ 结构化日志 (tracing JSON layer) 与 request-level `trace_id` 未做
+- ✅ 结构化日志 (tracing JSON layer, `[logging] format = "json"`) 与 request-level `trace_id` (中间件生成/透传 `X-Trace-Id`/`X-Request-Id`, 响应头回显; 默认 `text` 保持人类可读)
 - ✅ Prometheus `/metrics`: 请求/错误计数、方法/状态码/端点分布、瓦片缓存命中率、PG 连接池水位、系统资源 (纯 Rust 手工生成文本格式, 零外部依赖)
 - ✅ 优雅关闭: 捕获 SIGTERM/SIGINT + `shutdown_timeout_secs` 排空在途请求 (`main.rs::shutdown_signal` + `HttpServer::shutdown_signal`/`shutdown_timeout`)
 
@@ -328,9 +329,10 @@ Overall progress █████████░░░░░░░  58%
 #### Phase 2: State Convergence & Scalability
 
 - ✅ Storage: 配置文件只保留 `[metadata]` (SQLite/PostgreSQL); 矢量/栅格文件数据源按数据源登记 (persisted in metadata store), 记录 `file_path` + `file_storage_type` (local / s3 / oss); 缓存保持内置 local (`TileCacheBackend` + `SessionCache` traits in `src/store/cache/`) — local backends in place
+- ✅ **Redis 缓存数据源** (重新设计): Redis 作为数据源 (`DataSourceType::Redis`, 持久化于元数据 `data_sources` 表, host/port/database/username/password), 切片图层经 `Layer.cache_store` 选择缓存后端 (内存/本地默认 或 指定 Redis 数据源); `src/store/cache/redis.rs` 提供 `RedisConn` + `redis_url_from_connection`, `RedisTileCacheBackend` (`src/store/cache/tile.rs`) 按数据源 URL 驱动, 瓦片渲染路径 (`render_tile_bytes` / `get_tile`) 按图层解析; 连接测试支持 Redis PING
+- ✅ **In-memory catalog refresh mechanism**: 周期性地从元数据存储重载图层/样式/图层组到内存缓存, 收敛多副本间差异 (`[server] catalog_refresh_secs`, 0 = 禁用; `state.rs::refresh_catalog_from_store`, 后台 tokio 任务, 按名称更新/新增不删除)
 - 对象存储后端 (s3 / oss / minio) 落地: `FileStore` trait 已预留 (`src/store/file_store.rs`), 后续实现 S3/MinIO 读取/上传; cache 到 Redis / S3
-- In-memory catalog refresh mechanism: periodic/event-triggered reload from the metadata store to avoid stale data across replicas
-- Tile cache backend: local disk done → S3 / MinIO / Redis pending
+- 会话管理: **不引入 Redis 会话缓存**, 保持简单 JWT + 元数据存储会话 (`SessionCache` 仅 local 快速层)
 - `data_dir` / upload file storage abstraction: shared PVC / object storage (pending)
 - Graceful shutdown: catch SIGTERM + `.shutdown_timeout()` to drain in-flight requests
 
@@ -339,7 +341,9 @@ Overall progress █████████░░░░░░░  58%
 - ⚠️ CI (GitHub Actions) 已创建 (`.github/workflows/ci.yml`): `cargo fmt + clippy + test` + frontend build + docker build/push (ghcr, 按 git sha 打标签); 尚未在真实仓库验证
 - Tag images by git sha; image scanning with Trivy; Dependabot / Renovate dependency updates
 - Credential management: data source passwords injectable via env, never logged; integrate with K8s Secrets
-- ✅ 韧性中间件: 请求超时 (504) + 滑动窗口速率限制 (429, 按客户端 IP / X-Forwarded-For) — `src/middleware.rs`, 经 `[server]` 配置 (`request_timeout_secs` / `rate_limit_max_requests` / `rate_limit_window_secs`) 启用; 待办: 级联 WMS 上游 backoff-retry 与熔断
+- ✅ 韧性中间件: 请求超时 (504) + 滑动窗口速率限制 (429, 按客户端 IP / X-Forwarded-For) — `src/middleware.rs`, 经 `[server]` 配置 (`request_timeout_secs` / `rate_limit_max_requests` / `rate_limit_window_secs`) 启用
+- ✅ 级联 WMS 韧性: 瞬时故障 (超时/连接失败/429/5xx) 指数退避重试 (`cascaded_max_retries` / `cascaded_retry_base_ms`) + 按上游 URL 隔离的熔断器 (`cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, 打开→半开试探→关闭/重开) — `src/utils/cascaded.rs`, `AppState.cascaded_circuits`
+- ✅ 依赖与镜像安全: `.github/workflows/ci.yml` docker job 增加 Trivy 镜像漏洞扫描 (CRITICAL/HIGH, SARIF 上传 GitHub Security tab); `.github/dependabot.yml` 自动更新 cargo / npm / GitHub Actions 依赖
 
 ### 6.3 Target Deployment Architecture
 

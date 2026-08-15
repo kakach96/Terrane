@@ -33,6 +33,7 @@ fn ds_type_to_store_type(ds_type: &DataSourceType) -> &'static str {
             "CoverageStore"
         },
         DataSourceType::CascadedWms => "CascadedStore",
+        DataSourceType::Redis => "RedisCacheStore",
         DataSourceType::Metadata => "DataStore",
     }
 }

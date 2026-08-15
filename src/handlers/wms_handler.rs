@@ -1992,7 +1992,7 @@ async fn handle_cascaded_wms_request(
     context: &GetMapContext,
     meta: &LayerMetadata,
 ) -> Result<HttpResponse, GeoServerError> {
-    use crate::utils::cascaded::{extract_cascaded_config, fetch_cascaded_map};
+    use crate::utils::cascaded::{extract_cascaded_config, fetch_cascaded_map, CascadedResilience};
 
     let conn = meta
         .connection
@@ -2001,6 +2001,13 @@ async fn handle_cascaded_wms_request(
 
     let config = extract_cascaded_config(conn)
         .ok_or_else(|| GeoServerError::BadRequest("无法解析级联 WMS 配置".to_string()))?;
+
+    // 级联韧性参数来自 [server] 配置 (重试 + 指数退避); 熔断器由
+    // state.cascaded_circuits 持有 (按上游 URL 隔离, 配置于 AppState 初始化)
+    let resilience = CascadedResilience {
+        max_retries: state.config.server.cascaded_max_retries,
+        retry_base_ms: state.config.server.cascaded_retry_base_ms,
+    };
 
     // 如果请求的是 OpenLayers 预览，回退到本地渲染
     if context.format.to_lowercase().contains("openlayers") {
@@ -2055,6 +2062,8 @@ async fn handle_cascaded_wms_request(
 
     match fetch_cascaded_map(
         &config,
+        &resilience,
+        Some(state.cascaded_circuits.as_ref()),
         &bbox_str,
         context.width,
         context.height,

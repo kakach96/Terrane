@@ -16,6 +16,10 @@ pub struct Layer {
     pub styles: Vec<StyleRef>,
     pub resource: LayerResource,
     pub enabled: bool,
+    /// 瓦片缓存后端数据源名称: 指定 Redis 数据源 (type = "redis") 时,
+    /// 该图层的瓦片缓存使用该 Redis; 为空则使用默认 (内存/本地磁盘) 缓存。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_store: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +59,7 @@ impl Layer {
                 path: None,
             },
             enabled: true,
+            cache_store: None,
         }
     }
 

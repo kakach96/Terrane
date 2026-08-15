@@ -530,4 +530,24 @@ integration: 9 (ogc_coverages_test.rs) + 7 (ogc_styles_test.rs) + 4
 frontend build + GHCR image push on main).
 Next candidates:
 
+Batch 23 completed: **cascaded WMS 韧性 (retry/backoff + 熔断), 结构化 JSON 日志
++ request `trace_id`, Redis 缓存数据源** — (1) `src/utils/cascaded.rs` 为级联
+WMS 上游加入指数退避重试 (`cascaded_max_retries` / `cascaded_retry_base_ms`,
+瞬时故障 = 超时/连接失败/429/5xx) 与按上游 URL 隔离的熔断器
+(`cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, 打开→半开试探→
+关闭/重开), 由 `[server]` 配置驱动, `AppState.cascaded_circuits` 持有状态。
+(2) `[logging] format = "json"` 输出结构化日志; `TraceId` 中间件为每个请求
+分配 `trace_id` (透传 `X-Trace-Id`/`X-Request-Id`, 否则生成 UUID), 挂到
+tracing span 并在 `X-Trace-Id` 响应头回显, JSON/text 日志均可跨副本关联。
+(3) Redis 作为**数据源** (`DataSourceType::Redis`, 持久化于元数据
+`data_sources` 表, 连接字段 host/port/database/username/password); 切片图层
+经 `Layer.cache_store` 选择缓存后端 — 为空用默认内存/本地缓存, 指向 Redis
+数据源则该图层瓦片缓存走 Redis (`src/store/cache/redis.rs` + `RedisTileCacheBackend`,
+`render_tile_bytes` / `get_tile` 按图层解析); 数据源连接测试支持 Redis PING;
+备份/恢复与 REST 图层 CRUD 均携带 `cache_store`。会话管理保持简单 JWT
+(Redis 会话缓存不做)。新单元测试: 10 (cascaded.rs) + 6 (cache/redis.rs) +
+1 (sqlite_store cache_store CRUD); 前端: 数据源对话框新增 Redis 类型,
+图层详情页新增瓦片缓存后端选择。
+Next candidates:
+
 1. ImageMosaic / ImagePyramid data sources (P2)

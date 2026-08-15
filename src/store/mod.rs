@@ -97,6 +97,7 @@ pub trait Store: Send + Sync {
         abstract_text: Option<String>,
         native_name: Option<String>,
         enabled: Option<bool>,
+        cache_store: Option<Option<String>>,
     ) -> Result<(), StoreError>;
     async fn delete_layer(&self, name: &str) -> Result<(), StoreError>;
 

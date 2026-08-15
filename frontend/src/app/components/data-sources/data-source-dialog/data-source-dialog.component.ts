@@ -6,6 +6,7 @@ import { GeoserverService } from '../../../services/geoserver.service';
 import { NotificationService } from '../../../services/notification.service';
 import {
   DataSource,
+  DataSourceConnection,
   CreateDataSourceRequest,
   UpdateDataSourceRequest,
   ConnectionTestResult,
@@ -36,6 +37,7 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'worldimage', label: 'WorldImage' },
     { value: 'cascaded_wms', label: 'Cascaded WMS' },
     { value: 'arcgrid', label: 'ArcGrid' },
+    { value: 'redis', label: 'Redis Cache' },
   ];
   fileStorageTypes = [
     { value: 'local', label: 'Local', description: 'Server-local directory' },
@@ -87,6 +89,7 @@ export class DataSourceDialogComponent implements OnInit {
       { value: 'worldimage', label: 'WorldImage' },
       { value: 'cascaded_wms', label: this.translate.instant('dataSources.cascadedWms') },
       { value: 'arcgrid', label: 'ArcGrid' },
+      { value: 'redis', label: 'Redis Cache' },
     ];
     this.fileStorageTypes = [
       {
@@ -231,7 +234,7 @@ export class DataSourceDialogComponent implements OnInit {
   }
 
   testConnection(): void {
-    if (this.selectedType !== 'postgis') {
+    if (this.selectedType !== 'postgis' && this.selectedType !== 'redis') {
       this.notificationService.info(this.translate.instant('dataSources.postgisOnlyTest'));
       return;
     }
@@ -266,6 +269,18 @@ export class DataSourceDialogComponent implements OnInit {
     });
   }
 
+  /** 构建 host/port/database/username/password 连接 (PostGIS 与 Redis 通用) */
+  private buildTcpConnection(): DataSourceConnection {
+    return {
+      host: this.form.get('host')?.value,
+      port: parseInt(this.form.get('port')?.value, 10),
+      database: this.form.get('database')?.value,
+      schema: this.form.get('schema')?.value,
+      username: this.form.get('username')?.value,
+      password: this.form.get('password')?.value,
+    };
+  }
+
   buildCreateRequest(): CreateDataSourceRequest {
     const type = this.form.get('type')?.value;
     const request: CreateDataSourceRequest = {
@@ -275,15 +290,8 @@ export class DataSourceDialogComponent implements OnInit {
       enabled: this.form.get('enabled')?.value ?? true,
     };
 
-    if (type === 'postgis') {
-      request.connection = {
-        host: this.form.get('host')?.value,
-        port: parseInt(this.form.get('port')?.value, 10),
-        database: this.form.get('database')?.value,
-        schema: this.form.get('schema')?.value,
-        username: this.form.get('username')?.value,
-        password: this.form.get('password')?.value,
-      };
+    if (type === 'postgis' || type === 'redis') {
+      request.connection = this.buildTcpConnection();
     } else {
       const filePath = this.form.get('file_path')?.value || this.selectedFile?.name;
       if (filePath || this.isS3) {
@@ -314,15 +322,8 @@ export class DataSourceDialogComponent implements OnInit {
       enabled: this.form.get('enabled')?.value ?? true,
     };
 
-    if (type === 'postgis') {
-      request.connection = {
-        host: this.form.get('host')?.value,
-        port: parseInt(this.form.get('port')?.value, 10),
-        database: this.form.get('database')?.value,
-        schema: this.form.get('schema')?.value,
-        username: this.form.get('username')?.value,
-        password: this.form.get('password')?.value,
-      };
+    if (type === 'postgis' || type === 'redis') {
+      request.connection = this.buildTcpConnection();
     } else {
       const filePath = this.form.get('file_path')?.value;
       if (filePath || this.isS3) {

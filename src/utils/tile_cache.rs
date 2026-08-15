@@ -117,11 +117,12 @@ pub struct LayerTileMeta {
 // 缓存引擎
 // ---------------------------------------------------------------------------
 
+#[derive(Clone)]
 pub struct TileCache {
     pub config: CacheConfig,
     backend: Arc<dyn TileCacheBackend>,
-    hits: AtomicU64,
-    misses: AtomicU64,
+    hits: Arc<AtomicU64>,
+    misses: Arc<AtomicU64>,
 }
 
 impl TileCache {
@@ -130,13 +131,13 @@ impl TileCache {
         Self::with_backend(config.clone(), build_tile_cache_backend(&config))
     }
 
-    /// 使用指定后端创建瓦片缓存引擎 (供未来 Redis/S3 等后端使用)。
+    /// 使用指定后端创建瓦片缓存引擎 (供 Redis 数据源缓存等后端使用)。
     pub fn with_backend(config: CacheConfig, backend: Arc<dyn TileCacheBackend>) -> Self {
         Self {
             config,
             backend,
-            hits: AtomicU64::new(0),
-            misses: AtomicU64::new(0),
+            hits: Arc::new(AtomicU64::new(0)),
+            misses: Arc::new(AtomicU64::new(0)),
         }
     }
 

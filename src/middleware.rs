@@ -9,10 +9,16 @@
 //! - **Request timeout** — cancels requests that exceed a configured deadline
 //!   and answers HTTP 504 (Gateway Timeout), so a slow handler can never hold a
 //!   worker slot forever. A zero duration disables the timeout.
+//! - **Trace ID** — assigns every request a `trace_id` (reused from the
+//!   incoming `X-Trace-Id` / `X-Request-Id` header when present, otherwise a
+//!   fresh UUID), attaches it to a tracing span so structured (JSON) logs can
+//!   be correlated across replicas, and echoes it back in the `X-Trace-Id`
+//!   response header.
 //!
-//! Both are opt-in via `[server]` config (`rate_limit_max_requests`,
-//! `rate_limit_window_secs`, `request_timeout_secs`) and are applied in
-//! `main.rs` around the whole app (static files included).
+//! Rate limiting and the request timeout are opt-in via `[server]` config
+//! (`rate_limit_max_requests`, `rate_limit_window_secs`, `request_timeout_secs`)
+//! and are applied in `main.rs` around the whole app (static files included).
+//! The trace-id middleware is always on.
 //!
 //! The middlewares follow actix-web's own middleware pattern (`EitherBody`):
 //! the inner service keeps its generic body `B` (the `Left` variant) while the
@@ -21,6 +27,7 @@
 
 use actix_web::body::EitherBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
+use actix_web::http::header::HeaderValue;
 use actix_web::{Error, HttpResponse};
 use std::collections::HashMap;
 use std::future::{ready, Ready};
@@ -28,6 +35,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Header carrying the trace id (echoed back on responses).
+pub const TRACE_ID_HEADER: &str = "X-Trace-Id";
 
 /// Sliding-window rate limiter keyed by client identifier.
 ///
@@ -260,6 +270,92 @@ where
                 },
             }
         })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Trace ID middleware
+// ---------------------------------------------------------------------------
+
+/// Middleware factory: assigns a `trace_id` per request.
+///
+/// The id is taken from the incoming `X-Trace-Id` (or `X-Request-Id`) header
+/// when present — enabling cross-service trace propagation — otherwise a fresh
+/// UUID is generated. The id is attached to a tracing span (visible in both
+/// text and JSON log output) and echoed back via the `X-Trace-Id` response
+/// header.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TraceId;
+
+/// Extract a trace id from the incoming headers, or generate a fresh one.
+fn resolve_trace_id(req: &ServiceRequest) -> String {
+    let header = req
+        .headers()
+        .get("x-trace-id")
+        .or_else(|| req.headers().get("x-request-id"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s.len() <= 128);
+    header.unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+}
+
+impl<S, B> Transform<S, ServiceRequest> for TraceId
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type Transform = TraceIdMiddleware<S>;
+    type InitError = ();
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
+
+    fn new_transform(&self, service: S) -> Self::Future {
+        ready(Ok(TraceIdMiddleware { service }))
+    }
+}
+
+pub struct TraceIdMiddleware<S> {
+    service: S,
+}
+
+impl<S, B> Service<ServiceRequest> for TraceIdMiddleware<S>
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type Future = Pin<Box<dyn std::future::Future<Output = Result<ServiceResponse<B>, Error>>>>;
+
+    fn poll_ready(&self, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.service.poll_ready(ctx)
+    }
+
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let trace_id = resolve_trace_id(&req);
+        // A `ServiceRequest` is not `Clone`; capture the span fields up front.
+        let method = req.method().as_str().to_string();
+        let path = req.path().to_string();
+        let span =
+            tracing::info_span!("request", trace_id = %trace_id, method = %method, path = %path);
+
+        let fut = self.service.call(req);
+        let future = async move {
+            let mut res = fut.await?;
+            // Echo the trace id back to the client.
+            res.headers_mut().insert(
+                actix_web::http::header::HeaderName::from_static(TRACE_ID_HEADER),
+                HeaderValue::from_str(&trace_id).unwrap(),
+            );
+            Ok(res)
+        };
+        // `Instrument` enters the span for the whole request lifetime, so
+        // structured logs emitted anywhere inside (handler + Logger middleware)
+        // carry the trace_id for cross-replica correlation.
+        Box::pin(tracing::Instrument::instrument(future, span))
     }
 }
 

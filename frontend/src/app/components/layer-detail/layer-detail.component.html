@@ -49,6 +49,21 @@
             <span *ngIf="styleNames.length === 0">{{ currentStyleName }}</span>
           </span>
         </div>
+        <div class="info-item">
+          <span class="label">{{ 'layerDetail.cacheStore' | translate }}</span>
+          <span class="value">
+            <mat-select
+              [value]="currentCacheStore"
+              (selectionChange)="onCacheStoreChange($event.value)"
+              class="style-select"
+            >
+              <mat-option value="">默认 (内存/本地)</mat-option>
+              <mat-option *ngFor="let ds of redisCacheSources" [value]="ds.name">
+                {{ ds.name }}
+              </mat-option>
+            </mat-select>
+          </span>
+        </div>
         <div class="native-name full-width">
           <span class="label">{{ 'layerDetail.nativeName' | translate }}</span>
           <span class="value">{{ layer.native_name || '-' }}</span>

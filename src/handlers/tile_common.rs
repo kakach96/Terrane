@@ -57,9 +57,20 @@ pub async fn render_tile_bytes(
 ) -> Result<(Vec<u8>, bool), GeoServerError> {
     let gridset = tile_grid::canonical_gridset(gridset);
 
+    // 0. Resolve the per-layer cache backend (layer.cache_store → Redis data
+    //    source, otherwise the default local cache).
+    let layer_obj = {
+        let layers = state.layers.read().await;
+        layers.iter().find(|l| l.name == layer).cloned()
+    };
+    let cache = match &layer_obj {
+        Some(l) => state.tile_cache_for(l).await,
+        None => state.tile_cache.clone(),
+    };
+
     // 1. Try the tile cache first (PNG only).
     if format == TileFormat::Png {
-        if let Some(ref cache) = state.tile_cache {
+        if let Some(ref cache) = cache {
             if let Some(cached) = cache.get(layer, &gridset, z, col, row).await {
                 return Ok((cached, true));
             }
@@ -135,7 +146,7 @@ pub async fn render_tile_bytes(
 
     // 3. Populate the tile cache (PNG only).
     if format == TileFormat::Png {
-        if let Some(ref cache) = state.tile_cache {
+        if let Some(ref cache) = cache {
             cache.put(layer, &gridset, z, col, row, &tile_data).await;
         }
     }

@@ -1,6 +1,7 @@
 use crate::config::GeoServerConfig;
 use crate::models::{layer::LayerGroup, Layer};
 use crate::store::{build_session_cache, PostgresStore, SessionCache, SqliteStore, Store};
+use crate::utils::cascaded::CascadedCircuits;
 use crate::utils::sld_parser;
 use crate::utils::tile_cache::TileCache;
 use serde::Serialize;
@@ -76,8 +77,12 @@ pub struct AppState {
     pub request_log: Arc<RwLock<Vec<RequestRecord>>>,
     /// 监控: 近5分钟请求计数 (每秒重置)
     pub recent_request_count: AtomicU64,
-    /// GeoWebCache 瓦片缓存引擎
+    /// GeoWebCache 瓦片缓存引擎 (默认本地后端)
     pub tile_cache: Option<TileCache>,
+    /// 图层级 Redis 瓦片缓存 (按数据源名称; 惰性构建并缓存)
+    pub redis_tile_caches: Arc<Mutex<HashMap<String, TileCache>>>,
+    /// 级联 WMS 熔断器 (按上游 URL 隔离)
+    pub cascaded_circuits: Arc<CascadedCircuits>,
     /// OGC API - Processes 任务存储 (jobID -> OgcJob; 首版为同步执行)
     pub ogc_jobs: Arc<Mutex<HashMap<String, crate::services::ogc_processes::OgcJob>>>,
 }
@@ -194,6 +199,8 @@ impl AppState {
                         layer.native_name = Some(native_name);
                     }
 
+                    layer.cache_store = db_layer.cache_store.clone();
+
                     if !all_layers.iter().any(|l| l.name == layer.name) {
                         all_layers.push(layer);
                     }
@@ -228,6 +235,7 @@ impl AppState {
                         miny: -90.0,
                         maxx: 180.0,
                         maxy: 90.0,
+                        cache_store: None,
                         created: String::new(),
                         modified: String::new(),
                     })
@@ -314,7 +322,23 @@ impl AppState {
             }
         }
 
-        AppState {
+        // 级联 WMS 熔断器 (阈值 0 = 禁用; 按上游 URL 隔离)
+        let cascaded_circuits = Arc::new(CascadedCircuits::new(
+            config.server.cascaded_circuit_threshold,
+            std::time::Duration::from_secs(config.server.cascaded_circuit_reset_secs),
+        ));
+
+        // 目录定时刷新: 多副本部署时周期性地从元数据存储重载图层/样式/图层组,
+        // 收敛副本间内存缓存差异 (`[server] catalog_refresh_secs`, 0 = 禁用)
+        let catalog_refresh_secs = config.server.catalog_refresh_secs;
+        if catalog_refresh_secs > 0 && store.is_some() {
+            tracing::info!(
+                "Catalog refresh enabled: reload from metadata store every {}s",
+                catalog_refresh_secs
+            );
+        }
+
+        let app_state = AppState {
             config,
             layers: Arc::new(RwLock::new(features_layers)),
             styles: Arc::new(RwLock::new(default_styles)),
@@ -332,8 +356,37 @@ impl AppState {
             request_log: Arc::new(RwLock::new(Vec::with_capacity(10000))),
             recent_request_count: AtomicU64::new(0),
             tile_cache,
+            redis_tile_caches: Arc::new(Mutex::new(HashMap::new())),
+            cascaded_circuits,
             ogc_jobs: Arc::new(Mutex::new(HashMap::new())),
+        };
+
+        // 启动目录定时刷新任务 (独立 tokio 任务, 不影响请求路径):
+        // 从元数据存储周期重载图层/样式/图层组到内存缓存, 收敛多副本间差异。
+        if catalog_refresh_secs > 0 {
+            let refresh_layers = app_state.layers.clone();
+            let refresh_styles = app_state.styles.clone();
+            let refresh_styles_meta = app_state.styles_meta.clone();
+            let refresh_groups = app_state.layer_groups.clone();
+            let refresh_store = app_state.store.clone();
+            tokio::spawn(async move {
+                let mut ticker =
+                    tokio::time::interval(std::time::Duration::from_secs(catalog_refresh_secs));
+                loop {
+                    ticker.tick().await;
+                    refresh_catalog_from_store(
+                        &refresh_store,
+                        &refresh_layers,
+                        &refresh_styles,
+                        &refresh_styles_meta,
+                        &refresh_groups,
+                    )
+                    .await;
+                }
+            });
         }
+
+        app_state
     }
 
     /// 获取或创建指定数据源的 PostgreSQL 连接池
@@ -466,6 +519,9 @@ impl AppState {
             if let Some(enabled) = updates.enabled {
                 layer.enabled = enabled;
             }
+            if let Some(cache_store) = updates.cache_store {
+                layer.cache_store = cache_store;
+            }
             true
         } else {
             false
@@ -481,6 +537,67 @@ impl AppState {
             false
         }
     }
+
+    /// 解析图层使用的瓦片缓存引擎。
+    ///
+    /// - 图层设置了 `cache_store` (指向 `type = "redis"` 的数据源) → 返回该
+    ///   Redis 数据源驱动的瓦片缓存 (惰性构建并按数据源缓存, 多副本共享)。
+    /// - 否则 (未设置 / 数据源缺失 / 非 redis / 连接信息不完整) → 回退到默认
+    ///   (本地磁盘) 缓存, 保证缓存始终可用。
+    pub async fn tile_cache_for(&self, layer: &Layer) -> Option<TileCache> {
+        let ds_name = match layer.cache_store.as_deref() {
+            Some(name) if !name.trim().is_empty() => name,
+            _ => return self.tile_cache.clone(),
+        };
+
+        // 已构建过的 Redis 缓存直接复用
+        {
+            let caches = self.redis_tile_caches.lock().unwrap();
+            if let Some(cache) = caches.get(ds_name) {
+                return Some(cache.clone());
+            }
+        }
+
+        // 校验数据源: 必须是 type = "redis" 且启用; 任何解析失败都回退默认缓存
+        let store = match self.store.as_ref() {
+            Some(s) => s.clone(),
+            None => return self.tile_cache.clone(),
+        };
+        let ds = match store.get_data_source(ds_name).await {
+            Ok(Some(ds)) => ds,
+            _ => return self.tile_cache.clone(),
+        };
+        if ds.data_source_type != crate::models::DataSourceType::Redis || !ds.enabled {
+            return self.tile_cache.clone();
+        }
+        let conn = match ds.connection.as_ref() {
+            Some(c) => c,
+            None => return self.tile_cache.clone(),
+        };
+        let url = match crate::store::cache::redis::redis_url_from_connection(conn) {
+            Some(u) => u,
+            None => return self.tile_cache.clone(),
+        };
+
+        let mut cache_config = self.config.cache.clone();
+        cache_config.enabled = true;
+        let backend: std::sync::Arc<dyn crate::store::cache::TileCacheBackend> =
+            std::sync::Arc::new(crate::store::cache::RedisTileCacheBackend::new(
+                &url,
+                cache_config.expire_after_secs,
+            ));
+        let cache = TileCache::with_backend(cache_config, backend);
+
+        let mut caches = self.redis_tile_caches.lock().unwrap();
+        caches.insert(ds_name.to_string(), cache.clone());
+        tracing::info!(
+            "[GWC] layer '{}' uses Redis cache data source '{}' ({})",
+            layer.name,
+            ds_name,
+            url
+        );
+        Some(cache)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -488,6 +605,8 @@ pub struct LayerUpdates {
     pub title: Option<String>,
     pub abstract_text: Option<String>,
     pub enabled: Option<bool>,
+    /// 图层级瓦片缓存后端数据源 (Some(ds) = 设置, Some(None) = 清除)
+    pub cache_store: Option<Option<String>>,
 }
 
 /// 将存储中的格式字符串解析为 StyleFormat
@@ -498,4 +617,93 @@ fn parse_style_format(format: &str) -> crate::models::style::StyleFormat {
         "MBStyle" => crate::models::style::StyleFormat::MBStyle,
         _ => crate::models::style::StyleFormat::SLD,
     }
+}
+
+/// 目录刷新: 从元数据存储重载图层/样式/图层组到内存缓存。
+///
+/// 多副本部署时各副本的内存目录 (`Arc<RwLock<...>>`) 会因本副本的 REST 写入
+/// 或外部修改而发散; 周期性调用本函数可从共享元数据存储收敛差异:
+/// - 图层: 按名称更新/新增 (不删除, 保留本副本内未持久化/内置的图层)
+/// - 样式: 按名称更新/新增 (保留内置样式与本副本独有样式)
+/// - 图层组: 按名称更新/新增
+///
+/// 失败 (存储不可用) 时静默返回, 下个周期重试, 不影响请求路径。
+async fn refresh_catalog_from_store(
+    store: &Option<Arc<dyn Store>>,
+    layers: &Arc<RwLock<Vec<Layer>>>,
+    styles: &Arc<RwLock<HashMap<String, String>>>,
+    styles_meta: &Arc<RwLock<HashMap<String, StyleMeta>>>,
+    layer_groups: &Arc<RwLock<Vec<LayerGroup>>>,
+) {
+    let store = match store {
+        Some(s) => s.clone(),
+        None => return,
+    };
+
+    // 1. 图层
+    if let Ok(db_layers) = store.get_all_layers().await {
+        let mut layers_guard = layers.write().await;
+        for db_layer in db_layers {
+            let mut layer = Layer::new(
+                db_layer.name.clone(),
+                db_layer.title.clone(),
+                db_layer.workspace.clone(),
+                db_layer.store.clone(),
+                crate::models::CoordinateReferenceSystem::from_epsg(&db_layer.srs),
+            )
+            .with_bounds(crate::models::BoundingBox::new(
+                crate::models::CoordinateReferenceSystem::from_epsg(&db_layer.srs),
+                crate::models::Bounds::new(
+                    db_layer.minx,
+                    db_layer.miny,
+                    db_layer.maxx,
+                    db_layer.maxy,
+                ),
+            ));
+            if let Some(native_name) = db_layer.native_name {
+                layer.native_name = Some(native_name);
+            }
+            layer.cache_store = db_layer.cache_store.clone();
+            match layers_guard.iter_mut().find(|l| l.name == layer.name) {
+                Some(existing) => *existing = layer,
+                None => layers_guard.push(layer),
+            }
+        }
+    }
+
+    // 2. 样式 — 覆盖式更新 (元数据存储为真源; 内置样式不在存储中则保持本地)
+    if let Ok(style_records) = store.get_all_styles().await {
+        let mut styles_guard = styles.write().await;
+        let mut meta_guard = styles_meta.write().await;
+        for rec in style_records {
+            styles_guard.insert(rec.name.clone(), rec.content.clone());
+            meta_guard.insert(
+                rec.name.clone(),
+                StyleMeta {
+                    title: rec.title.clone(),
+                    is_builtin: rec.is_builtin,
+                    format: parse_style_format(&rec.format),
+                },
+            );
+        }
+    }
+
+    // 3. 图层组
+    if let Ok(group_records) = store.get_all_layer_groups().await {
+        let mut groups_guard = layer_groups.write().await;
+        for g in group_records {
+            let group = LayerGroup {
+                name: g.name.clone(),
+                title: g.title,
+                layers: g.layers,
+                styles: g.styles,
+            };
+            match groups_guard.iter_mut().find(|x| x.name == group.name) {
+                Some(existing) => *existing = group,
+                None => groups_guard.push(group),
+            }
+        }
+    }
+
+    tracing::debug!("[catalog] refreshed from metadata store");
 }

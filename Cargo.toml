@@ -16,7 +16,7 @@ image = "0.24"
 geo = "0.27"
 geo-types = "0.7"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 config = "0.13"
 thiserror = "1"
 anyhow = "1"
@@ -60,6 +60,8 @@ proj4rs = { version = "0.1.10", features = ["crs-definitions"] }
 # S3 对象存储 (AWS S3 / MinIO 等 S3 兼容服务); http-credentials 启用
 # Credentials::new 以便按数据源传入 access/secret key
 rust-s3 = { version = "0.34", features = ["http-credentials"] }
+# Redis 缓存后端 (会话缓存 + 瓦片缓存; 多副本共享)
+redis = { version = "1", features = ["tokio-comp", "connection-manager"] }
 
 [dev-dependencies]
 actix-rt = "2"
