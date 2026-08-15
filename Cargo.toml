@@ -17,7 +17,7 @@ geo = "0.27"
 geo-types = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-config = "0.13"
+config = "0.15"
 thiserror = "1"
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
