@@ -1051,6 +1051,7 @@ async fn test_rest_tile_cache_hit() {
             .join(format!("terrane-rest-gwc-meta-{}", std::process::id())),
         expire_after_secs: 0,
         max_tiles: 0,
+        layer_quota_bytes: 0,
         enabled: true,
         default_gridset: "EPSG:4326".to_string(),
         session_ttl_secs: 300,

@@ -109,6 +109,9 @@ pub struct CacheConfig {
     /// 最大缓存瓦片数 (0=无限制)
     #[serde(default)]
     pub max_tiles: u64,
+    /// 单图层瓦片缓存磁盘配额 (字节; 0=无限制; 超限时按文件 mtime LRU 淘汰)
+    #[serde(default)]
+    pub layer_quota_bytes: u64,
     /// 是否启用缓存
     #[serde(default = "default_enabled")]
     pub enabled: bool,
@@ -302,6 +305,7 @@ impl Default for CacheConfig {
             meta_dir: PathBuf::from("./data/gwc/meta"),
             expire_after_secs: default_expire(),
             max_tiles: 100_000,
+            layer_quota_bytes: 0,
             enabled: default_enabled(),
             default_gridset: default_gridset(),
             session_ttl_secs: default_session_ttl(),

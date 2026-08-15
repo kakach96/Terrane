@@ -22,6 +22,7 @@ pub fn create_test_config() -> terrane::config::GeoServerConfig {
         meta_dir: std::env::temp_dir().join("terrane-test-gwc-meta"),
         expire_after_secs: 0,
         max_tiles: 0,
+        layer_quota_bytes: 0,
         enabled: false,
         default_gridset: "EPSG:4326".to_string(),
         session_ttl_secs: 300,
