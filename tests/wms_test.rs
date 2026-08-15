@@ -495,17 +495,30 @@ async fn test_wms_get_map_gif() {
         "WMS GetMap (GIF) 应返回 200, 实际: {}",
         resp.status()
     );
+    let body = test::read_body(resp).await;
+    // GIF 魔数 GIF8。
+    assert_eq!(&body[..4], b"GIF8", "GIF 输出应以 GIF8 开头");
+}
 
-    let content_type = resp
-        .headers()
-        .get("Content-Type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
+#[actix_rt::test]
+async fn test_wms_get_map_jpeg_decodes() {
+    let app = build_test_app!();
+
+    let uri = GET_MAP_BASE.replace("FORMAT=image/png", "FORMAT=image/jpeg");
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
     assert!(
-        content_type.contains("image/gif"),
-        "Content-Type 应为 image/gif, 实际: {}",
-        content_type
+        resp.status().is_success(),
+        "WMS GetMap (JPEG) 应返回 200, 实际: {}",
+        resp.status()
+    );
+    let body = test::read_body(resp).await;
+    // JPEG 魔数 FFD8。
+    assert_eq!(&body[..2], b"\xFF\xD8", "JPEG 输出应以 FFD8 开头");
+    // 必须能成功解码为 JPEG (验证 RGBA→RGB 转换路径)。
+    assert!(
+        image::load_from_memory_with_format(&body, image::ImageFormat::Jpeg).is_ok(),
+        "响应应能被解码为 JPEG"
     );
 }
 

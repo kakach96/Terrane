@@ -1027,9 +1027,39 @@ fn render_map_image(
 
     debug!("[render_map_image] 渲染格式: {:?}", image_format);
 
+    // JPEG / GIF 无 alpha 通道: RGBA 直接编码会报 UnsupportedColor,
+    // 先合成到不透明白底再转 RGB。
     let mut buffer = Cursor::new(Vec::new());
-    img.write_to(&mut buffer, image_format)
-        .map_err(|e| GeoServerError::RenderingError(format!("Failed to render image: {}", e)))?;
+    match image_format {
+        ImageFormat::Jpeg | ImageFormat::Gif => {
+            let mut opaque = RgbaImage::new(context.width, context.height);
+            for (y, row) in img.rows().enumerate() {
+                for (x, px) in row.enumerate() {
+                    let a = px.0[3] as f32 / 255.0;
+                    let bg = [255u8, 255, 255];
+                    let out = [
+                        (px.0[0] as f32 * a + bg[0] as f32 * (1.0 - a)).round() as u8,
+                        (px.0[1] as f32 * a + bg[1] as f32 * (1.0 - a)).round() as u8,
+                        (px.0[2] as f32 * a + bg[2] as f32 * (1.0 - a)).round() as u8,
+                    ];
+                    opaque.put_pixel(
+                        x as u32,
+                        y as u32,
+                        image::Rgba([out[0], out[1], out[2], 255]),
+                    );
+                }
+            }
+            image::DynamicImage::ImageRgba8(opaque)
+                .to_rgb8()
+                .write_to(&mut buffer, image_format)
+                .map_err(|e| {
+                    GeoServerError::RenderingError(format!("Failed to render image: {}", e))
+                })?;
+        },
+        _ => img.write_to(&mut buffer, image_format).map_err(|e| {
+            GeoServerError::RenderingError(format!("Failed to render image: {}", e))
+        })?,
+    }
 
     let image_size = buffer.get_ref().len();
     let content_type = match image_format {
