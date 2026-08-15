@@ -111,10 +111,23 @@ Endpoint `/wmts` (`src/services/wmts.rs`, `src/handlers/wmts_handler.rs`).
 - `/tiles/{layer}/{z}/{x}/{y}.pbf`, `/mvt/{layer}/{z}/{x}/{y}` — pure-Rust protobuf
   encoder (`src/utils/mvt.rs`, `src/handlers/mvt_handler.rs`)
 
-### 5.3 Tile cache (GWC-like) ⚠️
-- Basic `/tiles/{layer}/{z}/{x}/{y}` with a local disk cache
-  (`<data_dir>/gwc`, `TileCacheBackend` trait, `src/store/cache/`)
-- No GWC seeding / metastore / multi-backend integration yet
+### 5.3 Tile cache (GWC-like) ✅
+
+- `/tiles/{layer}/{z}/{x}/{y}` with a local disk cache (`<data_dir>/gwc`,
+  `TileCacheBackend` trait, `src/store/cache/`) + layer-level Redis data-source
+  backends (`Layer.cache_store` → `DataSourceType::Redis`)
+- **Seeding / truncate** (`src/utils/tile_seed.rs` + `/tiles/seed` REST): background
+  seed jobs over a zoom range with progress + cooperative cancel; truncate clears
+  a layer's cached tiles
+- **Metastore**: per-`(layer, gridset)` JSON tile registry (`meta_dir`) — fast
+  stats, seed resume, quota bookkeeping
+- **Disk quota**: `[cache] layer_quota_bytes` with mtime-LRU eviction per layer
+- **Conditional requests**: tile responses carry `ETag` (content hash) +
+  `Last-Modified`; `If-None-Match` / `If-Modified-Since` → `304`
+- **Custom gridsets**: runtime registration (per-zoom resolutions), honoured by
+  the shared grid math (`src/utils/tile_grid.rs`)
+- No GWC metastore/disk-quota *fidelity* (e.g. per-gridset quotas, blob stores) — 
+  see ROADMAP known debt
 
 ### 5.4 TMS 1.0.0 ✅ & WMS-C 1.1.1 ✅
 
@@ -244,7 +257,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **251 lib unit tests + 180 integration tests**, plus
+`cargo test` currently green: **261 lib unit tests + 194 integration tests**, plus
 **6 `#[ignore]`-marked live tests** (PostGIS metadata/vector + PostGIS data-source
 HTTP + 2× S3 + 2× cascaded-WMS live) that require
 running services and are verified with `cargo test -- --ignored`.
@@ -257,7 +270,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 |---------------------|-------|-----------------------------------------------------------|
 | `tests/wms_test.rs` | 30 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, **GetFeatureInfo GML output**, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
 | `tests/wfs_test.rs` | 15    | WFS (all operations + **LockFeature acquire/conflict/renew/release** + **GetFeatureWithLock lockId** + **GetPropertyValue** + **GetGmlObject** + WFS-T 501 (未实现, 计划后续) contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
-| `tests/rest_test.rs`| 31 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
+| `tests/rest_test.rs`| 45 (+1 ignored live) | health / probes / metrics, REST CRUD (layers / workspaces / namespaces / **stores full CRUD** / **layer-groups PUT** / styles / sql-views / **users PUT**), **workspace-dimension endpoints** (`/workspaces/{ws}/layers|datastores|coveragestores`), **service settings** (`/services/wms/settings` + GetCapabilities title), **`/about/version` + `/about/system-status`**, **`/resources`** (list/upload/delete + path-traversal protection), **feature-type PUT** (GeoPackage columns), **tile seed/truncate REST** (`/tiles/seed` create/list/progress/cancel + truncate), **tile conditional requests** (ETag/Last-Modified → 304), MVT (incl. `.pbf` route), auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 14    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, **range 波段子集 Band(a:b)**, **INTERPOLATION** bilinear/nearest/未知回退, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
 | `tests/tms_test.rs` | 7     | TMS (GetCapabilities RESTful + KVP, TileMap document, GetTile geodetic/mercator PNG + JPEG, KVP GetTile) |
@@ -300,7 +313,7 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 | Tile grid (util)   | 5 unit tests (`utils/tile_grid.rs`: geodetic matrix/bounds, mercator matrix/bounds, TMS y-flip, zoom-for-resolution, bbox→tile) |
 | MVT                | `/mvt/{layer}/{z}/{x}/{y}` endpoint integration + 5 encoder unit tests    |
 | REST               | health, split probes `/health/live` + `/health/ready` + `/metrics`, `/server/status`, layers, workspaces CRUD, namespaces CRUD, styles CRUD, layer-groups CRUD, features CRUD (+ single get / update / delete), sql-views CRUD, data-sources CRUD, auth (login / verify / users CRUD), permissions CRUD, backup export + import round-trip, GeoJSON upload, `/tiles` PNG tile, tile cache stats / clear / HIT, live PostGIS data source HTTP (`/data-sources/{name}/tables` + `/layers/{layer}/feature-type` against a real schema) — integration |
-| Tile cache (util)  | 10 unit tests (`utils/tile_cache.rs`: gridset, bounds, hit-rate)         |
+| Tile cache (util)  | 15 unit tests (`utils/tile_cache.rs` + `store/cache/tile.rs`: gridset, bounds, hit-rate, **metastore write + fast-path stats**, **layer quota LRU eviction**, put/get/clear) + 2 `tile_seed` (serde, status) + 7 `tile_grid` (geodetic/mercator + **custom gridset matrix/bounds/zoom**) |
 | CQL / ECQL         | 8 unit tests (`utils/cql_filter.rs`) — incl. bug8 regression: `A AND B` is a real AND, not OR |
 | Projection         | 7 unit tests (`utils/projection.rs`)                                     |
 | Geometry           | 3 unit tests (`utils/geometry.rs`)                                       |

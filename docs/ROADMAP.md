@@ -37,14 +37,16 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Cloud-native foundation: multi-stage Docker image, `build/docker-compose.yml`, split health probes, Prometheus `/metrics`, graceful shutdown
 - WMS rendering engine: multi-geometry + opacity compositing + polygon holes + z-order + label (TextSymbolizer) rendering with collision avoidance; raster layers (GeoTIFF/WorldImage/ArcGrid/ImageMosaic) render in WMS GetMap and tiles
 - OGC core services 7/7: WMS / WFS (incl. LockFeature + GetFeatureWithLock + GetPropertyValue + GetGmlObject) / WCS (incl. range 波段子集 + INTERPOLATION) / WMTS / WPS / CSW / OGC API series; WMS GetFeatureInfo GML output
-- Overall progress: ~69% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
+- REST API 15/16: store / layer-group / user CRUD, workspace-dimension endpoints, service settings, about + resources, feature-type PUT, tile seed REST (Importer pending)
+- Tile caching 6/6: seeding/truncate, metastore, disk quota (LRU), ETag/Last-Modified 304, custom gridsets
+- Overall progress: ~78% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
 
 ### v1.1 — State Convergence (target: 2026 Q3–Q4)
 
 - Metadata + vector data on PostgreSQL (PostGIS) for HA / multi-replica
 - Session storage: Redis (cloud) / in-memory (standalone) — *deferred: session management stays simple JWT + metadata store*
 - Storage config simplified: config keeps only `[metadata]`; vector/raster file data sources registered per data source (`file_path` + `file_storage_type`) with `FileStore` abstraction (`src/store/file_store.rs`); cache stays local (`TileCacheBackend` + `SessionCache`)
-- Tile cache backend abstraction: local disk backend done; **Redis data source backend done** (`DataSourceType::Redis` + `Layer.cache_store`, shared across replicas)
+- Tile cache backend abstraction: local disk backend done; **Redis data source backend done** (`DataSourceType::Redis` + `Layer.cache_store`, shared across replicas); **seeding/truncate, metastore, per-layer disk quota (LRU), ETag/Last-Modified 304, and custom gridsets done** (see PROTOCOLS §5.3)
 - Raster data backend abstraction: local files backend done; MinIO / S3 pending
 - Session cache: local in-memory backend done; Redis pending (deferred — simple JWT)
 - Catalog refresh mechanism to converge in-memory caches across replicas — **periodic reload done** (`[server] catalog_refresh_secs`); **event-triggered refresh done** (REST layer update/delete now immediately reloads the in-memory catalog via `AppState::refresh_catalog`, eliminating the write-after-read-stale window for WMS/WMTS/tile paths)

@@ -12,27 +12,38 @@
 | Feature Area | Implemented | Partial | Not Implemented | Progress |
 |---------|:-----:|:--------:|:-----:|:-----:|
 | OGC Core Services | 7/7 | 0 | 0 | **100%** |
-| REST API | 11/16 | 0 | 5 | **69%** |
+| REST API | 15/16 | 0 | 1 | **94%** |
 | Data Source Types | 12/15 | 0 | 3 | **80%** |
 | Styling System | 5/5 | 0 | 0 | **100%** |
-| Tile Caching | 3/6 | 0 | 3 | **50%** |
+| Tile Caching | 6/6 | 0 | 0 | **100%** |
 | Security | 3/7 | 0 | 4 | **43%** |
 | Extensions | 8/14 | 0 | 6 | **57%** |
 | Cloud-Native | 4/7 | 0 | 3 | **57%** |
-| **Overall Progress** | | | | **~69%** |
+| **Overall Progress** | | | | **~78%** |
 
 ```
 OGC services     ██████████████████ 100%
-REST API         █████████████░░░░  69%
+REST API         ████████████████░░  94%
 Data sources     ████████████████░░  80%
 Styling system   ██████████████████ 100%
-Tile caching     ██████████░░░░░░░  50%
-Security         ████████░░░░░░░░  43%
+Tile caching     ██████████████████ 100%
+Security         ████████░░░░░░░░░  43%
 Extensions       █████████░░░░░░░  57%
 Cloud-Native     █████████░░░░░░░  57%
 ──────────────────────────────
-Overall progress █████████████░░░  69%
+Overall progress ████████████████░  78%
 ```
+
+> **统计口径说明**:历史 "REST API 11/16" 与 "Tile Caching 3/6" 的原始 16/6 项清单
+> 已不可追溯 (文档考古确认最早版本即为该数字且未留明细)。本轮按
+> [REST/Tile 缺口补全计划](#四phased-implementation-roadmap) 重新定义了可审计口径:
+>
+> - **REST API 16 项** = 原已实现 11 项 + 本轮补齐 5 组 (Stores 完整 CRUD、
+>   工作空间维度端点、/services/settings、/about + /resources、feature-type PUT);
+>   剩余 1 项未实现 = **Importer** (批量导入工作流, 独立大项暂缓)。
+> - **Tile Caching 6 项** = 基本瓦片服务 ✅ + 缓存引擎 (磁盘+TTL+Gridset) ✅ +
+>   多后端 (local + Redis) ✅ + **Seeding/Truncate ✅** + **Metastore ✅** +
+>   **Disk Quota + 条件刷新 (304) ✅** (附: 自定义 Gridset 注册 ✅)。
 
 ---
 
@@ -84,6 +95,21 @@ Overall progress █████████████░░░  69%
 | `/health` | Health check | ✅ |
 | `/tiles/{layer}/{z}/{x}/{y}` | Tile service | ✅ |
 
+> **本轮补齐的 REST 端点** (见四、Phased Roadmap 之后的补全批次):
+>
+> | 端点 | 功能 | 批次 |
+> |------|------|:----:|
+> | `/stores` POST、`/stores/{name}` PUT/DELETE | Store CRUD (数据源别名视图) | R1 |
+> | `/workspaces/{ws}/stores` POST | 按工作空间创建 store | R1 |
+> | `/layer-groups/{name}` PUT | 更新图层组 | R1 |
+> | `/auth/users/{username}` PUT | 更新用户 (角色/启用/密码重置) | R1 |
+> | `/workspaces/{ws}/layers\|datastores\|coveragestores` | 工作空间维度端点 (GeoServer 标准路径) | R2 |
+> | `/services/{wms,wfs,wcs,wmts,wps,csw}/settings` GET/PUT | 服务标题/摘要/关键字 (WMS capabilities 生效) | R2 |
+> | `/about/version`、`/about/system-status` | 系统信息 (GeoServer 兼容) | R3 |
+> | `/resources` GET/POST/DELETE | 数据目录资源管理 (防路径穿越) | R3 |
+> | `/layers/{name}/feature-type` PUT | GeoPackage 属性列扩展 | R3 |
+> | `/tiles/seed` POST/GET、`/tiles/seed/{id}` GET/DELETE、`/tiles/seed/truncate` POST | GWC 风格种子任务/取消/清除 | T1 |
+
 ### 1.3 Data Source Types
 
 | Type | Description | Status |
@@ -129,7 +155,7 @@ Overall progress █████████████░░░  69%
 
 ### 1.7 Infrastructure
 
-- ✅ **GeoWebCache tile caching**: disk cache + expiry + Gridset
+- ✅ **GeoWebCache tile caching**: disk cache + expiry + Gridset + **Seeding/Truncate 种子任务** (`/tiles/seed`) + **Metastore** (瓦片元数据 JSON, 快速统计/断点续传) + **按层磁盘配额 LRU 淘汰** (`layer_quota_bytes`) + **ETag/Last-Modified 304 条件请求** + **自定义 Gridset 注册** (运行时按分辨率定义)
 - ✅ **SQL views**: parameterized SQL → virtual layers
 - ✅ **WCS subset enhancements**: spatial clipping + resolution resampling
 

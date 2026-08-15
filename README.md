@@ -170,6 +170,13 @@ All REST endpoints live under the configurable context path (default `/geoserver
 | DELETE | `/geoserver/layers/:name` | Delete a layer |
 | GET | `/geoserver/layers/:name/preview` | Get layer preview image |
 | GET | `/geoserver/layers/:name/features` | Get layer features (read-only) |
+| GET/POST | `/geoserver/stores`, `/geoserver/stores/:name` (PUT/DELETE) | Store management (data-source view) |
+| GET/POST | `/geoserver/workspaces/:ws/layers` `/datastores` `/coveragestores` | Workspace-dimension listings |
+| GET/PUT | `/geoserver/services/:service/settings` | OGC service settings (WMS/WFS/WCS/…) |
+| GET/POST/DELETE | `/geoserver/resources` | Data-directory resource management |
+| GET/PUT | `/geoserver/layers/:name/feature-type` | Attribute schema (GeoPackage columns) |
+| POST/GET/DELETE | `/geoserver/tiles/seed`, `/tiles/seed/:id`, `/tiles/seed/truncate` | Tile seeding / cancel / truncate |
+| GET | `/geoserver/about/version`, `/geoserver/about/system-status` | System information |
 
 ### OGC Services
 
