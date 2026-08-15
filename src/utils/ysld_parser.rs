@@ -205,7 +205,7 @@ fn apply_ysld_polygon(style: &mut Style, props: &serde_json::Map<String, serde_j
             },
             "fill-opacity" => {
                 if let Some(n) = val.as_f64() {
-                    fill_opacity = n.min(1.0).max(0.0);
+                    fill_opacity = n.clamp(0.0, 1.0);
                 }
             },
             "stroke-color" => {
@@ -220,7 +220,7 @@ fn apply_ysld_polygon(style: &mut Style, props: &serde_json::Map<String, serde_j
             },
             "stroke-opacity" => {
                 if let Some(n) = val.as_f64() {
-                    stroke_opacity = n.min(1.0).max(0.0);
+                    stroke_opacity = n.clamp(0.0, 1.0);
                 }
             },
             _ => {},
@@ -262,7 +262,7 @@ fn apply_ysld_line(style: &mut Style, props: &serde_json::Map<String, serde_json
             },
             "stroke-opacity" => {
                 if let Some(n) = val.as_f64() {
-                    stroke_opacity = n.min(1.0).max(0.0);
+                    stroke_opacity = n.clamp(0.0, 1.0);
                 }
             },
             _ => {},
@@ -302,7 +302,7 @@ fn apply_ysld_point(style: &mut Style, props: &serde_json::Map<String, serde_jso
             },
             "fill-opacity" => {
                 if let Some(n) = val.as_f64() {
-                    fill_opacity = n.min(1.0).max(0.0);
+                    fill_opacity = n.clamp(0.0, 1.0);
                 }
             },
             "stroke-color" => {

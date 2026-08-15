@@ -134,20 +134,22 @@ pub fn read_geotiff_metadata<P: AsRef<Path>>(path: P) -> Result<GeoTiffMetadata,
     })
 }
 
-/// 从 GeoTIFF 文件中读取地理标签
-///
-/// 使用 `tiff` crate 读取 TIFF 标签中的 GEOTIFF 地理配准信息。
-/// 由于 `image` crate 不暴露原生 TIFF 标签，我们在此用 `tiff` crate 直接读取文件。
-fn read_geotiff_tags(
-    path: &Path,
-) -> (
+/// Parsed GeoTIFF georeferencing tags:
+/// `(bounds, crs, pixel_scale_x, pixel_scale_y, tie_point_x, tie_point_y)`.
+type GeoTiffTags = (
     Option<Bounds>,
     Option<String>,
     Option<f64>,
     Option<f64>,
     Option<f64>,
     Option<f64>,
-) {
+);
+
+/// 从 GeoTIFF 文件中读取地理标签
+///
+/// 使用 `tiff` crate 读取 TIFF 标签中的 GEOTIFF 地理配准信息。
+/// 由于 `image` crate 不暴露原生 TIFF 标签，我们在此用 `tiff` crate 直接读取文件。
+fn read_geotiff_tags(path: &Path) -> GeoTiffTags {
     // 尝试使用 tiff crate（如果可用）读取地理标签
     // 如果 tiff crate 不在依赖中，回退到仅返回 None
     // 目前使用简化的方法：检查文件扩展名，尝试解析已知格式
@@ -169,19 +171,7 @@ fn read_geotiff_tags(
 }
 
 /// 尝试使用 tiff crate 读取原生 TIFF 标签
-fn try_read_geotiff_tags_native(
-    path: &Path,
-) -> Result<
-    (
-        Option<Bounds>,
-        Option<String>,
-        Option<f64>,
-        Option<f64>,
-        Option<f64>,
-        Option<f64>,
-    ),
-    String,
-> {
+fn try_read_geotiff_tags_native(path: &Path) -> Result<GeoTiffTags, String> {
     use std::fs::File;
     use tiff::decoder::ifd::Value;
     use tiff::decoder::Decoder;
@@ -272,16 +262,7 @@ fn try_read_geotiff_tags_native(
 }
 
 /// 回退方案：从原始字节中搜索 GeoTIFF 标签
-fn try_read_tags_from_bytes(
-    _path: &Path,
-) -> Option<(
-    Option<Bounds>,
-    Option<String>,
-    Option<f64>,
-    Option<f64>,
-    Option<f64>,
-    Option<f64>,
-)> {
+fn try_read_tags_from_bytes(_path: &Path) -> Option<GeoTiffTags> {
     // 这是一个简化的回退实现
     // 实际生产环境中建议使用 proj / gdal 等专业库读取 GeoTIFF 标签
     None

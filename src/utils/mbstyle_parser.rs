@@ -84,7 +84,7 @@ fn apply_fill_paint(style: &mut Style, paint: Option<&Value>) {
                 .unwrap_or_else(|| "#808080".to_string());
             style.fill = Some(FillStyle {
                 color,
-                opacity: o.min(1.0).max(0.0),
+                opacity: o.clamp(0.0, 1.0),
             });
         }
         if let Some(c) = get_color(p, "fill-outline-color") {
@@ -137,7 +137,7 @@ fn apply_line_paint(style: &mut Style, paint: Option<&Value>) {
             style.stroke = Some(StrokeStyle {
                 color,
                 width: w,
-                opacity: o.min(1.0).max(0.0),
+                opacity: o.clamp(0.0, 1.0),
                 dash_array: d,
             });
         }
@@ -178,7 +178,7 @@ fn apply_circle_paint(style: &mut Style, paint: Option<&Value>) {
                 .unwrap_or_else(|| "#FF0000".to_string());
             style.fill = Some(FillStyle {
                 color,
-                opacity: o.min(1.0).max(0.0),
+                opacity: o.clamp(0.0, 1.0),
             });
         }
         if let Some(r) = p.get("circle-radius").and_then(|v| v.as_f64()) {
@@ -243,58 +243,46 @@ fn parse_mbstyle_filter(filter: &Value) -> Vec<OgcFilter> {
         }
         let op = arr[0].as_str().unwrap_or("");
         match op {
-            "==" => {
-                if arr.len() >= 3 {
-                    let prop = arr[1].as_str().unwrap_or("");
-                    let val = value_to_string(&arr[2]);
-                    filters.push(OgcFilter::PropertyIsEqualTo(prop.to_string(), val));
-                }
+            "==" if arr.len() >= 3 => {
+                let prop = arr[1].as_str().unwrap_or("");
+                let val = value_to_string(&arr[2]);
+                filters.push(OgcFilter::PropertyIsEqualTo(prop.to_string(), val));
             },
-            "!=" => {
-                if arr.len() >= 3 {
-                    let prop = arr[1].as_str().unwrap_or("");
-                    let val = value_to_string(&arr[2]);
-                    filters.push(OgcFilter::PropertyIsNotEqualTo(prop.to_string(), val));
-                }
+            "!=" if arr.len() >= 3 => {
+                let prop = arr[1].as_str().unwrap_or("");
+                let val = value_to_string(&arr[2]);
+                filters.push(OgcFilter::PropertyIsNotEqualTo(prop.to_string(), val));
             },
-            "<" => {
-                if arr.len() >= 3 {
-                    let prop = arr[1].as_str().unwrap_or("");
-                    let val = value_to_string(&arr[2]);
-                    filters.push(OgcFilter::PropertyIsLessThan(prop.to_string(), val));
-                }
+            "<" if arr.len() >= 3 => {
+                let prop = arr[1].as_str().unwrap_or("");
+                let val = value_to_string(&arr[2]);
+                filters.push(OgcFilter::PropertyIsLessThan(prop.to_string(), val));
             },
-            ">" => {
-                if arr.len() >= 3 {
-                    let prop = arr[1].as_str().unwrap_or("");
-                    let val = value_to_string(&arr[2]);
-                    filters.push(OgcFilter::PropertyIsGreaterThan(prop.to_string(), val));
-                }
+            ">" if arr.len() >= 3 => {
+                let prop = arr[1].as_str().unwrap_or("");
+                let val = value_to_string(&arr[2]);
+                filters.push(OgcFilter::PropertyIsGreaterThan(prop.to_string(), val));
             },
-            "<=" => {
-                if arr.len() >= 3 {
-                    let prop = arr[1].as_str().unwrap_or("");
-                    let val = value_to_string(&arr[2]);
-                    filters.push(OgcFilter::PropertyIsLessThanOrEqualTo(
-                        prop.to_string(),
-                        val,
-                    ));
-                }
+            "<=" if arr.len() >= 3 => {
+                let prop = arr[1].as_str().unwrap_or("");
+                let val = value_to_string(&arr[2]);
+                filters.push(OgcFilter::PropertyIsLessThanOrEqualTo(
+                    prop.to_string(),
+                    val,
+                ));
             },
-            ">=" => {
-                if arr.len() >= 3 {
-                    let prop = arr[1].as_str().unwrap_or("");
-                    let val = value_to_string(&arr[2]);
-                    filters.push(OgcFilter::PropertyIsGreaterThanOrEqualTo(
-                        prop.to_string(),
-                        val,
-                    ));
-                }
+            ">=" if arr.len() >= 3 => {
+                let prop = arr[1].as_str().unwrap_or("");
+                let val = value_to_string(&arr[2]);
+                filters.push(OgcFilter::PropertyIsGreaterThanOrEqualTo(
+                    prop.to_string(),
+                    val,
+                ));
             },
             "all" => {
                 let sub: Vec<Vec<OgcFilter>> = arr[1..]
                     .iter()
-                    .map(|v| parse_mbstyle_filter(v))
+                    .map(parse_mbstyle_filter)
                     .filter(|v| !v.is_empty())
                     .collect();
                 if sub.len() == 1 {
@@ -306,7 +294,7 @@ fn parse_mbstyle_filter(filter: &Value) -> Vec<OgcFilter> {
             "any" => {
                 let sub: Vec<Vec<OgcFilter>> = arr[1..]
                     .iter()
-                    .map(|v| parse_mbstyle_filter(v))
+                    .map(parse_mbstyle_filter)
                     .filter(|v| !v.is_empty())
                     .collect();
                 if sub.len() == 1 {
@@ -316,28 +304,21 @@ fn parse_mbstyle_filter(filter: &Value) -> Vec<OgcFilter> {
                 }
             },
             "none" => {
-                let sub: Vec<OgcFilter> = arr[1..]
-                    .iter()
-                    .flat_map(|v| parse_mbstyle_filter(v))
-                    .collect();
+                let sub: Vec<OgcFilter> = arr[1..].iter().flat_map(parse_mbstyle_filter).collect();
                 if !sub.is_empty() {
                     filters.push(OgcFilter::Not(Box::new(OgcFilter::Or(sub))));
                 }
             },
-            "has" => {
-                if arr.len() >= 2 {
-                    let prop = arr[1].as_str().unwrap_or("");
-                    filters.push(OgcFilter::PropertyIsNotEqualTo(
-                        prop.to_string(),
-                        String::new(),
-                    ));
-                }
+            "has" if arr.len() >= 2 => {
+                let prop = arr[1].as_str().unwrap_or("");
+                filters.push(OgcFilter::PropertyIsNotEqualTo(
+                    prop.to_string(),
+                    String::new(),
+                ));
             },
-            "!has" => {
-                if arr.len() >= 2 {
-                    let prop = arr[1].as_str().unwrap_or("");
-                    filters.push(OgcFilter::PropertyIsNull(prop.to_string()));
-                }
+            "!has" if arr.len() >= 2 => {
+                let prop = arr[1].as_str().unwrap_or("");
+                filters.push(OgcFilter::PropertyIsNull(prop.to_string()));
             },
             _ => {},
         }

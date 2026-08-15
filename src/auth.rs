@@ -149,6 +149,26 @@ pub fn verify_token(token: &str) -> Result<Claims, String> {
 // 初始化默认管理员
 // ---------------------------------------------------------------------------
 
+/// 创建默认管理员用户（如果不存在）
+pub async fn ensure_default_admin(store: &dyn crate::store::Store) {
+    match store.get_user("admin").await {
+        Ok(Some(_)) => {
+            info!("[Auth] 默认管理员用户已存在");
+        },
+        _ => {
+            let salt = generate_salt();
+            let hash = hash_password("geoserver", &salt);
+            match store
+                .create_user("admin", &hash, &salt, &UserRole::Admin, true)
+                .await
+            {
+                Ok(_) => info!("[Auth] 已创建默认管理员: admin / geoserver"),
+                Err(e) => eprintln!("[Auth] 创建默认管理员失败: {}", e),
+            }
+        },
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 测试
 // ---------------------------------------------------------------------------
@@ -227,25 +247,5 @@ mod tests {
         assert_eq!(UserRole::Manager.to_string(), "manager");
         assert_eq!(UserRole::User.to_string(), "user");
         assert_eq!(UserRole::Guest.to_string(), "guest");
-    }
-}
-
-/// 创建默认管理员用户（如果不存在）
-pub async fn ensure_default_admin(store: &dyn crate::store::Store) {
-    match store.get_user("admin").await {
-        Ok(Some(_)) => {
-            info!("[Auth] 默认管理员用户已存在");
-        },
-        _ => {
-            let salt = generate_salt();
-            let hash = hash_password("geoserver", &salt);
-            match store
-                .create_user("admin", &hash, &salt, &UserRole::Admin, true)
-                .await
-            {
-                Ok(_) => info!("[Auth] 已创建默认管理员: admin / geoserver"),
-                Err(e) => eprintln!("[Auth] 创建默认管理员失败: {}", e),
-            }
-        },
     }
 }

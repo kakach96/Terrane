@@ -152,14 +152,11 @@ pub async fn create_data_source(
         )));
     }
     if let Some(store) = &state.store {
-        match store.get_data_source(&body.name).await {
-            Ok(Some(_)) => {
-                return Err(GeoServerError::Conflict(format!(
-                    "Data source '{}' already exists",
-                    body.name
-                )));
-            },
-            _ => {},
+        if let Ok(Some(_)) = store.get_data_source(&body.name).await {
+            return Err(GeoServerError::Conflict(format!(
+                "Data source '{}' already exists",
+                body.name
+            )));
         }
 
         match store
@@ -754,15 +751,13 @@ async fn get_geopackage_table_columns(
         .map_err(|e| format!("查询结果错误: {}", e))?;
 
     let mut cols = Vec::new();
-    for row in rows {
-        if let Ok((name, ty)) = row {
-            cols.push(serde_json::json!({
-                "name": name,
-                "type": ty,
-                "length": serde_json::Value::Null,
-                "nullable": true,
-            }));
-        }
+    for (name, ty) in rows.flatten() {
+        cols.push(serde_json::json!({
+            "name": name,
+            "type": ty,
+            "length": serde_json::Value::Null,
+            "nullable": true,
+        }));
     }
     Ok(cols)
 }

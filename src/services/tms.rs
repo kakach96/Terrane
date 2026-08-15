@@ -139,9 +139,7 @@ pub fn build_tile_map(
     gridset: &str,
     format: &str,
 ) -> Option<String> {
-    if tile_grid::gridset_profile(gridset).is_none() {
-        return None;
-    }
+    tile_grid::gridset_profile(gridset)?;
     let ext = format;
     let mime = mime_for_extension(ext);
     let id = url_encode_id(&tilemap_id(&layer.name, gridset, ext));

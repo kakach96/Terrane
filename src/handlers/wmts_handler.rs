@@ -20,8 +20,8 @@ pub async fn handle_wmts_request(
     let wmts_request = wmts::parse_wmts_request(params)?;
 
     match wmts_request.request {
-        WmtsOperation::GetCapabilities => handle_get_capabilities(&state, &req).await,
-        WmtsOperation::GetTile {
+        WmtsOperation::Capabilities => handle_get_capabilities(&state, &req).await,
+        WmtsOperation::Tile {
             layer,
             style,
             format,
@@ -42,7 +42,7 @@ pub async fn handle_wmts_request(
             )
             .await
         },
-        WmtsOperation::GetFeatureInfo {
+        WmtsOperation::FeatureInfo {
             layer,
             style,
             tile_matrix_set,
@@ -99,6 +99,7 @@ async fn handle_get_capabilities(
 }
 
 /// GetTile — 返回瓦片图像
+#[allow(clippy::too_many_arguments)] // signature mirrors the WMTS GetTile query parameters
 async fn handle_get_tile(
     state: &AppState,
     layer: &str,
@@ -171,6 +172,7 @@ pub async fn handle_wmts_rest_tile(
 }
 
 /// GetFeatureInfo — 返回要素信息
+#[allow(clippy::too_many_arguments)] // signature mirrors the WMTS GetFeatureInfo query parameters
 async fn handle_get_feature_info(
     state: &AppState,
     layer: &str,

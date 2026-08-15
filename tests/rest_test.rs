@@ -85,7 +85,7 @@ async fn test_rest_workspaces_crud() {
 
     let create = test::TestRequest::post()
         .uri("/geoserver/workspaces")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "ws_test_1",
             "title": "Test Workspace",
             "description": "created by integration test",
@@ -139,7 +139,7 @@ async fn test_rest_namespaces_crud() {
 
     let create = test::TestRequest::post()
         .uri("/geoserver/namespaces")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "prefix": "ns_test_1",
             "uri": "http://example.com/ns_test_1",
         }))
@@ -186,7 +186,7 @@ async fn test_rest_styles_crud() {
 
     let create = test::TestRequest::post()
         .uri("/geoserver/styles")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "style_test_1",
             "title": "Test Style",
             "content": "<StyledLayerDescriptor version=\"1.0.0\"></StyledLayerDescriptor>",
@@ -225,7 +225,7 @@ async fn test_rest_layer_groups_crud() {
 
     let create = test::TestRequest::post()
         .uri("/geoserver/layer-groups")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "lg_test_1",
             "title": "Test Layer Group",
             "layers": ["world"],
@@ -287,7 +287,7 @@ async fn test_rest_feature_write_not_supported() {
     // POST 创建要素 → 405 (接口已移除, 只读发布)
     let create = test::TestRequest::post()
         .uri("/geoserver/layers/world/features")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "geometry": { "type": "Point", "coordinates": [10.0, 20.0] },
             "properties": { "name": "integration-test" },
         }))
@@ -310,7 +310,7 @@ async fn test_rest_sql_views_crud() {
 
     let create = test::TestRequest::post()
         .uri("/geoserver/sql-views")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "sqlview_test_1",
             "sql": "SELECT id, geom FROM cities",
             "workspace": "default",
@@ -356,7 +356,7 @@ async fn test_rest_data_sources_crud() {
 
     let create = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "ds_test_1",
             "type": "shapefile",
             "workspace": "default",
@@ -503,7 +503,7 @@ async fn test_rest_auth_login_and_verify() {
     // 默认管理员登录
     let login = test::TestRequest::post()
         .uri("/geoserver/auth/login")
-        .set_json(&serde_json::json!({ "username": "admin", "password": "geoserver" }))
+        .set_json(serde_json::json!({ "username": "admin", "password": "geoserver" }))
         .to_request();
     let resp = test::call_service(&app, login).await;
     assert_eq!(
@@ -538,7 +538,7 @@ async fn test_rest_auth_login_and_verify() {
     // 错误密码 → 400
     let bad = test::TestRequest::post()
         .uri("/geoserver/auth/login")
-        .set_json(&serde_json::json!({ "username": "admin", "password": "wrong" }))
+        .set_json(serde_json::json!({ "username": "admin", "password": "wrong" }))
         .to_request();
     let resp = test::call_service(&app, bad).await;
     assert_eq!(
@@ -559,7 +559,7 @@ async fn test_rest_auth_users_crud() {
         .uri("/geoserver/auth/users")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(
-            &serde_json::json!({ "username": "tester1", "password": "secret123", "role": "guest" }),
+            serde_json::json!({ "username": "tester1", "password": "secret123", "role": "guest" }),
         )
         .to_request();
     let resp = test::call_service(&app, create).await;
@@ -598,7 +598,7 @@ async fn test_rest_auth_users_crud() {
     // 新用户可登录
     let login2 = test::TestRequest::post()
         .uri("/geoserver/auth/login")
-        .set_json(&serde_json::json!({ "username": "tester1", "password": "secret123" }))
+        .set_json(serde_json::json!({ "username": "tester1", "password": "secret123" }))
         .to_request();
     let resp = test::call_service(&app, login2).await;
     assert_eq!(
@@ -634,7 +634,7 @@ async fn test_rest_permissions_crud() {
     let create = test::TestRequest::post()
         .uri("/geoserver/permissions")
         .insert_header(("Authorization", format!("Bearer {}", token)))
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "username": "admin",
             "resource_type": "layer",
             "resource_name": "world",
@@ -776,7 +776,7 @@ async fn test_rest_upload_geojson() {
     // 发布图层 (store = 数据源名) 后可查询上传的要素
     let create = test::TestRequest::post()
         .uri("/geoserver/layers")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "uploaded_layer",
             "title": "Uploaded",
             "workspace": "default",
@@ -975,7 +975,7 @@ async fn test_rest_backup_import_roundtrip() {
 
     let create = test::TestRequest::post()
         .uri("/geoserver/workspaces")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "ws_import",
             "title": "Import Workspace",
             "description": "created for backup import round-trip",
@@ -1146,7 +1146,7 @@ async fn test_live_rest_postgis_data_source_http() {
     // 1. 通过 REST 创建 postgis 数据源 (指向真实容器)
     let create = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "pg_http_ds",
             "type": "postgis",
             "workspace": "default",
@@ -1215,7 +1215,7 @@ async fn test_live_rest_postgis_data_source_http() {
     // 4. 创建图层 (引用数据源 + native table name)
     let create = test::TestRequest::post()
         .uri("/geoserver/layers")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "cities_layer",
             "title": "Cities",
             "workspace": "default",
@@ -1341,7 +1341,7 @@ async fn test_rest_geopackage_feature_type() {
     // 2. 通过 REST 创建 geopackage 数据源
     let create = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "gpkg_ds",
             "type": "geopackage",
             "workspace": "default",
@@ -1384,7 +1384,7 @@ async fn test_rest_geopackage_feature_type() {
     // 4. 创建图层 (store=gpkg_ds, native_name=typed)
     let create = test::TestRequest::post()
         .uri("/geoserver/layers")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "typed_layer",
             "title": "Typed",
             "workspace": "default",

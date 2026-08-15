@@ -16,6 +16,7 @@ use actix_web::test;
 /// Generate an 8x8 GeoTIFF fixture with georeferencing tags:
 /// - ModelPixelScaleTag (33550) = [1.0, 1.0, 0.0]
 /// - ModelTiepointTag (33922)   = [0,0,0, 0,8,0]  (top-left model coord (0, 8))
+///
 /// -> bounds = (minx 0, miny 0, maxx 8, maxy 8)
 fn create_georef_tiff_fixture(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
     use tiff::encoder::*;
@@ -199,7 +200,7 @@ async fn test_ogc_coverages_collection_detail() {
     assert_eq!(bbox[3], 8.0);
     // band range field
     let fields = body["ranges"]["fields"].as_array().unwrap();
-    assert!(fields.len() >= 1);
+    assert!(!fields.is_empty());
 
     // unknown collection -> 404
     let req = test::TestRequest::get()

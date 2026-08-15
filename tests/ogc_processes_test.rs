@@ -107,7 +107,7 @@ async fn test_ogc_processes_execute_centroid() {
     // 执行 vec:Centroid, 输入为本地图层引用 layer:world (空发布)
     let req = test::TestRequest::post()
         .uri("/ogc/processes/jobs")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "processID": "vec:Centroid",
             "inputs": { "features": "layer:world" }
         }))
@@ -159,7 +159,7 @@ async fn test_ogc_processes_execute_buffer() {
 
     let req = test::TestRequest::post()
         .uri("/ogc/processes/jobs")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "processID": "vec:Buffer",
             "inputs": {
                 "features": { "type": "FeatureCollection", "features": [
@@ -194,7 +194,7 @@ async fn test_ogc_processes_jobs_list() {
     // 先执行一个任务 (world 空发布)
     let req = test::TestRequest::post()
         .uri("/ogc/processes/jobs")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "processID": "gs:Bounds",
             "inputs": { "features": "layer:world" }
         }))
@@ -221,7 +221,7 @@ async fn test_ogc_processes_execute_errors() {
     // 未知 process → 404
     let req = test::TestRequest::post()
         .uri("/ogc/processes/jobs")
-        .set_json(&serde_json::json!({ "processID": "vec:DoesNotExist", "inputs": {} }))
+        .set_json(serde_json::json!({ "processID": "vec:DoesNotExist", "inputs": {} }))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), actix_web::http::StatusCode::NOT_FOUND);
@@ -256,7 +256,7 @@ async fn test_ogc_processes_cancel_successful_conflict() {
     // 同步执行的任务立即 success, 取消应返回 409 (不能取消已完成任务)
     let req = test::TestRequest::post()
         .uri("/ogc/processes/jobs")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "processID": "vec:Centroid",
             "inputs": { "features": "layer:world" }
         }))

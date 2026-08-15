@@ -143,7 +143,7 @@ async fn test_ogc_styles_create_requires_auth() {
     // 未登录 → 401
     let req = test::TestRequest::post()
         .uri("/ogc/styles/styles")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "id": "my_style",
             "title": "My Style",
             "content": "<?xml version=\"1.0\"?><StyledLayerDescriptor version=\"1.0.0\"></StyledLayerDescriptor>",
@@ -162,7 +162,7 @@ async fn test_ogc_styles_create_get_put_delete() {
     let req = test::TestRequest::post()
         .uri("/ogc/styles/styles")
         .insert_header(("Authorization", format!("Bearer {}", token)))
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "id": "my_style",
             "title": "My Style",
             "description": "A test style",

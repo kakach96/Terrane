@@ -107,22 +107,19 @@ fn compute_geojson_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, Geo
 /// 递归收集 GeoJSON 坐标数组中的所有 (x, y) 坐标点
 fn collect_geojson_coords(arr: Option<&serde_json::Value>, visit: &mut impl FnMut(f64, f64)) {
     let Some(arr) = arr else { return };
-    match arr {
-        serde_json::Value::Array(items) => {
-            if items.iter().all(|i| i.is_number()) {
-                // 坐标点 [x, y, ...]
-                if items.len() >= 2 {
-                    let x = items[0].as_f64().unwrap_or(0.0);
-                    let y = items[1].as_f64().unwrap_or(0.0);
-                    visit(x, y);
-                }
-            } else {
-                for item in items {
-                    collect_geojson_coords(Some(item), visit);
-                }
+    if let serde_json::Value::Array(items) = arr {
+        if items.iter().all(|i| i.is_number()) {
+            // 坐标点 [x, y, ...]
+            if items.len() >= 2 {
+                let x = items[0].as_f64().unwrap_or(0.0);
+                let y = items[1].as_f64().unwrap_or(0.0);
+                visit(x, y);
             }
-        },
-        _ => {},
+        } else {
+            for item in items {
+                collect_geojson_coords(Some(item), visit);
+            }
+        }
     }
 }
 
@@ -263,12 +260,10 @@ fn parse_postgis_extent(ext: &str) -> Option<Bounds> {
         return None;
     }
     let min: Vec<f64> = parts[0]
-        .trim()
         .split_whitespace()
         .filter_map(|s| s.parse().ok())
         .collect();
     let max: Vec<f64> = parts[1]
-        .trim()
         .split_whitespace()
         .filter_map(|s| s.parse().ok())
         .collect();
@@ -381,18 +376,15 @@ async fn get_postgis_geom_column(
     schema: &str,
     table: &str,
 ) -> Option<String> {
-    let sql = format!(
-        "SELECT f_geometry_column FROM geometry_columns WHERE f_table_schema = $1 AND f_table_name = $2"
-    );
+    let sql = "SELECT f_geometry_column FROM geometry_columns WHERE f_table_schema = $1 AND f_table_name = $2".to_string();
     match client.query_opt(&sql, &[&schema, &table]).await {
         Ok(Some(row)) => row.get::<_, String>(0).into(),
         _ => {
             // 回退：查询所有 geometry 类型的列
-            let sql = format!(
-                "SELECT column_name FROM information_schema.columns
+            let sql = "SELECT column_name FROM information_schema.columns
                  WHERE table_schema = $1 AND table_name = $2
                  AND udt_name IN ('geometry', 'geography')"
-            );
+                .to_string();
             match client.query_opt(&sql, &[&schema, &table]).await {
                 Ok(Some(row)) => row.get::<_, String>(0).into(),
                 _ => Some("geom".to_string()),

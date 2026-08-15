@@ -69,6 +69,7 @@ fn url_encode(value: &str) -> String {
 /// 会百分号编码后追加到上游 URL。
 ///
 /// 返回 (image_bytes, content_type)
+#[allow(clippy::too_many_arguments)] // signature mirrors the upstream WMS GetMap query parameters
 pub async fn fetch_cascaded_map(
     config: &CascadedWmsConfig,
     bbox: &str,

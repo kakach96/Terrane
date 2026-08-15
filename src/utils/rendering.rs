@@ -16,6 +16,7 @@ pub struct RenderOptions {
 
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
+#[allow(clippy::upper_case_acronyms)] // PNG/JPEG/GIF are domain-standard acronyms
 pub enum RenderFormat {
     PNG,
     JPEG,
@@ -77,6 +78,7 @@ impl MapRenderer {
         img
     }
 
+    #[allow(clippy::too_many_arguments)] // rectangle drawing primitive
     fn draw_rect(
         &self,
         img: &mut RgbaImage,
@@ -320,11 +322,9 @@ impl MapRenderer {
                 let j = (i + 1) % 3;
                 let (x1, y1) = pts[i];
                 let (x2, y2) = pts[j];
-                if (y1 <= y && y2 > y) || (y2 <= y && y1 > y) {
-                    if y1 != y2 {
-                        let x = x1 as f64 + (y - y1) as f64 / (y2 - y1) as f64 * (x2 - x1) as f64;
-                        xs.push(x as i32);
-                    }
+                if ((y1 <= y && y2 > y) || (y2 <= y && y1 > y)) && y1 != y2 {
+                    let x = x1 as f64 + (y - y1) as f64 / (y2 - y1) as f64 * (x2 - x1) as f64;
+                    xs.push(x as i32);
                 }
             }
             xs.sort();
@@ -465,6 +465,7 @@ impl MapRenderer {
         (px as i32, py as i32)
     }
 
+    #[allow(clippy::too_many_arguments)] // line drawing primitive
     fn draw_line(
         &self,
         img: &mut RgbaImage,
@@ -557,8 +558,7 @@ impl MapRenderer {
     }
 
     fn parse_color(color: &str) -> Option<[u8; 4]> {
-        if color.starts_with('#') {
-            let hex = &color[1..];
+        if let Some(hex) = color.strip_prefix('#') {
             if hex.len() == 6 {
                 let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
                 let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
@@ -605,8 +605,7 @@ impl Style {
     }
 
     fn parse_color(color: &str) -> Option<[u8; 4]> {
-        if color.starts_with('#') {
-            let hex = &color[1..];
+        if let Some(hex) = color.strip_prefix('#') {
             if hex.len() == 6 {
                 let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
                 let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
@@ -681,13 +680,11 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
 
     for feature in features {
         match &feature.geometry {
-            GeoJsonGeometry::Point { coordinates } => {
-                if coordinates.len() >= 2 {
-                    minx = minx.min(coordinates[0]);
-                    miny = miny.min(coordinates[1]);
-                    maxx = maxx.max(coordinates[0]);
-                    maxy = maxy.max(coordinates[1]);
-                }
+            GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
+                minx = minx.min(coordinates[0]);
+                miny = miny.min(coordinates[1]);
+                maxx = maxx.max(coordinates[0]);
+                maxy = maxy.max(coordinates[1]);
             },
             GeoJsonGeometry::LineString { coordinates } => {
                 for coord in coordinates {
@@ -720,13 +717,13 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
 
     if world_width < 0.01 {
         world_width = 1.0;
-        minx = minx - 0.5;
-        maxx = maxx + 0.5;
+        minx -= 0.5;
+        maxx += 0.5;
     }
 
     if world_height < 0.01 {
-        miny = miny - 0.5;
-        maxy = maxy + 0.5;
+        miny -= 0.5;
+        maxy += 0.5;
     }
 
     let padding = world_width * 0.1;
@@ -745,7 +742,7 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
         format: RenderFormat::PNG,
     };
 
-    let renderer = MapRenderer::new(options.clone(), bounds);
+    let renderer = MapRenderer::new(options, bounds);
     let features_with_style: Vec<(GeoJsonGeometry, Style)> = features
         .iter()
         .map(|f| (f.geometry.clone(), Style::default()))
@@ -787,9 +784,7 @@ pub fn render_to_svg(
 ]]></style></defs>"#,
     );
 
-    svg.push_str(&format!(
-        "<rect width=\"100%\" height=\"100%\" fill=\"#f8f8f8\"/>\n"
-    ));
+    svg.push_str("<rect width=\"100%\" height=\"100%\" fill=\"#f8f8f8\"/>\n");
 
     for (geometry, _style) in features {
         match geometry {
@@ -811,19 +806,17 @@ pub fn render_to_svg(
                     }
                 }
             },
-            GeoJsonGeometry::LineString { coordinates } => {
-                if coordinates.len() >= 2 {
-                    let pts: String = coordinates
-                        .iter()
-                        .filter(|c| c.len() >= 2)
-                        .map(|c| {
-                            let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
-                            format!("{},{}", sx, sy)
-                        })
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    svg.push_str(&format!(r#"<polyline points="{}" class="fl"/>"#, pts));
-                }
+            GeoJsonGeometry::LineString { coordinates } if coordinates.len() >= 2 => {
+                let pts: String = coordinates
+                    .iter()
+                    .filter(|c| c.len() >= 2)
+                    .map(|c| {
+                        let (sx, sy) = project_point(c[0], c[1], bounds, width, height);
+                        format!("{},{}", sx, sy)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                svg.push_str(&format!(r#"<polyline points="{}" class="fl"/>"#, pts));
             },
             GeoJsonGeometry::Polygon { coordinates } => {
                 for ring in coordinates {

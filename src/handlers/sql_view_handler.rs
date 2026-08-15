@@ -335,7 +335,7 @@ pub async fn preview_sql_view(
     let mut features = Vec::new();
     let col_count = if rows.is_empty() { 0 } else { rows[0].len() };
 
-    if rows.first().is_some() {
+    if !rows.is_empty() {
         let names = client
             .prepare(&format!("SELECT * FROM ({}) AS _sv LIMIT 0", body.sql))
             .await

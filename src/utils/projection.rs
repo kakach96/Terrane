@@ -61,6 +61,14 @@ pub fn validate_crs(crs: &str) -> bool {
     )
 }
 
+pub fn normalize_crs(crs: &str) -> String {
+    match crs {
+        "EPSG:4326" | "4326" => "EPSG:4326".to_string(),
+        "EPSG:3857" | "3857" | "EPSG:900913" | "900913" => "EPSG:3857".to_string(),
+        _ => crs.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,13 +143,5 @@ mod tests {
         assert!((result.1 - (-90.0)).abs() < 0.001);
         assert!((result.2 - 180.0).abs() < 0.001);
         assert!((result.3 - 90.0).abs() < 0.001);
-    }
-}
-
-pub fn normalize_crs(crs: &str) -> String {
-    match crs {
-        "EPSG:4326" | "4326" => "EPSG:4326".to_string(),
-        "EPSG:3857" | "3857" | "EPSG:900913" | "900913" => "EPSG:3857".to_string(),
-        _ => crs.to_string(),
     }
 }

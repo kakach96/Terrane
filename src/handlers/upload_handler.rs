@@ -80,14 +80,11 @@ pub async fn upload_shapefile(
 
     if let Some(store) = &state.store {
         // 检查是否已存在同名数据源
-        match store.get_data_source(&ds_name).await {
-            Ok(Some(_)) => {
-                return Err(GeoServerError::Conflict(format!(
-                    "Data source '{}' already exists",
-                    ds_name
-                )));
-            },
-            _ => {},
+        if let Ok(Some(_)) = store.get_data_source(&ds_name).await {
+            return Err(GeoServerError::Conflict(format!(
+                "Data source '{}' already exists",
+                ds_name
+            )));
         }
 
         match store
@@ -254,7 +251,7 @@ async fn save_multipart_file(
         let content_disposition = field.content_disposition().clone();
         let filename = content_disposition
             .get_filename()
-            .map(|f| sanitize_filename(f))
+            .map(sanitize_filename)
             .unwrap_or_else(|| "upload".to_string());
 
         let file_path = upload_dir.join(&filename);
@@ -283,8 +280,7 @@ async fn save_multipart_file(
 /// 清理文件名，防止路径遍历攻击
 fn sanitize_filename(name: &str) -> String {
     let name = name
-        .replace('\\', "_")
-        .replace('/', "_")
+        .replace(['\\', '/'], "_")
         .replace("..", "_")
         .replace(std::path::MAIN_SEPARATOR, "_");
     // 只保留安全字符

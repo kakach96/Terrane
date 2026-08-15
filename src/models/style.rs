@@ -10,6 +10,7 @@ pub struct Style {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::upper_case_acronyms)] // SLD/CSS/YSLD are domain-standard acronyms kept in the wire format
 pub enum StyleFormat {
     SLD,
     CSS,

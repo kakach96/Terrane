@@ -113,22 +113,21 @@ pub async fn get_server_status(
         .load(std::sync::atomic::Ordering::Relaxed);
     let error_count = state.error_count.load(std::sync::atomic::Ordering::Relaxed);
 
-    let memory_info = match sysinfo::System::new_all() {
-        mut s => {
-            s.refresh_memory();
-            let total = s.total_memory();
-            let used = s.used_memory();
-            let percent = if total > 0 {
-                (used as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            serde_json::json!({
-                "used": used,
-                "total": total,
-                "percent": percent,
-            })
-        },
+    let mut s = sysinfo::System::new_all();
+    let memory_info = {
+        s.refresh_memory();
+        let total = s.total_memory();
+        let used = s.used_memory();
+        let percent = if total > 0 {
+            (used as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        serde_json::json!({
+            "used": used,
+            "total": total,
+            "percent": percent,
+        })
     };
 
     let layer_count = state.layers.read().await.len();

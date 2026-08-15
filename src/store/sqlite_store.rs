@@ -369,15 +369,15 @@ impl SqliteStore {
         let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now.clone())];
 
         if let Some(t) = title {
-            updates.push(format!("title = ?"));
+            updates.push("title = ?".to_string());
             values.push(Box::new(t));
         }
         if let Some(d) = description {
-            updates.push(format!("description = ?"));
+            updates.push("description = ?".to_string());
             values.push(Box::new(d));
         }
         if let Some(e) = enabled {
-            updates.push(format!("enabled = ?"));
+            updates.push("enabled = ?".to_string());
             values.push(Box::new(e as i32));
         }
 
@@ -1012,19 +1012,19 @@ impl SqliteStore {
         let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now)];
 
         if let Some(t) = title {
-            updates.push(format!("title = ?"));
+            updates.push("title = ?".to_string());
             values.push(Box::new(t));
         }
         if let Some(a) = abstract_text {
-            updates.push(format!("abstract_text = ?"));
+            updates.push("abstract_text = ?".to_string());
             values.push(Box::new(a));
         }
         if let Some(n) = native_name {
-            updates.push(format!("native_name = ?"));
+            updates.push("native_name = ?".to_string());
             values.push(Box::new(n));
         }
         if let Some(e) = enabled {
-            updates.push(format!("enabled = ?"));
+            updates.push("enabled = ?".to_string());
             values.push(Box::new(e as i32));
         }
 
@@ -1123,6 +1123,7 @@ impl SqliteStore {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)] // matches the Store trait contract for SQL view updates
     pub async fn update_sql_view(
         &self,
         name: &str,

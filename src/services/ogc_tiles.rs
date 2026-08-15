@@ -62,7 +62,7 @@ pub fn tile_matrix_sets(base_url: &str) -> Value {
         .map(|id| {
             json!({
                 "id": id,
-                "links": [link(&format!("{}/ogc/tiles/tileMatrixSets/{}", base_url, id), "self", "application/json", *id)],
+                "links": [link(&format!("{}/ogc/tiles/tileMatrixSets/{}", base_url, id), "self", "application/json", id)],
             })
         })
         .collect();

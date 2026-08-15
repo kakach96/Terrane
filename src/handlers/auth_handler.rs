@@ -49,7 +49,7 @@ pub async fn login(
     req: HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
     let ip = req_ip(&req);
-    let lang = i18n::from_accept_language(&req.headers());
+    let lang = i18n::from_accept_language(req.headers());
 
     if let Some(store) = &state.store {
         match store.get_user(&body.username).await {
@@ -73,7 +73,7 @@ pub async fn login(
 
                 if verify_password(&body.password, &user.salt, &user.password_hash) {
                     let token = generate_token(&user.username, &user.role, 24)
-                        .map_err(|e| GeoServerError::InternalError(e))?;
+                        .map_err(GeoServerError::InternalError)?;
 
                     // 记录会话到数据库 (支持登出/吊销) 并写入会话缓存
                     if let Ok(claims) = verify_token(&token) {
@@ -166,7 +166,7 @@ pub async fn logout(
     req: HttpRequest,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
-    let lang = i18n::from_accept_language(&req.headers());
+    let lang = i18n::from_accept_language(req.headers());
     let auth_header = req
         .headers()
         .get("Authorization")
@@ -229,10 +229,7 @@ pub async fn verify(
                 }
             }
         } else {
-            match store.get_session(&claims.jti).await {
-                Ok(s) => s,
-                Err(_) => None,
-            }
+            store.get_session(&claims.jti).await.unwrap_or_default()
         };
 
         match session_opt {

@@ -24,8 +24,8 @@ pub struct WmtsRequest {
 
 #[derive(Debug, Clone)]
 pub enum WmtsOperation {
-    GetCapabilities,
-    GetTile {
+    Capabilities,
+    Tile {
         layer: String,
         style: String,
         format: String,
@@ -34,7 +34,7 @@ pub enum WmtsOperation {
         tile_row: u32,       // y
         tile_col: u32,       // x
     },
-    GetFeatureInfo {
+    FeatureInfo {
         layer: String,
         style: String,
         tile_matrix_set: String,
@@ -352,8 +352,8 @@ pub fn parse_wmts_request(params: &[(String, String)]) -> Result<WmtsRequest, Ge
     }
 
     let operation = match request.as_str() {
-        "GETCAPABILITIES" => WmtsOperation::GetCapabilities,
-        "GETTILE" => WmtsOperation::GetTile {
+        "GETCAPABILITIES" => WmtsOperation::Capabilities,
+        "GETTILE" => WmtsOperation::Tile {
             layer,
             style,
             format,
@@ -362,7 +362,7 @@ pub fn parse_wmts_request(params: &[(String, String)]) -> Result<WmtsRequest, Ge
             tile_row,
             tile_col,
         },
-        "GETFEATUREINFO" => WmtsOperation::GetFeatureInfo {
+        "GETFEATUREINFO" => WmtsOperation::FeatureInfo {
             layer,
             style,
             tile_matrix_set,
@@ -610,6 +610,7 @@ fn build_wmts_layers(layers: &[Layer], base_url: &str, api_context: &str) -> Vec
 }
 
 /// 从 WMTS GetTile 请求参数生成瓦片 URL (复用现有 /tiles 端点)
+#[allow(clippy::too_many_arguments)] // signature mirrors the WMTS GetTile query parameters
 pub fn get_tile_url(
     internal_base: &str,
     layer: &str,

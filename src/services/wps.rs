@@ -374,9 +374,9 @@ pub fn build_process_descriptions(identifiers: &[String]) -> Result<String, GeoS
         wps_attrs()
     ));
     for spec in specs {
-        out.push_str(&format!(
-            "  <ProcessDescription wps:processVersion=\"1.0.0\" storeSupported=\"true\" statusSupported=\"true\">\n"
-        ));
+        out.push_str(
+            "  <ProcessDescription wps:processVersion=\"1.0.0\" storeSupported=\"true\" statusSupported=\"true\">\n",
+        );
         out.push_str(&format!(
             "    <ows:Identifier>{}</ows:Identifier>\n",
             spec.identifier

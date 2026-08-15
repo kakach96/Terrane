@@ -170,7 +170,7 @@ impl<'a> WkbReader<'a> {
         let order = self.read_byte()?;
         let little = order == 0x01;
         // 低 16 位为 WKB 类型, 高位为 Z/M/SRID 标志 (此处仅解析 2D)
-        let geom_type = (self.read_u32(little)? & 0xFFFF) as u32;
+        let geom_type = self.read_u32(little)? & 0xFFFF;
         match geom_type {
             1 => self.read_point(little),
             2 => self.read_linestring(little),
@@ -517,7 +517,7 @@ mod tests {
         let wkb_mls = geometry_to_wkb(&mls);
         assert_eq!(
             wkb_mls.len(),
-            1 + 4 + 4 + (1 + 4 + 4 + 2 * 16) + (1 + 4 + 4 + 1 * 16)
+            1 + 4 + 4 + (1 + 4 + 4 + 2 * 16) + (1 + 4 + 4 + 16)
         );
 
         // MultiPolygon: 1 + 4 + 4 + 2 个多边形 (每个 1+4+4+ring 数+点数)

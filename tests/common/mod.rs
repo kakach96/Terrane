@@ -4,8 +4,6 @@
 //! files directly under `tests/` are compiled as separate test binaries, so this
 //! module is compiled into every test crate that does `#[macro_use] mod common;`.
 
-use std::path::PathBuf;
-
 /// Build a test `GeoServerConfig`:
 /// - in-memory SQLite metadata store
 /// - vector store reuses the metadata store (no files written to `./data/business`)
@@ -20,8 +18,8 @@ pub fn create_test_config() -> terrane::config::GeoServerConfig {
     // 禁用瓦片缓存, 避免测试写入 ./data/gwc (缓存为内置默认, 测试可编程覆盖)
     config.cache = terrane::config::CacheConfig {
         kind: "local".to_string(),
-        cache_dir: PathBuf::from(std::env::temp_dir()).join("terrane-test-gwc"),
-        meta_dir: PathBuf::from(std::env::temp_dir()).join("terrane-test-gwc-meta"),
+        cache_dir: std::env::temp_dir().join("terrane-test-gwc"),
+        meta_dir: std::env::temp_dir().join("terrane-test-gwc-meta"),
         expire_after_secs: 0,
         max_tiles: 0,
         enabled: false,
@@ -60,6 +58,7 @@ pub fn create_test_config() -> terrane::config::GeoServerConfig {
 /// Consumed via `#[macro_use] mod common;` at the top of each protocol test
 /// crate (e.g. `tests/wms_test.rs`). The macro uses fully-qualified paths, so
 /// test files only need the `mod common;` declaration.
+#[allow(unused_macros)] // used through `#[macro_use] mod common;` in the test crates
 macro_rules! build_test_app {
     () => {{
         let config = common::create_test_config();

@@ -167,7 +167,7 @@ async fn test_s3_geojson_data_source_features() {
     // 创建 S3 数据源
     let create_ds = actix_web::test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "s3_ds",
             "type": "geojson",
             "workspace": "default",
@@ -189,7 +189,7 @@ async fn test_s3_geojson_data_source_features() {
     // 创建图层
     let create_layer = actix_web::test::TestRequest::post()
         .uri("/geoserver/layers")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "s3_points",
             "title": "S3 Points",
             "workspace": "default",

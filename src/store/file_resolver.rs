@@ -70,6 +70,7 @@ pub fn file_store_from_connection(
 ///
 /// - local: reads `file_path` from disk.
 /// - s3: downloads the object.
+///
 /// Returns `None` when the connection has no usable `file_path`.
 pub async fn read_bytes(conn: &DataSourceConnection) -> Result<Option<Vec<u8>>, GeoServerError> {
     let file_path = match file_path_of(conn) {
@@ -105,6 +106,7 @@ pub async fn read_bytes(conn: &DataSourceConnection) -> Result<Option<Vec<u8>>, 
 ///
 /// - local: returns `file_path` as-is.
 /// - s3: downloads the object to a temp file (kept alive by the guard).
+///
 /// Returns `None` when the connection has no usable `file_path`.
 pub async fn materialize_file(
     conn: &DataSourceConnection,

@@ -203,7 +203,7 @@ pub fn read_arcgrid_meta<P: AsRef<Path>>(path: P) -> Result<(Bounds, u32, u32), 
     let mut cellsize = 1.0f64;
 
     for line in content.lines() {
-        let parts: Vec<&str> = line.trim().split_whitespace().collect();
+        let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() < 2 {
             continue;
         }
@@ -226,7 +226,7 @@ pub fn read_arcgrid_meta<P: AsRef<Path>>(path: P) -> Result<(Bounds, u32, u32), 
             _ => {
                 if parts[0]
                     .chars()
-                    .all(|c| c.is_digit(10) || c == '.' || c == '-')
+                    .all(|c| c.is_ascii_digit() || c == '.' || c == '-')
                 {
                     break;
                 }

@@ -17,7 +17,7 @@ pub async fn handle_export(
 
     let backup = export_backup(&state)
         .await
-        .map_err(|e| GeoServerError::InternalError(e))?;
+        .map_err(GeoServerError::InternalError)?;
 
     info!("[Backup] 导出完成: {} 个实体", backup.workspaces.len());
     Ok(HttpResponse::Ok()
@@ -40,7 +40,7 @@ pub async fn handle_import(
     let backup = body.into_inner();
     let report = import_backup(&state, &backup)
         .await
-        .map_err(|e| GeoServerError::InternalError(e))?;
+        .map_err(GeoServerError::InternalError)?;
 
     info!("[Backup] 导入完成: {}", report.summary());
     Ok(

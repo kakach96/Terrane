@@ -194,7 +194,7 @@ async fn test_wcs_get_coverage_real_geotiff() {
     // 2. 创建 geotiff 数据源, connection.file_path 指向 fixture
     let create = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "cov1",
             "type": "geotiff",
             "workspace": "default",
@@ -288,7 +288,7 @@ async fn test_wcs_get_coverage_real_arcgrid() {
     // 2. 创建 arcgrid 数据源, connection.file_path 指向 fixture
     let create = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "cov_asc",
             "type": "arcgrid",
             "workspace": "default",
@@ -438,7 +438,7 @@ async fn test_wcs_get_coverage_real_arcgrid_subset_size() {
 
     let create = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "cov_asc_sub",
             "type": "arcgrid",
             "workspace": "default",
@@ -505,6 +505,7 @@ async fn test_wcs_get_coverage_real_arcgrid_subset_size() {
 /// 生成一个带地理配准标签的 8x8 GeoTIFF fixture (用 tiff crate 编码):
 /// - ModelPixelScaleTag (33550) = [1.0, 1.0, 0.0]
 /// - ModelTiepointTag (33922)   = [0,0,0, 0,8,0] → 左上角模型坐标 (0, 8)
+///
 /// → bounds = (minx 0, miny 0, maxx 8, maxy 8)
 fn create_georef_tiff_fixture(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
     use tiff::encoder::*;
@@ -551,7 +552,7 @@ async fn test_wcs_get_coverage_real_geotiff_subset_size() {
     // 2. 创建 geotiff 数据源
     let create = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "cov_geo",
             "type": "geotiff",
             "workspace": "default",

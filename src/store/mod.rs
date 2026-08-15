@@ -104,6 +104,7 @@ pub trait Store: Send + Sync {
     async fn get_sql_view(&self, name: &str) -> Result<Option<SqlView>, StoreError>;
     async fn get_all_sql_views(&self) -> Result<Vec<SqlView>, StoreError>;
     async fn create_sql_view(&self, view: &SqlView) -> Result<(), StoreError>;
+    #[allow(clippy::too_many_arguments)] // SQL view update options, part of the Store trait contract
     async fn update_sql_view(
         &self,
         name: &str,

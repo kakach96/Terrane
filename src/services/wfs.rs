@@ -387,6 +387,12 @@ impl TransactionResponse {
     }
 }
 
+impl Default for TransactionResponse {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn parse_wfs_request(
     params: &[(String, String)],
 ) -> Result<WfsRequest, crate::error::GeoServerError> {
@@ -933,7 +939,7 @@ fn parse_gml_ring(node: &XmlNode) -> Result<String, String> {
 /// 从 GML Envelope 解析边界 (coordinates "minx,miny maxx,maxy" 或 lowerCorner/upperCorner)
 fn parse_envelope_bounds(node: &XmlNode) -> Result<(f64, f64, f64, f64), String> {
     if let Some(coord) = node.children.iter().find(|c| c.name == "coordinates") {
-        let mut pairs = coord.text.trim().split_whitespace();
+        let mut pairs = coord.text.split_whitespace();
         let low = pairs
             .next()
             .ok_or_else(|| "Envelope 缺少低角点".to_string())?;
@@ -1185,7 +1191,7 @@ pub fn parse_transaction_xml(
             Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref())
                     .split(':')
-                    .last()
+                    .next_back()
                     .unwrap_or("")
                     .to_string();
                 text_content.clear();
@@ -1243,19 +1249,17 @@ pub fn parse_transaction_xml(
                     "Point" | "point" => {},
                     "FeatureId" | "featureId" | "FEATUREID" if in_delete => {
                         // Collect ogc:FeatureId fid attributes into the Delete filter
-                        for attr in e.attributes().with_checks(false) {
-                            if let Ok(a) = attr {
-                                let key = String::from_utf8_lossy(a.key.as_ref())
-                                    .split(':')
-                                    .last()
-                                    .unwrap_or("")
-                                    .to_lowercase();
-                                if key == "fid" {
-                                    let fid = String::from_utf8_lossy(a.value.as_ref()).to_string();
-                                    if let Some(ref mut delete) = current_delete {
-                                        if let Filter::FeatureId(ref mut ids) = delete.filter {
-                                            ids.push(fid);
-                                        }
+                        for a in e.attributes().with_checks(false).flatten() {
+                            let key = String::from_utf8_lossy(a.key.as_ref())
+                                .split(':')
+                                .next_back()
+                                .unwrap_or("")
+                                .to_lowercase();
+                            if key == "fid" {
+                                let fid = String::from_utf8_lossy(a.value.as_ref()).to_string();
+                                if let Some(ref mut delete) = current_delete {
+                                    if let Filter::FeatureId(ref mut ids) = delete.filter {
+                                        ids.push(fid);
                                     }
                                 }
                             }
@@ -1282,7 +1286,7 @@ pub fn parse_transaction_xml(
             Ok(Event::End(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref())
                     .split(':')
-                    .last()
+                    .next_back()
                     .unwrap_or("")
                     .to_string();
 

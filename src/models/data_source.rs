@@ -76,7 +76,7 @@ impl std::fmt::Display for DataSourceType {
 ///
 /// - 对于 PostGIS: 使用 host/port/database/schema/username/password
 /// - 对于 Shapefile/GeoTIFF: 使用 file_path/file_storage_type
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DataSourceConnection {
     // -- PostGIS 字段 (均为可选，以便文件型数据源留空) --
     #[serde(default)]
@@ -124,26 +124,6 @@ fn default_schema() -> Option<String> {
 
 fn default_file_storage() -> Option<String> {
     Some("local".to_string())
-}
-
-impl Default for DataSourceConnection {
-    fn default() -> Self {
-        DataSourceConnection {
-            host: None,
-            port: None,
-            database: None,
-            schema: None,
-            username: None,
-            password: None,
-            file_path: None,
-            file_storage_type: None,
-            s3_endpoint: None,
-            s3_region: None,
-            s3_bucket: None,
-            s3_access_key: None,
-            s3_secret_key: None,
-        }
-    }
 }
 
 impl DataSourceConnection {

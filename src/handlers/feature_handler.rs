@@ -230,7 +230,7 @@ fn geometry_to_wkt(geom: &crate::models::GeoJsonGeometry) -> String {
             format!("MULTIPOLYGON ({})", polys.join(", "))
         },
         crate::models::GeoJsonGeometry::GeometryCollection { geometries } => {
-            let geoms: Vec<String> = geometries.iter().map(|g| geometry_to_wkt(g)).collect();
+            let geoms: Vec<String> = geometries.iter().map(geometry_to_wkt).collect();
             format!("GEOMETRYCOLLECTION ({})", geoms.join(", "))
         },
     }

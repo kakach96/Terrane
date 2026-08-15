@@ -536,8 +536,8 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
 /// WMS 1.3.0 对地理坐标系（EPSG:4326）要求 BBOX 轴序为 lat,lon
 /// 需要转换为内部的 lon,lat 表示
 fn normalize_bbox(raw: Bbox, version: Option<&str>, crs: Option<&str>) -> Bbox {
-    let is_130 = version.map_or(false, |v| v.starts_with("1.3"));
-    let is_geographic = crs.map_or(false, |c| {
+    let is_130 = version.is_some_and(|v| v.starts_with("1.3"));
+    let is_geographic = crs.is_some_and(|c| {
         let upper = c.to_uppercase();
         upper == "EPSG:4326" || upper == "4326" || upper == "CRS:84"
     });

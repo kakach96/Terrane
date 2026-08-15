@@ -358,7 +358,7 @@ async fn test_wfs_describe_feature_type_geopackage() {
     // 2. 通过 REST 发布: geopackage 数据源 + 图层
     let create = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "gpkg_ds",
             "type": "geopackage",
             "workspace": "default",
@@ -376,7 +376,7 @@ async fn test_wfs_describe_feature_type_geopackage() {
 
     let create = test::TestRequest::post()
         .uri("/geoserver/layers")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "typed_layer",
             "title": "Typed",
             "workspace": "default",

@@ -266,7 +266,7 @@ fn apply_css_property(style: &mut Style, prop: &str, val: &str) {
                     .unwrap_or_else(|| "#808080".to_string());
                 style.fill = Some(FillStyle {
                     color,
-                    opacity: opacity.min(1.0).max(0.0),
+                    opacity: opacity.clamp(0.0, 1.0),
                 });
             }
         },
@@ -309,14 +309,14 @@ fn apply_css_property(style: &mut Style, prop: &str, val: &str) {
                 style.stroke = Some(StrokeStyle {
                     color,
                     width: w,
-                    opacity: opacity.min(1.0).max(0.0),
+                    opacity: opacity.clamp(0.0, 1.0),
                     dash_array: d,
                 });
             }
         },
         "stroke-dasharray" => {
             let dash: Vec<f64> = val
-                .split(|c: char| c == ' ' || c == ',')
+                .split([' ', ','])
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
             if !dash.is_empty() {

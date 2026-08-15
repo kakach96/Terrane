@@ -34,11 +34,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: cargo clippy
-        # NOTE: the codebase currently carries pre-existing clippy warnings, so
-        # `-D warnings` is intentionally NOT used yet; clippy still runs and any
-        # new *error* fails the build. Tighten to `-D warnings` after the
-        # known clippy debt is paid down (see docs/ROADMAP.md).
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: cargo test
         run: cargo test --all

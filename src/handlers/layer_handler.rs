@@ -127,7 +127,7 @@ pub async fn get_layer(
                     layer
                         .abstract_text
                         .clone()
-                        .map(|v| serde_json::Value::String(v))
+                        .map(serde_json::Value::String)
                         .unwrap_or(serde_json::Value::Null),
                 );
                 map.insert(
@@ -143,7 +143,7 @@ pub async fn get_layer(
                     layer
                         .native_name
                         .clone()
-                        .map(|v| serde_json::Value::String(v))
+                        .map(serde_json::Value::String)
                         .unwrap_or(serde_json::Value::Null),
                 );
                 map.insert("srs".into(), serde_json::Value::String(layer.srs.clone()));
@@ -202,7 +202,7 @@ pub async fn get_layer(
                 layer
                     .abstract_text
                     .clone()
-                    .map(|v| serde_json::Value::String(v))
+                    .map(serde_json::Value::String)
                     .unwrap_or(serde_json::Value::Null),
             );
             map.insert(
@@ -218,7 +218,7 @@ pub async fn get_layer(
                 layer
                     .native_name
                     .clone()
-                    .map(|v| serde_json::Value::String(v))
+                    .map(serde_json::Value::String)
                     .unwrap_or(serde_json::Value::Null),
             );
             map.insert("srs".into(), serde_json::Value::String(layer.srs.to_epsg()));

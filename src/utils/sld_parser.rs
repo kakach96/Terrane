@@ -64,7 +64,7 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                 let local = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                let tag = local.split(':').last().unwrap_or(&local).to_string();
+                let tag = local.split(':').next_back().unwrap_or(&local).to_string();
 
                 match tag.as_str() {
                     "Rule" => {
@@ -124,26 +124,22 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                 }
             },
 
-            Ok(Event::Text(ref e)) => {
-                if collect_text {
-                    let text = String::from_utf8_lossy(e.as_ref()).trim().to_string();
-                    if !text.is_empty() {
-                        if in_ogc_filter {
-                            current_literal = text;
-                        } else if !css_param_name.is_empty() {
-                            css_param_value = text;
-                        } else if in_mark && text.len() < 20 {
-                            current_literal = text;
-                        } else if in_graphic {
-                            current_literal = text;
-                        }
+            Ok(Event::Text(ref e)) if collect_text => {
+                let text = String::from_utf8_lossy(e.as_ref()).trim().to_string();
+                if !text.is_empty() {
+                    if in_ogc_filter {
+                        current_literal = text;
+                    } else if !css_param_name.is_empty() {
+                        css_param_value = text;
+                    } else if (in_mark && text.len() < 20) || in_graphic {
+                        current_literal = text;
                     }
                 }
             },
 
             Ok(Event::End(ref e)) => {
                 let local = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                let tag = local.split(':').last().unwrap_or(&local).to_string();
+                let tag = local.split(':').next_back().unwrap_or(&local).to_string();
 
                 match tag.as_str() {
                     "Rule" => {
@@ -346,7 +342,7 @@ fn apply_css_param(style: &mut Style, name: &str, value: &str, is_fill: bool) {
         },
         "stroke-dasharray" if !is_fill => {
             let dash: Vec<f64> = value
-                .split(|c: char| c == ' ' || c == ',')
+                .split([' ', ','])
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
             if !dash.is_empty() {
@@ -486,11 +482,10 @@ fn apply_env_to_style(
     env: &std::collections::HashMap<String, String>,
 ) {
     // 遍历环境变量，将匹配的 hex 颜色替换到样式中
-    for (_, val) in env {
+    for val in env.values() {
         if val.starts_with('#') && val.len() == 7 {
             // 验证是否为有效 hex 颜色
-            let _valid =
-                val.as_bytes().len() == 7 && val[1..].chars().all(|c| c.is_ascii_hexdigit());
+            let _valid = val.len() == 7 && val[1..].chars().all(|c| c.is_ascii_hexdigit());
 
             if let Some(ref mut fill) = style.fill {
                 fill.color = val.clone();

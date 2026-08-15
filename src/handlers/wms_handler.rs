@@ -112,6 +112,7 @@ fn format_wms_error_response(err: &GeoServerError, params: &[(String, String)]) 
 /// Render a map for a single layer by delegating to the shared WMS GetMap
 /// pipeline. Used by the OGC API - Maps `map` operation
 /// (`GET /ogc/maps/collections/{id}/map`).
+#[allow(clippy::too_many_arguments)] // signature mirrors the WMS GetMap query parameters
 pub async fn render_ogc_map(
     state: &AppState,
     layer: &str,
@@ -247,8 +248,8 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
         .as_ref()
         .ok_or_else(|| GeoServerError::BadRequest("LAYERS parameter is required".to_string()))?;
 
-    let width = request.width.unwrap_or(512) as u32;
-    let height = request.height.unwrap_or(512) as u32;
+    let width = request.width.unwrap_or(512);
+    let height = request.height.unwrap_or(512);
 
     let bbox = request
         .bbox
@@ -588,6 +589,7 @@ async fn query_layer_features_optimized(
     features
 }
 
+#[allow(clippy::too_many_arguments)] // signature mirrors the WMS GetMap query parameters
 async fn query_postgis_features_optimized(
     state: &AppState,
     conn: &crate::models::DataSourceConnection,
@@ -887,7 +889,7 @@ fn render_map_image(
     }
 
     // 图片格式: 使用 MapRenderer 渲染
-    let renderer = MapRenderer::new(context.options.clone(), context.bounds.clone());
+    let renderer = MapRenderer::new(context.options, context.bounds.clone());
     let img = renderer.render(all_render_items);
 
     let image_format = match format_lower.as_str() {
@@ -1311,18 +1313,16 @@ async fn handle_get_feature_info(
                 )
             });
 
-            let features = match crate::handlers::features::query_layer_features(
-                state,
-                layer_name,
-                query_bbox.as_ref(),
-                Some(feature_count as u64 * 2),
-                None,
-            )
-            .await
-            {
-                Ok(f) => f,
-                Err(_) => Vec::new(),
-            };
+            let features: Vec<crate::models::feature::Feature> =
+                crate::handlers::features::query_layer_features(
+                    state,
+                    layer_name,
+                    query_bbox.as_ref(),
+                    Some(feature_count as u64 * 2),
+                    None,
+                )
+                .await
+                .unwrap_or_default();
 
             for feature in &features {
                 let hit = if let Some((cx, cy)) = click_point {
@@ -1588,7 +1588,7 @@ async fn handle_get_styles(
         let style_content = styles_lock
             .get(&style_name)
             .cloned()
-            .unwrap_or_else(|| String::new());
+            .unwrap_or_else(String::new);
 
         sld_doc.push_str(&format!(
             r#"  <NamedLayer>
@@ -1724,8 +1724,7 @@ fn get_layer_rules(
 }
 
 fn parse_color_opt(color: &str) -> Option<[u8; 4]> {
-    if color.starts_with('#') {
-        let hex = &color[1..];
+    if let Some(hex) = color.strip_prefix('#') {
         if hex.len() == 6 {
             let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
             let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
@@ -1819,7 +1818,7 @@ fn calculate_openlayers_zoom(bounds: &Bounds, crs: &str) -> f64 {
         return 1.0;
     }
     // ImageWMS 不需要匹配瓦片网格，直接计算合适的缩放级别
-    let zoom = (world_width / range).log2().max(0.0).min(20.0);
+    let zoom = (world_width / range).log2().clamp(0.0, 20.0);
     // 减少 0.5 让视图稍微缩小，确保数据完整显示
     (zoom - 0.5).max(0.0)
 }
@@ -2024,7 +2023,7 @@ async fn handle_cascaded_wms_request(
     );
 
     let srs = &context.output_crs;
-    let style = context.layers.first().and_then(|_| None); // 暂不使用样式
+    let style: Option<&str> = None; // 暂不使用样式
 
     // 收集请求级厂商参数, 透传到上游 WMS (CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID)
     let mut passthrough: HashMap<String, String> = HashMap::new();

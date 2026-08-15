@@ -626,3 +626,9 @@ impl ImportReport {
         )
     }
 }
+
+impl Default for ImportReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}

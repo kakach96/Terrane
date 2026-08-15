@@ -733,7 +733,7 @@ async fn test_wms_cascaded_live() {
     // 1. 创建级联 WMS 数据源, 指向参考 GeoServer 的 WMS 端点 (sf:archsites 点图层)
     let create_ds = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "casc1",
             "type": "cascaded_wms",
             "workspace": "default",
@@ -757,7 +757,7 @@ async fn test_wms_cascaded_live() {
     // 2. 创建图层引用该级联数据源
     let create_layer = test::TestRequest::post()
         .uri("/geoserver/layers")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "casc_layer",
             "title": "Cascaded Layer",
             "workspace": "default",
@@ -818,7 +818,7 @@ async fn test_wms_cascaded_vendor_params_live() {
     // 1. 创建级联 WMS 数据源 (参考 GeoServer sf:archsites, 原生 CRS EPSG:26713)
     let create_ds = test::TestRequest::post()
         .uri("/geoserver/data-sources")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "casc_vendor",
             "type": "cascaded_wms",
             "workspace": "default",
@@ -840,7 +840,7 @@ async fn test_wms_cascaded_vendor_params_live() {
 
     let create_layer = test::TestRequest::post()
         .uri("/geoserver/layers")
-        .set_json(&serde_json::json!({
+        .set_json(serde_json::json!({
             "name": "casc_vendor_layer",
             "title": "Cascaded Vendor Layer",
             "workspace": "default",

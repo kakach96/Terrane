@@ -314,8 +314,8 @@ fn parse_in(s: &str) -> Result<CqlExpression, String> {
     if let Some(idx) = s_upper.find(" IN (") {
         let property = s[..idx].trim().to_string();
         let rest = s[idx + 5..].trim();
-        let rest = if rest.ends_with(')') {
-            &rest[..rest.len() - 1]
+        let rest = if let Some(stripped) = rest.strip_suffix(')') {
+            stripped
         } else {
             rest
         };
@@ -578,7 +578,7 @@ fn parse_wkt_polygon(wkt: &str) -> Option<Vec<(f64, f64)>> {
             let points: Vec<(f64, f64)> = outer
                 .split(',')
                 .filter_map(|pair| {
-                    let parts: Vec<&str> = pair.trim().split_whitespace().collect();
+                    let parts: Vec<&str> = pair.split_whitespace().collect();
                     if parts.len() >= 2 {
                         Some((parts[0].parse::<f64>().ok()?, parts[1].parse::<f64>().ok()?))
                     } else {
@@ -758,8 +758,7 @@ fn compare_values(prop_val: &PropertyValue, op: &ComparisonOp, lit: &LiteralValu
 /// 将 SQL LIKE 模式转为正则表达式
 fn pattern_to_regex(pattern: &str) -> String {
     let mut regex = String::new();
-    let mut chars = pattern.chars().peekable();
-    while let Some(c) = chars.next() {
+    for c in pattern.chars() {
         match c {
             '%' => regex.push_str(".*"),
             '_' => regex.push('.'),

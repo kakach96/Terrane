@@ -298,8 +298,8 @@ fn encode_geometry(geom: &GeoJsonGeometry, bbox: &Bounds, extent: u32) -> (MvtGe
             (MvtGeomType::Polygon, buf)
         },
         GeoJsonGeometry::GeometryCollection { geometries } => {
-            // 递归编码第一个几何
-            for g in geometries {
+            // Recursively encode the first geometry
+            if let Some(g) = geometries.first() {
                 return encode_geometry(g, bbox, extent);
             }
             (MvtGeomType::Point, Vec::new())

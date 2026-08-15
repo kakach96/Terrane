@@ -196,8 +196,8 @@ pub fn crop_worldimage(data: &WorldImageData, bounds: &Bounds) -> Option<RgbaIma
 
     let x = x1.max(0) as u32;
     let y = y1.max(0) as u32;
-    let w = (x2 - x1 as i64).max(0).min((data.width - x) as i64) as u32;
-    let h = (y2 - y1 as i64).max(0).min((data.height - y) as i64) as u32;
+    let w = (x2 - x1).max(0).min((data.width - x) as i64) as u32;
+    let h = (y2 - y1).max(0).min((data.height - y) as i64) as u32;
 
     if w == 0 || h == 0 {
         return None;

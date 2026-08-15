@@ -265,13 +265,9 @@ fn filter_features(features: Vec<Feature>, bbox: Option<&Bounds>) -> Vec<Feature
 
 fn feature_in_bbox(feature: &Feature, bounds: &Bounds) -> bool {
     match &feature.geometry {
-        GeoJsonGeometry::Point { coordinates } => {
-            if coordinates.len() >= 2 {
-                let (x, y) = (coordinates[0], coordinates[1]);
-                x >= bounds.minx && x <= bounds.maxx && y >= bounds.miny && y <= bounds.maxy
-            } else {
-                true
-            }
+        GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
+            let (x, y) = (coordinates[0], coordinates[1]);
+            x >= bounds.minx && x <= bounds.maxx && y >= bounds.miny && y <= bounds.maxy
         },
         _ => true,
     }
@@ -368,11 +364,10 @@ async fn get_table_columns(
     schema: &str,
     table: &str,
 ) -> Vec<String> {
-    let sql = format!(
-        "SELECT column_name FROM information_schema.columns
+    let sql = "SELECT column_name FROM information_schema.columns
          WHERE table_schema = $1 AND table_name = $2
          ORDER BY ordinal_position"
-    );
+        .to_string();
     match client.query(&sql, &[&schema, &table]).await {
         Ok(rows) => rows.iter().map(|r| r.get::<_, String>(0)).collect(),
         Err(_) => vec![],
@@ -457,12 +452,11 @@ async fn query_geopackage_features(
 }
 
 async fn get_id_expr(client: &tokio_postgres::Client, schema: &str, table: &str) -> String {
-    let sql = format!(
-        "SELECT column_name FROM information_schema.columns
+    let sql = "SELECT column_name FROM information_schema.columns
          WHERE table_schema = $1 AND table_name = $2
          AND (column_name = 'id' OR column_name LIKE '%_id' OR column_name = 'gid')
          ORDER BY ordinal_position LIMIT 1"
-    );
+        .to_string();
     match client.query(&sql, &[&schema, &table]).await {
         Ok(rows) if !rows.is_empty() => rows[0].get::<_, String>(0),
         Err(_) | Ok(_) => format!("'{}'", uuid::Uuid::new_v4()),

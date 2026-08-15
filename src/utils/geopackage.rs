@@ -73,26 +73,24 @@ pub fn read_geopackage_layers<P: AsRef<Path>>(path: P) -> Result<Vec<GeoPackageL
         })
         .map_err(|e| format!("查询结果错误: {}", e))?;
 
-    for row in rows {
-        if let Ok((table_name, srs_id, column_name, geom_type)) = row {
-            let crs = srs_map
-                .get(&srs_id)
-                .cloned()
-                .unwrap_or_else(|| format!("EPSG:{}", srs_id));
-            let count = conn
-                .prepare(&format!("SELECT COUNT(*) FROM \"{}\"", table_name))
-                .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
-                .unwrap_or(0);
+    for (table_name, srs_id, column_name, geom_type) in rows.flatten() {
+        let crs = srs_map
+            .get(&srs_id)
+            .cloned()
+            .unwrap_or_else(|| format!("EPSG:{}", srs_id));
+        let count = conn
+            .prepare(&format!("SELECT COUNT(*) FROM \"{}\"", table_name))
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .unwrap_or(0);
 
-            layers.push(GeoPackageLayer {
-                table_name,
-                geometry_column: column_name,
-                geometry_type: geom_type,
-                srs_id,
-                crs,
-                feature_count: count,
-            });
-        }
+        layers.push(GeoPackageLayer {
+            table_name,
+            geometry_column: column_name,
+            geometry_type: geom_type,
+            srs_id,
+            crs,
+            feature_count: count,
+        });
     }
 
     info!("[GeoPackage] 读取完成: {} 个图层", layers.len());
@@ -126,13 +124,7 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
                 ))
             })
         })
-        .map_err(|e| {
-            format!(
-                "查询图层 '{}' 元数据失败: {}",
-                path.display().to_string(),
-                e
-            )
-        })?;
+        .map_err(|e| format!("查询图层 '{}' 元数据失败: {}", path.display(), e))?;
 
     let srs_map = read_srs(&conn)?;
     let crs = srs_map
@@ -151,12 +143,10 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
             let col_type: String = row.get(2).unwrap_or_default();
             Ok((col_name, col_type))
         }) {
-            for row in rows {
-                if let Ok((name, ty)) = row {
-                    if name != *geom_col {
-                        attr_columns.push(name.clone());
-                        col_types.insert(name, ty);
-                    }
+            for (name, ty) in rows.flatten() {
+                if name != *geom_col {
+                    attr_columns.push(name.clone());
+                    col_types.insert(name, ty);
                 }
             }
         }
@@ -164,7 +154,7 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
 
     // 构建查询
     let cols = if attr_columns.is_empty() {
-        format!("*")
+        "*".to_string()
     } else {
         format!("{}, {}", geom_col, attr_columns.join(", "))
     };
@@ -209,13 +199,11 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
             }
             Ok((geom_blob, props))
         }) {
-            for row in rows {
-                if let Ok((geom_blob, props)) = row {
-                    if let Some(wkb) = geom_blob {
-                        let geometry = crate::utils::wkb::parse_wkb_geometry(&wkb);
-                        update_bounds_from_geometry(&geometry, &mut bounds);
-                        features.push(Feature::new(geometry, props));
-                    }
+            for (geom_blob, props) in rows.flatten() {
+                if let Some(wkb) = geom_blob {
+                    let geometry = crate::utils::wkb::parse_wkb_geometry(&wkb);
+                    update_bounds_from_geometry(&geometry, &mut bounds);
+                    features.push(Feature::new(geometry, props));
                 }
             }
         }
@@ -248,10 +236,8 @@ fn read_srs(conn: &Connection) -> Result<HashMap<i32, String>, String> {
             let cs_id: i32 = row.get(2)?;
             Ok((id, org, cs_id))
         }) {
-            for row in rows {
-                if let Ok((id, org, cs_id)) = row {
-                    map.insert(id, format!("{}:{}", org, cs_id));
-                }
+            for (id, org, cs_id) in rows.flatten() {
+                map.insert(id, format!("{}:{}", org, cs_id));
             }
         }
     };
@@ -318,10 +304,8 @@ pub fn geopackage_table_columns<P: AsRef<Path>>(
         .map_err(|e| format!("查询结果错误: {}", e))?;
 
     let mut cols = Vec::new();
-    for row in rows {
-        if let Ok((name, ty)) = row {
-            cols.push((name, ty));
-        }
+    for (name, ty) in rows.flatten() {
+        cols.push((name, ty));
     }
     Ok(cols)
 }

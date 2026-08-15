@@ -267,10 +267,9 @@ fn extract_coordinates(geometry: &GeoJsonGeometry) -> Vec<Vec<f64>> {
             .flat_map(|poly| poly.iter())
             .flat_map(|ring| ring.iter().cloned())
             .collect(),
-        GeoJsonGeometry::GeometryCollection { geometries } => geometries
-            .iter()
-            .flat_map(|g| extract_coordinates(g))
-            .collect(),
+        GeoJsonGeometry::GeometryCollection { geometries } => {
+            geometries.iter().flat_map(extract_coordinates).collect()
+        },
     }
 }
 
