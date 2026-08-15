@@ -46,7 +46,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Tile cache backend abstraction: local disk backend done; **Redis data source backend done** (`DataSourceType::Redis` + `Layer.cache_store`, shared across replicas); S3/MinIO pending
 - Raster data backend abstraction: local files backend done; MinIO / S3 pending
 - Session cache: local in-memory backend done; Redis pending (deferred — simple JWT)
-- Catalog refresh mechanism to converge in-memory caches across replicas — **periodic reload done** (`[server] catalog_refresh_secs`), event-triggered push pending
+- Catalog refresh mechanism to converge in-memory caches across replicas — **periodic reload done** (`[server] catalog_refresh_secs`); **event-triggered refresh done** (REST layer update/delete now immediately reloads the in-memory catalog via `AppState::refresh_catalog`, eliminating the write-after-read-stale window for WMS/WMTS/tile paths)
 - Structured JSON logs + optional OpenTelemetry tracing — **JSON logs + request `trace_id` done** (`[logging] format = "json"`, `X-Trace-Id`); OTel pending
 - CI/CD pipeline (GitHub Actions / GitLab CI): fmt + clippy + test + frontend build + image push — **GitHub Actions done, incl. Trivy scan + Dependabot**
 

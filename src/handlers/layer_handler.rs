@@ -465,11 +465,15 @@ pub async fn update_layer(
             )
             .await
         {
-            Ok(_) => Ok(
-                HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                    "message": format!("Layer '{}' updated successfully", layer_name),
-                }))),
-            ),
+            Ok(_) => {
+                // 事件驱动目录刷新: 立即重载内存目录, 消除"写后读旧"窗口。
+                state.refresh_catalog().await;
+                Ok(
+                    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                        "message": format!("Layer '{}' updated successfully", layer_name),
+                    }))),
+                )
+            },
             Err(e) => {
                 eprintln!("Failed to update layer: {}", e);
                 Err(GeoServerError::InternalError(
@@ -507,11 +511,16 @@ pub async fn delete_layer(
 
     if let Some(store) = &state.store {
         match store.delete_layer(layer_name).await {
-            Ok(_) => Ok(
-                HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                    "message": format!("Layer '{}' deleted", layer_name),
-                }))),
-            ),
+            Ok(_) => {
+                // 事件驱动目录刷新: 立即从内存目录移除已删除图层
+                // (refresh_catalog 按名称更新/新增不删除, 故此处显式移除)。
+                state.delete_layer(layer_name).await;
+                Ok(
+                    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                        "message": format!("Layer '{}' deleted", layer_name),
+                    }))),
+                )
+            },
             Err(e) => {
                 eprintln!("Failed to delete layer: {}", e);
                 Err(GeoServerError::InternalError(

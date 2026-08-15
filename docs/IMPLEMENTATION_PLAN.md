@@ -356,7 +356,7 @@ Overall progress █████████████░░░  67%
 
 - ✅ Storage: 配置文件只保留 `[metadata]` (SQLite/PostgreSQL); 矢量/栅格文件数据源按数据源登记 (persisted in metadata store), 记录 `file_path` + `file_storage_type` (local / s3 / oss); 缓存保持内置 local (`TileCacheBackend` + `SessionCache` traits in `src/store/cache/`) — local backends in place
 - ✅ **Redis 缓存数据源** (重新设计): Redis 作为数据源 (`DataSourceType::Redis`, 持久化于元数据 `data_sources` 表, host/port/database/username/password), 切片图层经 `Layer.cache_store` 选择缓存后端 (内存/本地默认 或 指定 Redis 数据源); `src/store/cache/redis.rs` 提供 `RedisConn` + `redis_url_from_connection`, `RedisTileCacheBackend` (`src/store/cache/tile.rs`) 按数据源 URL 驱动, 瓦片渲染路径 (`render_tile_bytes` / `get_tile`) 按图层解析; 连接测试支持 Redis PING
-- ✅ **In-memory catalog refresh mechanism**: 周期性地从元数据存储重载图层/样式/图层组到内存缓存, 收敛多副本间差异 (`[server] catalog_refresh_secs`, 0 = 禁用; `state.rs::refresh_catalog_from_store`, 后台 tokio 任务, 按名称更新/新增不删除)
+- ✅ **In-memory catalog refresh mechanism**: 周期性地从元数据存储重载图层/样式/图层组到内存缓存, 收敛多副本间差异 (`[server] catalog_refresh_secs`, 0 = 禁用; `state.rs::refresh_catalog_from_store`, 后台 tokio 任务, 按名称更新/新增不删除); **事件驱动刷新**: REST 图层更新/删除后立即调用 `AppState::refresh_catalog` 重载内存目录, 消除 WMS/WMTS/瓦片路径的"写后读旧"窗口
 - 对象存储后端 (s3 / oss / minio) 落地: `FileStore` trait 已预留 (`src/store/file_store.rs`), 后续实现 S3/MinIO 读取/上传; cache 到 Redis / S3
 - 会话管理: **不引入 Redis 会话缓存**, 保持简单 JWT + 元数据存储会话 (`SessionCache` 仅 local 快速层)
 - `data_dir` / upload file storage abstraction: shared PVC / object storage (pending)

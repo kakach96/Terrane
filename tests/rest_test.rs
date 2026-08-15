@@ -1189,6 +1189,58 @@ async fn test_layer_cache_store_persists_through_api() {
 }
 
 #[actix_rt::test]
+async fn test_event_driven_refresh_updates_memory_immediately() {
+    // 事件驱动目录刷新: store 模式下 PUT 更新图层后, 内存 `state.layers`
+    // 应立刻反映 (无需等待目录刷新周期), 使 WMS/WMTS 等读内存的服务无
+    // "写后读旧"窗口。
+    let mut config = common::create_test_config();
+    config.server.catalog_refresh_secs = 0; // 关闭周期刷新, 只验证事件驱动
+
+    let state = actix_web::web::Data::new(terrane::state::AppState::new(config).await);
+    let app = actix_web::test::init_service(
+        actix_web::App::new()
+            .app_data(state.clone())
+            .wrap(actix_web::middleware::Logger::default())
+            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+    )
+    .await;
+
+    // 创建图层 (持久化 + 内存)。
+    let create_layer = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(serde_json::json!({
+            "name": "evt_refresh",
+            "title": "Original Title",
+            "workspace": "default",
+            "store": "shapes",
+            "native_name": "world"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create_layer).await;
+    assert!(resp.status().is_success(), "创建图层应成功");
+
+    // PUT 更新 title。
+    let update_layer = test::TestRequest::put()
+        .uri("/geoserver/layers/evt_refresh")
+        .set_json(serde_json::json!({ "title": "Updated Title" }))
+        .to_request();
+    let resp = test::call_service(&app, update_layer).await;
+    assert!(resp.status().is_success(), "更新图层应成功");
+
+    // 立即读内存目录: 标题必须已是新值 (事件刷新生效, 无 sleep)。
+    let layers = state.layers.read().await;
+    let updated = layers
+        .iter()
+        .find(|l| l.name == "evt_refresh")
+        .expect("内存中应存在图层");
+    assert_eq!(
+        updated.title, "Updated Title",
+        "事件刷新后内存标题应立即更新, 实际: {}",
+        updated.title
+    );
+}
+
+#[actix_rt::test]
 async fn test_catalog_refresh_reloads_layers() {
     // 启用目录定时刷新 (极短周期), 验证从元数据存储重载后内存目录包含新图层
     let mut config = common::create_test_config();

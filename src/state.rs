@@ -395,6 +395,19 @@ impl AppState {
         app_state
     }
 
+    /// 事件驱动目录刷新: REST 写路径 (图层/样式/图层组/数据源 CRUD) 成功后
+    /// 立即从元数据存储重载内存目录, 消除"写后读旧"窗口 (周期刷新之外)。
+    pub async fn refresh_catalog(&self) {
+        refresh_catalog_from_store(
+            &self.store,
+            &self.layers,
+            &self.styles,
+            &self.styles_meta,
+            &self.layer_groups,
+        )
+        .await;
+    }
+
     /// 获取或创建指定数据源的 PostgreSQL 连接池
     pub fn get_pg_pool(
         &self,
