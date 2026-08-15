@@ -37,7 +37,7 @@ shapefile = "0.5"
 # 文件上传
 actix-multipart = "0.6"
 # GeoTIFF 原生标签读取
-tiff = "0.9"
+tiff = "0.11"
 # ZIP 解压 (用于 shapefile 上传)
 zip = "2"
 # 临时文件
