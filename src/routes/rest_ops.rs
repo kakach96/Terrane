@@ -22,9 +22,19 @@ pub fn add_routes(scope: Scope) -> Scope {
             "/data/upload/geotiff",
             web::post().to(crate::handlers::upload_handler::upload_geotiff),
         )
+        // 矢量瓦片 (MVT) — 必须在通用瓦片路由之前注册, 否则
+        // /tiles/{layer}/{z}/{x}/{y} 会捕获 {y}=="0.pbf" (遮蔽 bug)。
+        .route(
+            "/tiles/{layer}/{z}/{x}/{y}.pbf",
+            web::get().to(crate::handlers::handle_mvt_tile),
+        )
         .route(
             "/tiles/{layer}/{z}/{x}/{y}",
             web::get().to(crate::handlers::get_tile),
+        )
+        .route(
+            "/mvt/{layer}/{z}/{x}/{y}",
+            web::get().to(crate::handlers::handle_mvt_tile),
         )
         // WMTS RESTful 瓦片模板: /wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}
         .route(
@@ -55,15 +65,6 @@ pub fn add_routes(scope: Scope) -> Scope {
         .route(
             "/tiles/cache/stats",
             web::get().to(crate::handlers::get_tile_cache_stats),
-        )
-        // 矢量瓦片 (MVT)
-        .route(
-            "/tiles/{layer}/{z}/{x}/{y}.pbf",
-            web::get().to(crate::handlers::handle_mvt_tile),
-        )
-        .route(
-            "/mvt/{layer}/{z}/{x}/{y}",
-            web::get().to(crate::handlers::handle_mvt_tile),
         )
         // 监控
         .route(

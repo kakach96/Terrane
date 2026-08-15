@@ -31,6 +31,13 @@ pub struct CreateUserRequest {
     pub role: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserRequest {
+    pub role: Option<String>,
+    pub password: Option<String>,
+    pub enabled: Option<bool>,
+}
+
 fn req_ip(req: &HttpRequest) -> Option<String> {
     req.peer_addr().map(|a| a.to_string())
 }
@@ -398,6 +405,75 @@ pub async fn delete_user(
         Ok(
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "message": format!("用户 '{}' 已删除", username),
+            }))),
+        )
+    } else {
+        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+    }
+}
+
+/// 更新用户 (仅 admin): 角色 / 启用状态 / 密码 (密码重置时重新哈希 + 新盐)。
+pub async fn update_user(
+    req: HttpRequest,
+    body: web::Json<UpdateUserRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    check_admin(&req)?;
+    let username = req.match_info().get("username").unwrap_or("").to_string();
+
+    if let Some(store) = &state.store {
+        let existing = store
+            .get_user(&username)
+            .await
+            .map_err(|e| GeoServerError::InternalError(format!("查询用户失败: {}", e)))?
+            .ok_or_else(|| GeoServerError::NotFound(format!("用户 '{}' 不存在", username)))?;
+
+        if body.role.is_none() && body.password.is_none() && body.enabled.is_none() {
+            return Err(GeoServerError::BadRequest(
+                "至少提供 role / password / enabled 之一".to_string(),
+            ));
+        }
+
+        let role = match body.role.as_deref() {
+            Some("admin") => Some(UserRole::Admin),
+            Some("manager") => Some(UserRole::Manager),
+            Some("guest") => Some(UserRole::Guest),
+            Some("user") => Some(UserRole::User),
+            Some(other) => return Err(GeoServerError::BadRequest(format!("未知角色: {}", other))),
+            None => None,
+        };
+
+        // 密码重置: 生成新盐并重新哈希
+        let (password_hash, salt) = if let Some(pw) = &body.password {
+            if pw.is_empty() {
+                return Err(GeoServerError::BadRequest("密码不能为空".to_string()));
+            }
+            let s = generate_salt();
+            let h = hash_password(pw, &s);
+            (Some(h), Some(s))
+        } else {
+            (None, None)
+        };
+
+        store
+            .update_user(
+                &username,
+                role.as_ref(),
+                body.enabled,
+                password_hash.as_deref(),
+                salt.as_deref(),
+            )
+            .await
+            .map_err(|e| GeoServerError::InternalError(format!("更新用户失败: {}", e)))?;
+
+        let role_str = role
+            .map(|r| r.to_string())
+            .unwrap_or_else(|| existing.role.to_string());
+        Ok(
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "username": username,
+                "role": role_str,
+                "message": "用户更新成功",
             }))),
         )
     } else {

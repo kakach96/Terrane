@@ -587,7 +587,7 @@ async fn test_browse_local_directory() {
 async fn test_mvt_endpoint() {
     let app = build_test_app!();
 
-    // 注意: /tiles/{layer}/{z}/{x}/{y} 通用路由会先匹配 .pbf, 故用专用 /mvt/ 路由
+    // /mvt/ 专用路由 (与 .pbf 路由等价; .pbf 遮蔽已修复, 见 test_rest_mvt_pbf_route)
     let req = test::TestRequest::get()
         .uri("/geoserver/mvt/world/0/0/0")
         .to_request();
@@ -1761,4 +1761,313 @@ async fn test_rest_geopackage_feature_type() {
 
     // 清理
     std::fs::remove_dir_all(&dir).ok();
+}
+
+// ---------------------------------------------------------------------------
+// R1: Stores CRUD / workspace stores / layer-group PUT / user PUT / .pbf 路由
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_stores_crud() {
+    let app = build_test_app!();
+
+    // 创建 store (postgis 类型, 无真实连接, 仅测元数据 CRUD)
+    let create = test::TestRequest::post()
+        .uri("/geoserver/stores")
+        .set_json(serde_json::json!({
+            "name": "store_r1",
+            "type": "postgis",
+            "workspace": "default",
+            "enabled": true,
+            "connection": { "host": "127.0.0.1", "port": 5432, "database": "geoserver" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建 store 应返回 201, 实际: {}",
+        resp.status()
+    );
+
+    // 列表包含新 store
+    let req = test::TestRequest::get()
+        .uri("/geoserver/stores")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|s| s["name"].as_str().map(|v| v.to_string()))
+        .collect();
+    assert!(
+        names.contains(&"store_r1".to_string()),
+        "stores 列表应包含 store_r1, 实际: {:?}",
+        names
+    );
+
+    // 详情: postgis → DataStore
+    let req = test::TestRequest::get()
+        .uri("/geoserver/stores/store_r1")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "GET store 应返回 200");
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(
+        body["data"]["type"].as_str(),
+        Some("DataStore"),
+        "postgis store 应映射为 DataStore, 实际: {}",
+        body
+    );
+
+    // 更新 (禁用)
+    let update = test::TestRequest::put()
+        .uri("/geoserver/stores/store_r1")
+        .set_json(serde_json::json!({ "enabled": false }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert!(resp.status().is_success(), "PUT store 应返回 200");
+    let req = test::TestRequest::get()
+        .uri("/geoserver/stores/store_r1")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["enabled"], serde_json::json!(false));
+
+    // 删除 → 404
+    let del = test::TestRequest::delete()
+        .uri("/geoserver/stores/store_r1")
+        .to_request();
+    let resp = test::call_service(&app, del).await;
+    assert!(resp.status().is_success(), "DELETE store 应返回 200");
+    let req = test::TestRequest::get()
+        .uri("/geoserver/stores/store_r1")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "删除后 GET store 应返回 404"
+    );
+}
+
+#[actix_rt::test]
+async fn test_rest_create_store_in_workspace() {
+    let app = build_test_app!();
+
+    // 先创建工作空间 (测试配置的 default 工作空间仅存在于 config, 不在元数据存储)
+    let create = test::TestRequest::post()
+        .uri("/geoserver/workspaces")
+        .set_json(serde_json::json!({
+            "name": "ws_r1",
+            "uri": "http://geoserver.org/ws_r1",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert!(
+        resp.status().is_success(),
+        "创建工作空间应成功, 实际: {}",
+        resp.status()
+    );
+
+    // 在工作空间创建 store
+    let create = test::TestRequest::post()
+        .uri("/geoserver/workspaces/ws_r1/stores")
+        .set_json(serde_json::json!({
+            "name": "store_ws1",
+            "type": "shapefile",
+            "enabled": true,
+            "connection": { "file_path": "C:/tmp/ws1.shp", "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "在工作空间创建 store 应返回 201, 实际: {}",
+        resp.status()
+    );
+
+    // 按工作空间列表包含
+    let req = test::TestRequest::get()
+        .uri("/geoserver/workspaces/ws_r1/stores")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|s| s["name"].as_str().map(|v| v.to_string()))
+        .collect();
+    assert!(
+        names.contains(&"store_ws1".to_string()),
+        "工作空间 stores 应包含 store_ws1, 实际: {:?}",
+        names
+    );
+
+    // 不存在的工作空间 → 404
+    let create = test::TestRequest::post()
+        .uri("/geoserver/workspaces/nonexistent/stores")
+        .set_json(serde_json::json!({
+            "name": "store_bad",
+            "type": "shapefile",
+            "connection": { "file_path": "C:/tmp/bad.shp", "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "不存在工作空间创建 store 应返回 404, 实际: {}",
+        resp.status()
+    );
+}
+
+#[actix_rt::test]
+async fn test_rest_update_layer_group() {
+    let app = build_test_app!();
+
+    // 创建
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layer-groups")
+        .set_json(serde_json::json!({
+            "name": "lg_r1",
+            "title": "Original",
+            "layers": ["world"],
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // PUT 更新标题 + 成员
+    let update = test::TestRequest::put()
+        .uri("/geoserver/layer-groups/lg_r1")
+        .set_json(serde_json::json!({
+            "title": "Updated",
+            "layers": ["world", "world"],
+            "styles": [null, "default"],
+        }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert!(
+        resp.status().is_success(),
+        "PUT layer-group 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    // GET 验证
+    let req = test::TestRequest::get()
+        .uri("/geoserver/layer-groups/lg_r1")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["title"].as_str(), Some("Updated"));
+    assert_eq!(
+        body["data"]["layers"].as_array().map(|a| a.len()),
+        Some(2),
+        "layers 应更新为 2 个成员, 实际: {}",
+        body
+    );
+
+    // 更新不存在的组 → 404
+    let update = test::TestRequest::put()
+        .uri("/geoserver/layer-groups/no_such_group")
+        .set_json(serde_json::json!({ "title": "X" }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[actix_rt::test]
+async fn test_rest_update_user() {
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    // 创建用户
+    let create = test::TestRequest::post()
+        .uri("/geoserver/auth/users")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({ "username": "u_r1", "password": "pass123", "role": "user" }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "创建用户应返回 201");
+
+    // PUT 改角色 + 重置密码
+    let update = test::TestRequest::put()
+        .uri("/geoserver/auth/users/u_r1")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({ "role": "manager", "password": "newpass456" }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert!(
+        resp.status().is_success(),
+        "PUT user 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    // 新密码可登录
+    let login = test::TestRequest::post()
+        .uri("/geoserver/auth/login")
+        .set_json(serde_json::json!({ "username": "u_r1", "password": "newpass456" }))
+        .to_request();
+    let resp = test::call_service(&app, login).await;
+    assert!(
+        resp.status().is_success(),
+        "新密码应能登录, 实际: {}",
+        resp.status()
+    );
+
+    // 旧密码失效
+    let login = test::TestRequest::post()
+        .uri("/geoserver/auth/login")
+        .set_json(serde_json::json!({ "username": "u_r1", "password": "pass123" }))
+        .to_request();
+    let resp = test::call_service(&app, login).await;
+    assert!(
+        !resp.status().is_success(),
+        "旧密码应登录失败, 实际: {}",
+        resp.status()
+    );
+
+    // 更新不存在用户 → 404
+    let update = test::TestRequest::put()
+        .uri("/geoserver/auth/users/no_such_user")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({ "role": "admin" }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[actix_rt::test]
+async fn test_rest_mvt_pbf_route() {
+    let app = build_test_app!();
+
+    // .pbf 尾缀路由不再被 /tiles/{layer}/{z}/{x}/{y} 遮蔽
+    let req = test::TestRequest::get()
+        .uri("/geoserver/tiles/world/0/0/0.pbf")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "MVT .pbf 瓦片应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("mapbox-vector-tile"),
+        "Content-Type 应为 MVT, 实际: {}",
+        content_type
+    );
 }

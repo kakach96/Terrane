@@ -1,6 +1,8 @@
 use super::rest_handler::ApiResponse;
 use crate::error::GeoServerError;
-use crate::models::DataSourceType;
+use crate::models::{
+    CreateDataSourceRequest, DataSourceType, UpdateDataSourceRequest, METADATA_DATA_SOURCE,
+};
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
@@ -211,5 +213,213 @@ pub async fn get_workspace_store(
             "Store '{}' not found",
             name
         )))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Store CRUD — store 是数据源的 GeoServer 兼容别名视图, 与 /data-sources
+// 共享同一元数据 (data_sources 表)。创建/更新/删除复用数据源存储逻辑。
+// ---------------------------------------------------------------------------
+
+/// 创建存储 (POST /stores)。请求体与 /data-sources 一致。
+pub async fn create_store(
+    body: web::Json<CreateDataSourceRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    if body.name == METADATA_DATA_SOURCE {
+        return Err(GeoServerError::Conflict(format!(
+            "Store '{}' is a built-in store",
+            body.name
+        )));
+    }
+    if let Some(store) = &state.store {
+        if let Ok(Some(_)) = store.get_data_source(&body.name).await {
+            return Err(GeoServerError::Conflict(format!(
+                "Store '{}' already exists",
+                body.name
+            )));
+        }
+        match store
+            .create_data_source(
+                &body.name,
+                &body.data_source_type,
+                body.workspace.clone(),
+                body.enabled.unwrap_or(true),
+                &body.connection,
+            )
+            .await
+        {
+            Ok(ds) => Ok(
+                HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
+                    "name": ds.name,
+                    "type": ds_type_to_store_type(&ds.data_source_type),
+                    "workspace": ds.workspace,
+                    "enabled": ds.enabled,
+                    "connection": ds.connection,
+                    "created": ds.created,
+                    "modified": ds.modified,
+                    "message": "Store created",
+                }))),
+            ),
+            Err(e) => {
+                eprintln!("Failed to create store: {}", e);
+                Err(GeoServerError::InternalError(
+                    "Failed to create store".to_string(),
+                ))
+            },
+        }
+    } else {
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
+    }
+}
+
+/// 按工作空间创建存储 (POST /workspaces/{workspace}/stores)。
+/// 工作空间来自路径, 请求体中的 workspace 被忽略/校验一致。
+pub async fn create_workspace_store(
+    req: HttpRequest,
+    body: web::Json<CreateDataSourceRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let ws_name = req.match_info().get("workspace").unwrap_or("").to_string();
+    if let Some(store) = &state.store {
+        // 工作空间必须存在
+        match store.get_workspace(&ws_name).await {
+            Ok(Some(_)) => {},
+            Ok(None) => {
+                return Err(GeoServerError::NotFound(format!(
+                    "Workspace '{}' not found",
+                    ws_name
+                )))
+            },
+            Err(e) => {
+                eprintln!("Failed to get workspace: {}", e);
+                return Err(GeoServerError::InternalError(
+                    "Failed to get workspace".to_string(),
+                ));
+            },
+        }
+        if body.name == METADATA_DATA_SOURCE {
+            return Err(GeoServerError::Conflict(format!(
+                "Store '{}' is a built-in store",
+                body.name
+            )));
+        }
+        if let Ok(Some(_)) = store.get_data_source(&body.name).await {
+            return Err(GeoServerError::Conflict(format!(
+                "Store '{}' already exists",
+                body.name
+            )));
+        }
+        match store
+            .create_data_source(
+                &body.name,
+                &body.data_source_type,
+                Some(ws_name.clone()),
+                body.enabled.unwrap_or(true),
+                &body.connection,
+            )
+            .await
+        {
+            Ok(ds) => Ok(
+                HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
+                    "name": ds.name,
+                    "type": ds_type_to_store_type(&ds.data_source_type),
+                    "workspace": ds.workspace,
+                    "enabled": ds.enabled,
+                    "connection": ds.connection,
+                    "created": ds.created,
+                    "modified": ds.modified,
+                    "message": "Store created",
+                }))),
+            ),
+            Err(e) => {
+                eprintln!("Failed to create store in workspace '{}': {}", ws_name, e);
+                Err(GeoServerError::InternalError(
+                    "Failed to create store".to_string(),
+                ))
+            },
+        }
+    } else {
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
+    }
+}
+
+/// 更新存储 (PUT /stores/{name})。
+pub async fn update_store(
+    req: HttpRequest,
+    body: web::Json<UpdateDataSourceRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let name = req.match_info().get("name").unwrap_or("");
+    if name == METADATA_DATA_SOURCE {
+        return Err(GeoServerError::BadRequest(format!(
+            "Store '{}' is a built-in store and cannot be modified",
+            name
+        )));
+    }
+    if let Some(store) = &state.store {
+        match store
+            .update_data_source(
+                name,
+                body.data_source_type.clone(),
+                body.workspace.clone(),
+                body.enabled,
+                body.connection.clone(),
+            )
+            .await
+        {
+            Ok(_) => Ok(
+                HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                    "message": format!("Store '{}' updated", name),
+                }))),
+            ),
+            Err(e) => {
+                eprintln!("Failed to update store: {}", e);
+                Err(GeoServerError::InternalError(
+                    "Failed to update store".to_string(),
+                ))
+            },
+        }
+    } else {
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
+    }
+}
+
+/// 删除存储 (DELETE /stores/{name})。行为与 /data-sources/{name} 一致。
+pub async fn delete_store(
+    req: HttpRequest,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let name = req.match_info().get("name").unwrap_or("");
+    if name == METADATA_DATA_SOURCE {
+        return Err(GeoServerError::BadRequest(format!(
+            "Store '{}' is a built-in store and cannot be deleted",
+            name
+        )));
+    }
+    if let Some(store) = &state.store {
+        match store.delete_data_source(name).await {
+            Ok(_) => Ok(
+                HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                    "message": format!("Store '{}' deleted", name),
+                }))),
+            ),
+            Err(e) => {
+                eprintln!("Failed to delete store: {}", e);
+                Err(GeoServerError::InternalError(
+                    "Failed to delete store".to_string(),
+                ))
+            },
+        }
+    } else {
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
     }
 }

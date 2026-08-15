@@ -19,6 +19,10 @@ pub fn add_routes(scope: Scope) -> Scope {
         .route("/auth/users", web::post().to(crate::handlers::create_user))
         .route(
             "/auth/users/{username}",
+            web::put().to(crate::handlers::update_user),
+        )
+        .route(
+            "/auth/users/{username}",
             web::delete().to(crate::handlers::delete_user),
         )
         // 权限

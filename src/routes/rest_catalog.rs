@@ -94,11 +94,21 @@ pub fn add_routes(scope: Scope) -> Scope {
             "/data-sources/{name}/test",
             web::post().to(crate::handlers::test_data_source_connection),
         )
-        .service(web::resource("/stores").route(web::get().to(crate::handlers::list_stores)))
-        .service(web::resource("/stores/{name}").route(web::get().to(crate::handlers::get_store)))
+        .service(
+            web::resource("/stores")
+                .route(web::get().to(crate::handlers::list_stores))
+                .route(web::post().to(crate::handlers::create_store)),
+        )
+        .service(
+            web::resource("/stores/{name}")
+                .route(web::get().to(crate::handlers::get_store))
+                .route(web::put().to(crate::handlers::update_store))
+                .route(web::delete().to(crate::handlers::delete_store)),
+        )
         .service(
             web::resource("/workspaces/{workspace}/stores")
-                .route(web::get().to(crate::handlers::list_workspace_stores)),
+                .route(web::get().to(crate::handlers::list_workspace_stores))
+                .route(web::post().to(crate::handlers::create_workspace_store)),
         )
         .service(
             web::resource("/workspaces/{workspace}/stores/{name}")
@@ -128,6 +138,7 @@ pub fn add_routes(scope: Scope) -> Scope {
         .service(
             web::resource("/layer-groups/{name}")
                 .route(web::get().to(crate::handlers::get_layer_group))
+                .route(web::put().to(crate::handlers::update_layer_group))
                 .route(web::delete().to(crate::handlers::delete_layer_group)),
         )
         .service(

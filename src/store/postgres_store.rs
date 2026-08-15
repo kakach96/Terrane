@@ -1077,6 +1077,8 @@ impl Store for PostgresStore {
         username: &str,
         role: Option<&crate::auth::UserRole>,
         enabled: Option<bool>,
+        password_hash: Option<&str>,
+        salt: Option<&str>,
     ) -> Result<(), StoreError> {
         let ts = now();
         let client = self.pool.get().await?;
@@ -1090,6 +1092,14 @@ impl Store for PostgresStore {
         if let Some(e) = enabled {
             params.push(Box::new(e));
             sets.push(format!("enabled = ${}", params.len()));
+        }
+        if let Some(h) = password_hash {
+            params.push(Box::new(h.to_string()));
+            sets.push(format!("password_hash = ${}", params.len()));
+        }
+        if let Some(s) = salt {
+            params.push(Box::new(s.to_string()));
+            sets.push(format!("salt = ${}", params.len()));
         }
         params.push(Box::new(username.to_string()));
         let sql = format!(

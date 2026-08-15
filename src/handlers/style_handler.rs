@@ -452,6 +452,77 @@ pub async fn delete_layer_group(
     )
 }
 
+/// 更新图层组 (PUT /layer-groups/{name}): 更新标题/成员图层/样式。
+/// 内存目录与元数据存储 (INSERT OR REPLACE) 同步。
+pub async fn update_layer_group(
+    req: HttpRequest,
+    body: web::Json<serde_json::Value>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    let name = req.match_info().get("name").unwrap_or("").to_string();
+    let title = body
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let layers: Option<Vec<String>> = body.get("layers").and_then(|v| v.as_array()).map(|arr| {
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect()
+    });
+    let styles: Option<Vec<Option<String>>> =
+        body.get("styles").and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        });
+
+    if title.is_none() && layers.is_none() && styles.is_none() {
+        return Err(GeoServerError::BadRequest(
+            "At least one of title / layers / styles is required".to_string(),
+        ));
+    }
+
+    let updated = {
+        let mut groups = state.layer_groups.write().await;
+        let group = groups
+            .iter_mut()
+            .find(|g| g.name == name)
+            .ok_or_else(|| GeoServerError::NotFound(format!("Layer group '{}' not found", name)))?;
+        if let Some(t) = title {
+            group.title = t;
+        }
+        if let Some(l) = layers {
+            group.layers = l;
+        }
+        if let Some(s) = styles {
+            group.styles = s;
+        }
+        group.clone()
+    };
+
+    // 持久化 (INSERT OR REPLACE, 语义即 upsert)
+    if let Some(store) = &state.store {
+        let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let _ = store
+            .create_layer_group(&crate::store::LayerGroupRecord {
+                name: updated.name.clone(),
+                title: updated.title,
+                layers: updated.layers,
+                styles: updated.styles,
+                created: ts.clone(),
+                modified: ts,
+            })
+            .await;
+    }
+
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "name": name,
+            "message": format!("Layer group '{}' updated", name),
+        }))),
+    )
+}
+
 pub async fn get_tile(
     req: HttpRequest,
     state: web::Data<AppState>,

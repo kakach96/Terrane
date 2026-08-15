@@ -134,6 +134,8 @@ pub trait Store: Send + Sync {
         username: &str,
         role: Option<&UserRole>,
         enabled: Option<bool>,
+        password_hash: Option<&str>,
+        salt: Option<&str>,
     ) -> Result<(), StoreError>;
     async fn delete_user(&self, username: &str) -> Result<(), StoreError>;
 

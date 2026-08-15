@@ -1366,6 +1366,8 @@ impl SqliteStore {
         username: &str,
         role: Option<&crate::auth::UserRole>,
         enabled: Option<bool>,
+        password_hash: Option<&str>,
+        salt: Option<&str>,
     ) -> SqlResult<()> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let conn = self.conn.lock().unwrap();
@@ -1379,6 +1381,14 @@ impl SqliteStore {
         if let Some(e) = enabled {
             updates.push("enabled = ?".to_string());
             values.push(Box::new(e as i32));
+        }
+        if let Some(h) = password_hash {
+            updates.push("password_hash = ?".to_string());
+            values.push(Box::new(h.to_string()));
+        }
+        if let Some(s) = salt {
+            updates.push("salt = ?".to_string());
+            values.push(Box::new(s.to_string()));
         }
 
         let query = format!("UPDATE users SET {} WHERE username = ?", updates.join(", "));
@@ -1809,8 +1819,10 @@ impl super::Store for SqliteStore {
         username: &str,
         role: Option<&crate::auth::UserRole>,
         enabled: Option<bool>,
+        password_hash: Option<&str>,
+        salt: Option<&str>,
     ) -> Result<(), super::StoreError> {
-        SqliteStore::update_user(self, username, role, enabled)
+        SqliteStore::update_user(self, username, role, enabled, password_hash, salt)
             .await
             .map_err(super::StoreError::from)
     }
