@@ -1559,9 +1559,37 @@ fn geometry_to_kml(g: &GeoJsonGeometry) -> String {
                 coordinates[0], coordinates[1]
             )
         },
+        GeoJsonGeometry::Point { .. } => String::new(),
+        GeoJsonGeometry::MultiPoint { coordinates } => {
+            // KML 无 MultiPoint: 每个点一个 Placemark 不可行 (无容器),
+            // 取首个点作为代表 (与 GeoRSS 的 fallback 语义一致)。
+            coordinates
+                .first()
+                .filter(|c| c.len() >= 2)
+                .map(|c| {
+                    format!(
+                        "<Point><coordinates>{},{},0</coordinates></Point>",
+                        c[0], c[1]
+                    )
+                })
+                .unwrap_or_default()
+        },
         GeoJsonGeometry::LineString { coordinates } => {
             let c: Vec<String> = coordinates
                 .iter()
+                .filter(|c| c.len() >= 2)
+                .map(|c| format!("{},{},0", c[0], c[1]))
+                .collect();
+            format!(
+                "<LineString><coordinates>{}</coordinates></LineString>",
+                c.join(" ")
+            )
+        },
+        GeoJsonGeometry::MultiLineString { coordinates } => {
+            // KML 无 MultiLineString: 拼接所有线段的坐标点。
+            let c: Vec<String> = coordinates
+                .iter()
+                .flat_map(|line| line.iter())
                 .filter(|c| c.len() >= 2)
                 .map(|c| format!("{},{},0", c[0], c[1]))
                 .collect();
@@ -1587,7 +1615,48 @@ fn geometry_to_kml(g: &GeoJsonGeometry) -> String {
                 .collect();
             format!("<Polygon>{}</Polygon>", rings.join(""))
         },
-        _ => String::new(),
+        GeoJsonGeometry::MultiPolygon { coordinates } => {
+            // KML 无 MultiPolygon: 每个多边形一个 <Polygon> (KML 允许
+            // MultiGeometry 容器, 这里用 MultiGeometry 包裹)。
+            let polys: Vec<String> = coordinates
+                .iter()
+                .map(|poly| {
+                    let rings: Vec<String> = poly
+                        .iter()
+                        .map(|ring| {
+                            let c: Vec<String> = ring
+                                .iter()
+                                .filter(|c| c.len() >= 2)
+                                .map(|c| format!("{},{},0", c[0], c[1]))
+                                .collect();
+                            format!(
+                                "<LinearRing><coordinates>{}</coordinates></LinearRing>",
+                                c.join(" ")
+                            )
+                        })
+                        .collect();
+                    format!("<Polygon>{}</Polygon>", rings.join(""))
+                })
+                .collect();
+            if polys.is_empty() {
+                String::new()
+            } else if polys.len() == 1 {
+                polys[0].clone()
+            } else {
+                format!("<MultiGeometry>{}</MultiGeometry>", polys.join(""))
+            }
+        },
+        GeoJsonGeometry::GeometryCollection { geometries } => {
+            let subs: Vec<String> = geometries.iter().map(geometry_to_kml).collect();
+            let subs: Vec<String> = subs.into_iter().filter(|s| !s.is_empty()).collect();
+            if subs.is_empty() {
+                String::new()
+            } else if subs.len() == 1 {
+                subs[0].clone()
+            } else {
+                format!("<MultiGeometry>{}</MultiGeometry>", subs.join(""))
+            }
+        },
     }
 }
 
@@ -2359,5 +2428,64 @@ mod tests {
             (255, 0, 0),
             "multiply over white = color"
         );
+    }
+
+    #[test]
+    fn test_kml_multi_geometries() {
+        // MultiPolygon → MultiGeometry 容器 (多面)。
+        let mp = GeoJsonGeometry::MultiPolygon {
+            coordinates: vec![
+                vec![vec![
+                    vec![0.0, 0.0],
+                    vec![0.0, 1.0],
+                    vec![1.0, 1.0],
+                    vec![1.0, 0.0],
+                    vec![0.0, 0.0],
+                ]],
+                vec![vec![
+                    vec![2.0, 2.0],
+                    vec![2.0, 3.0],
+                    vec![3.0, 3.0],
+                    vec![3.0, 2.0],
+                    vec![2.0, 2.0],
+                ]],
+            ],
+        };
+        let kml = geometry_to_kml(&mp);
+        assert!(
+            kml.starts_with("<MultiGeometry>"),
+            "多面应包在 MultiGeometry 中: {}",
+            kml
+        );
+        assert_eq!(kml.matches("<Polygon>").count(), 2);
+
+        // MultiLineString → 拼接所有线段坐标。
+        let mls = GeoJsonGeometry::MultiLineString {
+            coordinates: vec![
+                vec![vec![0.0, 0.0], vec![1.0, 1.0]],
+                vec![vec![2.0, 2.0], vec![3.0, 3.0]],
+            ],
+        };
+        let kml = geometry_to_kml(&mls);
+        assert!(
+            kml.contains("0,0,0 1,1,0 2,2,0 3,3,0"),
+            "多线应拼接坐标: {}",
+            kml
+        );
+
+        // GeometryCollection → MultiGeometry。
+        let coll = GeoJsonGeometry::GeometryCollection {
+            geometries: vec![
+                GeoJsonGeometry::Point {
+                    coordinates: vec![1.0, 1.0],
+                },
+                GeoJsonGeometry::Point {
+                    coordinates: vec![2.0, 2.0],
+                },
+            ],
+        };
+        let kml = geometry_to_kml(&coll);
+        assert!(kml.starts_with("<MultiGeometry>"), "集合应包 MultiGeometry");
+        assert_eq!(kml.matches("<Point>").count(), 2);
     }
 }

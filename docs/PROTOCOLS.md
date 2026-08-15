@@ -185,7 +185,9 @@ subdirs `0/1/2/…`, level chosen by requested resolution; same WCS / WMS / tile
 - **SVG output** honors per-feature SLD/CSS styles (fill/stroke colors + opacity + width +
   dash array, point markers, `fill-rule="evenodd"` holes, labels with halo as text stroke).
 - **KML output** honors per-feature styles: deduplicated `<Style>` definitions referenced
-  by `styleUrl`, KML `aabbggrr` colors, label text as Placemark name + `<LabelStyle>`.
+  by `styleUrl`, KML `aabbggrr` colors, label text as Placemark name + `<LabelStyle>`;
+  Multi-geometry support (MultiPoint → first point, MultiLineString → joined coords,
+  MultiPolygon / GeometryCollection → `<MultiGeometry>`).
 - **Raster rendering**: GeoTIFF / WorldImage / ArcGrid / ImageMosaic layers render in
   WMS GetMap and in the shared tile pipeline (crop to BBOX + resample + source-over).
 - **Style selection**: WMS GetMap `STYLES` parameter selects the per-layer style
