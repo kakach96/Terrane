@@ -63,6 +63,8 @@ pub struct AppState {
     /// 会话缓存 (会话快速层; 元数据存储为真源)
     pub session_cache: Option<Arc<dyn SessionCache>>,
     pub pg_pools: Arc<Mutex<HashMap<String, deadpool_postgres::Pool>>>,
+    /// MySQL 连接池缓存 (按数据源名称; 惰性构建并缓存, 仿 pg_pools)
+    pub mysql_pools: Arc<Mutex<HashMap<String, mysql_async::Pool>>>,
     pub layer_groups: Arc<RwLock<Vec<LayerGroup>>>,
     pub start_time: Instant,
     pub request_count: AtomicU64,
@@ -347,6 +349,7 @@ impl AppState {
             store,
             session_cache,
             pg_pools: Arc::new(Mutex::new(HashMap::new())),
+            mysql_pools: Arc::new(Mutex::new(HashMap::new())),
             start_time: Instant::now(),
             request_count: AtomicU64::new(0),
             error_count: AtomicU64::new(0),
@@ -462,6 +465,43 @@ impl AppState {
             ds_name,
             start.elapsed()
         );
+        pool
+    }
+
+    /// 获取或创建指定数据源的 MySQL 连接池 (按数据源名称缓存)。
+    pub fn get_mysql_pool(
+        &self,
+        ds_name: &str,
+        conn_info: &crate::models::DataSourceConnection,
+    ) -> mysql_async::Pool {
+        let mut pools = self.mysql_pools.lock().unwrap();
+        if let Some(pool) = pools.get(ds_name) {
+            return pool.clone();
+        }
+
+        let host = conn_info.host.as_deref().unwrap_or("127.0.0.1").to_string();
+        let port = conn_info.port.unwrap_or(3306);
+        let database = conn_info
+            .database
+            .clone()
+            .unwrap_or_else(|| "geoserver".to_string());
+        let user = conn_info
+            .username
+            .clone()
+            .unwrap_or_else(|| "root".to_string());
+        let password = conn_info.password.clone();
+
+        let opts = mysql_async::OptsBuilder::default()
+            .ip_or_hostname(host)
+            .tcp_port(port)
+            .db_name(Some(database))
+            .user(Some(user))
+            .pass(password)
+            // 连接等待超时 (秒), 避免网络问题长时间挂起
+            .wait_timeout(Some(self.config.server.connect_timeout_secs.max(1) as usize));
+        let pool = mysql_async::Pool::new(opts);
+        pools.insert(ds_name.to_string(), pool.clone());
+        tracing::debug!("[get_mysql_pool] 新连接池已创建并缓存, ds_name={}", ds_name);
         pool
     }
 

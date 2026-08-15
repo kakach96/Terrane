@@ -29,9 +29,12 @@ impl DataSource {
         )
     }
 
-    /// 判断数据源是否为 PostGIS 数据库类型
+    /// 判断数据源是否为 PostGIS / MySQL 数据库类型
     pub fn is_database(&self) -> bool {
-        matches!(self.data_source_type, DataSourceType::Postgis)
+        matches!(
+            self.data_source_type,
+            DataSourceType::Postgis | DataSourceType::Mysql
+        )
     }
 
     /// 判断数据源是否为栅格类型 (WCS / WMS 栅格渲染路径)
@@ -54,6 +57,10 @@ pub const METADATA_DATA_SOURCE: &str = "metadata";
 #[serde(rename_all = "lowercase")]
 pub enum DataSourceType {
     Postgis,
+    /// MySQL 数据库 — 与 PostGIS 同级的空间数据库连接器 (MBR 空间过滤 +
+    /// ST_AsBinary 几何输出)
+    #[serde(rename = "mysql")]
+    Mysql,
     Shapefile,
     Geotiff,
     Geopackage,
@@ -86,6 +93,7 @@ impl std::fmt::Display for DataSourceType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DataSourceType::Postgis => write!(f, "postgis"),
+            DataSourceType::Mysql => write!(f, "mysql"),
             DataSourceType::Shapefile => write!(f, "shapefile"),
             DataSourceType::Geotiff => write!(f, "geotiff"),
             DataSourceType::Geopackage => write!(f, "geopackage"),
@@ -103,7 +111,7 @@ impl std::fmt::Display for DataSourceType {
 
 /// 数据源连接信息。
 ///
-/// - 对于 PostGIS: 使用 host/port/database/schema/username/password
+/// - 对于 PostGIS / MySQL: 使用 host/port/database/schema/username/password
 /// - 对于 Shapefile/GeoTIFF: 使用 file_path/file_storage_type
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DataSourceConnection {
@@ -220,6 +228,7 @@ mod tests {
         // 公共名称 (Display / 前端 / 备份) 与 serde 序列化/反序列化必须一致
         let cases: &[(&str, DataSourceType)] = &[
             ("postgis", DataSourceType::Postgis),
+            ("mysql", DataSourceType::Mysql),
             ("shapefile", DataSourceType::Shapefile),
             ("geotiff", DataSourceType::Geotiff),
             ("geopackage", DataSourceType::Geopackage),

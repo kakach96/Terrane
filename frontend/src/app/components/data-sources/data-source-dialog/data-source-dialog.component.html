@@ -39,14 +39,22 @@
       </mat-error>
     </mat-form-field>
 
-    <ng-container *ngIf="selectedType === 'postgis' || selectedType === 'redis'">
+    <ng-container
+      *ngIf="
+        selectedType === 'postgis' ||
+        selectedType === 'mysql' ||
+        selectedType === 'redis'
+      "
+    >
       <mat-divider></mat-divider>
 
       <h3 class="section-title">
         {{
           (selectedType === 'redis'
             ? 'dataSources.redisSection'
-            : 'dataSources.postgisSection'
+            : selectedType === 'mysql'
+              ? 'dataSources.mysqlSection'
+              : 'dataSources.postgisSection'
           ) | translate
         }}
       </h3>
@@ -115,7 +123,13 @@
     </ng-container>
 
     <!-- 文件型数据源配置 -->
-    <ng-container *ngIf="selectedType !== 'postgis' && selectedType !== 'redis'">
+    <ng-container
+      *ngIf="
+        selectedType !== 'postgis' &&
+        selectedType !== 'mysql' &&
+        selectedType !== 'redis'
+      "
+    >
       <mat-divider></mat-divider>
 
       <h3 class="section-title">{{ 'dataSources.fileSection' | translate }}</h3>
@@ -273,6 +287,7 @@
     [disabled]="
       isTesting ||
       (selectedType !== 'postgis' &&
+        selectedType !== 'mysql' &&
         selectedType !== 'redis' &&
         selectedType !== 'image_mosaic' &&
         selectedType !== 'image_pyramid')

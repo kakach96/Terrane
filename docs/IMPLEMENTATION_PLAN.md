@@ -13,25 +13,25 @@
 |---------|:-----:|:--------:|:-----:|:-----:|
 | OGC Core Services | 5/7 | 0 | 2 | **71%** |
 | REST API | 11/16 | 0 | 5 | **69%** |
-| Data Source Types | 10/15 | 0 | 5 | **67%** |
+| Data Source Types | 11/15 | 0 | 4 | **73%** |
 | Styling System | 5/5 | 0 | 0 | **100%** |
 | Tile Caching | 3/6 | 0 | 3 | **50%** |
 | Security | 3/7 | 0 | 4 | **43%** |
 | Extensions | 8/14 | 0 | 6 | **57%** |
 | Cloud-Native | 4/7 | 0 | 3 | **57%** |
-| **Overall Progress** | | | | **~64%** |
+| **Overall Progress** | | | | **~66%** |
 
 ```
 OGC services     █████████████░░░░  71%
 REST API         █████████████░░░░  69%
-Data sources     ██████████████░░░  67%
+Data sources     ██████████████░░░  73%
 Styling system   ██████████████████ 100%
 Tile caching     ██████████░░░░░░░  50%
 Security         ████████░░░░░░░░  43%
 Extensions       █████████░░░░░░░  57%
 Cloud-Native     █████████░░░░░░░  57%
 ──────────────────────────────
-Overall progress █████████████░░░  64%
+Overall progress █████████████░░░  66%
 ```
 
 ---
@@ -83,6 +83,7 @@ Overall progress █████████████░░░  64%
 | Type | Description | Status |
 |------|------|:----:|
 | **PostGIS** | PostgreSQL/PostGIS database | ✅ |
+| **MySQL** | MySQL 空间数据库 — MBR 空间过滤 + ST_AsGeoJSON 几何输出, 连接池缓存 | ✅ **New** |
 | **Shapefile** | ESRI Shapefile vector format | ✅ |
 | **GeoTIFF** | GeoTIFF raster format | ✅ |
 | **GeoPackage** | OGC GeoPackage vector format (WKB) | ✅ **P2** |
@@ -193,7 +194,8 @@ Overall progress █████████████░░░  64%
 - ✅ **Cascaded WMS service** — HTTP proxy of WMS upstream services
 - ✅ **ImageMosaic** — 栅格目录马赛克 (GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granule 合成)
 - ✅ **ImagePyramid** — 金字塔影像 (数字层级子目录, 按分辨率选层)
-- ❌ Oracle / MySQL / SQL Server — additional database support
+- ✅ **MySQL** — MySQL 空间数据库连接器 (MBR 过滤 + ST_AsGeoJSON, 连接测试/池缓存)
+- ❌ Oracle / SQL Server — additional database support
 - ❌ MongoDB — MongoDB GeoJSON data source
 
 ### P3 — Security ✅ Completed
@@ -236,7 +238,7 @@ Overall progress █████████████░░░  64%
 📅 Week 7-8:  WFS 2.0 enhancements + multi-format output + ECQL filters
 ```
 
-### Phase 2: Data Source Extensions ✅ Partially Completed (6/8)
+### Phase 2: Data Source Extensions ✅ Partially Completed (7/8)
 
 ```
 📅 GeoPackage    ✅ Completed
@@ -245,8 +247,8 @@ Overall progress █████████████░░░  64%
 📅 Cascaded WMS  ✅ Completed
 📅 ImageMosaic   ✅ Completed
 📅 ImagePyramid  ✅ Completed
-📅 More databases ⏳
-📅 MongoDB       ⏳
+📅 MySQL         ✅ Completed
+📅 Oracle / SQL Server / MongoDB ⏳
 ```
 
 ### Phase 3: Security & Permissions ✅ Completed

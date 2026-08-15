@@ -357,12 +357,67 @@ pub async fn test_connection(
 }
 
 /// 按数据源类型分发连接测试: Redis → PING; ImageMosaic / ImagePyramid →
-/// 目录栅格检查; 其余 → PostGIS 语义。
+/// 目录栅格检查; MySQL → 数据库 PING; 其余 → PostGIS 语义。
 async fn test_datasource_connection(ds: &DataSource) -> serde_json::Value {
     match ds.data_source_type {
         DataSourceType::Redis => test_redis_connection(ds).await,
         DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => test_mosaic_connection(ds),
+        DataSourceType::Mysql => test_mysql_connection(ds).await,
         _ => test_postgis_connection(ds).await,
+    }
+}
+
+/// MySQL 数据源连接测试: 建立连接并执行 `SELECT 1` 验证可连通性。
+async fn test_mysql_connection(ds: &DataSource) -> serde_json::Value {
+    let conn_info = match &ds.connection {
+        Some(c) => c,
+        None => {
+            return serde_json::json!({
+                "success": false,
+                "message": "No connection configuration",
+            })
+        },
+    };
+    let host = conn_info.host.as_deref().unwrap_or("127.0.0.1").to_string();
+    let port = conn_info.port.unwrap_or(3306);
+    let database = conn_info
+        .database
+        .clone()
+        .unwrap_or_else(|| "geoserver".to_string());
+    let user = conn_info
+        .username
+        .clone()
+        .unwrap_or_else(|| "root".to_string());
+    let password = conn_info.password.clone();
+
+    let opts = mysql_async::OptsBuilder::default()
+        .ip_or_hostname(host)
+        .tcp_port(port)
+        .db_name(Some(database))
+        .user(Some(user))
+        .pass(password)
+        .wait_timeout(Some(5));
+    let pool = mysql_async::Pool::new(opts);
+    match pool.get_conn().await {
+        Ok(mut conn) => {
+            let ok: mysql_async::Result<()> =
+                mysql_async::prelude::Queryable::query_drop(&mut conn, "SELECT 1").await;
+            drop(conn);
+            match ok {
+                Ok(()) => serde_json::json!({
+                    "success": true,
+                    "message": "MySQL connection successful",
+                }),
+                Err(e) => serde_json::json!({
+                    "success": false,
+                    "message": format!("MySQL query failed: {}", e),
+                }),
+            }
+        },
+        Err(e) => serde_json::json!({
+            "success": false,
+            "message": format!("MySQL connection failed: {}", e),
+        }),
     }
 }
 

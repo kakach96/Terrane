@@ -57,6 +57,19 @@ pub async fn query_layer_features(
                 );
                 return Ok(Vec::new());
             },
+            DataSourceType::Mysql => {
+                if let Some(ref conn) = ds.connection {
+                    if let Some(ref native_name) = layer.native_name {
+                        let pool = state.get_mysql_pool(&ds.name, conn);
+                        return query_mysql_features(&pool, conn, native_name, bbox, limit).await;
+                    }
+                }
+                info!(
+                    "[Features] MySQL 数据源 '{}' 缺少连接/表名, 返回空",
+                    ds.name
+                );
+                return Ok(Vec::new());
+            },
             DataSourceType::Shapefile => {
                 return query_shapefile_features(ds, bbox, limit, offset).await;
             },
@@ -375,6 +388,125 @@ async fn query_postgis_features(
             },
         };
         features.push(Feature::with_id(id, geometry, properties));
+    }
+
+    Ok(features)
+}
+
+/// 从 MySQL 空间表查询要素 (MBR 空间过滤 + ST_AsGeoJSON 几何输出)。
+async fn query_mysql_features(
+    pool: &mysql_async::Pool,
+    conn: &crate::models::DataSourceConnection,
+    native_name: &str,
+    bbox: Option<&Bounds>,
+    limit: Option<u64>,
+) -> Result<Vec<Feature>, GeoServerError> {
+    let mut db = pool
+        .get_conn()
+        .await
+        .map_err(|e| GeoServerError::InternalError(format!("MySQL pool error: {}", e)))?;
+
+    let database = conn
+        .database
+        .clone()
+        .unwrap_or_else(|| "geoserver".to_string());
+
+    let table = native_name.replace('`', "``");
+    let cols: Vec<(String, String)> = mysql_async::prelude::Queryable::query(
+        &mut db,
+        format!(
+            "SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS \
+             WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}' ORDER BY ORDINAL_POSITION",
+            database.replace('\'', "''"),
+            table
+        ),
+    )
+    .await
+    .map_err(|e| GeoServerError::InternalError(format!("MySQL metadata error: {}", e)))?;
+
+    let geom_col = cols
+        .iter()
+        .find(|(_, dt)| {
+            matches!(
+                dt.to_uppercase().as_str(),
+                "GEOMETRY"
+                    | "POINT"
+                    | "LINESTRING"
+                    | "POLYGON"
+                    | "MULTIPOINT"
+                    | "MULTILINESTRING"
+                    | "MULTIPOLYGON"
+                    | "GEOMETRYCOLLECTION"
+            )
+        })
+        .map(|(c, _)| c.clone())
+        .unwrap_or_else(|| "geom".to_string());
+
+    let non_geom_cols: Vec<String> = cols
+        .iter()
+        .filter(|(c, _)| *c != geom_col)
+        .map(|(c, _)| c.clone())
+        .collect();
+    let col_list = non_geom_cols
+        .iter()
+        .map(|c| format!("`{}`", c.replace('`', "``")))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let geom_q = format!("`{}`", geom_col.replace('`', "``"));
+    let mut sql = format!(
+        "SELECT ST_AsGeoJSON({}) AS _geometry{} FROM `{}`",
+        geom_q,
+        if col_list.is_empty() {
+            String::new()
+        } else {
+            format!(", {}", col_list)
+        },
+        table
+    );
+
+    let limit_val = limit.unwrap_or(10000);
+    if let Some(b) = bbox {
+        // MBR 过滤 (请求 bbox 假定 EPSG:4326; 与 PostGIS 路径语义一致)。
+        sql.push_str(&format!(
+            " WHERE MBRIntersects({}, ST_GeomFromText('POLYGON(({} {} , {} {} , {} {} , {} {} , {} {}))')) LIMIT {}",
+            geom_q,
+            b.minx, b.miny, b.maxx, b.miny, b.maxx, b.maxy, b.minx, b.maxy, b.minx, b.miny,
+            limit_val
+        ));
+    } else {
+        sql.push_str(&format!(" LIMIT {}", limit_val));
+    }
+
+    let rows: Vec<mysql_async::Row> = mysql_async::prelude::Queryable::query(&mut db, sql)
+        .await
+        .map_err(|e| GeoServerError::InternalError(format!("MySQL query error: {}", e)))?;
+
+    let mut features = Vec::with_capacity(rows.len());
+    for (idx, row) in rows.iter().enumerate() {
+        let geojson_str: Option<String> = row.get("_geometry");
+        let geometry = geojson_str
+            .as_deref()
+            .map(wkb::parse_geojson_geometry)
+            .unwrap_or_else(|| crate::models::GeoJsonGeometry::Point {
+                coordinates: vec![0.0, 0.0],
+            });
+
+        let mut properties = std::collections::HashMap::new();
+        properties.insert(
+            "id".to_string(),
+            crate::models::PropertyValue::String(format!("feat_{}", idx)),
+        );
+        for col in &non_geom_cols {
+            if let Some(v) = row.get::<Option<String>, _>(col.as_str()).flatten() {
+                properties.insert(col.clone(), crate::models::PropertyValue::String(v));
+            }
+        }
+        features.push(Feature::with_id(
+            format!("feat_{}", idx),
+            geometry,
+            properties,
+        ));
     }
 
     Ok(features)

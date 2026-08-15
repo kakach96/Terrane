@@ -26,6 +26,7 @@ fn now() -> String {
 fn parse_ds_type(type_str: &str) -> DataSourceType {
     match type_str {
         "postgis" => DataSourceType::Postgis,
+        "mysql" => DataSourceType::Mysql,
         "shapefile" => DataSourceType::Shapefile,
         "geotiff" => DataSourceType::Geotiff,
         "geopackage" => DataSourceType::Geopackage,

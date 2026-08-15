@@ -438,6 +438,50 @@ async fn test_rest_image_pyramid_data_source_crud() {
 }
 
 #[actix_rt::test]
+async fn test_rest_mysql_data_source_crud() {
+    let app = build_test_app!();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(serde_json::json!({
+            "name": "mysql_test_1",
+            "type": "mysql",
+            "workspace": "default",
+            "enabled": true,
+            "connection": {
+                "host": "127.0.0.1",
+                "port": 3306,
+                "database": "geodb",
+                "username": "root",
+                "password": "secret",
+            },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建 MySQL 数据源应返回 201"
+    );
+
+    // 列表应包含且类型持久化为 mysql。
+    let req = test::TestRequest::get()
+        .uri("/geoserver/data-sources")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let found = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .find(|d| d["name"] == "mysql_test_1");
+    let found = found.expect("MySQL 数据源应存在");
+    assert_eq!(found["type"], "mysql", "类型应持久化为 mysql");
+    assert_eq!(found["connection"]["port"], 3306);
+}
+
+#[actix_rt::test]
 async fn test_browse_local_directory() {
     let app = build_test_app!();
 

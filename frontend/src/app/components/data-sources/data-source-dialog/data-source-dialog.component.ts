@@ -30,6 +30,7 @@ export class DataSourceDialogComponent implements OnInit {
   workspaces: Workspace[] = [];
   dataSourceTypes = [
     { value: 'postgis', label: 'PostGIS' },
+    { value: 'mysql', label: 'MySQL' },
     { value: 'shapefile', label: 'Shapefile' },
     { value: 'geotiff', label: 'GeoTIFF' },
     { value: 'geopackage', label: 'GeoPackage' },
@@ -84,6 +85,7 @@ export class DataSourceDialogComponent implements OnInit {
     this.loadWorkspaces();
     this.dataSourceTypes = [
       { value: 'postgis', label: 'PostGIS' },
+      { value: 'mysql', label: 'MySQL' },
       { value: 'shapefile', label: 'Shapefile' },
       { value: 'geotiff', label: 'GeoTIFF' },
       { value: 'geopackage', label: 'GeoPackage' },
@@ -240,6 +242,7 @@ export class DataSourceDialogComponent implements OnInit {
   testConnection(): void {
     if (
       this.selectedType !== 'postgis' &&
+      this.selectedType !== 'mysql' &&
       this.selectedType !== 'redis' &&
       this.selectedType !== 'image_mosaic' &&
       this.selectedType !== 'image_pyramid'
@@ -299,7 +302,7 @@ export class DataSourceDialogComponent implements OnInit {
       enabled: this.form.get('enabled')?.value ?? true,
     };
 
-    if (type === 'postgis' || type === 'redis') {
+    if (type === 'postgis' || type === 'mysql' || type === 'redis') {
       request.connection = this.buildTcpConnection();
     } else {
       const filePath = this.form.get('file_path')?.value || this.selectedFile?.name;
@@ -331,7 +334,7 @@ export class DataSourceDialogComponent implements OnInit {
       enabled: this.form.get('enabled')?.value ?? true,
     };
 
-    if (type === 'postgis' || type === 'redis') {
+    if (type === 'postgis' || type === 'mysql' || type === 'redis') {
       request.connection = this.buildTcpConnection();
     } else {
       const filePath = this.form.get('file_path')?.value;
