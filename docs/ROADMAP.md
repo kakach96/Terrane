@@ -36,7 +36,8 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Angular 17 + Material admin console
 - Cloud-native foundation: multi-stage Docker image, `build/docker-compose.yml`, split health probes, Prometheus `/metrics`, graceful shutdown
 - WMS rendering engine: multi-geometry + opacity compositing + polygon holes + z-order + label (TextSymbolizer) rendering with collision avoidance; raster layers (GeoTIFF/WorldImage/ArcGrid/ImageMosaic) render in WMS GetMap and tiles
-- Overall progress: ~63% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
+- OGC core services 7/7: WMS / WFS (incl. LockFeature + GetFeatureWithLock + GetPropertyValue + GetGmlObject) / WCS (incl. range 波段子集 + INTERPOLATION) / WMTS / WPS / CSW / OGC API series; WMS GetFeatureInfo GML output
+- Overall progress: ~69% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
 
 ### v1.1 — State Convergence (target: 2026 Q3–Q4)
 
@@ -71,6 +72,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 - **JWT secret hardcoded default** in `src/auth.rs` (`terrane-jwt-secret-2026`) — must be injected via `GEOSERVER__SECURITY__JWT_SECRET` in production.
 - **In-memory caches** (`Arc<RwLock<...>>` in `src/state.rs`) diverge across replicas; periodic catalog refresh added (`[server] catalog_refresh_secs`, reload layers/styles/groups from the metadata store) plus event-triggered refresh on REST layer writes (`AppState::refresh_catalog`) — multi-replica divergence is bounded, but refresh remains best-effort (no external event bus).
+- **WFS feature locks are in-memory only** (`src/utils/wfs_lock.rs`, per-replica): locks guard concurrent consumers within one process and are lost on restart — acceptable for a read-only platform, but multi-replica lock coordination (e.g. Redis) is not implemented.
 - **Tile cache backend**: local disk default (`./data/gwc`, `src/store/cache/tile.rs`); layer-level Redis cache data sources added (`Layer.cache_store` → `DataSourceType::Redis`, shared across replicas).
 - **Uploads on local disk** (`./data`) — no shared volume / object storage.
 - **Sessions persisted in the metadata DB** (SQLite / PostgreSQL) with a local in-memory `SessionCache` fast-path — Redis session backend intentionally not implemented (simple JWT only).

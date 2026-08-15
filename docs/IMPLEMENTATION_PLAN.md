@@ -11,7 +11,7 @@
 
 | Feature Area | Implemented | Partial | Not Implemented | Progress |
 |---------|:-----:|:--------:|:-----:|:-----:|
-| OGC Core Services | 5/7 | 0 | 2 | **71%** |
+| OGC Core Services | 7/7 | 0 | 0 | **100%** |
 | REST API | 11/16 | 0 | 5 | **69%** |
 | Data Source Types | 12/15 | 0 | 3 | **80%** |
 | Styling System | 5/5 | 0 | 0 | **100%** |
@@ -19,10 +19,10 @@
 | Security | 3/7 | 0 | 4 | **43%** |
 | Extensions | 8/14 | 0 | 6 | **57%** |
 | Cloud-Native | 4/7 | 0 | 3 | **57%** |
-| **Overall Progress** | | | | **~67%** |
+| **Overall Progress** | | | | **~69%** |
 
 ```
-OGC services     █████████████░░░░  71%
+OGC services     ██████████████████ 100%
 REST API         █████████████░░░░  69%
 Data sources     ████████████████░░  80%
 Styling system   ██████████████████ 100%
@@ -31,7 +31,7 @@ Security         ████████░░░░░░░░  43%
 Extensions       █████████░░░░░░░  57%
 Cloud-Native     █████████░░░░░░░  57%
 ──────────────────────────────
-Overall progress █████████████░░░  67%
+Overall progress █████████████░░░  69%
 ```
 
 ---
@@ -40,23 +40,29 @@ Overall progress █████████████░░░  67%
 
 ### 1.1 OGC Standard Services
 
+> OGC 核心服务 **7/7 (100%)**: WMS / WFS / WCS / WMTS / WPS / CSW / OGC API 系列。
+> 早期文档中的 "2 项未实现" (WPS、CSW) 已完成; 本计划另补齐了操作级缺口
+> (WFS 锁 + GetPropertyValue + GetGmlObject、WMS GetFeatureInfo GML、WCS 波段子集 + 插值)。
+
 | Service | Operation | Status |
 |------|------|:----:|
 | **WMS 1.1.1/1.3.0** | GetCapabilities | ✅ |
 | | GetMap | ✅ |
-| | GetFeatureInfo | ✅ |
+| | GetFeatureInfo (text/plain · text/html · application/json · **application/vnd.ogc.gml**) | ✅ |
 | | DescribeLayer | ✅ |
 | | GetLegendGraphic | ✅ |
 | | GetStyles / PutStyles | ✅ |
 | **WFS 1.0/1.1/2.0** | GetCapabilities | ✅ |
 | | DescribeFeatureType | ✅ |
-| | GetFeature | ✅ |
-| | GetFeatureWithLock | ✅ |
-| | Transaction (Insert/Update/Delete) | ✅ |
-| | LockFeature (definition) | ✅ |
+| | GetFeature (GML 2/3.1.1/3.2 · GeoJSON · CSV · KML · SHAPE-ZIP) | ✅ |
+| | GetFeatureWithLock (真实加锁, 响应携带 lockId) | ✅ |
+| | LockFeature (加锁 / 续锁 / RELEASEACTION 释放, lockAction ALL/SOME, EXPIRY) | ✅ |
+| | GetPropertyValue (WFS 2.0, `wfs:ValueCollection`) | ✅ |
+| | GetGmlObject (WFS 2.0, `wfs:GMLObjectCollection`) | ✅ |
+| | Transaction (Insert/Update/Delete) | ❌ 只读发布平台, 501 |
 | **WCS 1.0/1.1/2.0** | GetCapabilities | ✅ |
 | | DescribeCoverage | ✅ |
-| | GetCoverage | ✅ |
+| | GetCoverage (空间子集 + **波段 range 子集** + **INTERPOLATION** nearest/bilinear/cubic/lanczos) | ✅ |
 
 ### 1.2 REST API
 

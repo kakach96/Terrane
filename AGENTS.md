@@ -22,8 +22,10 @@ src/              — Rust backend (Actix-web)
     cache/        — Cache abstraction (TileCacheBackend + SessionCache; local disk/in-memory)
   utils/          — Rendering + format readers
     bitmap_font.rs — built-in 5×7 bitmap font for SLD label (TextSymbolizer) rendering (zero deps)
+    gml.rs        — shared GML serialization helpers (escape_xml, GeoJSON→GML, GML 3.2 feature) used by WFS GetFeature/GetGmlObject and WMS GetFeatureInfo
     mosaic.rs     — ImageMosaic data source: raster-directory granule scan + bounds + composite
     pyramid.rs    — ImagePyramid data source: numeric level subdirs + resolution-based level selection
+    wfs_lock.rs   — WFS feature-lock registry (LockFeature / GetFeatureWithLock): in-memory, TTL expiry, lockAction ALL/SOME
   routes.rs       — All route registrations in one file
 frontend/         — Angular 17 + Material
   src/app/

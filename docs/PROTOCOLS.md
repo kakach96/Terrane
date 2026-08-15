@@ -44,7 +44,7 @@ Endpoint `/wms` (`src/services/wms.rs`, `src/handlers/wms_handler.rs`).
 |---------------------|--------|-------|
 | GetCapabilities     | ✅     | Layers from the catalog |
 | GetMap              | ✅     | Raster (PNG/JPEG/GIF/WebP), vector (SVG), KML, GeoJSON, GeoRSS, PDF, OpenLayers preview; CascadedWms proxy |
-| GetFeatureInfo      | ✅     | `text/plain`, `text/html`, `application/json` |
+| GetFeatureInfo      | ✅     | `text/plain`, `text/html`, `application/json`, **`application/vnd.ogc.gml`** (GML 3.1.1 要素集合) |
 | DescribeLayer       | ✅     | WMS 1.1.1 DescribeLayerResponse |
 | GetLegendGraphic    | ✅     | SLD-based legend |
 | GetStyles / PutStyles | ✅   | SLD style read/write |
@@ -54,7 +54,7 @@ Endpoint `/wms` (`src/services/wms.rs`, `src/handlers/wms_handler.rs`).
 `featureId` (feature-id filter), `angle`, scale-denominator-aware styling.
 
 **Gaps vs reference**: full SLD dynamic-styling feature
-set, GML `GetFeatureInfo` output.
+set (rendering transforms out of scope).
 
 ## 3. WFS — Web Feature Service
 
@@ -66,12 +66,14 @@ Endpoint `/wfs` (`src/services/wfs.rs`, `src/handlers/wfs_handler.rs`). GET + PO
 
 | Operation           | Status | Notes |
 |---------------------|--------|-------|
-| GetCapabilities     | ✅     | Advertises 2.0.0 |
+| GetCapabilities     | ✅     | Advertises 2.0.0 (incl. GetFeatureWithLock / LockFeature / GetPropertyValue / GetGmlObject) |
 | DescribeFeatureType | ✅     | XSD schema (real typed columns for published GeoPackage layers) |
 | GetFeature          | ✅     | GML 2.1.2 / GML 3.1.1 / GML 3.2, GeoJSON, CSV, KML 2.2, Shapefile (SHAPE-ZIP) |
-| GetFeatureWithLock  | ✅     | |
-| LockFeature         | ✅     | |
-| Transaction         | ✅     | WFS-T insert / update / delete via POST XML |
+| GetFeatureWithLock  | ✅     | 真实加锁 (内存锁注册表, TTL 过期, `lockAction=SOME` 跳过已锁要素), 响应携带 `lockId` |
+| LockFeature         | ✅     | 加锁 / 续锁 (LOCKID+EXPIRY) / 释放 (LOCKID+RELEASEACTION=ALL), `lockAction` ALL/SOME; `wfs:LockFeatureResponse` (1.1/2.0 命名空间) |
+| GetPropertyValue    | ✅     | WFS 2.0 核心操作 (OGC 09-025r2): `PROPERTYNAME` 取值 → `wfs:ValueCollection` (几何属性输出 GML) |
+| GetGmlObject        | ✅     | WFS 2.0 核心操作 (OGC 09-025r2): `GMLOBJECTID` 查要素 → `wfs:GMLObjectCollection` (GML 3.2) |
+| Transaction         | ❌     | WFS-T 写入不支持 (501): Terrane 是只读数据发布平台 |
 
 **Gaps vs reference**: deeper GML 3.2 schema fidelity.
 
@@ -87,13 +89,14 @@ Endpoint `/wcs` (`src/services/wcs.rs`, `src/handlers/wcs_handler.rs`).
 |---------------------|--------|-------|
 | GetCapabilities     | ✅     | |
 | DescribeCoverage    | ✅     | |
-| GetCoverage         | ✅     | GeoTIFF (`image/tiff`), ArcGrid (`application/x-arcgrid`) |
+| GetCoverage         | ✅     | GeoTIFF (`image/tiff`), ArcGrid (`application/x-arcgrid`); 空间子集 + **range 波段子集** (`SUBSET=Band(a:b)`, r/g/b/a 轴) + **`INTERPOLATION`** (nearest / bilinear / cubic / lanczos) |
 
-**Subsetting**: WCS 2.0 `SUBSET` (intervals / position, with CRS + resolution),
-`SUBSETTINGCRS`.
+**Subsetting**: WCS 2.0 `SUBSET` (intervals / position, with CRS + resolution,
+comma `x(10,20)` or colon `Band(1:2)` syntax), `SUBSETTINGCRS`.
 
-**Gaps vs reference**: no full WCS 1.1 range-subset / interpolation semantics, no
-Web Coverage Transaction (WCS-T), no coverages exposed through WMS GetMap.
+**Gaps vs reference**: no full WCS 1.1 range-subset / interpolation *semantics*
+(2.0 GetCoverage 上的波段子集与插值已实现, 1.1 语义未完整建模), no
+Web Coverage Transaction (WCS-T, 只读平台不支持).
 
 ## 5. Tiling — WMTS / MVT / TMS / WMS-C
 
@@ -241,8 +244,9 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **189 lib unit tests + 164 integration tests**, plus
-**7 `#[ignore]`-marked live tests** (3× PostGIS + 2× CascadedWms + 2 others) that require
+`cargo test` currently green: **251 lib unit tests + 180 integration tests**, plus
+**6 `#[ignore]`-marked live tests** (PostGIS metadata/vector + PostGIS data-source
+HTTP + 2× S3 + 2× cascaded-WMS live) that require
 running services and are verified with `cargo test -- --ignored`.
 
 The integration tests are split by protocol into separate test crates (Rust
@@ -251,10 +255,10 @@ convention: every file directly under `tests/` is its own binary), sharing a
 
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
-| `tests/wms_test.rs` | 26 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
-| `tests/wfs_test.rs` | 27    | WFS (all operations + WFS-T + LockFeature contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
-| `tests/rest_test.rs`| 23 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
-| `tests/wcs_test.rs` | 12    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, JPEG / netCDF) |
+| `tests/wms_test.rs` | 30 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, **GetFeatureInfo GML output**, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
+| `tests/wfs_test.rs` | 15    | WFS (all operations + **LockFeature acquire/conflict/renew/release** + **GetFeatureWithLock lockId** + **GetPropertyValue** + **GetGmlObject** + WFS-T 501 contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
+| `tests/rest_test.rs`| 31 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
+| `tests/wcs_test.rs` | 14    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, **range 波段子集 Band(a:b)**, **INTERPOLATION** bilinear/nearest/未知回退, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
 | `tests/tms_test.rs` | 7     | TMS (GetCapabilities RESTful + KVP, TileMap document, GetTile geodetic/mercator PNG + JPEG, KVP GetTile) |
 | `tests/wps_test.rs` | 6     | WPS (GetCapabilities, DescribeProcess, Execute KVP raw centroid/buffer/bounds + XML POST) |
@@ -281,15 +285,15 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 
 | Layer              | Coverage                                                                 |
 |--------------------|--------------------------------------------------------------------------|
-| WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
-| WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV / KML 2.2 / Shapefile SHAPE-ZIP), GetFeatureWithLock, Transaction (insert round-trip + update + delete by FeatureId), LockFeature (contract: GET returns 400 — declared but unsupported), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
+| WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain / **GML application/vnd.ogc.gml**), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
+| WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV / KML 2.2 / Shapefile SHAPE-ZIP), GetFeatureWithLock (真实加锁 + `lockId` 响应), LockFeature (加锁 / lockAction ALL/SOME 冲突 / 续锁 / RELEASEACTION 释放), GetPropertyValue (`wfs:ValueCollection` + FEATUREID 过滤 + 缺 PROPERTYNAME 400), GetGmlObject (`wfs:GMLObjectCollection` + 未知 id 空集合 + 缺 GMLOBJECTID 400), Transaction (501 只读契约), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
 | WPS                | GetCapabilities (ServiceIdentification / OperationsMetadata / ProcessOfferings / Languages), DescribeProcess (DataInputs / ProcessOutputs + xsd:double), Execute (KVP `response=raw` → GeoJSON + document XML, POST XML with `Reference xlink:href="layer:…"`), built-in `vec:Centroid` / `vec:Buffer` / `gs:Bounds` — integration + 6 unit tests (`services/wps.rs`: KVP DataInputs, operation parse, Execute XML, capabilities structure, features_to_geojson, run_process) |
 | OGC API Maps       | Landing / conformance / collections / collection / styles, `map` operation (`bbox` + `width`/`height`, PNG/JPEG via `?f=`, `transparent` / `bgcolor` / `datetime` / `cql_filter` pass-through) reusing the shared WMS GetMap pipeline — integration + 8 unit tests (`services/ogc_maps.rs`: landing, conformance, collections, collection links, styles, bbox parse, map href formats) |
 | OGC API Processes  | Landing / conformance / process list / process description; synchronous job surface (`POST /jobs` → 201 status document, `GET /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/results`, `DELETE /jobs/{id}`) over the WPS engine, inputs as `layer:` reference / inline GeoJSON / OGC API href / literals — integration + 9 unit tests (`services/ogc_processes.rs`: landing, conformance, process list/description, job status/results, job request parse) |
 | OGC API Coverages | Landing / conformance / collections (empty + with a real 8x8 georeferenced GeoTIFF data source) / collection detail (real bounds + grid scale + band fields) / `coverage` operation (GeoTIFF default, PNG + JPEG via `?f=`, bbox crop 2×2 + width/height resample 8×8, disjoint bbox 400, unknown collection 404) — integration + 7 unit tests (`services/ogc_coverages.rs`: landing, conformance, collections, collection links/dimensions, bbox parse, coverage hrefs) |
 | OGC API Styles     | Landing / conformance / style list (built-in `default` SLD) + style content with native media type + 404 / metadata / create (401 without token, 201 with JWT) / get–put (CSS content-type after replace)–delete lifecycle / collections + layer styles — integration + 8 unit tests (`services/ogc_styles.rs`: mime mapping, landing, conformance, list, metadata, collections, layer-style resolution, hrefs) |
 | Resilience (middleware) | Rate limit (429 over limit, per-client `X-Forwarded-For` buckets) + request timeout (504 over a real HTTP server, fast requests pass) — integration + 5 unit tests (`middleware.rs`: allow/deny, disabled limiter, per-client independence, window slide, count after prune) |
-| WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8) — integration |
+| WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8, **range 波段子集 `Band(a:b)` 输出常量/渐变断言**, **INTERPOLATION=bilinear/nearest/未知回退**) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | TMS                | GetCapabilities (RESTful + KVP), TileMap document (SRS / BoundingBox / Origin / TileFormat / TileSets + units-per-pixel), GetTile (global-geodetic + global-mercator, PNG + JPEG, TMS bottom-up y flip) — integration |
 | WMS-C              | GetCapabilities (`WMT_MS_Capabilities` 1.1.1), GetMap `TILED=true` (geodetic + mercator grid-aligned BBOX → cached tile), GetMap without TILED (plain WMS 1.1.1) — integration |
@@ -308,13 +312,13 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 | Upload             | 1 unit test (`upload_handler.rs`: filename sanitize)                     |
 | Store (cache)      | 4 `LocalSessionCache` unit tests (set/get/remove/remove_user/TTL) + 4 `LocalTileCacheBackend` (put/get/clear/stats/gridset-path sanitize) |
 | Store (vector/raster) | 4 `LocalVectorStore` (save/load/delete/list/sanitize) + 4 `LocalRasterStore` (put/get/delete/list/.tif) + 8 `sqlite_store` (workspace / namespace / layer+features / user+permission / session / styles CRUD / layer-groups CRUD / audit logs) + 2 live `PostgresStore` (metadata CRUD) / `PostgresVectorStore` (feature round-trip) — `#[ignore]` |
-| Data-source adapters | 4 `arcgrid` (read/meta/errors) + 5 `worldimage` (ext/meta/crop) + 5 `cascaded` (config extract + **vendor-param URL encoding** + live `fetch_cascaded_map` via WMS proxy: CQL_FILTER valid/invalid + TIME pass-through) + 8 `geopackage` (layers / validation / features read round-trip / limit + **write→read round-trip** for Point & LineString + **typed attributes: INTEGER/REAL/BOOLEAN/TEXT inference + round-trip**) + 2 `data_source` (serde type round-trip incl. `cascaded_wms`, postgis connection constructor) + 4 `wkb` (Point/LineString/Polygon round-trip + **Multi*/GeometryCollection round-trip** + byte lengths + big-endian decode, all 7 WKB types now parse) |
+| Data-source adapters | 4 `arcgrid` (read/meta/errors) + 5 `worldimage` (ext/meta/crop) + 5 `cascaded` (config extract + **vendor-param URL encoding** + live `fetch_cascaded_map` via WMS proxy: CQL_FILTER valid/invalid + TIME pass-through) + 8 `geopackage` (layers / validation / features read round-trip / limit + **write→read round-trip** for Point & LineString + **typed attributes: INTEGER/REAL/BOOLEAN/TEXT inference + round-trip** + **stable feature ids `table.rowid`**) + 2 `data_source` (serde type round-trip incl. `cascaded_wms`, postgis connection constructor) + 4 `wkb` (Point/LineString/Polygon round-trip + **Multi*/GeometryCollection round-trip** + byte lengths + big-endian decode, all 7 WKB types now parse) + 7 `wfs_lock` (acquire / conflict ALL / SOME skip / expiry / never-expire / renew+release / per-layer) + 3 `gml` (escape / point / feature GML 3.2) |
 
 ### 11.2 Coverage gaps (adapted but untested)
 
 | Protocol / surface | Missing tests                                                              |
 |--------------------|----------------------------------------------------------------------------|
-| **WFS**            | LockFeature (documented as unsupported — GET returns 400); OGC XML `FILTER=` now also handles `ogc:Function` (e.g. `strToLowerCase` → case-insensitive equality) and spatial `Intersects` / `Within` / `DWithin` with GML Point / Polygon / Envelope (delegated to the CQL engine) — a superset of the reference KVP `FILTER=`, which rejects `ogc:`-prefixed tags and GML geometry |
+| **WFS**            | OGC XML `FILTER=` also handles `ogc:Function` (e.g. `strToLowerCase` → case-insensitive equality) and spatial `Intersects` / `Within` / `DWithin` with GML Point / Polygon / Envelope (delegated to the CQL engine) — a superset of the reference KVP `FILTER=`, which rejects `ogc:`-prefixed tags and GML geometry. LockFeature / GetPropertyValue / GetGmlObject are now implemented (see §3) — remaining gap is deeper GML 3.2 schema fidelity |
 | **WCS**            | native netCDF output (falls back to TIFF); elevation / time subsetting on real rasters (only recorded) |
 | **Data sources**   | GeoPackage attributes are typed on write (INTEGER/REAL/BOOLEAN/TEXT by value inference) and typed on read, but no GeoPackage **update** / append; GeoPackage writer still only emits Point / LineString geometry types |
 | **WKB**            | decoder now handles all 7 WKB types (2D); EWKB Z/M/SRID flags are masked for routing but Z/M coordinates are not yet parsed; no GeometryCollection-in-GeoPackage round-trip test (GeoPackage write supports Point/LineString only) |
