@@ -628,3 +628,142 @@ async fn test_wcs_get_coverage_real_geotiff_subset_size() {
     // 清理 fixture
     std::fs::remove_dir_all(&dir).ok();
 }
+
+// ---------------------------------------------------------------------------
+// Batch D: WCS range (波段) 子集 + INTERPOLATION 插值
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_wcs_get_coverage_range_subset() {
+    // 1. 发布 RGB 渐变 GeoTIFF (R=列渐变, G=100, B=200)
+    let dir = std::env::temp_dir().join(format!("terrane-wcs-band-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let tif_path = create_georef_tiff_fixture(&dir, "cov_band.tif");
+
+    let app = build_test_app!();
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(serde_json::json!({
+            "name": "cov_band",
+            "type": "geotiff",
+            "workspace": "default",
+            "enabled": true,
+            "connection": { "file_path": tif_path.to_str(), "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::CREATED);
+
+    // 2. Band(2:2) → 仅 G 通道 (常量 100) → 输出应为常量灰度图
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_band&FORMAT=image/tiff&SUBSET=Band(2:2)")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WCS 波段子集应返回 200, 实际: {}",
+        resp.status()
+    );
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
+    assert_eq!(decoded.width(), 8, "波段子集不应改变空间尺寸");
+    assert_eq!(decoded.height(), 8);
+    let rgb = decoded.to_rgb8();
+    let first = rgb.get_pixel(0, 0).0;
+    let uniform = rgb.pixels().all(|p| p.0 == first);
+    assert!(
+        uniform,
+        "Band(2:2) 只保留 G 通道 (常量 100), 输出应为常量图, 实际首像素: {:?}",
+        first
+    );
+    // G 通道值 100 → 灰度 100 (编码器有小幅偏差容忍)
+    assert!(
+        (i32::from(first[0]) - 100).abs() <= 3,
+        "G=100 应映射为灰度 100, 实际: {:?}",
+        first
+    );
+
+    // 3. Band(1:3) → 全波段 → 保持原图 (列渐变, 非常量)
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_band&FORMAT=image/tiff&SUBSET=Band(1:3)")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "Band(1:3) 应返回 200, 实际: {}",
+        resp.status()
+    );
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
+    let rgb = decoded.to_rgb8();
+    let non_uniform = rgb.pixels().skip(1).any(|p| p.0 != rgb.get_pixel(0, 0).0);
+    assert!(non_uniform, "Band(1:3) 保留 RGB 渐变, 输出应非常量");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[actix_rt::test]
+async fn test_wcs_get_coverage_interpolation() {
+    let dir = std::env::temp_dir().join(format!("terrane-wcs-interp-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let tif_path = create_georef_tiff_fixture(&dir, "cov_interp.tif");
+
+    let app = build_test_app!();
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(serde_json::json!({
+            "name": "cov_interp",
+            "type": "geotiff",
+            "workspace": "default",
+            "enabled": true,
+            "connection": { "file_path": tif_path.to_str(), "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::CREATED);
+
+    // 1. INTERPOLATION=bilinear + SIZE → 重采样成功且尺寸正确
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_interp&FORMAT=image/tiff&INTERPOLATION=bilinear&SIZE=16,16")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "INTERPOLATION=bilinear 应返回 200, 实际: {}",
+        resp.status()
+    );
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
+    assert_eq!(decoded.width(), 16, "bilinear + SIZE=16,16 应输出 16x16");
+    assert_eq!(decoded.height(), 16);
+
+    // 2. INTERPOLATION=nearest + SIZE → 尺寸正确
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_interp&FORMAT=image/tiff&INTERPOLATION=nearest&SIZE=16,16")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "INTERPOLATION=nearest 应返回 200, 实际: {}",
+        resp.status()
+    );
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码 TIFF");
+    assert_eq!(decoded.width(), 16, "nearest + SIZE=16,16 应输出 16x16");
+
+    // 3. 未知插值 → 回退默认 (不报错), 输出仍有效
+    let req = test::TestRequest::get()
+        .uri("/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cov_interp&FORMAT=image/png&INTERPOLATION=unknown-xyz")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "未知 INTERPOLATION 应回退默认并返回 200, 实际: {}",
+        resp.status()
+    );
+    let body = test::read_body(resp).await;
+    let decoded = image::load_from_memory(&body).expect("应能解码 PNG");
+    assert_eq!(decoded.width(), 8, "无 SIZE 时保持原始尺寸");
+
+    std::fs::remove_dir_all(&dir).ok();
+}

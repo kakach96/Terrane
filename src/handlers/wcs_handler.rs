@@ -375,13 +375,23 @@ async fn handle_get_coverage(
             tie_point_y: None,
         };
 
-        // 1. 应用子集（空间裁剪 / 时间裁剪）
-        let img = apply_coverage_subsets(&coverage_data, &request.subsets, &request.size);
+        // 1. 应用子集（空间裁剪 / 波段选择 / 时间记录）
+        let img = apply_coverage_subsets(
+            &coverage_data,
+            &request.subsets,
+            &request.size,
+            request.interpolation.as_deref(),
+        );
 
-        // 2. 按请求的宽度/高度缩放
+        // 2. 按请求的宽度/高度缩放 (使用请求的插值方式)
         let (width, height) = calculate_output_size(img.width(), img.height(), &request.size);
         let final_img = if width != img.width() || height != img.height() {
-            image::imageops::resize(&img, width, height, image::imageops::FilterType::Lanczos3)
+            image::imageops::resize(
+                &img,
+                width,
+                height,
+                resize_filter(request.interpolation.as_deref()),
+            )
         } else {
             img
         };
@@ -412,11 +422,12 @@ async fn handle_get_coverage(
     encode_coverage_output(img, &output_format, coverage_id)
 }
 
-/// 应用 WCS 子集参数（空间裁剪、时间裁剪等）
+/// 应用 WCS 子集参数（空间裁剪、波段选择、时间记录等）。
 fn apply_coverage_subsets(
     coverage: &crate::utils::geotiff::CoverageData,
     subsets: &Option<Vec<crate::services::wcs::Subset>>,
     size: &Option<Vec<i64>>,
+    interpolation: Option<&str>,
 ) -> image::RgbaImage {
     let img = coverage.rgba_image.clone();
 
@@ -430,6 +441,9 @@ fn apply_coverage_subsets(
     let mut bbox_maxx: Option<f64> = None;
     let mut bbox_maxy: Option<f64> = None;
     let mut use_resolution: Option<f64> = None;
+    // 波段选择 (WCS 2.0 range 子集, 1 起始的波段号; 轴名 r/g/b/a 直接用 0 起始)
+    let mut band_min: Option<f64> = None;
+    let mut band_max: Option<f64> = None;
 
     for subset in subsets {
         match subset.subset_type {
@@ -460,6 +474,32 @@ fn apply_coverage_subsets(
                             subset.axis_label, min, max
                         );
                     },
+                    // range 子集: 波段选择 (WCS 2.0 `Band(a:b)`, 1 起始)
+                    "band" | "range" | "bands" => {
+                        band_min = Some(min);
+                        band_max = Some(max);
+                        info!(
+                            "[WCS] 波段子集: axis={}, range=[{}, {}]",
+                            subset.axis_label, min, max
+                        );
+                    },
+                    // 通道快捷轴: r/g/b/a (0 起始的通道下标)
+                    "r" | "red" => {
+                        band_min = Some(0.0);
+                        band_max = Some(0.0);
+                    },
+                    "g" | "green" => {
+                        band_min = Some(1.0);
+                        band_max = Some(1.0);
+                    },
+                    "b" | "blue" => {
+                        band_min = Some(2.0);
+                        band_max = Some(2.0);
+                    },
+                    "a" | "alpha" => {
+                        band_min = Some(3.0);
+                        band_max = Some(3.0);
+                    },
                     _ => {
                         info!(
                             "[WCS] 未知轴子集: axis={}, range=[{}, {}]",
@@ -487,6 +527,12 @@ fn apply_coverage_subsets(
         }
     }
 
+    // 波段选择: 将选中的波段映射到输出通道 (单波段 → 灰度)。
+    let img = match (band_min, band_max) {
+        (Some(bmin), Some(bmax)) => select_bands(&img, bmin, bmax),
+        _ => img,
+    };
+
     // 应用空间裁剪
     if let (Some(minx), Some(miny), Some(maxx), Some(maxy)) =
         (bbox_minx, bbox_miny, bbox_maxx, bbox_maxy)
@@ -509,7 +555,7 @@ fn apply_coverage_subsets(
                                     &cropped,
                                     cov_width,
                                     cov_height,
-                                    image::imageops::FilterType::Lanczos3,
+                                    resize_filter(interpolation),
                                 );
                             }
                         }
@@ -522,7 +568,7 @@ fn apply_coverage_subsets(
                             &cropped,
                             sz[0] as u32,
                             sz[1] as u32,
-                            image::imageops::FilterType::Lanczos3,
+                            resize_filter(interpolation),
                         );
                     }
                 }
@@ -535,6 +581,63 @@ fn apply_coverage_subsets(
     }
 
     img
+}
+
+/// 波段选择: 将 `[bmin, bmax]` (1 起始的波段号, 轴 r/g/b/a 直接 0 起始) 中
+/// 的波段映射到输出 RGBA 通道 — 单波段 → 灰度, 双波段 → RG, 三波段 → RGB。
+/// 越界波段忽略; 无有效波段时返回原图。
+fn select_bands(img: &image::RgbaImage, bmin: f64, bmax: f64) -> image::RgbaImage {
+    // r/g/b/a 轴以 0 起始直接使用; band/range 轴按 WCS 1 起始约定减 1。
+    let (lo, hi) = if (0.0..=3.0).contains(&bmin) && (0.0..=3.0).contains(&bmax) {
+        (bmin.max(0.0) as usize, bmax.max(0.0) as usize)
+    } else {
+        return img.clone();
+    };
+    // band/range 轴为 1 起始: 若用户给了 >= 1 的号, 转 0 起始。
+    let (lo, hi) = if lo >= 1 && hi >= 1 {
+        (lo.saturating_sub(1), hi.saturating_sub(1))
+    } else {
+        (lo, hi)
+    };
+
+    let bands: Vec<usize> = (lo..=hi).filter(|b| *b < 4).collect();
+    if bands.is_empty() || bands.len() == 4 {
+        return img.clone();
+    }
+
+    let (w, h) = img.dimensions();
+    let mut out = image::RgbaImage::new(w, h);
+    for y in 0..h {
+        for x in 0..w {
+            let p = img.get_pixel(x, y);
+            let vals: Vec<u8> = bands.iter().map(|b| p[*b]).collect();
+            let px = match vals.len() {
+                1 => image::Rgba([vals[0], vals[0], vals[0], 255]),
+                2 => image::Rgba([vals[0], vals[1], 0, 255]),
+                _ => image::Rgba([vals[0], vals[1], vals[2], 255]),
+            };
+            out.put_pixel(x, y, px);
+        }
+    }
+    out
+}
+
+/// WCS INTERPOLATION → image resize 滤镜。
+/// - nearest → Nearest (WCS 2.0 默认语义)
+/// - bilinear → Triangle (双线性)
+/// - cubic → CatmullRom (三次)
+/// - lanczos → Lanczos3 (本实现历史默认, 亦为 INTERPOLATION 缺省值)
+/// - 未知值回退 lanczos, 不报错。
+fn resize_filter(interpolation: Option<&str>) -> image::imageops::FilterType {
+    match interpolation.map(|s| s.to_lowercase()).as_deref() {
+        Some("nearest") | Some("nearestneighbor") | Some("nearest-neighbor") => {
+            image::imageops::FilterType::Nearest
+        },
+        Some("bilinear") => image::imageops::FilterType::Triangle,
+        Some("cubic") | Some("bicubic") => image::imageops::FilterType::CatmullRom,
+        Some("lanczos") => image::imageops::FilterType::Lanczos3,
+        _ => image::imageops::FilterType::Lanczos3,
+    }
 }
 
 /// 计算输出尺寸

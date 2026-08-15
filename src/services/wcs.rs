@@ -452,12 +452,17 @@ fn parse_subset(value: &str) -> Result<Subset, crate::error::GeoServerError> {
             .filter(|s| s.to_uppercase().starts_with("EPSG:"))
     });
 
-    // 解析括号格式: axis(min,max) 或 axis(value)
+    // 解析括号格式: axis(min,max) 或 axis(min:max) 或 axis(value)
     if axis_label.contains('(') && value.ends_with(')') {
         if let Some(paren_idx) = axis_label.find('(') {
             let clean_axis = axis_label[..paren_idx].trim().to_string();
             let inner = &value[value.find('(').unwrap_or(0) + 1..value.len() - 1];
-            let inner_parts: Vec<&str> = inner.split(',').collect();
+            // WCS 2.0 区间支持逗号 (x(10,20)) 与冒号 (Band(1:2)) 两种分隔
+            let inner_parts: Vec<&str> = if inner.contains(':') {
+                inner.split(':').map(|s| s.trim()).collect()
+            } else {
+                inner.split(',').map(|s| s.trim()).collect()
+            };
             if inner_parts.len() >= 2 {
                 let min: f64 = inner_parts[0].trim().parse().unwrap_or(0.0);
                 let max: f64 = inner_parts[1].trim().parse().unwrap_or(0.0);
@@ -535,4 +540,44 @@ fn parse_subset(value: &str) -> Result<Subset, crate::error::GeoServerError> {
         crs,
         subset_type: SubsetType::Position { value: 0.0 },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_subset_colon_range() {
+        // WCS 2.0 波段子集 `Band(1:2)` — 冒号区间
+        let s = parse_subset("Band(1:2)").unwrap();
+        assert_eq!(s.axis_label, "Band");
+        match s.subset_type {
+            SubsetType::Intervals { min, max, .. } => {
+                assert_eq!(min, 1.0);
+                assert_eq!(max, 2.0);
+            },
+            other => panic!("应为 Intervals, 实际: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_subset_comma_range_and_position() {
+        // 逗号区间 x(10,20)
+        let s = parse_subset("x(10,20)").unwrap();
+        assert_eq!(s.axis_label, "x");
+        match s.subset_type {
+            SubsetType::Intervals { min, max, .. } => {
+                assert_eq!(min, 10.0);
+                assert_eq!(max, 20.0);
+            },
+            other => panic!("应为 Intervals, 实际: {:?}", other),
+        }
+
+        // 单值位置 time(12.5)
+        let s = parse_subset("time(12.5)").unwrap();
+        match s.subset_type {
+            SubsetType::Position { value } => assert_eq!(value, 12.5),
+            other => panic!("应为 Position, 实际: {:?}", other),
+        }
+    }
 }
