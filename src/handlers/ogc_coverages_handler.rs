@@ -36,21 +36,26 @@ fn not_found(what: &str) -> HttpResponse {
 fn is_raster_type(ds_type: &DataSourceType) -> bool {
     matches!(
         ds_type,
-        DataSourceType::Geotiff | DataSourceType::WorldImage | DataSourceType::ArcGrid
+        DataSourceType::Geotiff
+            | DataSourceType::WorldImage
+            | DataSourceType::ArcGrid
+            | DataSourceType::ImageMosaic
     )
 }
 
 /// Materialize a raster data source to a local file (supports local / s3).
 ///
-/// WorldImage needs its world-file sibling, so it goes through
-/// `materialize_dir`; GeoTIFF / ArcGrid are single files via
+/// WorldImage needs its world-file sibling and ImageMosaic is a directory, so
+/// they go through `materialize_dir`; GeoTIFF / ArcGrid are single files via
 /// `materialize_file`.
 async fn materialize_raster(
     conn: &crate::models::DataSourceConnection,
     ds_type: &DataSourceType,
 ) -> Result<Option<crate::store::file_resolver::MaterializedFile>, crate::error::GeoServerError> {
     match ds_type {
-        DataSourceType::WorldImage => crate::store::materialize_dir(conn).await,
+        DataSourceType::WorldImage | DataSourceType::ImageMosaic => {
+            crate::store::materialize_dir(conn).await
+        },
         _ => crate::store::materialize_file(conn).await,
     }
 }
@@ -96,6 +101,7 @@ async fn discover_coverages(state: &AppState) -> Vec<CoverageCollection> {
                 DataSourceType::Geotiff => "GeoTIFF",
                 DataSourceType::WorldImage => "WorldImage",
                 DataSourceType::ArcGrid => "ArcGrid",
+                DataSourceType::ImageMosaic => "ImageMosaic",
                 _ => "Raster",
             }
             .to_string(),
@@ -134,6 +140,17 @@ async fn discover_coverages(state: &AppState) -> Vec<CoverageCollection> {
                             cc.band_count = 4;
                             cc.srs = meta.crs.clone().unwrap_or_else(|| "EPSG:4326".to_string());
                         }
+                    },
+                    DataSourceType::ImageMosaic => {
+                        // 目录马赛克: 聚合所有 granule 的边界。
+                        let granules = crate::utils::mosaic::load_mosaic(&path);
+                        if let Some(b) = crate::utils::mosaic::mosaic_bounds(&granules) {
+                            cc.bbox = b;
+                        }
+                        let total: u64 = granules.iter().map(|g| g.image.width() as u64).sum();
+                        cc.width = total.max(1) as u32;
+                        cc.height = 1;
+                        cc.band_count = 4;
                     },
                     _ => {},
                 }
@@ -187,6 +204,13 @@ async fn read_raster_image(
         DataSourceType::ArcGrid => crate::utils::arcgrid::read_arcgrid(&path)
             .ok()
             .map(|a| (a.rgba_image, Some(a.bounds))),
+        DataSourceType::ImageMosaic => {
+            // 目录马赛克: 聚合所有 granule, 返回整幅合成图 (EPSG:4326)。
+            let granules = crate::utils::mosaic::load_mosaic(&path);
+            let bounds = crate::utils::mosaic::mosaic_bounds(&granules)?;
+            let img = crate::utils::mosaic::render_mosaic(&granules, &bounds, 1024, 1024)?;
+            Some((img, Some(bounds)))
+        },
         _ => None,
     }
 }

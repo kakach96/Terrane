@@ -356,12 +356,49 @@ pub async fn test_connection(
     Ok(HttpResponse::Ok().json(result))
 }
 
-/// 按数据源类型分发连接测试: Redis → PING; 其余 → PostGIS 语义。
+/// 按数据源类型分发连接测试: Redis → PING; ImageMosaic → 目录栅格检查;
+/// 其余 → PostGIS 语义。
 async fn test_datasource_connection(ds: &DataSource) -> serde_json::Value {
     match ds.data_source_type {
         DataSourceType::Redis => test_redis_connection(ds).await,
+        DataSourceType::ImageMosaic => test_mosaic_connection(ds),
         _ => test_postgis_connection(ds).await,
     }
+}
+
+/// ImageMosaic 数据源连接测试: 目录存在且包含至少一个受支持栅格文件。
+fn test_mosaic_connection(ds: &DataSource) -> serde_json::Value {
+    let dir = match &ds.connection {
+        Some(c) => c.file_path.clone(),
+        None => None,
+    };
+    let Some(dir) = dir else {
+        return serde_json::json!({
+            "success": false,
+            "message": "ImageMosaic requires a directory path (file_path)",
+        });
+    };
+    let path = std::path::Path::new(&dir);
+    if !path.is_dir() {
+        return serde_json::json!({
+            "success": false,
+            "message": format!("Directory not found: {}", dir),
+        });
+    }
+    let files = crate::utils::mosaic::scan_raster_files(path);
+    if files.is_empty() {
+        return serde_json::json!({
+            "success": false,
+            "message": format!(
+                "No supported raster files (GeoTIFF/WorldImage/ArcGrid/PNG/JPEG) in {}",
+                dir
+            ),
+        });
+    }
+    serde_json::json!({
+        "success": true,
+        "message": format!("Found {} raster granule(s)", files.len()),
+    })
 }
 
 /// Redis 数据源连接测试: PING 验证可连通性。

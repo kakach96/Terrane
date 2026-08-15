@@ -1,5 +1,5 @@
 use crate::models::{Bounds, Feature, GeoJsonGeometry};
-use geo_types::{Geometry, LineString, Point, Polygon};
+use geo_types::{Coord, LineString, Point, Polygon};
 use image::codecs::png::PngEncoder;
 use image::ImageEncoder;
 use image::{ColorType, Rgba, RgbaImage};
@@ -71,11 +71,120 @@ impl MapRenderer {
             );
         }
 
-        for (geometry, style) in features {
-            self.render_feature(&mut img, &geometry, &style);
+        // Z-order: stable-sort so that, within the same z-index, polygons draw
+        // below lines below points (layer order is preserved by stability).
+        let mut items: Vec<&(GeoJsonGeometry, Style)> = features.iter().collect();
+        items.sort_by_key(|(g, s)| (s.z_index, geometry_type_rank(g)));
+
+        // Pass 1: geometry.
+        for (geometry, style) in &items {
+            self.render_feature(&mut img, geometry, style);
         }
 
+        // Pass 2: labels, with collision avoidance against already-placed ones.
+        self.render_labels(&mut img, &items);
+
         img
+    }
+
+    /// Render all labels of the given items, skipping any whose bounding box
+    /// overlaps an already-placed label (simple greedy collision avoidance).
+    fn render_labels(&self, img: &mut RgbaImage, items: &[&(GeoJsonGeometry, Style)]) {
+        use super::bitmap_font;
+        let mut placed: Vec<(i32, i32, i32, i32)> = Vec::new();
+        let w = self.options.width as i32;
+        let h = self.options.height as i32;
+
+        for (geometry, style) in items {
+            let label = match &style.label {
+                Some(l) if !l.text.trim().is_empty() => l,
+                _ => continue,
+            };
+            let scale = label.scale();
+            let text_w = bitmap_font::text_width(&label.text, scale) as i32;
+            let text_h = bitmap_font::text_height(scale) as i32;
+            let pad = (label.halo_radius.ceil() as i32).max(1);
+
+            // Anchor: point → the point itself; line → midpoint; polygon → centroid.
+            let (cx, cy) = match geometry {
+                GeoJsonGeometry::Point { coordinates } if coordinates.len() >= 2 => {
+                    self.world_to_pixel(coordinates[0], coordinates[1])
+                },
+                GeoJsonGeometry::LineString { coordinates } => {
+                    if let Some((mx, my)) = midpoint(coordinates) {
+                        self.world_to_pixel(mx, my)
+                    } else {
+                        continue;
+                    }
+                },
+                GeoJsonGeometry::Polygon { coordinates } => {
+                    if let Some((cx, cy)) = polygon_centroid(coordinates) {
+                        self.world_to_pixel(cx, cy)
+                    } else {
+                        continue;
+                    }
+                },
+                _ => continue,
+            };
+
+            // Bounding box (halo inflated) around the anchor.
+            let x0 = cx - text_w / 2 - pad;
+            let y0 = cy - text_h / 2 - pad;
+            let x1 = x0 + text_w + pad * 2;
+            let y1 = y0 + text_h + pad * 2;
+
+            // Off-screen labels are skipped.
+            if x1 < 0 || y1 < 0 || x0 >= w || y0 >= h {
+                continue;
+            }
+            // Collision: skip if it overlaps any placed box.
+            if placed
+                .iter()
+                .any(|(px0, py0, px1, py1)| x0 < *px1 && x1 > *px0 && y0 < *py1 && y1 > *py0)
+            {
+                continue;
+            }
+            placed.push((x0, y0, x1, y1));
+
+            let text_color = label.parse_color().unwrap_or([30, 30, 30, 255]);
+            let halo_color = label.parse_halo_color();
+
+            let origin_x = cx - text_w / 2;
+            let origin_y = cy - text_h / 2;
+
+            // Halo: draw the text in the halo color around the anchor (8 offsets).
+            if let Some(hc) = halo_color {
+                let radius = (label.halo_radius.max(0.5)).round() as i32;
+                for dy in -radius..=radius {
+                    for dx in -radius..=radius {
+                        if dx == 0 && dy == 0 {
+                            continue;
+                        }
+                        if dx * dx + dy * dy > radius * radius {
+                            continue;
+                        }
+                        bitmap_font::draw_text(
+                            origin_x + dx,
+                            origin_y + dy,
+                            &label.text,
+                            scale,
+                            |px, py| {
+                                if px < w as u32 && py < h as u32 {
+                                    blend_pixel(img, px, py, hc);
+                                }
+                            },
+                        );
+                    }
+                }
+            }
+
+            // Foreground text.
+            bitmap_font::draw_text(origin_x, origin_y, &label.text, scale, |px, py| {
+                if px < w as u32 && py < h as u32 {
+                    blend_pixel(img, px, py, text_color);
+                }
+            });
+        }
     }
 
     #[allow(clippy::too_many_arguments)] // rectangle drawing primitive
@@ -117,12 +226,52 @@ impl MapRenderer {
     }
 
     fn render_feature(&self, img: &mut RgbaImage, geometry: &GeoJsonGeometry, style: &Style) {
-        let geo = geometry.to_geo();
-        match &geo {
-            Geometry::Point(p) => self.render_point(img, p, style),
-            Geometry::LineString(ls) => self.render_linestring(img, ls, style),
-            Geometry::Polygon(p) => self.render_polygon(img, p, style),
-            _ => {},
+        match geometry {
+            GeoJsonGeometry::Point { coordinates } => {
+                if coordinates.len() >= 2 {
+                    let p = Point::new(coordinates[0], coordinates[1]);
+                    self.render_point(img, &p, style);
+                }
+            },
+            GeoJsonGeometry::LineString { coordinates } => {
+                let ls = build_linestring(coordinates);
+                if ls.coords().count() >= 2 {
+                    self.render_linestring(img, &ls, style);
+                }
+            },
+            GeoJsonGeometry::Polygon { coordinates } => {
+                if let Some(poly) = build_polygon(coordinates) {
+                    self.render_polygon(img, &poly, style);
+                }
+            },
+            GeoJsonGeometry::MultiPoint { coordinates } => {
+                for c in coordinates {
+                    if c.len() >= 2 {
+                        let p = Point::new(c[0], c[1]);
+                        self.render_point(img, &p, style);
+                    }
+                }
+            },
+            GeoJsonGeometry::MultiLineString { coordinates } => {
+                for line in coordinates {
+                    let ls = build_linestring(line);
+                    if ls.coords().count() >= 2 {
+                        self.render_linestring(img, &ls, style);
+                    }
+                }
+            },
+            GeoJsonGeometry::MultiPolygon { coordinates } => {
+                for poly in coordinates {
+                    if let Some(poly) = build_polygon(poly) {
+                        self.render_polygon(img, &poly, style);
+                    }
+                }
+            },
+            GeoJsonGeometry::GeometryCollection { geometries } => {
+                for sub in geometries {
+                    self.render_feature(img, sub, style);
+                }
+            },
         }
     }
 
@@ -167,9 +316,9 @@ impl MapRenderer {
                 }
                 if dist <= r * r {
                     if dist >= (r - 1) * (r - 1) {
-                        img.put_pixel(px as u32, py as u32, Rgba(stroke));
+                        blend_pixel(img, px as u32, py as u32, stroke);
                     } else {
-                        img.put_pixel(px as u32, py as u32, Rgba(fill));
+                        blend_pixel(img, px as u32, py as u32, fill);
                     }
                 }
             }
@@ -197,9 +346,9 @@ impl MapRenderer {
                     continue;
                 }
                 if dx.abs() == half || dy.abs() == half {
-                    img.put_pixel(px as u32, py as u32, Rgba(stroke));
+                    blend_pixel(img, px as u32, py as u32, stroke);
                 } else {
-                    img.put_pixel(px as u32, py as u32, Rgba(fill));
+                    blend_pixel(img, px as u32, py as u32, fill);
                 }
             }
         }
@@ -215,7 +364,7 @@ impl MapRenderer {
                     && py >= 0
                     && py < self.options.height as i32
                 {
-                    img.put_pixel(px as u32, py as u32, Rgba(color));
+                    blend_pixel(img, px as u32, py as u32, color);
                 }
                 let px2 = cx + w;
                 let py2 = cy + i;
@@ -224,7 +373,7 @@ impl MapRenderer {
                     && py2 >= 0
                     && py2 < self.options.height as i32
                 {
-                    img.put_pixel(px2 as u32, py2 as u32, Rgba(color));
+                    blend_pixel(img, px2 as u32, py2 as u32, color);
                 }
             }
         }
@@ -240,7 +389,7 @@ impl MapRenderer {
                     && py >= 0
                     && py < self.options.height as i32
                 {
-                    img.put_pixel(px as u32, py as u32, Rgba(color));
+                    blend_pixel(img, px as u32, py as u32, color);
                 }
                 let px2 = cx + i;
                 let py2 = cy - i + w;
@@ -249,7 +398,7 @@ impl MapRenderer {
                     && py2 >= 0
                     && py2 < self.options.height as i32
                 {
-                    img.put_pixel(px2 as u32, py2 as u32, Rgba(color));
+                    blend_pixel(img, px2 as u32, py2 as u32, color);
                 }
             }
         }
@@ -336,7 +485,7 @@ impl MapRenderer {
                             && y >= 0
                             && y < self.options.height as i32
                         {
-                            img.put_pixel(x as u32, y as u32, Rgba(fill));
+                            blend_pixel(img, x as u32, y as u32, fill);
                         }
                     }
                 }
@@ -418,40 +567,54 @@ impl MapRenderer {
 
     fn render_polygon(&self, img: &mut RgbaImage, polygon: &Polygon<f64>, style: &Style) {
         if let Some(fill) = &style.fill {
-            let color = Self::parse_color(&fill.color).unwrap_or([100, 100, 100, 128]);
-            let exterior = polygon.exterior();
-            let mut pixels = Vec::new();
-            for coord in exterior.coords() {
-                let (px, py) = self.world_to_pixel(coord.x, coord.y);
-                pixels.push((px, py));
-            }
-            self.fill_polygon(img, &pixels, color);
-        }
+            let mut color = Self::parse_color(&fill.color).unwrap_or([100, 100, 100, 128]);
+            apply_opacity(&mut color, fill.opacity);
 
-        if let Some(stroke) = &style.stroke {
-            let color = Self::parse_color(&stroke.color).unwrap_or([0, 0, 0, 255]);
-            let width = stroke.width.unwrap_or(1.0) as i32;
-            let dash_array = stroke.dash_array.clone();
-
-            let coords: Vec<(i32, i32)> = polygon
+            // All rings: the exterior is filled, interior rings become holes.
+            let mut rings: Vec<Vec<(i32, i32)>> = Vec::new();
+            let exterior: Vec<(i32, i32)> = polygon
                 .exterior()
                 .coords()
                 .map(|c| self.world_to_pixel(c.x, c.y))
                 .collect();
+            rings.push(exterior);
+            for interior in polygon.interiors() {
+                let ring: Vec<(i32, i32)> = interior
+                    .coords()
+                    .map(|c| self.world_to_pixel(c.x, c.y))
+                    .collect();
+                rings.push(ring);
+            }
+            self.fill_polygon_rings(img, &rings, color);
+        }
 
-            if let Some(dash) = dash_array {
-                self.draw_line_dashed(img, &coords, color, width, &dash);
-            } else {
-                for i in 0..coords.len().saturating_sub(1) {
-                    self.draw_line(
-                        img,
-                        coords[i].0,
-                        coords[i].1,
-                        coords[i + 1].0,
-                        coords[i + 1].1,
-                        color,
-                        width,
-                    );
+        if let Some(stroke) = &style.stroke {
+            let mut color = Self::parse_color(&stroke.color).unwrap_or([0, 0, 0, 255]);
+            apply_opacity(&mut color, stroke.opacity);
+            let width = stroke.width.unwrap_or(1.0) as i32;
+            let dash_array = stroke.dash_array.clone();
+
+            // Stroke the exterior ring and every interior ring.
+            for ring in std::iter::once(polygon.exterior()).chain(polygon.interiors()) {
+                let coords: Vec<(i32, i32)> = ring
+                    .coords()
+                    .map(|c| self.world_to_pixel(c.x, c.y))
+                    .collect();
+
+                if let Some(dash) = dash_array.clone() {
+                    self.draw_line_dashed(img, &coords, color, width, &dash);
+                } else {
+                    for i in 0..coords.len().saturating_sub(1) {
+                        self.draw_line(
+                            img,
+                            coords[i].0,
+                            coords[i].1,
+                            coords[i + 1].0,
+                            coords[i + 1].1,
+                            color,
+                            width,
+                        );
+                    }
                 }
             }
         }
@@ -494,7 +657,7 @@ impl MapRenderer {
                         && py >= 0
                         && py < self.options.height as i32
                     {
-                        img.put_pixel(px as u32, py as u32, Rgba(color));
+                        blend_pixel(img, px as u32, py as u32, color);
                     }
                 }
             }
@@ -515,25 +678,42 @@ impl MapRenderer {
         }
     }
 
-    fn fill_polygon(&self, img: &mut RgbaImage, points: &[(i32, i32)], color: [u8; 4]) {
-        if points.len() < 3 {
+    /// Fill a polygon given by multiple rings (first = exterior, rest = holes)
+    /// using the even-odd scanline rule, so interior holes stay transparent.
+    fn fill_polygon_rings(&self, img: &mut RgbaImage, rings: &[Vec<(i32, i32)>], color: [u8; 4]) {
+        if rings.is_empty() || rings[0].len() < 3 {
             return;
         }
 
-        let min_y = points.iter().map(|p| p.1).min().unwrap_or(0);
-        let max_y = points.iter().map(|p| p.1).max().unwrap_or(0);
+        let min_y = rings
+            .iter()
+            .flat_map(|r| r.iter())
+            .map(|p| p.1)
+            .min()
+            .unwrap_or(0);
+        let max_y = rings
+            .iter()
+            .flat_map(|r| r.iter())
+            .map(|p| p.1)
+            .max()
+            .unwrap_or(0);
 
         for y in min_y..=max_y {
             let mut intersections: Vec<i32> = Vec::new();
-            for i in 0..points.len() {
-                let j = (i + 1) % points.len();
-                let (x1, y1) = points[i];
-                let (x2, y2) = points[j];
+            for ring in rings {
+                if ring.len() < 3 {
+                    continue;
+                }
+                for i in 0..ring.len() {
+                    let j = (i + 1) % ring.len();
+                    let (x1, y1) = ring[i];
+                    let (x2, y2) = ring[j];
 
-                if (y1 <= y && y2 > y) || (y2 <= y && y1 > y) {
-                    let x_intersect =
-                        x1 as f64 + (y - y1) as f64 / (y2 - y1) as f64 * (x2 - x1) as f64;
-                    intersections.push(x_intersect as i32);
+                    if (y1 <= y && y2 > y) || (y2 <= y && y1 > y) {
+                        let x_intersect =
+                            x1 as f64 + (y - y1) as f64 / (y2 - y1) as f64 * (x2 - x1) as f64;
+                        intersections.push(x_intersect as i32);
+                    }
                 }
             }
 
@@ -549,7 +729,7 @@ impl MapRenderer {
                             && y >= 0
                             && y < self.options.height as i32
                         {
-                            img.put_pixel(x as u32, y as u32, Rgba(color));
+                            blend_pixel(img, x as u32, y as u32, color);
                         }
                     }
                 }
@@ -576,12 +756,156 @@ impl MapRenderer {
     }
 }
 
+/// Apply an opacity factor (0..1) to a color's alpha channel.
+fn apply_opacity(color: &mut [u8; 4], opacity: f64) {
+    let a = (opacity.clamp(0.0, 1.0) * 255.0) as u8;
+    color[3] = (color[3] as u16 * a as u16 / 255) as u8;
+}
+
+/// Source-over alpha blending: composite `fg` over the existing pixel
+/// (straight alpha, non-premultiplied).
+fn blend_pixel(img: &mut RgbaImage, x: u32, y: u32, fg: [u8; 4]) {
+    let dst = img.get_pixel(x, y).0;
+    let a_fg = fg[3] as f32 / 255.0;
+    if a_fg >= 1.0 {
+        img.put_pixel(x, y, Rgba(fg));
+        return;
+    }
+    if a_fg <= 0.0 {
+        return;
+    }
+    let a_dst = dst[3] as f32 / 255.0;
+    let a_out = a_fg + a_dst * (1.0 - a_fg);
+    if a_out <= 0.0 {
+        return;
+    }
+    let blend = |c_fg: u8, c_dst: u8| -> u8 {
+        ((c_fg as f32 * a_fg + c_dst as f32 * a_dst * (1.0 - a_fg)) / a_out).round() as u8
+    };
+    let out = [
+        blend(fg[0], dst[0]),
+        blend(fg[1], dst[1]),
+        blend(fg[2], dst[2]),
+        (a_out * 255.0).round() as u8,
+    ];
+    img.put_pixel(x, y, Rgba(out));
+}
+
+/// Z-order rank of a geometry type: polygons at the bottom, then lines,
+/// then points on top (matching GeoServer's default drawing order).
+fn geometry_type_rank(g: &GeoJsonGeometry) -> i32 {
+    match g {
+        GeoJsonGeometry::Polygon { .. } | GeoJsonGeometry::MultiPolygon { .. } => 0,
+        GeoJsonGeometry::LineString { .. } | GeoJsonGeometry::MultiLineString { .. } => 1,
+        GeoJsonGeometry::Point { .. } | GeoJsonGeometry::MultiPoint { .. } => 2,
+        GeoJsonGeometry::GeometryCollection { geometries } => {
+            geometries.iter().map(geometry_type_rank).max().unwrap_or(0)
+        },
+    }
+}
+
+/// Build a `LineString` from GeoJSON coordinates.
+fn build_linestring(coordinates: &[Vec<f64>]) -> LineString<f64> {
+    let points: Vec<Coord<f64>> = coordinates
+        .iter()
+        .filter(|c| c.len() >= 2)
+        .map(|c| Coord { x: c[0], y: c[1] })
+        .collect();
+    LineString::new(points)
+}
+
+/// Build a `Polygon` from GeoJSON rings (first ring = exterior, rest = holes).
+fn build_polygon(coordinates: &[Vec<Vec<f64>>]) -> Option<Polygon<f64>> {
+    let mut rings = coordinates.iter().map(|ring| build_linestring(ring));
+    let exterior = rings.next()?;
+    if exterior.coords().count() < 3 {
+        return None;
+    }
+    Some(Polygon::new(exterior, rings.collect()))
+}
+
+/// Midpoint of a linestring's coordinates.
+fn midpoint(coordinates: &[Vec<f64>]) -> Option<(f64, f64)> {
+    if coordinates.len() < 2 {
+        return None;
+    }
+    let a = &coordinates[0];
+    let b = &coordinates[coordinates.len() / 2];
+    if a.len() < 2 || b.len() < 2 {
+        return None;
+    }
+    Some(((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0))
+}
+
+/// Simple polygon centroid (average of the exterior ring's vertices).
+fn polygon_centroid(coordinates: &[Vec<Vec<f64>>]) -> Option<(f64, f64)> {
+    let ring = coordinates.first()?;
+    if ring.len() < 3 {
+        return None;
+    }
+    let n = ring.len() as f64;
+    let mut sx = 0.0;
+    let mut sy = 0.0;
+    let mut count = 0u32;
+    for c in ring {
+        if c.len() >= 2 {
+            sx += c[0];
+            sy += c[1];
+            count += 1;
+        }
+    }
+    if count == 0 {
+        None
+    } else {
+        Some((sx / n, sy / n))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Style {
     pub fill: Option<FillStyle>,
     pub stroke: Option<StrokeStyle>,
     pub point_size: Option<f64>,
     pub mark: Option<String>,
+    /// TextSymbolizer label configuration. The text is resolved from the
+    /// feature's properties (or a literal) by the style resolver before the
+    /// renderer sees it.
+    pub label: Option<LabelStyle>,
+    /// Optional z-index (SLD `VendorOption name="z-index"` / GeoServer CSS
+    /// `z-index`). Higher values draw on top. Defaults to 0.
+    pub z_index: i32,
+}
+
+/// Label (TextSymbolizer) style.
+#[derive(Debug, Clone)]
+pub struct LabelStyle {
+    /// Resolved label text (may come from a feature property or a literal).
+    pub text: String,
+    /// Property name the label text is read from (`ogc:PropertyName`).
+    /// Resolved to `text` by the style resolver before rendering.
+    pub property: Option<String>,
+    /// Font size in points (rendered at ~scale 1 px/point, min 1).
+    pub font_size: f64,
+    /// Label fill color (#RRGGBB or #RRGGBBAA).
+    pub color: String,
+    /// Halo color (#RRGGBB). None disables the halo.
+    pub halo_color: Option<String>,
+    /// Halo radius in px (default 1).
+    pub halo_radius: f64,
+}
+
+impl LabelStyle {
+    pub fn parse_color(&self) -> Option<[u8; 4]> {
+        Style::parse_color(&self.color)
+    }
+
+    pub fn parse_halo_color(&self) -> Option<[u8; 4]> {
+        self.halo_color.as_deref().and_then(Style::parse_color)
+    }
+
+    pub fn scale(&self) -> f64 {
+        (self.font_size / 12.0).max(1.0)
+    }
 }
 
 impl Style {
@@ -591,17 +915,25 @@ impl Style {
             stroke: Some(StrokeStyle::default()),
             point_size: None,
             mark: None,
+            label: None,
+            z_index: 0,
         }
     }
 
     pub fn parse_fill_color(&self) -> Option<[u8; 4]> {
-        self.fill.as_ref().and_then(|f| Self::parse_color(&f.color))
+        self.fill.as_ref().and_then(|f| {
+            let mut c = Self::parse_color(&f.color)?;
+            apply_opacity(&mut c, f.opacity);
+            Some(c)
+        })
     }
 
     pub fn parse_stroke_color(&self) -> Option<[u8; 4]> {
-        self.stroke
-            .as_ref()
-            .and_then(|s| Self::parse_color(&s.color))
+        self.stroke.as_ref().and_then(|s| {
+            let mut c = Self::parse_color(&s.color)?;
+            apply_opacity(&mut c, s.opacity);
+            Some(c)
+        })
     }
 
     fn parse_color(color: &str) -> Option<[u8; 4]> {
@@ -1255,5 +1587,229 @@ mod tests {
         }
         // Image stream must contain actual FlateDecode data.
         assert!(pdf.len() > 200, "PDF 应包含压缩图像数据");
+    }
+
+    // ------------------------------------------------------------------
+    // Raster rendering engine tests (multi-geometry / opacity / holes /
+    // z-order / labels).
+    // ------------------------------------------------------------------
+
+    fn renderer() -> MapRenderer {
+        MapRenderer::new(
+            RenderOptions {
+                width: 100,
+                height: 100,
+                transparent: true,
+                bg_color: None,
+                format: RenderFormat::PNG,
+            },
+            Bounds::new(0.0, 0.0, 10.0, 10.0),
+        )
+    }
+
+    fn is_transparent(img: &RgbaImage, x: u32, y: u32) -> bool {
+        img.get_pixel(x, y).0[3] == 0
+    }
+
+    #[test]
+    fn test_render_multipoint_all_drawn() {
+        let geom = GeoJsonGeometry::MultiPoint {
+            coordinates: vec![vec![1.0, 1.0], vec![5.0, 5.0], vec![9.0, 9.0]],
+        };
+        let mut style = Style::new();
+        style.mark = Some("circle".to_string());
+        style.point_size = Some(4.0);
+        let img = renderer().render(vec![(geom, style)]);
+        // Center pixels of each mark should be filled.
+        for (lon, lat) in [(1.0, 1.0), (5.0, 5.0), (9.0, 9.0)] {
+            let (px, py) = renderer().world_to_pixel(lon, lat);
+            assert!(
+                !is_transparent(&img, px as u32, py as u32),
+                "mark at ({}, {}) must be drawn",
+                lon,
+                lat
+            );
+        }
+    }
+
+    #[test]
+    fn test_render_multilinestring_and_geometrycollection() {
+        let mls = GeoJsonGeometry::MultiLineString {
+            coordinates: vec![
+                vec![vec![1.0, 1.0], vec![3.0, 3.0]],
+                vec![vec![7.0, 7.0], vec![9.0, 9.0]],
+            ],
+        };
+        let coll = GeoJsonGeometry::GeometryCollection {
+            geometries: vec![
+                GeoJsonGeometry::MultiPolygon {
+                    coordinates: vec![vec![vec![
+                        vec![1.0, 1.0],
+                        vec![1.0, 3.0],
+                        vec![3.0, 3.0],
+                        vec![3.0, 1.0],
+                        vec![1.0, 1.0],
+                    ]]],
+                },
+                point(5.0, 5.0),
+            ],
+        };
+        let img = renderer().render(vec![(mls, Style::new()), (coll, Style::new())]);
+        // MultiLineString: a pixel on the diagonal must be painted.
+        let (lx, ly) = renderer().world_to_pixel(2.0, 2.0);
+        assert!(!is_transparent(&img, lx as u32, ly as u32));
+        // GeometryCollection: polygon fill + point mark.
+        let (px, py) = renderer().world_to_pixel(2.0, 2.0);
+        assert!(!is_transparent(&img, px as u32, py as u32));
+        let (cx, cy) = renderer().world_to_pixel(5.0, 5.0);
+        assert!(!is_transparent(&img, cx as u32, cy as u32));
+    }
+
+    #[test]
+    fn test_fill_opacity_alpha_composited() {
+        let geom = GeoJsonGeometry::Polygon {
+            coordinates: vec![vec![
+                vec![1.0, 1.0],
+                vec![1.0, 4.0],
+                vec![4.0, 4.0],
+                vec![4.0, 1.0],
+                vec![1.0, 1.0],
+            ]],
+        };
+        // Opaque red fill at 50% opacity over a white background.
+        let mut style = Style::new();
+        style.fill = Some(FillStyle {
+            color: "#ff0000".to_string(),
+            opacity: 0.5,
+        });
+        style.stroke = None;
+        let options = RenderOptions {
+            width: 100,
+            height: 100,
+            transparent: false,
+            bg_color: Some([255, 255, 255, 255]),
+            format: RenderFormat::PNG,
+        };
+        let renderer = MapRenderer::new(options, Bounds::new(0.0, 0.0, 10.0, 10.0));
+        let img = renderer.render(vec![(geom, style)]);
+        let (ix, iy) = renderer.world_to_pixel(2.0, 2.0);
+        let px = img.get_pixel(ix as u32, iy as u32).0;
+        // 0.5 * 255 + 0.5 * 255(white) = ~255 red channel blended with white.
+        assert!(px[0] > 200, "red channel should stay high: {}", px[0]);
+        assert!(
+            px[1] > 100 && px[1] < 200,
+            "green channel should be mid: {}",
+            px[1]
+        );
+        assert!(px[3] == 255);
+    }
+
+    #[test]
+    fn test_polygon_holes_not_filled() {
+        // Outer 0..8 square with a 2..6 hole in the middle.
+        let geom = GeoJsonGeometry::Polygon {
+            coordinates: vec![
+                vec![
+                    vec![0.0, 0.0],
+                    vec![0.0, 8.0],
+                    vec![8.0, 8.0],
+                    vec![8.0, 0.0],
+                    vec![0.0, 0.0],
+                ],
+                vec![
+                    vec![2.0, 2.0],
+                    vec![2.0, 6.0],
+                    vec![6.0, 6.0],
+                    vec![6.0, 2.0],
+                    vec![2.0, 2.0],
+                ],
+            ],
+        };
+        let mut style = Style::new();
+        style.fill = Some(FillStyle {
+            color: "#0000ff".to_string(),
+            opacity: 1.0,
+        });
+        style.stroke = None;
+        let img = renderer().render(vec![(geom, style)]);
+        let (outside_x, outside_y) = renderer().world_to_pixel(1.0, 1.0);
+        let (hole_x, hole_y) = renderer().world_to_pixel(4.0, 4.0);
+        assert!(!is_transparent(&img, outside_x as u32, outside_y as u32));
+        assert!(
+            is_transparent(&img, hole_x as u32, hole_y as u32),
+            "polygon hole must stay transparent"
+        );
+    }
+
+    #[test]
+    fn test_z_order_polygon_below_point() {
+        // A point exactly at the polygon center: the point mark must win.
+        let poly = GeoJsonGeometry::Polygon {
+            coordinates: vec![vec![
+                vec![0.0, 0.0],
+                vec![0.0, 8.0],
+                vec![8.0, 8.0],
+                vec![8.0, 0.0],
+                vec![0.0, 0.0],
+            ]],
+        };
+        let mut poly_style = Style::new();
+        poly_style.fill = Some(FillStyle {
+            color: "#0000ff".to_string(),
+            opacity: 1.0,
+        });
+        poly_style.stroke = None;
+
+        let mut point_style = Style::new();
+        point_style.mark = Some("square".to_string());
+        point_style.point_size = Some(6.0);
+        point_style.fill = Some(FillStyle {
+            color: "#ff0000".to_string(),
+            opacity: 1.0,
+        });
+        point_style.stroke = None;
+
+        let img = renderer().render(vec![(poly, poly_style), (point(4.0, 4.0), point_style)]);
+        let (cx, cy) = renderer().world_to_pixel(4.0, 4.0);
+        let px = img.get_pixel(cx as u32, cy as u32).0;
+        assert!(px[0] > 200, "point (drawn last) must be on top: {:?}", px);
+    }
+
+    #[test]
+    fn test_label_rendered_with_collision() {
+        let mut style = Style::new();
+        style.label = Some(LabelStyle {
+            text: "AA".to_string(),
+            property: None,
+            font_size: 12.0,
+            color: "#000000".to_string(),
+            halo_color: Some("#ffffff".to_string()),
+            halo_radius: 1.0,
+        });
+        // Two points 1 unit apart in a 10-unit map: labels would overlap, so
+        // only the first is drawn.
+        let img = renderer().render(vec![
+            (point(1.0, 5.0), style.clone()),
+            (point(1.1, 5.0), style.clone()),
+        ]);
+        // The first label's anchor area must be non-transparent.
+        let (x1, y1) = renderer().world_to_pixel(1.0, 5.0);
+        assert!(!is_transparent(&img, x1 as u32, y1 as u32));
+    }
+
+    #[test]
+    fn test_blend_pixel_source_over() {
+        let mut img = RgbaImage::new(1, 1);
+        img.put_pixel(0, 0, Rgba([255, 255, 255, 255]));
+        // 50% red over white → pink-ish (127 = 255 * 0.498 rounded).
+        blend_pixel(&mut img, 0, 0, [255, 0, 0, 128]);
+        let px = img.get_pixel(0, 0).0;
+        assert_eq!(px[0], 255);
+        assert_eq!(px[1], 127);
+        assert_eq!(px[2], 127);
+        assert_eq!(px[3], 255);
+        // Fully transparent: no change.
+        blend_pixel(&mut img, 0, 0, [0, 0, 0, 0]);
+        assert_eq!(img.get_pixel(0, 0).0, [255, 127, 127, 255]);
     }
 }

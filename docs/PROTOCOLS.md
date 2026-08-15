@@ -164,7 +164,25 @@ surface (the reference GeoServer has WPS disabled, so this follows the OGC WPS
 
 ## 8. Data sources
 
-PostGIS, Shapefile, GeoTIFF, GeoPackage, WorldImage, CascadedWms, ArcGrid (7 types).
+PostGIS, Shapefile, GeoTIFF, GeoPackage, WorldImage, CascadedWms, ArcGrid, Redis (cache
+backend), GeoJson, **ImageMosaic** (raster-directory mosaic: GeoTIFF / WorldImage /
+ArcGrid / PNG / JPEG granules composited into one coverage; WCS GetCoverage + WMS GetMap +
+tile pipelines).
+
+### 8.1 WMS / WMS-C / WMTS rendering engine
+
+- **Vector rendering**: Point / LineString / Polygon **and** MultiPoint / MultiLineString /
+  MultiPolygon / GeometryCollection; `fill-opacity` / `stroke-opacity` alpha compositing
+  (source-over), polygon interior-ring holes (even-odd scanline), z-order (polygon → line →
+  point within a layer, SLD `z-index` vendor option on top), label rendering from
+  `TextSymbolizer` (built-in 5×7 bitmap font, halo + greedy collision avoidance).
+- **Raster rendering**: GeoTIFF / WorldImage / ArcGrid / ImageMosaic layers render in
+  WMS GetMap and in the shared tile pipeline (crop to BBOX + resample + source-over).
+- **Style formats**: SLD / CSS / YSLD / MBStyle all dispatch to the same rule pipeline in
+  WMS GetMap (previously only SLD reached the WMS renderer).
+- **SLD parsing**: TextSymbolizer (`Label` property/literal, `Font` size, `Fill`, `Halo`
+  radius/color), `ogc:Filter` comparisons + `And`/`Or`/`Not` nesting, `VendorOption
+  name="z-index"`, Min/MaxScaleDenominator.
 
 ## 9. Pending protocols (to adapt)
 

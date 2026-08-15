@@ -270,7 +270,12 @@
   <button
     mat-button
     (click)="testConnection()"
-    [disabled]="isTesting || (selectedType !== 'postgis' && selectedType !== 'redis')"
+    [disabled]="
+      isTesting ||
+      (selectedType !== 'postgis' &&
+        selectedType !== 'redis' &&
+        selectedType !== 'image_mosaic')
+    "
   >
     <mat-icon>{{ isTesting ? 'hourglass_empty' : 'network_check' }}</mat-icon>
     {{ isTesting ? ('dataSources.testing' | translate) : ('common.testConnection' | translate) }}

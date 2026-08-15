@@ -13,25 +13,25 @@
 |---------|:-----:|:--------:|:-----:|:-----:|
 | OGC Core Services | 5/7 | 0 | 2 | **71%** |
 | REST API | 11/16 | 0 | 5 | **69%** |
-| Data Source Types | 8/15 | 0 | 7 | **53%** |
-| Styling System | 4/5 | 0 | 1 | **80%** |
+| Data Source Types | 9/15 | 0 | 6 | **60%** |
+| Styling System | 5/5 | 0 | 0 | **100%** |
 | Tile Caching | 3/6 | 0 | 3 | **50%** |
 | Security | 3/7 | 0 | 4 | **43%** |
 | Extensions | 8/14 | 0 | 6 | **57%** |
 | Cloud-Native | 4/7 | 0 | 3 | **57%** |
-| **Overall Progress** | | | | **~60%** |
+| **Overall Progress** | | | | **~63%** |
 
 ```
 OGC services     █████████████░░░░  71%
 REST API         █████████████░░░░  69%
-Data sources     ███████████░░░░░  53%
-Styling system   ████████████████░  80%
-Tile caching     ██████████░░░░░░  50%
+Data sources     ████████████░░░░░  60%
+Styling system   ██████████████████ 100%
+Tile caching     ██████████░░░░░░░  50%
 Security         ████████░░░░░░░░  43%
 Extensions       █████████░░░░░░░  57%
 Cloud-Native     █████████░░░░░░░  57%
 ──────────────────────────────
-Overall progress ████████████░░░░  60%
+Overall progress █████████████░░░  63%
 ```
 
 ---
@@ -89,6 +89,7 @@ Overall progress ████████████░░░░  60%
 | **WorldImage** | Image + world file (.pgw/.jgw/.tfw) | ✅ **P2** |
 | **CascadedWms** | Cascaded external WMS service | ✅ **P2** |
 | **ArcGrid** | ESRI ASCII Grid raster format | ✅ **P2** |
+| **ImageMosaic** | 栅格目录马赛克 — 目录下多个 GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granule 作为一个覆盖发布 (WCS GetCoverage / WMS GetMap / 瓦片管线) | ✅ **New** |
 | **Redis** | Redis 缓存数据源 — 切片图层缓存后端 (经 `Layer.cache_store` 选择) | ✅ **New** |
 
 ### 1.4 Extended REST API
@@ -131,7 +132,7 @@ Overall progress ████████████░░░░  60%
 - ✅ Workspace management
 - ✅ Namespace management (NamespacesComponent) — **New**
 - ✅ Store management (StoresComponent) — **New**
-- ✅ Data source management (PostGIS/Shapefile/GeoTIFF)
+- ✅ Data source management (PostGIS/Shapefile/GeoTIFF/ImageMosaic/Redis)
 - ✅ Style management (multi-format SLD/CSS/YSLD/MBStyle + templates)
 - ✅ Layer group management
 - ✅ Tile layers + GeoWebCache statistics (TileLayersComponent revamp) — **New**
@@ -143,10 +144,17 @@ Overall progress ████████████░░░░  60%
 
 ## 二、⚠️ Partially Implemented Features
 
-### 2.1 Style Rendering Enhancements
+### 2.1 Style Rendering Enhancements ✅ Completed
 
-- ✅ SLD/CSS/YSLD/MBStyle parsers all implemented
-- **Missing**: rendering transforms, geometry transforms, label collision, z-order, compositing/blend modes
+- ✅ SLD/CSS/YSLD/MBStyle parsers all implemented (multi-format dispatch in WMS GetMap)
+- ✅ **Label rendering (TextSymbolizer)**: Label property/literal, Font size, Fill color,
+  Halo radius/color + greedy collision avoidance (built-in 5×7 bitmap font, zero deps)
+- ✅ **Geometry / rendering correctness**: MultiPoint / MultiLineString / MultiPolygon /
+  GeometryCollection rendering; `fill-opacity` / `stroke-opacity` alpha compositing;
+  polygon interior-ring holes; z-order (polygon → line → point + SLD `z-index`)
+- ✅ **WMS raster rendering**: GeoTIFF / WorldImage / ArcGrid / ImageMosaic layers render
+  in WMS GetMap and the shared tile pipeline (BBOX crop + resample + source-over)
+- ⏳ Rendering transforms / compositing blend modes (still out of scope)
 
 ---
 
@@ -175,7 +183,7 @@ Overall progress ████████████░░░░  60%
 - ✅ **WorldImage** — world image format (.pgw/.jgw/.tfw)
 - ✅ **ArcGrid** — ESRI ASCII Grid raster format
 - ✅ **Cascaded WMS service** — HTTP proxy of WMS upstream services
-- ❌ ImageMosaic — raster time series / mosaic datasets
+- ✅ **ImageMosaic** — 栅格目录马赛克 (GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granule 合成)
 - ❌ ImagePyramid — pyramid imagery
 - ❌ Oracle / MySQL / SQL Server — additional database support
 - ❌ MongoDB — MongoDB GeoJSON data source
@@ -220,14 +228,14 @@ Overall progress ████████████░░░░  60%
 📅 Week 7-8:  WFS 2.0 enhancements + multi-format output + ECQL filters
 ```
 
-### Phase 2: Data Source Extensions ✅ Partially Completed (4/8)
+### Phase 2: Data Source Extensions ✅ Partially Completed (5/8)
 
 ```
 📅 GeoPackage    ✅ Completed
 📅 WorldImage    ✅ Completed
 📅 ArcGrid       ✅ Completed
 📅 Cascaded WMS  ✅ Completed
-📅 ImageMosaic   ⏳
+📅 ImageMosaic   ✅ Completed
 📅 ImagePyramid  ⏳
 📅 More databases ⏳
 📅 MongoDB       ⏳

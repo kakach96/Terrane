@@ -216,6 +216,7 @@
     "cascadedWms": "级联 WMS",
     "postgisSection": "PostGIS 连接配置",
     "redisSection": "Redis 缓存连接配置",
+    "imageMosaicSection": "ImageMosaic 栅格目录 (含 GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granule)",
     "host": "主机",
     "hostPlaceholder": "localhost",
     "port": "端口",

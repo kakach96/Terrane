@@ -1,4 +1,5 @@
 pub mod arcgrid;
+pub mod bitmap_font;
 pub mod bounds;
 pub mod cascaded;
 pub mod cql_filter;
@@ -7,6 +8,7 @@ pub mod geometry;
 pub mod geopackage;
 pub mod geotiff;
 pub mod mbstyle_parser;
+pub mod mosaic;
 pub mod mvt;
 pub mod projection;
 pub mod rendering;

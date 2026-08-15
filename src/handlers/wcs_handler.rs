@@ -1,5 +1,5 @@
 use crate::error::GeoServerError;
-use crate::models::DataSourceType;
+use crate::models::{Bounds, DataSourceType};
 use crate::services::wcs::{self, CoverageDescription, WcsCapabilities, WcsRequest};
 use crate::state::AppState;
 use crate::utils::geotiff;
@@ -24,18 +24,21 @@ pub async fn handle_wcs_request(
 /// 解析栅格数据源文件到本地路径 (支持 local / s3)。
 ///
 /// WorldImage 需要读取 .wld 世界文件伴生对象, 走 `materialize_dir`;
-/// GeoTIFF / ArcGrid 单文件, 走 `materialize_file`。
+/// ImageMosaic 是栅格目录, 走 `materialize_dir`; GeoTIFF / ArcGrid 单文件,
+/// 走 `materialize_file`。
 async fn materialize_raster(
     conn: &crate::models::DataSourceConnection,
     ds_type: &DataSourceType,
 ) -> Result<Option<crate::store::file_resolver::MaterializedFile>, GeoServerError> {
     match ds_type {
-        DataSourceType::WorldImage => crate::store::materialize_dir(conn).await,
+        DataSourceType::WorldImage | DataSourceType::ImageMosaic => {
+            crate::store::materialize_dir(conn).await
+        },
         _ => crate::store::materialize_file(conn).await,
     }
 }
 
-/// 从数据源中查找栅格覆盖数据 (GeoTIFF / WorldImage / ArcGrid)。
+/// 从数据源中查找栅格覆盖数据 (GeoTIFF / WorldImage / ArcGrid / ImageMosaic)。
 ///
 /// local 后端要求文件真实存在; s3 后端乐观纳入 (真实读取在 GetCoverage
 /// 时经 materialize 校验), 避免每次 GetCapabilities 都下载对象。
@@ -48,6 +51,7 @@ async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::pa
                 if ds.data_source_type == DataSourceType::Geotiff
                     || ds.data_source_type == DataSourceType::WorldImage
                     || ds.data_source_type == DataSourceType::ArcGrid
+                    || ds.data_source_type == DataSourceType::ImageMosaic
                 {
                     if let Some(conn) = &ds.connection {
                         if let Some(file_path) = conn.file_path.as_ref() {
@@ -160,6 +164,16 @@ async fn handle_describe_coverage(
                                     description.set_size(meta.width, meta.height, 4);
                                 }
                             },
+                            DataSourceType::ImageMosaic => {
+                                // 目录马赛克: 聚合所有 granule 的边界。
+                                let granules = crate::utils::mosaic::load_mosaic(&path);
+                                if let Some(b) = crate::utils::mosaic::mosaic_bounds(&granules) {
+                                    description.set_bounds(b.minx, b.miny, b.maxx, b.maxy);
+                                }
+                                let total: u64 =
+                                    granules.iter().map(|g| g.image.width() as u64).sum();
+                                description.set_size(total.max(1) as u32, 1, 4);
+                            },
                             _ => {},
                         }
                     }
@@ -210,7 +224,37 @@ async fn handle_get_coverage(
         .unwrap_or("image/tiff")
         .to_string();
 
-    // 尝试从数据源读取真实栅格数据 (GeoTIFF / WorldImage)
+    // ImageMosaic: 目录栅格马赛克 — 子集 bbox 选择相交 granule 并合成。
+    if let Some(store) = &state.store {
+        if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
+            if ds.data_source_type == DataSourceType::ImageMosaic {
+                if let Some(conn) = &ds.connection {
+                    if let Ok(Some(materialized)) =
+                        materialize_raster(conn, &ds.data_source_type).await
+                    {
+                        let dir = materialized.path;
+                        let granules = crate::utils::mosaic::load_mosaic(&dir);
+                        if let Some(mosaic_b) = crate::utils::mosaic::mosaic_bounds(&granules) {
+                            // 目标范围: 子集 bbox ∩ 马赛克范围 (无子集 → 全范围)。
+                            let (target, size) =
+                                mosaic_target(&mosaic_b, &request.subsets, &request.size);
+                            let (w, h) = size;
+                            if let Some(img) =
+                                crate::utils::mosaic::render_mosaic(&granules, &target, w, h)
+                            {
+                                let final_img =
+                                    encode_coverage_output(img, &output_format, coverage_id);
+                                return final_img;
+                            }
+                        }
+                    }
+                }
+                // 读取失败/无 granule: 落入通用回退 (测试图像)。
+            }
+        }
+    }
+
+    // 尝试从数据源读取真实栅格数据 (GeoTIFF / WorldImage / ArcGrid)
     let raster_result = if let Some(store) = &state.store {
         if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
             let is_raster = ds.data_source_type == DataSourceType::Geotiff
@@ -494,4 +538,56 @@ fn encode_coverage_output(
         .content_type(content_type)
         .append_header(("Content-Description", format!("Coverage: {}", coverage_id)))
         .body(buffer))
+}
+
+/// ImageMosaic 目标范围与输出尺寸:
+/// - 目标范围 = 子集 bbox ∩ 马赛克范围 (无子集 → 马赛克全范围)
+/// - 输出尺寸 = WCS SIZE 参数, 无则按目标范围长宽比给 512 上限
+fn mosaic_target(
+    mosaic_b: &Bounds,
+    subsets: &Option<Vec<crate::services::wcs::Subset>>,
+    size: &Option<Vec<i64>>,
+) -> (Bounds, (u32, u32)) {
+    // 从子集中提取 X/Y 区间。
+    let mut minx = mosaic_b.minx;
+    let mut miny = mosaic_b.miny;
+    let mut maxx = mosaic_b.maxx;
+    let mut maxy = mosaic_b.maxy;
+    if let Some(subs) = subsets {
+        for sub in subs {
+            if let crate::services::wcs::SubsetType::Intervals { min, max, .. } = sub.subset_type {
+                match sub.axis_label.to_lowercase().as_str() {
+                    "x" | "long" | "longitude" | "i" => {
+                        minx = min.max(mosaic_b.minx);
+                        maxx = max.min(mosaic_b.maxx);
+                    },
+                    "y" | "lat" | "latitude" | "j" => {
+                        miny = min.max(mosaic_b.miny);
+                        maxy = max.min(mosaic_b.maxy);
+                    },
+                    _ => {},
+                }
+            }
+        }
+    }
+    let target = Bounds::new(minx, miny, maxx, maxy);
+
+    let (w, h) = match size {
+        Some(sz) if sz.len() >= 2 => (
+            if sz[0] > 0 { sz[0] as u32 } else { 512 },
+            if sz[1] > 0 { sz[1] as u32 } else { 512 },
+        ),
+        _ => {
+            let range_x = (maxx - minx).max(1e-9);
+            let range_y = (maxy - miny).max(1e-9);
+            let base = 512u32;
+            let (w, h) = if range_x >= range_y {
+                (base, ((base as f64 * range_y / range_x).max(1.0)) as u32)
+            } else {
+                (((base as f64 * range_x / range_y).max(1.0)) as u32, base)
+            };
+            (w.max(1), h.max(1))
+        },
+    };
+    (target, (w.max(1), h.max(1)))
 }

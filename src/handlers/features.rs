@@ -94,6 +94,13 @@ pub async fn query_layer_features(
                 );
                 return Ok(Vec::new());
             },
+            DataSourceType::ImageMosaic => {
+                info!(
+                    "[Features] ImageMosaic 数据源 '{}' 是栅格目录, 通过 WCS 访问",
+                    ds.name
+                );
+                return Ok(Vec::new());
+            },
             DataSourceType::Redis => {
                 info!(
                     "[Features] Redis 数据源 '{}' 是瓦片缓存后端, 不发布要素",

@@ -1,4 +1,4 @@
-use super::rendering::{FillStyle, StrokeStyle, Style};
+use super::rendering::{FillStyle, LabelStyle, StrokeStyle, Style};
 use super::sld_parser::{OgcFilter, ParsedRule};
 use std::collections::HashMap;
 
@@ -346,6 +346,77 @@ fn apply_css_property(style: &mut Style, prop: &str, val: &str) {
         "mark-size" => {
             if let Ok(s) = val.parse::<f64>() {
                 style.point_size = Some(s);
+            }
+        },
+        // --- Label (TextSymbolizer) support (GeoServer CSS dialect) ---
+        "label" => {
+            let text = val.trim().trim_matches('"').to_string();
+            let label = style.label.get_or_insert_with(|| LabelStyle {
+                text: String::new(),
+                property: None,
+                font_size: 12.0,
+                color: "#333333".to_string(),
+                halo_color: None,
+                halo_radius: 1.0,
+            });
+            if text.starts_with('[') && text.ends_with(']') {
+                // `label: [name]` — attribute expression.
+                label.property = Some(text[1..text.len() - 1].trim().to_string());
+            } else {
+                label.property = None;
+                label.text = text;
+            }
+        },
+        "label-size" | "font-size" => {
+            if let Ok(s) = val.parse::<f64>() {
+                let label = style.label.get_or_insert_with(|| LabelStyle {
+                    text: String::new(),
+                    property: None,
+                    font_size: 12.0,
+                    color: "#333333".to_string(),
+                    halo_color: None,
+                    halo_radius: 1.0,
+                });
+                label.font_size = s.max(1.0);
+            }
+        },
+        "label-color" | "font-fill" => {
+            if let Some(c) = normalize_color(val) {
+                let label = style.label.get_or_insert_with(|| LabelStyle {
+                    text: String::new(),
+                    property: None,
+                    font_size: 12.0,
+                    color: "#333333".to_string(),
+                    halo_color: None,
+                    halo_radius: 1.0,
+                });
+                label.color = c;
+            }
+        },
+        "halo-color" => {
+            if let Some(c) = normalize_color(val) {
+                let label = style.label.get_or_insert_with(|| LabelStyle {
+                    text: String::new(),
+                    property: None,
+                    font_size: 12.0,
+                    color: "#333333".to_string(),
+                    halo_color: None,
+                    halo_radius: 1.0,
+                });
+                label.halo_color = Some(c);
+            }
+        },
+        "halo-radius" => {
+            if let Ok(r) = val.parse::<f64>() {
+                let label = style.label.get_or_insert_with(|| LabelStyle {
+                    text: String::new(),
+                    property: None,
+                    font_size: 12.0,
+                    color: "#333333".to_string(),
+                    halo_color: None,
+                    halo_radius: 1.0,
+                });
+                label.halo_radius = r.max(0.0);
             }
         },
         _ => {},

@@ -37,6 +37,7 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'worldimage', label: 'WorldImage' },
     { value: 'cascaded_wms', label: 'Cascaded WMS' },
     { value: 'arcgrid', label: 'ArcGrid' },
+    { value: 'image_mosaic', label: 'ImageMosaic' },
     { value: 'redis', label: 'Redis Cache' },
   ];
   fileStorageTypes = [
@@ -89,6 +90,7 @@ export class DataSourceDialogComponent implements OnInit {
       { value: 'worldimage', label: 'WorldImage' },
       { value: 'cascaded_wms', label: this.translate.instant('dataSources.cascadedWms') },
       { value: 'arcgrid', label: 'ArcGrid' },
+      { value: 'image_mosaic', label: 'ImageMosaic' },
       { value: 'redis', label: 'Redis Cache' },
     ];
     this.fileStorageTypes = [
@@ -234,7 +236,11 @@ export class DataSourceDialogComponent implements OnInit {
   }
 
   testConnection(): void {
-    if (this.selectedType !== 'postgis' && this.selectedType !== 'redis') {
+    if (
+      this.selectedType !== 'postgis' &&
+      this.selectedType !== 'redis' &&
+      this.selectedType !== 'image_mosaic'
+    ) {
       this.notificationService.info(this.translate.instant('dataSources.postgisOnlyTest'));
       return;
     }

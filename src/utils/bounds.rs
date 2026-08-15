@@ -39,8 +39,42 @@ pub async fn compute_layer_bounds(
         DataSourceType::WorldImage => compute_worldimage_bounds(ds),
         DataSourceType::CascadedWms => Ok(None),
         DataSourceType::ArcGrid => compute_arcgrid_bounds(ds),
+        DataSourceType::ImageMosaic => compute_mosaic_bounds(ds),
         DataSourceType::Redis => Ok(None),
         DataSourceType::Metadata => Ok(None),
+    }
+}
+
+/// 从 ImageMosaic 目录计算边界 (聚合所有 granule 边界)
+fn compute_mosaic_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+    let file_path = ds
+        .connection
+        .as_ref()
+        .and_then(|c| c.file_path.as_ref())
+        .ok_or_else(|| GeoServerError::BadRequest("ImageMosaic 数据源缺少目录路径".to_string()))?;
+
+    info!("[Bounds] 从 ImageMosaic 计算边界: {}", file_path);
+
+    let dir = std::path::Path::new(file_path);
+    if !dir.is_dir() {
+        info!("[Bounds] ImageMosaic 目录不存在: {}", file_path);
+        return Ok(None);
+    }
+    let granules = crate::utils::mosaic::load_mosaic(dir);
+    match crate::utils::mosaic::mosaic_bounds(&granules) {
+        Some(bounds) => {
+            let crs = CoordinateReferenceSystem::EPSG4326;
+            info!(
+                "[Bounds] ImageMosaic 边界: {:?}, granule 数: {}",
+                bounds,
+                granules.len()
+            );
+            Ok(Some(ComputedBounds { bounds, crs }))
+        },
+        None => {
+            info!("[Bounds] ImageMosaic 无有效 granule, 返回 None");
+            Ok(None)
+        },
     }
 }
 

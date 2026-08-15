@@ -24,12 +24,24 @@ impl DataSource {
                 | DataSourceType::WorldImage
                 | DataSourceType::ArcGrid
                 | DataSourceType::GeoJson
+                | DataSourceType::ImageMosaic
         )
     }
 
     /// 判断数据源是否为 PostGIS 数据库类型
     pub fn is_database(&self) -> bool {
         matches!(self.data_source_type, DataSourceType::Postgis)
+    }
+
+    /// 判断数据源是否为栅格类型 (WCS / WMS 栅格渲染路径)
+    pub fn is_raster(&self) -> bool {
+        matches!(
+            self.data_source_type,
+            DataSourceType::Geotiff
+                | DataSourceType::WorldImage
+                | DataSourceType::ArcGrid
+                | DataSourceType::ImageMosaic
+        )
     }
 }
 
@@ -52,6 +64,10 @@ pub enum DataSourceType {
     /// 持久化于元数据, 图层 `cache_store` 引用其名称)
     #[serde(rename = "redis")]
     Redis,
+    /// ImageMosaic — 栅格目录马赛克数据源 (目录下多个 GeoTIFF/WorldImage/
+    /// ArcGrid/PNG/JPEG 作为 granule, 整体作为一个覆盖发布)
+    #[serde(rename = "image_mosaic")]
+    ImageMosaic,
     ArcGrid,
     /// GeoJSON 文件数据源 (存储位置由 connection.file_storage_type 决定: local/s3/oss)
     #[serde(rename = "geojson")]
@@ -70,6 +86,7 @@ impl std::fmt::Display for DataSourceType {
             DataSourceType::WorldImage => write!(f, "worldimage"),
             DataSourceType::CascadedWms => write!(f, "cascaded_wms"),
             DataSourceType::Redis => write!(f, "redis"),
+            DataSourceType::ImageMosaic => write!(f, "image_mosaic"),
             DataSourceType::ArcGrid => write!(f, "arcgrid"),
             DataSourceType::GeoJson => write!(f, "geojson"),
             DataSourceType::Metadata => write!(f, "metadata"),
@@ -202,6 +219,7 @@ mod tests {
             ("worldimage", DataSourceType::WorldImage),
             ("cascaded_wms", DataSourceType::CascadedWms),
             ("redis", DataSourceType::Redis),
+            ("image_mosaic", DataSourceType::ImageMosaic),
             ("arcgrid", DataSourceType::ArcGrid),
             ("geojson", DataSourceType::GeoJson),
             ("metadata", DataSourceType::Metadata),

@@ -6,7 +6,10 @@
 //! and share the GeoWebCache-style tile cache when it is enabled.
 
 use crate::error::GeoServerError;
+use crate::handlers::features;
+use crate::models::Bounds;
 use crate::state::AppState;
+use crate::utils::rendering::{MapRenderer, RenderFormat, RenderOptions};
 use crate::utils::tile_grid;
 
 /// Output format for a rendered tile.
@@ -85,9 +88,6 @@ pub async fn render_tile_bytes(
         ))
     })?;
 
-    use crate::handlers::features;
-    use crate::utils::rendering::{MapRenderer, RenderFormat, RenderOptions};
-
     let tile_size = 256u32;
     let options = RenderOptions {
         width: tile_size,
@@ -97,17 +97,96 @@ pub async fn render_tile_bytes(
         format: RenderFormat::PNG,
     };
 
-    let renderer = MapRenderer::new(options, bounds);
+    let renderer = MapRenderer::new(options, bounds.clone());
     let layers_lock = state.layers.read().await;
     let styles_lock = state.styles.read().await;
     let meta_lock = state.styles_meta.read().await;
     let mut render_items = Vec::new();
+    let mut raster: Option<Option<(image::RgbaImage, Bounds)>> = None;
 
     if let Some(layer_obj) = layers_lock.iter().find(|l| l.name == layer) {
         use crate::handlers::style_handler::{
             calculate_tile_scale_denom, get_style_rules, reproject_geometry_helper,
         };
         use crate::utils::sld_parser;
+
+        // 栅格图层 (GeoTIFF / WorldImage / ArcGrid / ImageMosaic): 加载栅格并绘制到瓦片。
+        let data_source = if let Some(store) = &state.store {
+            store.get_data_source(&layer_obj.store).await.ok().flatten()
+        } else {
+            None
+        };
+        if let Some(ds) = &data_source {
+            if matches!(
+                ds.data_source_type,
+                crate::models::DataSourceType::Geotiff
+                    | crate::models::DataSourceType::WorldImage
+                    | crate::models::DataSourceType::ArcGrid
+                    | crate::models::DataSourceType::ImageMosaic
+            ) {
+                if let Some(conn) = &ds.connection {
+                    let materialized = match ds.data_source_type {
+                        crate::models::DataSourceType::WorldImage
+                        | crate::models::DataSourceType::ImageMosaic => {
+                            crate::store::materialize_dir(conn).await.ok().flatten()
+                        },
+                        _ => crate::store::materialize_file(conn).await.ok().flatten(),
+                    };
+                    if let Some(m) = materialized {
+                        let img_bounds = match ds.data_source_type {
+                            crate::models::DataSourceType::Geotiff => {
+                                crate::utils::geotiff::read_geotiff(&m.path)
+                                    .ok()
+                                    .map(|cov| (cov.rgba_image, cov.bounds))
+                            },
+                            crate::models::DataSourceType::WorldImage => {
+                                crate::utils::worldimage::read_worldimage(&m.path)
+                                    .ok()
+                                    .map(|w| (w.rgba_image, Some(w.bounds)))
+                            },
+                            crate::models::DataSourceType::ArcGrid => {
+                                crate::utils::arcgrid::read_arcgrid(&m.path)
+                                    .ok()
+                                    .map(|a| (a.rgba_image, Some(a.bounds)))
+                            },
+                            crate::models::DataSourceType::ImageMosaic => {
+                                let granules = crate::utils::mosaic::load_mosaic(&m.path);
+                                let b = crate::utils::mosaic::mosaic_bounds(&granules);
+                                match b {
+                                    Some(bb) => crate::utils::mosaic::render_mosaic(
+                                        &granules, &bb, 1024, 1024,
+                                    )
+                                    .map(|img| (img, Some(bb))),
+                                    None => None,
+                                }
+                            },
+                            _ => None,
+                        };
+                        if let Some((img, Some(b))) = img_bounds {
+                            raster = Some(Some((img, b)));
+                        }
+                    }
+                }
+                drop(layers_lock);
+                drop(styles_lock);
+                drop(meta_lock);
+                return finish_tile(
+                    state,
+                    &cache,
+                    layer,
+                    &gridset,
+                    z,
+                    col,
+                    row,
+                    format,
+                    renderer,
+                    bounds,
+                    raster,
+                    Vec::new(),
+                )
+                .await;
+            }
+        }
 
         let layer_crs = layer_obj.srs.to_epsg();
         let needs_reproject = layer_crs != "EPSG:4326";
@@ -131,7 +210,57 @@ pub async fn render_tile_bytes(
     drop(styles_lock);
     drop(meta_lock);
 
-    let img = renderer.render(render_items);
+    finish_tile(
+        state,
+        &cache,
+        layer,
+        &gridset,
+        z,
+        col,
+        row,
+        format,
+        renderer,
+        bounds,
+        raster,
+        render_items,
+    )
+    .await
+}
+
+/// 共享瓦片渲染收尾: 栅格底图 + 矢量叠加 → 编码 → 缓存。
+#[allow(clippy::too_many_arguments)] // tile pipeline wiring
+async fn finish_tile(
+    state: &AppState,
+    cache: &Option<crate::utils::tile_cache::TileCache>,
+    layer: &str,
+    gridset: &str,
+    z: u32,
+    col: u32,
+    row: u32,
+    format: TileFormat,
+    renderer: MapRenderer,
+    bounds: Bounds,
+    raster: Option<Option<(image::RgbaImage, Bounds)>>,
+    render_items: Vec<(
+        crate::models::GeoJsonGeometry,
+        crate::utils::rendering::Style,
+    )>,
+) -> Result<(Vec<u8>, bool), GeoServerError> {
+    let mut img = image::RgbaImage::new(256, 256);
+
+    // 栅格底图 (与 WMS GetMap 相同的裁剪/缩放逻辑)。
+    if let Some(Some((raster_img, raster_bounds))) = raster {
+        if let Some(tile) =
+            super::wms_handler::render_raster_to_map(&raster_img, &raster_bounds, &bounds, 256, 256)
+        {
+            composite(&mut img, &tile);
+        }
+    }
+
+    // 矢量要素 + 标签。
+    let vector = renderer.render(render_items);
+    composite(&mut img, &vector);
+
     let mut buffer = std::io::Cursor::new(Vec::new());
     match format {
         TileFormat::Png => img
@@ -147,9 +276,43 @@ pub async fn render_tile_bytes(
     // 3. Populate the tile cache (PNG only).
     if format == TileFormat::Png {
         if let Some(ref cache) = cache {
-            cache.put(layer, &gridset, z, col, row, &tile_data).await;
+            cache.put(layer, gridset, z, col, row, &tile_data).await;
         }
     }
 
+    let _ = state;
     Ok((tile_data, false))
+}
+
+/// Source-over composite `src` onto `dst` (transparent pixels skipped).
+fn composite(dst: &mut image::RgbaImage, src: &image::RgbaImage) {
+    for (y, row) in src.rows().enumerate() {
+        for (x, px) in row.enumerate() {
+            let fg = px.0;
+            let a = fg[3] as f32 / 255.0;
+            if a <= 0.0 {
+                continue;
+            }
+            if a >= 1.0 {
+                dst.put_pixel(x as u32, y as u32, image::Rgba(fg));
+                continue;
+            }
+            let bg = dst.get_pixel(x as u32, y as u32).0;
+            let b = bg[3] as f32 / 255.0;
+            let out_a = a + b * (1.0 - a);
+            let blend = |f: u8, g: u8| -> u8 {
+                ((f as f32 * a + g as f32 * b * (1.0 - a)) / out_a).round() as u8
+            };
+            dst.put_pixel(
+                x as u32,
+                y as u32,
+                image::Rgba([
+                    blend(fg[0], bg[0]),
+                    blend(fg[1], bg[1]),
+                    blend(fg[2], bg[2]),
+                    (out_a * 255.0).round() as u8,
+                ]),
+            );
+        }
+    }
 }

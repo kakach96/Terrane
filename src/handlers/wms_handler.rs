@@ -9,7 +9,7 @@ use crate::utils::rendering::{MapRenderer, RenderFormat, RenderOptions, Style};
 use crate::utils::sld_parser::{self, ParsedRule};
 use crate::utils::wkb;
 use actix_web::{web, HttpRequest, HttpResponse};
-use image::ImageFormat;
+use image::{ImageFormat, RgbaImage};
 use quick_xml::se::to_string;
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -56,6 +56,15 @@ struct LayerRenderContext {
     metadata: LayerMetadata,
     features: Vec<Feature>,
     render_items: Vec<(GeoJsonGeometry, Style)>,
+    /// 栅格图层渲染数据 (GeoTIFF / WorldImage / ArcGrid): 图像 + 地理边界。
+    /// 矢量图层为 None。栅格图层无矢量要素。
+    raster: Option<Option<RasterLayerData>>,
+}
+
+/// 栅格图层数据: 已解码的 RGBA 图像与其地理边界 (EPSG:4326)。
+struct RasterLayerData {
+    image: image::RgbaImage,
+    bounds: Bounds,
 }
 
 pub async fn handle_wms_request(
@@ -330,6 +339,7 @@ async fn resolve_layer_metadata(
     );
     let layers_lock = state.layers.read().await;
     let styles_lock = state.styles.read().await;
+    let styles_meta_lock = state.styles_meta.read().await;
 
     let mut metadata_list = Vec::with_capacity(context.layers.len());
 
@@ -386,8 +396,15 @@ async fn resolve_layer_metadata(
 
         let native_crs = layer.srs.to_epsg();
 
-        let sld_xml = request_sld_body(layer, &styles_lock);
-        let rules = sld_parser::parse_sld(&sld_xml);
+        // 按样式格式分派解析 (SLD/CSS/YSLD/MBStyle), 保证 WMS 渲染与
+        // 瓦片管线 (style_handler::parse_style_content) 行为一致。
+        let style_content = request_sld_body(layer, &styles_lock);
+        let style_format = styles_meta_lock
+            .get(&style_name_of(layer))
+            .map(|m| m.format.clone())
+            .unwrap_or_else(|| crate::models::style::detect_style_format(&style_content));
+        let rules =
+            crate::handlers::style_handler::parse_style_content(&style_content, &style_format);
 
         info!("[resolve_layer_metadata] 图层 '{}' 详情: workspace='{}', layer='{}', native_name='{}', native_crs='{}', data_source_type={:?}, rules_count={}", 
               layer_name, layer.workspace, layer.name, native_name, native_crs, data_source_type, rules.len());
@@ -412,15 +429,18 @@ async fn resolve_layer_metadata(
     Ok(metadata_list)
 }
 
-fn request_sld_body(layer: &Layer, styles: &HashMap<String, String>) -> String {
-    let style_name = layer
+/// 图层绑定的第一个样式名 (WMS 渲染使用图层主样式)。
+fn style_name_of(layer: &Layer) -> String {
+    layer
         .styles
         .first()
         .map(|s| s.name.clone())
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
 
+fn request_sld_body(layer: &Layer, styles: &HashMap<String, String>) -> String {
     styles
-        .get(&style_name)
+        .get(&style_name_of(layer))
         .cloned()
         .unwrap_or_else(|| sld_parser::default_sld(&layer.name))
 }
@@ -450,14 +470,29 @@ async fn query_all_layer_features(
             "[query_all_layer_features] 查询图层: {}",
             metadata.layer_name
         );
-        let mut features = query_layer_features_optimized(
-            state,
-            metadata,
-            &context.bounds,
-            &context.output_crs,
-            context.scale_denominator,
-        )
-        .await?;
+
+        // 栅格图层: 加载栅格图像 (GeoTIFF / WorldImage / ArcGrid / ImageMosaic),
+        // 不查询矢量要素。
+        let raster = match metadata.data_source_type {
+            DataSourceType::Geotiff
+            | DataSourceType::WorldImage
+            | DataSourceType::ArcGrid
+            | DataSourceType::ImageMosaic => Some(load_raster_layer(state, metadata).await),
+            _ => None,
+        };
+
+        let mut features = if raster.is_some() {
+            Vec::new()
+        } else {
+            query_layer_features_optimized(
+                state,
+                metadata,
+                &context.bounds,
+                &context.output_crs,
+                context.scale_denominator,
+            )
+            .await?
+        };
 
         // 应用 CQL 过滤
         if let Some(cql_str) = cql_filters.get(idx).filter(|s| !s.is_empty()) {
@@ -513,11 +548,49 @@ async fn query_all_layer_features(
             },
             features,
             render_items: Vec::new(),
+            raster,
         });
     }
 
     info!("[query_all_layer_features] 要素查询完成");
     Ok(contexts)
+}
+
+/// 加载栅格图层数据 (GeoTIFF / WorldImage / ArcGrid / ImageMosaic) 并归一化为
+/// RGBA 图像 + 地理边界 (EPSG:4326)。
+async fn load_raster_layer(_state: &AppState, metadata: &LayerMetadata) -> Option<RasterLayerData> {
+    let conn = metadata.connection.as_ref()?;
+    // WorldImage / ImageMosaic 是目录/伴生文件, 走目录物化; 其余单文件。
+    let materialized = match metadata.data_source_type {
+        DataSourceType::WorldImage | DataSourceType::ImageMosaic => {
+            crate::store::materialize_dir(conn).await.ok()??
+        },
+        _ => crate::store::materialize_file(conn).await.ok()??,
+    };
+    let path = materialized.path;
+    let (image, bounds) = match metadata.data_source_type {
+        DataSourceType::Geotiff => {
+            let cov = crate::utils::geotiff::read_geotiff(&path).ok()?;
+            (cov.rgba_image, cov.bounds?)
+        },
+        DataSourceType::WorldImage => {
+            let wim = crate::utils::worldimage::read_worldimage(&path).ok()?;
+            (wim.rgba_image, wim.bounds)
+        },
+        DataSourceType::ArcGrid => {
+            let ag = crate::utils::arcgrid::read_arcgrid(&path).ok()?;
+            (ag.rgba_image, ag.bounds)
+        },
+        DataSourceType::ImageMosaic => {
+            // 目录马赛克: 聚合所有 granule, 返回整幅合成图 (EPSG:4326)。
+            let granules = crate::utils::mosaic::load_mosaic(&path);
+            let b = crate::utils::mosaic::mosaic_bounds(&granules)?;
+            let img = crate::utils::mosaic::render_mosaic(&granules, &b, 1024, 1024)?;
+            (img, b)
+        },
+        _ => return None,
+    };
+    Some(RasterLayerData { image, bounds })
 }
 
 async fn query_layer_features_optimized(
@@ -750,6 +823,9 @@ fn resolve_feature_styles(
     );
     let mut total_items = 0;
 
+    // 空环境变量映射: 无 env 时标签/颜色保持原样
+    let empty_env: HashMap<String, String> = HashMap::new();
+
     for layer_ctx in layer_contexts.iter_mut() {
         debug!(
             "[resolve_feature_styles] 处理图层: {}, 要素数: {}",
@@ -758,40 +834,13 @@ fn resolve_feature_styles(
         );
 
         for feature in &layer_ctx.features {
-            let style = if let Some(env_map) = env {
-                if !env_map.is_empty() {
-                    sld_parser::resolve_style_with_env(
-                        &layer_ctx.metadata.rules,
-                        feature,
-                        Some(scale_denominator),
-                        env_map,
-                    )
-                } else {
-                    layer_ctx
-                        .metadata
-                        .rules
-                        .iter()
-                        .find(|rule| {
-                            sld_parser::match_rule(
-                                rule,
-                                &feature.properties,
-                                Some(scale_denominator),
-                            )
-                        })
-                        .map(|rule| rule.style.clone())
-                        .unwrap_or_default()
-                }
-            } else {
-                layer_ctx
-                    .metadata
-                    .rules
-                    .iter()
-                    .find(|rule| {
-                        sld_parser::match_rule(rule, &feature.properties, Some(scale_denominator))
-                    })
-                    .map(|rule| rule.style.clone())
-                    .unwrap_or_default()
-            };
+            let env_map = env.as_ref().filter(|m| !m.is_empty());
+            let style = sld_parser::resolve_style_with_env(
+                &layer_ctx.metadata.rules,
+                feature,
+                Some(scale_denominator),
+                env_map.unwrap_or(&empty_env),
+            );
 
             layer_ctx
                 .render_items
@@ -888,9 +937,43 @@ fn render_map_image(
         return Ok(HttpResponse::Ok().content_type("application/pdf").body(pdf));
     }
 
-    // 图片格式: 使用 MapRenderer 渲染
+    // 图片格式: 使用 MapRenderer 渲染。栅格图层先绘制 (按图层顺序),
+    // 矢量要素叠加在上。
     let renderer = MapRenderer::new(context.options, context.bounds.clone());
-    let img = renderer.render(all_render_items);
+    let has_raster = layer_contexts
+        .iter()
+        .any(|ctx| ctx.raster.as_ref().is_some_and(|r| r.is_some()));
+    let mut img = RgbaImage::new(context.width, context.height);
+
+    // 背景: 非透明时填充背景色。
+    if !context.transparent {
+        let bg = context.bg_color.unwrap_or([255, 255, 255, 255]);
+        for pixel in img.pixels_mut() {
+            *pixel = image::Rgba(bg);
+        }
+    }
+
+    // 栅格图层: 裁剪 + 缩放到请求 bbox。
+    for ctx in layer_contexts {
+        if let Some(Some(raster)) = &ctx.raster {
+            if let Some(tile) = render_raster_to_map(
+                &raster.image,
+                &raster.bounds,
+                &context.bounds,
+                context.width,
+                context.height,
+            ) {
+                composite_image(&mut img, &tile, 0, 0);
+            }
+        }
+    }
+
+    // 矢量要素叠加 (含标签与 z-order)。空渲染项时渲染器会画"空地图"
+    // 占位框, 仅在无栅格图层时保留该行为。
+    if !all_render_items.is_empty() || !has_raster {
+        let vector_img = renderer.render(all_render_items);
+        composite_image(&mut img, &vector_img, 0, 0);
+    }
 
     let image_format = match format_lower.as_str() {
         s if s.contains("png") => ImageFormat::Png,
@@ -2101,5 +2184,200 @@ fn parse_color(color: &str) -> [u8; 4] {
         [r, g, b, 255]
     } else {
         [255, 255, 255, 255]
+    }
+}
+
+/// 将栅格图像裁剪 + 缩放为与请求 bbox 对齐的瓦片图像。
+///
+/// 栅格覆盖的边界 (EPSG:4326) 与请求 bbox 求交, 相交区域按比例映射到
+/// 输出图像的对应像素区域。返回与输出尺寸一致的 RGBA 图像 (未相交区域
+/// 保持透明), 便于直接合成到地图底图上。
+pub(crate) fn render_raster_to_map(
+    raster: &image::RgbaImage,
+    raster_bounds: &Bounds,
+    map_bounds: &Bounds,
+    map_width: u32,
+    map_height: u32,
+) -> Option<image::RgbaImage> {
+    // 无相交 → 不绘制。
+    if map_bounds.minx >= raster_bounds.maxx
+        || map_bounds.maxx <= raster_bounds.minx
+        || map_bounds.miny >= raster_bounds.maxy
+        || map_bounds.maxy <= raster_bounds.miny
+    {
+        return None;
+    }
+
+    // 相交区域 (地理坐标)。
+    let inter_minx = map_bounds.minx.max(raster_bounds.minx);
+    let inter_maxx = map_bounds.maxx.min(raster_bounds.maxx);
+    let inter_miny = map_bounds.miny.max(raster_bounds.miny);
+    let inter_maxy = map_bounds.maxy.min(raster_bounds.maxy);
+
+    // 相交区域在输出图像中的像素范围。
+    let map_range_x = map_bounds.maxx - map_bounds.minx;
+    let map_range_y = map_bounds.maxy - map_bounds.miny;
+    if map_range_x <= 0.0 || map_range_y <= 0.0 {
+        return None;
+    }
+    let dst_x0 = ((inter_minx - map_bounds.minx) / map_range_x * map_width as f64) as i64;
+    let dst_x1 = ((inter_maxx - map_bounds.minx) / map_range_x * map_width as f64) as i64;
+    // 屏幕 y 轴向下, 地理 y 轴向上。
+    let dst_y0 = ((map_bounds.maxy - inter_maxy) / map_range_y * map_height as f64) as i64;
+    let dst_y1 = ((map_bounds.maxy - inter_miny) / map_range_y * map_height as f64) as i64;
+    let dst_w = (dst_x1 - dst_x0).max(1) as u32;
+    let dst_h = (dst_y1 - dst_y0).max(1) as u32;
+
+    // 源栅格中的相交区域。
+    let raster_range_x = raster_bounds.maxx - raster_bounds.minx;
+    let raster_range_y = raster_bounds.maxy - raster_bounds.miny;
+    if raster_range_x <= 0.0 || raster_range_y <= 0.0 {
+        return None;
+    }
+    let src_x0 =
+        ((inter_minx - raster_bounds.minx) / raster_range_x * raster.width() as f64).floor() as u32;
+    let src_x1 =
+        ((inter_maxx - raster_bounds.minx) / raster_range_x * raster.width() as f64).ceil() as u32;
+    let src_y0 = ((raster_bounds.maxy - inter_maxy) / raster_range_y * raster.height() as f64)
+        .floor() as u32;
+    let src_y1 =
+        ((raster_bounds.maxy - inter_miny) / raster_range_y * raster.height() as f64).ceil() as u32;
+    let src_w = (src_x1 - src_x0)
+        .max(1)
+        .min(raster.width() - src_x0.min(raster.width() - 1));
+    let src_h = (src_y1 - src_y0)
+        .max(1)
+        .min(raster.height() - src_y0.min(raster.height() - 1));
+
+    let cropped = image::imageops::crop_imm(raster, src_x0, src_y0, src_w, src_h).to_image();
+    let resized = if dst_w != cropped.width() || dst_h != cropped.height() {
+        image::imageops::resize(
+            &cropped,
+            dst_w,
+            dst_h,
+            image::imageops::FilterType::Triangle,
+        )
+    } else {
+        cropped
+    };
+
+    // 粘贴到输出图像的正确位置。
+    let mut out = image::RgbaImage::new(map_width, map_height);
+    let ox = dst_x0.max(0) as u32;
+    let oy = dst_y0.max(0) as u32;
+    let rw = resized.width().min(map_width - ox);
+    let rh = resized.height().min(map_height - oy);
+    if rw == 0 || rh == 0 {
+        return None;
+    }
+    image::imageops::overlay(&mut out, &resized, ox as i64, oy as i64);
+    let _ = (rw, rh);
+    Some(out)
+}
+
+/// 将 `src` 以 alpha 合成方式覆盖到 `dst` 的 (x, y) 处 (source-over)。
+fn composite_image(dst: &mut image::RgbaImage, src: &image::RgbaImage, x: i64, y: i64) {
+    for (sy, _dy) in (0..src.height()).enumerate() {
+        let dy = y + sy as i64;
+        if dy < 0 || dy >= dst.height() as i64 {
+            continue;
+        }
+        for (sx, _dx) in (0..src.width()).enumerate() {
+            let dx = x + sx as i64;
+            if dx < 0 || dx >= dst.width() as i64 {
+                continue;
+            }
+            let fg = src.get_pixel(sx as u32, sy as u32).0;
+            let a = fg[3] as f32 / 255.0;
+            if a <= 0.0 {
+                continue;
+            }
+            if a >= 1.0 {
+                dst.put_pixel(dx as u32, dy as u32, image::Rgba(fg));
+                continue;
+            }
+            let bg = dst.get_pixel(dx as u32, dy as u32).0;
+            let b = bg[3] as f32 / 255.0;
+            let out_a = a + b * (1.0 - a);
+            if out_a <= 0.0 {
+                continue;
+            }
+            let blend = |f: u8, g: u8| -> u8 {
+                ((f as f32 * a + g as f32 * b * (1.0 - a)) / out_a).round() as u8
+            };
+            dst.put_pixel(
+                dx as u32,
+                dy as u32,
+                image::Rgba([
+                    blend(fg[0], bg[0]),
+                    blend(fg[1], bg[1]),
+                    blend(fg[2], bg[2]),
+                    (out_a * 255.0).round() as u8,
+                ]),
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_render_raster_to_map_full_overlap() {
+        // 4x4 red raster covering the whole map area.
+        let mut raster = RgbaImage::new(4, 4);
+        for p in raster.pixels_mut() {
+            *p = image::Rgba([255, 0, 0, 255]);
+        }
+        let raster_bounds = Bounds::new(0.0, 0.0, 10.0, 10.0);
+        let map_bounds = Bounds::new(0.0, 0.0, 10.0, 10.0);
+        let out = render_raster_to_map(&raster, &raster_bounds, &map_bounds, 100, 100)
+            .expect("raster tile");
+        assert_eq!(out.dimensions(), (100, 100));
+        // Center pixel must be red.
+        let px = out.get_pixel(50, 50).0;
+        assert_eq!((px[0], px[3]), (255, 255), "raster must be composited");
+    }
+
+    #[test]
+    fn test_render_raster_to_map_partial_overlap() {
+        let mut raster = RgbaImage::new(4, 4);
+        for p in raster.pixels_mut() {
+            *p = image::Rgba([0, 0, 255, 255]);
+        }
+        // Raster covers [0,10]x[0,10]; map asks for [5,15]x[5,15] →
+        // only the left/bottom quarter of the output is covered.
+        let raster_bounds = Bounds::new(0.0, 0.0, 10.0, 10.0);
+        let map_bounds = Bounds::new(5.0, 5.0, 15.0, 15.0);
+        let out = render_raster_to_map(&raster, &raster_bounds, &map_bounds, 100, 100)
+            .expect("raster tile");
+        // Top-right quadrant (map coords 12.5,12.5 → pixel 75,25): outside raster → transparent.
+        let outside = out.get_pixel(75, 25).0;
+        assert_eq!(outside[3], 0, "outside raster must stay transparent");
+        // Bottom-left quadrant (map coords 7.5,7.5 → pixel 25,75): inside raster → blue.
+        let inside = out.get_pixel(25, 75).0;
+        assert_eq!((inside[0], inside[2], inside[3]), (0, 255, 255));
+    }
+
+    #[test]
+    fn test_render_raster_to_map_no_overlap() {
+        let raster = RgbaImage::new(4, 4);
+        let raster_bounds = Bounds::new(0.0, 0.0, 10.0, 10.0);
+        let map_bounds = Bounds::new(100.0, 100.0, 110.0, 110.0);
+        assert!(render_raster_to_map(&raster, &raster_bounds, &map_bounds, 100, 100).is_none());
+    }
+
+    #[test]
+    fn test_composite_image_source_over() {
+        let mut dst = RgbaImage::new(2, 1);
+        dst.put_pixel(0, 0, image::Rgba([255, 255, 255, 255]));
+        let mut src = RgbaImage::new(1, 1);
+        src.put_pixel(0, 0, image::Rgba([255, 0, 0, 128]));
+        composite_image(&mut dst, &src, 0, 0);
+        let px = dst.get_pixel(0, 0).0;
+        assert_eq!(px[0], 255);
+        assert_eq!(px[1], 127);
+        assert_eq!(px[3], 255);
     }
 }

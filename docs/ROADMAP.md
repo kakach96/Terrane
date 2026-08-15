@@ -31,11 +31,12 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 - OGC services: WMS 1.1.1/1.3.0, WFS 1.0/1.1/2.0, WCS 1.0/1.1/2.0, WMTS 1.0.0
 - REST API: workspaces / namespaces / layers / stores / data sources / styles / layer groups / sql views / permissions
-- Data sources: PostGIS, Shapefile, GeoTIFF, GeoPackage, GeoJSON, WorldImage, CascadedWms, ArcGrid
+- Data sources: PostGIS, Shapefile, GeoTIFF, GeoPackage, GeoJSON, WorldImage, CascadedWms, ArcGrid, ImageMosaic, Redis (cache backend)
 - Security: JWT auth, users/roles, layer-level permissions
 - Angular 17 + Material admin console
 - Cloud-native foundation: multi-stage Docker image, `build/docker-compose.yml`, split health probes, Prometheus `/metrics`, graceful shutdown
-- Overall progress: ~58% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
+- WMS rendering engine: multi-geometry + opacity compositing + polygon holes + z-order + label (TextSymbolizer) rendering with collision avoidance; raster layers (GeoTIFF/WorldImage/ArcGrid/ImageMosaic) render in WMS GetMap and tiles
+- Overall progress: ~63% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
 
 ### v1.1 — State Convergence (target: 2026 Q3–Q4)
 

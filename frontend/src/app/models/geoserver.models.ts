@@ -189,7 +189,8 @@ export interface CreateDataSourceRequest {
     | 'cascaded_wms'
     | 'arcgrid'
     | 'geojson'
-    | 'redis';
+    | 'redis'
+    | 'image_mosaic';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;
@@ -205,7 +206,8 @@ export interface UpdateDataSourceRequest {
     | 'cascaded_wms'
     | 'arcgrid'
     | 'geojson'
-    | 'redis';
+    | 'redis'
+    | 'image_mosaic';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;

@@ -1,4 +1,4 @@
-use super::rendering::{FillStyle, StrokeStyle, Style};
+use super::rendering::{FillStyle, LabelStyle, StrokeStyle, Style};
 use crate::models::{Feature, PropertyValue};
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -13,6 +13,23 @@ pub struct ParsedRule {
     pub max_scale: Option<f64>,
     pub filters: Vec<OgcFilter>,
     pub style: Style,
+}
+
+/// Per-rule label metadata collected while parsing a TextSymbolizer.
+#[derive(Debug, Clone, Default)]
+struct LabelCtx {
+    /// Property name to read the label text from (`ogc:PropertyName`).
+    property: Option<String>,
+    /// Literal label text (`<Label>` with plain text content).
+    literal: Option<String>,
+    /// Font size in points (SLD `Font/CssParameter name="font-size"`).
+    font_size: f64,
+    /// Label fill color (SLD `TextSymbolizer/Fill`).
+    color: Option<String>,
+    /// Halo color (SLD `Halo/Fill`).
+    halo_color: Option<String>,
+    /// Halo radius in px (SLD `Halo/Radius`).
+    halo_radius: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +65,7 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
     let mut in_polygon_symbolizer = false;
     let mut in_line_symbolizer = false;
     let mut in_point_symbolizer = false;
-    let mut _in_text_symbolizer = false;
+    let mut in_text_symbolizer = false;
     let mut in_fill = false;
     let mut in_stroke = false;
     let mut in_graphic = false;
@@ -59,6 +76,29 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
     let mut collect_text = false;
     let mut css_param_name = String::new();
     let mut css_param_value = String::new();
+
+    // ogc:Filter building state. Comparison operators are captured by name and
+    // their PropertyName/Literal children collected; logical operators
+    // (And/Or/Not) nest via a stack.
+    let mut filter_stack: Vec<Vec<OgcFilter>> = Vec::new();
+    let mut ogc_op: Option<String> = None;
+    let mut filter_props: Vec<String> = Vec::new();
+    let mut filter_literals: Vec<String> = Vec::new();
+
+    // Label (TextSymbolizer) state.
+    let mut label = LabelCtx::default();
+    let mut in_label = false;
+    let mut in_label_fill = false;
+    let mut in_font = false;
+    let mut in_halo = false;
+    let mut in_halo_fill = false;
+    let mut in_halo_radius = false;
+    // Raw text collected inside `<Label>` (disambiguated on End events).
+    let mut label_raw = String::new();
+    // z-index vendor option (`<VendorOption name="z-index">5</VendorOption>`).
+    let mut in_vendor_option = false;
+    let mut vendor_option_name = String::new();
+    let mut vendor_option_value = String::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -89,7 +129,10 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                     "PolygonSymbolizer" => in_polygon_symbolizer = true,
                     "LineSymbolizer" => in_line_symbolizer = true,
                     "PointSymbolizer" => in_point_symbolizer = true,
-                    "TextSymbolizer" => _in_text_symbolizer = true,
+                    "TextSymbolizer" => {
+                        in_text_symbolizer = true;
+                        label = LabelCtx::default();
+                    },
                     "Fill" if in_polygon_symbolizer || in_mark => in_fill = true,
                     "Stroke" if in_polygon_symbolizer || in_line_symbolizer || in_mark => {
                         in_stroke = true
@@ -119,6 +162,68 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                     },
                     "Filter" | "ogc:Filter" => {
                         in_ogc_filter = true;
+                        filter_stack.clear();
+                        ogc_op = None;
+                        filter_props.clear();
+                        filter_literals.clear();
+                    },
+                    // --- ogc:Filter comparison / logical operators ---
+                    "PropertyIsEqualTo"
+                    | "PropertyIsNotEqualTo"
+                    | "PropertyIsLessThan"
+                    | "PropertyIsGreaterThan"
+                    | "PropertyIsLessThanOrEqualTo"
+                    | "PropertyIsGreaterThanOrEqualTo"
+                    | "PropertyIsLike"
+                    | "PropertyIsNull"
+                    | "PropertyIsBetween" => {
+                        ogc_op = Some(tag.clone());
+                        filter_props.clear();
+                        filter_literals.clear();
+                    },
+                    "And" | "Or" => {
+                        filter_stack.push(Vec::new());
+                    },
+                    "Not" => {
+                        filter_stack.push(Vec::new());
+                    },
+                    // --- Label (TextSymbolizer) ---
+                    "Label" if in_text_symbolizer => {
+                        in_label = true;
+                        collect_text = true;
+                    },
+                    "PropertyName" if in_label => {
+                        collect_text = true;
+                    },
+                    "Literal" if in_label => {
+                        collect_text = true;
+                    },
+                    "Fill" if in_text_symbolizer && !in_halo => {
+                        in_label_fill = true;
+                    },
+                    "Font" if in_text_symbolizer => {
+                        in_font = true;
+                    },
+                    "Halo" if in_text_symbolizer => {
+                        in_halo = true;
+                    },
+                    "Fill" if in_halo => {
+                        in_halo_fill = true;
+                    },
+                    "Radius" if in_halo => {
+                        in_halo_radius = true;
+                        collect_text = true;
+                    },
+                    // --- z-index vendor option ---
+                    "VendorOption" => {
+                        in_vendor_option = true;
+                        vendor_option_name = e
+                            .attributes()
+                            .filter_map(|a| a.ok())
+                            .find(|a| String::from_utf8_lossy(a.key.as_ref()) == "name")
+                            .map(|a| String::from_utf8_lossy(&a.value).to_string())
+                            .unwrap_or_default();
+                        collect_text = true;
                     },
                     _ => {},
                 }
@@ -129,9 +234,19 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                 if !text.is_empty() {
                     if in_ogc_filter {
                         current_literal = text;
+                    } else if in_label {
+                        label_raw = text;
+                    } else if in_halo_radius {
+                        label.halo_radius = text.parse().unwrap_or(1.0);
+                    } else if in_vendor_option {
+                        vendor_option_value = text;
                     } else if !css_param_name.is_empty() {
                         css_param_value = text;
                     } else if (in_mark && text.len() < 20) || in_graphic {
+                        current_literal = text;
+                    } else {
+                        // Fallback: bare element text (Rule Name,
+                        // Min/MaxScaleDenominator, etc.).
                         current_literal = text;
                     }
                 }
@@ -168,17 +283,64 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                     "PolygonSymbolizer" => in_polygon_symbolizer = false,
                     "LineSymbolizer" => in_line_symbolizer = false,
                     "PointSymbolizer" => in_point_symbolizer = false,
-                    "TextSymbolizer" => _in_text_symbolizer = false,
+                    "TextSymbolizer" => {
+                        in_text_symbolizer = false;
+                        // Finalize the label style from the collected context.
+                        if let Some(text) = label.literal.clone().or_else(|| label.property.clone())
+                        {
+                            current_rule.style.label = Some(LabelStyle {
+                                text,
+                                property: label.property.clone(),
+                                font_size: if label.font_size > 0.0 {
+                                    label.font_size
+                                } else {
+                                    12.0
+                                },
+                                color: label.color.clone().unwrap_or_else(|| "#333333".to_string()),
+                                halo_color: label.halo_color.clone(),
+                                halo_radius: if label.halo_radius > 0.0 {
+                                    label.halo_radius
+                                } else {
+                                    1.0
+                                },
+                            });
+                        }
+                        label = LabelCtx::default();
+                    },
                     "Fill" => {
-                        in_fill = false;
-                        if !css_param_value.is_empty() {
-                            apply_css_param(
-                                &mut current_rule.style,
-                                &css_param_name,
-                                &css_param_value,
-                                true,
-                            );
-                            css_param_value.clear();
+                        if in_halo_fill {
+                            if !css_param_value.is_empty() {
+                                apply_label_fill(
+                                    &mut label,
+                                    &css_param_name,
+                                    &css_param_value,
+                                    true,
+                                );
+                                css_param_value.clear();
+                            }
+                            in_halo_fill = false;
+                        } else if in_label_fill {
+                            if !css_param_value.is_empty() {
+                                apply_label_fill(
+                                    &mut label,
+                                    &css_param_name,
+                                    &css_param_value,
+                                    false,
+                                );
+                                css_param_value.clear();
+                            }
+                            in_label_fill = false;
+                        } else {
+                            in_fill = false;
+                            if !css_param_value.is_empty() {
+                                apply_css_param(
+                                    &mut current_rule.style,
+                                    &css_param_name,
+                                    &css_param_value,
+                                    true,
+                                );
+                                css_param_value.clear();
+                            }
                         }
                     },
                     "Stroke" => {
@@ -232,6 +394,22 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                                     &css_param_value,
                                     false,
                                 );
+                            } else if in_font {
+                                apply_label_font(&mut label, &css_param_name, &css_param_value);
+                            } else if in_label_fill {
+                                apply_label_fill(
+                                    &mut label,
+                                    &css_param_name,
+                                    &css_param_value,
+                                    false,
+                                );
+                            } else if in_halo_fill {
+                                apply_label_fill(
+                                    &mut label,
+                                    &css_param_name,
+                                    &css_param_value,
+                                    true,
+                                );
                             }
                         }
                         css_param_name.clear();
@@ -239,16 +417,122 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                         collect_text = false;
                     },
                     "PropertyName" => {
-                        _current_property = current_literal.clone();
-                        current_literal.clear();
-                        collect_text = false;
+                        if in_label {
+                            // PropertyName inside Label → label text property.
+                            if !label_raw.is_empty() {
+                                label.property = Some(label_raw.clone());
+                                label.literal = None;
+                            }
+                            label_raw.clear();
+                            collect_text = false;
+                        } else if in_ogc_filter {
+                            if !current_literal.is_empty() {
+                                filter_props.push(current_literal.clone());
+                            }
+                            current_literal.clear();
+                            collect_text = false;
+                        } else {
+                            _current_property = current_literal.clone();
+                            current_literal.clear();
+                            collect_text = false;
+                        }
                     },
                     "Literal" => {
-                        current_literal.clear();
+                        if in_label {
+                            if !label_raw.is_empty() {
+                                label.literal = Some(label_raw.clone());
+                                label.property = None;
+                            }
+                            label_raw.clear();
+                            collect_text = false;
+                        } else if in_ogc_filter {
+                            if !current_literal.is_empty() {
+                                filter_literals.push(current_literal.clone());
+                            }
+                            current_literal.clear();
+                            collect_text = false;
+                        } else {
+                            current_literal.clear();
+                            collect_text = false;
+                        }
+                    },
+                    // --- ogc:Filter operator ends ---
+                    "PropertyIsEqualTo"
+                    | "PropertyIsNotEqualTo"
+                    | "PropertyIsLessThan"
+                    | "PropertyIsGreaterThan"
+                    | "PropertyIsLessThanOrEqualTo"
+                    | "PropertyIsGreaterThanOrEqualTo"
+                    | "PropertyIsLike"
+                    | "PropertyIsNull"
+                    | "PropertyIsBetween" => {
+                        if let (Some(op), Some(prop)) =
+                            (ogc_op.take(), filter_props.first().cloned())
+                        {
+                            if let Some(f) = build_comparison_filter(&op, &prop, &filter_literals) {
+                                push_filter(&mut filter_stack, &mut current_rule, f);
+                            }
+                        }
+                        filter_props.clear();
+                        filter_literals.clear();
+                        collect_text = false;
+                    },
+                    "And" | "Or" | "Not" => {
+                        if let Some(mut subs) = filter_stack.pop() {
+                            if !subs.is_empty() {
+                                let combined = match tag.as_str() {
+                                    "And" => OgcFilter::And(subs),
+                                    "Or" => OgcFilter::Or(subs),
+                                    _ => OgcFilter::Not(Box::new(subs.remove(0))),
+                                };
+                                push_filter(&mut filter_stack, &mut current_rule, combined);
+                            }
+                        }
                         collect_text = false;
                     },
                     "Filter" | "ogc:Filter" => {
                         in_ogc_filter = false;
+                        filter_stack.clear();
+                        ogc_op = None;
+                        filter_props.clear();
+                        filter_literals.clear();
+                    },
+                    // --- Label (TextSymbolizer) ---
+                    "Label" => {
+                        in_label = false;
+                        collect_text = false;
+                        // Bare text content (no PropertyName/Literal child).
+                        if label.property.is_none()
+                            && label.literal.is_none()
+                            && !label_raw.is_empty()
+                        {
+                            label.literal = Some(label_raw.clone());
+                        }
+                        label_raw.clear();
+                    },
+                    "Font" => {
+                        in_font = false;
+                    },
+                    "Halo" => {
+                        in_halo = false;
+                        in_halo_radius = false;
+                        collect_text = false;
+                    },
+                    "Radius" => {
+                        in_halo_radius = false;
+                        collect_text = false;
+                    },
+                    // --- z-index vendor option ---
+                    "VendorOption" => {
+                        if vendor_option_name == "z-index" {
+                            if let Ok(v) = vendor_option_value.trim().parse::<i32>() {
+                                current_rule.style.z_index = v;
+                            }
+                        }
+                        vendor_option_name.clear();
+                        vendor_option_value.clear();
+                        in_vendor_option = false;
+                        collect_text = false;
                     },
                     _ => {},
                 }
@@ -265,6 +549,72 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
     }
 
     rules
+}
+
+/// Apply a `CssParameter` to the label fill/halo color.
+fn apply_label_fill(label: &mut LabelCtx, name: &str, value: &str, halo: bool) {
+    if name != "fill" {
+        return;
+    }
+    let color = if value.starts_with('#') {
+        value.to_string()
+    } else {
+        format!("#{}", value)
+    };
+    if halo {
+        label.halo_color = Some(color);
+    } else {
+        label.color = Some(color);
+    }
+}
+
+/// Apply a `CssParameter` inside `Font` (font-size / font-family).
+fn apply_label_font(label: &mut LabelCtx, name: &str, value: &str) {
+    if name == "font-size" {
+        if let Ok(v) = value.trim().parse::<f64>() {
+            label.font_size = v.max(1.0);
+        }
+    }
+}
+
+/// Build an `OgcFilter` from a comparison operator name, its property and its
+/// literals (PropertyIsBetween takes two literals).
+fn build_comparison_filter(op: &str, prop: &str, literals: &[String]) -> Option<OgcFilter> {
+    let lit = |i: usize| literals.get(i).cloned();
+    match op {
+        "PropertyIsEqualTo" => lit(0).map(|v| OgcFilter::PropertyIsEqualTo(prop.to_string(), v)),
+        "PropertyIsNotEqualTo" => {
+            lit(0).map(|v| OgcFilter::PropertyIsNotEqualTo(prop.to_string(), v))
+        },
+        "PropertyIsLessThan" => lit(0).map(|v| OgcFilter::PropertyIsLessThan(prop.to_string(), v)),
+        "PropertyIsGreaterThan" => {
+            lit(0).map(|v| OgcFilter::PropertyIsGreaterThan(prop.to_string(), v))
+        },
+        "PropertyIsLessThanOrEqualTo" => {
+            lit(0).map(|v| OgcFilter::PropertyIsLessThanOrEqualTo(prop.to_string(), v))
+        },
+        "PropertyIsGreaterThanOrEqualTo" => {
+            lit(0).map(|v| OgcFilter::PropertyIsGreaterThanOrEqualTo(prop.to_string(), v))
+        },
+        "PropertyIsLike" => lit(0).map(|v| OgcFilter::PropertyIsLike(prop.to_string(), v)),
+        "PropertyIsNull" => Some(OgcFilter::PropertyIsNull(prop.to_string())),
+        "PropertyIsBetween" => match (lit(0), lit(1)) {
+            (Some(low), Some(high)) => {
+                Some(OgcFilter::PropertyIsBetween(prop.to_string(), low, high))
+            },
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Push a filter onto the innermost logical container, or into the rule's
+/// filters when no container is open.
+fn push_filter(filter_stack: &mut [Vec<OgcFilter>], rule: &mut ParsedRule, filter: OgcFilter) {
+    match filter_stack.last_mut() {
+        Some(container) => container.push(filter),
+        None => rule.filters.push(filter),
+    }
 }
 
 fn apply_css_param(style: &mut Style, name: &str, value: &str, is_fill: bool) {
@@ -470,6 +820,16 @@ pub fn resolve_style_with_env(
             let mut style = rule.style.clone();
             // 应用环境变量替换到颜色值
             apply_env_to_style(&mut style, env);
+            // 解析标签文本: property → 要素属性值; literal → 原样
+            if let Some(label) = style.label.as_mut() {
+                if let Some(prop) = label.property.as_deref() {
+                    if let Some(v) = props.get(prop) {
+                        label.text = v.to_string();
+                    } else {
+                        label.text = String::new();
+                    }
+                }
+            }
             return style;
         }
     }
@@ -690,4 +1050,120 @@ fn wildcard_match(text: &str, pattern: &str) -> bool {
     }
 
     pi == pat_bytes.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn feature_with(name: &str, pop: &str) -> Feature {
+        let mut props = HashMap::new();
+        props.insert("name".to_string(), PropertyValue::String(name.to_string()));
+        props.insert(
+            "population".to_string(),
+            PropertyValue::String(pop.to_string()),
+        );
+        Feature::new(
+            crate::models::GeoJsonGeometry::Point {
+                coordinates: vec![0.0, 0.0],
+            },
+            props,
+        )
+    }
+
+    #[test]
+    fn test_parse_text_symbolizer_property_label() {
+        let sld = r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>cities</Name><UserStyle><FeatureTypeStyle><Rule>
+    <TextSymbolizer>
+      <Label><ogc:PropertyName>name</ogc:PropertyName></Label>
+      <Font>
+        <CssParameter name="font-family">Arial</CssParameter>
+        <CssParameter name="font-size">14</CssParameter>
+      </Font>
+      <Fill><CssParameter name="fill">#FF0000</CssParameter></Fill>
+      <Halo>
+        <Radius>3</Radius>
+        <Fill><CssParameter name="fill">#FFFFFF</CssParameter></Fill>
+      </Halo>
+    </TextSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#;
+        let rules = parse_sld(sld);
+        assert_eq!(rules.len(), 1);
+        let label = rules[0].style.label.as_ref().expect("label parsed");
+        assert_eq!(label.property.as_deref(), Some("name"));
+        assert_eq!(label.font_size, 14.0);
+        assert_eq!(label.color, "#FF0000");
+        assert_eq!(label.halo_color.as_deref(), Some("#FFFFFF"));
+        assert_eq!(label.halo_radius, 3.0);
+    }
+
+    #[test]
+    fn test_parse_text_symbolizer_literal_label() {
+        let sld = r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>cities</Name><UserStyle><FeatureTypeStyle><Rule>
+    <TextSymbolizer>
+      <Label>Hello</Label>
+    </TextSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#;
+        let rules = parse_sld(sld);
+        let label = rules[0].style.label.as_ref().expect("label parsed");
+        assert_eq!(label.text, "Hello");
+        assert!(label.property.is_none());
+    }
+
+    #[test]
+    fn test_resolve_label_from_feature_property() {
+        let sld = r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>cities</Name><UserStyle><FeatureTypeStyle><Rule>
+    <TextSymbolizer>
+      <Label><ogc:PropertyName>name</ogc:PropertyName></Label>
+      <Font><CssParameter name="font-size">12</CssParameter></Font>
+    </TextSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#;
+        let rules = parse_sld(sld);
+        let feature = feature_with("Beijing", "1000");
+        let style = resolve_style(&rules, &feature, None);
+        let label = style.label.expect("label resolved");
+        assert_eq!(label.text, "Beijing");
+    }
+
+    #[test]
+    fn test_parse_z_index_vendor_option() {
+        let sld = r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>x</Name><UserStyle><FeatureTypeStyle><Rule>
+    <VendorOption name="z-index">7</VendorOption>
+    <PolygonSymbolizer><Fill><CssParameter name="fill">#112233</CssParameter></Fill></PolygonSymbolizer>
+  </Rule></FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#;
+        let rules = parse_sld(sld);
+        assert_eq!(rules[0].style.z_index, 7);
+    }
+
+    #[test]
+    fn test_rule_filters_and_scale() {
+        let sld = r#"<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
+  <NamedLayer><Name>x</Name><UserStyle><FeatureTypeStyle>
+    <Rule>
+      <MinScaleDenominator>1000</MinScaleDenominator>
+      <MaxScaleDenominator>50000</MaxScaleDenominator>
+      <ogc:Filter><ogc:PropertyIsEqualTo><ogc:PropertyName>type</ogc:PropertyName><ogc:Literal>city</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter>
+      <PolygonSymbolizer><Fill><CssParameter name="fill">#112233</CssParameter></Fill></PolygonSymbolizer>
+    </Rule>
+  </FeatureTypeStyle></UserStyle></NamedLayer>
+</StyledLayerDescriptor>"#;
+        let rules = parse_sld(sld);
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].min_scale, Some(1000.0));
+        assert_eq!(rules[0].max_scale, Some(50000.0));
+        assert!(!rules[0].filters.is_empty());
+    }
 }
