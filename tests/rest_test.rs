@@ -2504,3 +2504,199 @@ async fn test_rest_update_feature_type() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+// ---------------------------------------------------------------------------
+// T1: 瓦片种子任务 (seed / cancel / truncate)
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_tiles_seed_completes() {
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    // 创建种子任务: world z0 (global-geodetic 2 瓦片)
+    let create = test::TestRequest::post()
+        .uri("/geoserver/tiles/seed")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "layer": "world",
+            "gridset": "EPSG:4326",
+            "z_min": 0,
+            "z_max": 0,
+            "format": "png",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(
+        resp.status().as_u16(),
+        201,
+        "创建种子任务应返回 201, 实际: {}",
+        resp.status()
+    );
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let job_id = body["data"]["job"]["id"].as_str().unwrap_or("").to_string();
+    assert!(!job_id.is_empty(), "应返回 job id, 实际: {}", body);
+
+    // 轮询直至 Completed
+    let mut status = String::new();
+    for _ in 0..200 {
+        let req = test::TestRequest::get()
+            .uri(&format!("/geoserver/tiles/seed/{}", job_id))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        let body: serde_json::Value = test::read_body_json(resp).await;
+        status = body["data"]["status"].as_str().unwrap_or("").to_string();
+        if status == "Completed" {
+            assert_eq!(body["data"]["done"].as_u64(), Some(2), "z0 应渲染 2 瓦片");
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        status, "Completed",
+        "种子任务应在超时前完成, 实际 status: {}",
+        status
+    );
+
+    // 任务列表包含
+    let req = test::TestRequest::get()
+        .uri("/geoserver/tiles/seed")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let ids: Vec<String> = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|j| j["id"].as_str().map(|s| s.to_string()))
+        .collect();
+    assert!(
+        ids.contains(&job_id),
+        "seed 列表应包含任务 {}, 实际: {:?}",
+        job_id,
+        ids
+    );
+}
+
+#[actix_rt::test]
+async fn test_tiles_seed_cancel() {
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    // 大范围任务 → 立即取消
+    let create = test::TestRequest::post()
+        .uri("/geoserver/tiles/seed")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "layer": "world",
+            "gridset": "EPSG:4326",
+            "z_min": 6,
+            "z_max": 8,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status().as_u16(), 201);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let job_id = body["data"]["job"]["id"].as_str().unwrap_or("").to_string();
+
+    let del = test::TestRequest::delete()
+        .uri(&format!("/geoserver/tiles/seed/{}", job_id))
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, del).await;
+    assert!(
+        resp.status().is_success(),
+        "取消任务应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    // 轮询直至 Cancelled
+    let mut status = String::new();
+    for _ in 0..200 {
+        let req = test::TestRequest::get()
+            .uri(&format!("/geoserver/tiles/seed/{}", job_id))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        let body: serde_json::Value = test::read_body_json(resp).await;
+        status = body["data"]["status"].as_str().unwrap_or("").to_string();
+        if status == "Cancelled" || status == "Completed" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(status, "Cancelled", "任务应被取消, 实际 status: {}", status);
+}
+
+#[actix_rt::test]
+async fn test_tiles_seed_truncate_and_validation() {
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    // truncate (world; 缓存未启用时 removed=0 也返回 200)
+    let truncate = test::TestRequest::post()
+        .uri("/geoserver/tiles/seed/truncate")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({ "layer": "world", "gridset": "EPSG:4326" }))
+        .to_request();
+    let resp = test::call_service(&app, truncate).await;
+    assert!(
+        resp.status().is_success(),
+        "truncate 应返回 200, 实际: {}",
+        resp.status()
+    );
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["layer"].as_str(), Some("world"));
+
+    // truncate 不存在图层 → 404
+    let truncate = test::TestRequest::post()
+        .uri("/geoserver/tiles/seed/truncate")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({ "layer": "no_such_layer" }))
+        .to_request();
+    let resp = test::call_service(&app, truncate).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+    // 未认证创建 → 400
+    let create = test::TestRequest::post()
+        .uri("/geoserver/tiles/seed")
+        .set_json(serde_json::json!({
+            "layer": "world", "z_min": 0, "z_max": 0
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert!(!resp.status().is_success(), "未认证创建应失败");
+
+    // 无效 gridset → 400
+    let create = test::TestRequest::post()
+        .uri("/geoserver/tiles/seed")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "layer": "world", "gridset": "EPSG:9999", "z_min": 0, "z_max": 0
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status().as_u16(), 400);
+
+    // z_min > z_max → 400
+    let create = test::TestRequest::post()
+        .uri("/geoserver/tiles/seed")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "layer": "world", "z_min": 3, "z_max": 1
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status().as_u16(), 400);
+
+    // 不存在图层 → 404
+    let create = test::TestRequest::post()
+        .uri("/geoserver/tiles/seed")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "layer": "no_such_layer", "z_min": 0, "z_max": 0
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}

@@ -93,6 +93,8 @@ pub struct AppState {
     pub wfs_locks: Arc<crate::utils::wfs_lock::WfsLockRegistry>,
     /// OGC 服务设置缓存 (service -> settings; 元数据存储为真源, 写后即更新)
     pub service_settings: Arc<RwLock<HashMap<String, crate::models::ServiceSettings>>>,
+    /// 瓦片种子任务表 (jobID -> SeedJob; GWC 风格 seed/truncate)
+    pub seed_jobs: crate::utils::tile_seed::SeedJobTable,
 }
 
 impl AppState {
@@ -380,6 +382,7 @@ impl AppState {
             ogc_jobs: Arc::new(Mutex::new(HashMap::new())),
             wfs_locks: Arc::new(crate::utils::wfs_lock::WfsLockRegistry::new()),
             service_settings: Arc::new(RwLock::new(service_settings_init)),
+            seed_jobs: Arc::new(Mutex::new(HashMap::new())),
         };
 
         // 启动目录定时刷新任务 (独立 tokio 任务, 不影响请求路径):

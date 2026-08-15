@@ -19,6 +19,7 @@ pub mod shapefile_export;
 pub mod sld_parser;
 pub mod tile_cache;
 pub mod tile_grid;
+pub mod tile_seed;
 pub mod wfs_lock;
 pub mod wkb;
 pub mod worldimage;

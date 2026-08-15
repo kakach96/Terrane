@@ -66,6 +66,27 @@ pub fn add_routes(scope: Scope) -> Scope {
             "/tiles/cache/stats",
             web::get().to(crate::handlers::get_tile_cache_stats),
         )
+        // 瓦片种子任务 (GWC 风格 seed / truncate)
+        .route(
+            "/tiles/seed",
+            web::post().to(crate::handlers::create_seed_job),
+        )
+        .route(
+            "/tiles/seed",
+            web::get().to(crate::handlers::list_seed_jobs),
+        )
+        .route(
+            "/tiles/seed/truncate",
+            web::post().to(crate::handlers::truncate_tiles),
+        )
+        .route(
+            "/tiles/seed/{id}",
+            web::get().to(crate::handlers::get_seed_job),
+        )
+        .route(
+            "/tiles/seed/{id}",
+            web::delete().to(crate::handlers::cancel_seed_job),
+        )
         // 系统信息 (GeoServer 兼容路径)
         .route(
             "/about/version",
