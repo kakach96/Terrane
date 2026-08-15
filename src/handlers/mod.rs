@@ -1,3 +1,4 @@
+pub mod about_handler;
 pub mod auth_handler;
 pub mod backup_handler;
 pub mod browse_handler;
@@ -17,6 +18,7 @@ pub mod ogc_styles_handler;
 pub mod ogc_tiles_handler;
 pub mod ows_handler;
 pub mod permission_handler;
+pub mod resources_handler;
 pub mod rest_handler;
 pub mod service_handler;
 pub mod sql_view_handler;
@@ -33,6 +35,7 @@ pub mod wmts_handler;
 pub mod workspace_handler;
 pub mod wps_handler;
 
+pub use about_handler::*;
 pub use auth_handler::*;
 pub use backup_handler::*;
 pub use browse_handler::*;
@@ -51,6 +54,7 @@ pub use ogc_styles_handler::*;
 pub use ogc_tiles_handler::*;
 pub use ows_handler::*;
 pub use permission_handler::*;
+pub use resources_handler::*;
 pub use rest_handler::*;
 pub use service_handler::*;
 pub use sql_view_handler::*;

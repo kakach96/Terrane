@@ -975,3 +975,117 @@ async fn get_geopackage_table_columns(
     }
     Ok(cols)
 }
+
+/// 更新要素属性架构请求体: 仅支持新增列 (`properties: [{ name, type }]`)。
+#[derive(Debug, serde::Deserialize)]
+pub struct UpdateFeatureTypeRequest {
+    pub properties: Vec<FeaturePropertyDef>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct FeaturePropertyDef {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub property_type: String,
+}
+
+/// PUT /layers/{layer}/feature-type — 为 GeoPackage 图层新增属性列。
+///
+/// 仅支持本地文件 (`file_storage_type = local`) 的 GeoPackage 数据源;
+/// 已存在的列名返回 400; 非 GeoPackage / 非本地返回 400 (暂不支持)。
+pub async fn update_layer_feature_type(
+    req: HttpRequest,
+    body: web::Json<UpdateFeatureTypeRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, GeoServerError> {
+    crate::handlers::auth_handler::require_auth(&req)?;
+    let layer_name = req.match_info().get("layer").unwrap_or("");
+
+    if let Some(store) = &state.store {
+        let layer = store
+            .get_layer(layer_name)
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to get layer: {}", e);
+                GeoServerError::InternalError("Failed to get layer".to_string())
+            })?
+            .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+
+        let data_source = store
+            .get_data_source(&layer.store)
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to get data source: {}", e);
+                GeoServerError::InternalError("Failed to get data source".to_string())
+            })?
+            .ok_or_else(|| {
+                GeoServerError::NotFound(format!("Data source '{}' not found", layer.store))
+            })?;
+
+        if data_source.data_source_type != DataSourceType::Geopackage {
+            return Err(GeoServerError::BadRequest(
+                "Feature type update is only supported for GeoPackage data sources".to_string(),
+            ));
+        }
+        let table_name = layer.native_name.as_ref().ok_or_else(|| {
+            GeoServerError::BadRequest("Layer has no native table name configured".to_string())
+        })?;
+        let conn = data_source.connection.as_ref().ok_or_else(|| {
+            GeoServerError::BadRequest("GeoPackage data source has no connection".to_string())
+        })?;
+        // 仅本地文件可直接修改; s3/oss 需先下载再回传, 暂不支持
+        let storage = conn.file_storage_type.as_deref().unwrap_or("local");
+        if storage != "local" {
+            return Err(GeoServerError::BadRequest(format!(
+                "Feature type update is not supported for '{}' storage (local only)",
+                storage
+            )));
+        }
+        let local_path = conn.file_path.as_ref().ok_or_else(|| {
+            GeoServerError::BadRequest("GeoPackage data source has no file path".to_string())
+        })?;
+
+        let properties = body.into_inner().properties;
+        if properties.is_empty() {
+            return Err(GeoServerError::BadRequest(
+                "properties 至少需要一个列定义".to_string(),
+            ));
+        }
+
+        // 校验列名与类型 (SQLite 类型白名单)
+        let allowed_types = ["TEXT", "INTEGER", "REAL", "BOOLEAN", "BLOB"];
+        for p in &properties {
+            if p.name.is_empty() {
+                return Err(GeoServerError::BadRequest("列名不能为空".to_string()));
+            }
+            let ty = p.property_type.to_uppercase();
+            if !allowed_types.contains(&ty.as_str()) {
+                return Err(GeoServerError::BadRequest(format!(
+                    "不支持的属性类型 '{}' (允许: TEXT/INTEGER/REAL/BOOLEAN/BLOB)",
+                    p.property_type
+                )));
+            }
+        }
+
+        let added = {
+            let defs: Vec<(String, String)> = properties
+                .iter()
+                .map(|p| (p.name.clone(), p.property_type.to_uppercase()))
+                .collect();
+            crate::utils::geopackage::add_geopackage_columns(local_path, table_name, &defs)
+                .map_err(GeoServerError::BadRequest)?
+        };
+
+        Ok(
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "layer": layer_name,
+                "added": added,
+                "message": format!("Feature type updated ({} column(s) added)", added.len()),
+            }))),
+        )
+    } else {
+        Err(GeoServerError::InternalError(
+            "Database not available".to_string(),
+        ))
+    }
+}

@@ -97,6 +97,43 @@ pub fn read_geopackage_layers<P: AsRef<Path>>(path: P) -> Result<Vec<GeoPackageL
     Ok(layers)
 }
 
+/// 为 GeoPackage 要素表新增属性列 (ALTER TABLE ADD COLUMN)。
+///
+/// `properties` 为 `(列名, SQLite 类型)` 列表; 已存在的列名报错 (不部分提交)。
+/// 返回实际新增的列名。
+pub fn add_geopackage_columns(
+    file_path: &str,
+    table_name: &str,
+    properties: &[(String, String)],
+) -> Result<Vec<String>, String> {
+    let conn = Connection::open(file_path).map_err(|e| format!("无法打开 GeoPackage: {}", e))?;
+    let qn = table_name.replace('"', "\"\"");
+
+    // 现有列
+    let pragma = format!("PRAGMA table_info(\"{}\")", qn);
+    let mut existing: Vec<String> = Vec::new();
+    if let Ok(mut stmt) = conn.prepare(&pragma) {
+        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(1)) {
+            for name in rows.flatten() {
+                existing.push(name);
+            }
+        }
+    }
+
+    let mut added = Vec::new();
+    for (name, ty) in properties {
+        if existing.iter().any(|e| e == name) {
+            return Err(format!("列 '{}' 已存在", name));
+        }
+        let col = name.replace('"', "\"\"");
+        conn.execute_batch(&format!("ALTER TABLE \"{qn}\" ADD COLUMN \"{col}\" {ty}"))
+            .map_err(|e| format!("新增列 '{}' 失败: {}", name, e))?;
+        existing.push(name.clone());
+        added.push(name.clone());
+    }
+    Ok(added)
+}
+
 /// 读取 GeoPackage 中指定图层的所有要素
 pub fn read_geopackage_layer_features<P: AsRef<Path>>(
     path: P,

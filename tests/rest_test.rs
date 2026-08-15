@@ -2261,3 +2261,246 @@ async fn test_rest_service_settings() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status().as_u16(), 400);
 }
+
+// ---------------------------------------------------------------------------
+// R3: /about + /resources + feature-type PUT
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_about_endpoints() {
+    let app = build_test_app!();
+
+    let req = test::TestRequest::get()
+        .uri("/geoserver/about/version")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "/about/version 应返回 200");
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(
+        body["data"]["version"].as_str().is_some(),
+        "应包含版本号, 实际: {}",
+        body
+    );
+
+    let req = test::TestRequest::get()
+        .uri("/geoserver/about/system-status")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "/about/system-status 应返回 200"
+    );
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert!(body["data"]["uptime"].as_str().is_some());
+}
+
+#[actix_rt::test]
+async fn test_rest_resources() {
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    // GET 列表 (data_dir 根)
+    let req = test::TestRequest::get()
+        .uri("/geoserver/resources")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "GET /resources 应返回 200");
+
+    // POST 上传 (multipart, 需认证)
+    let boundary = "terraneboundary";
+    let multipart_body = format!(
+        "--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"res_test.txt\"\r\nContent-Type: text/plain\r\n\r\nhello resources\r\n--{b}--\r\n",
+        b = boundary
+    );
+    let req = test::TestRequest::post()
+        .uri("/geoserver/resources?path=uploads")
+        .insert_header((
+            "Content-Type",
+            format!("multipart/form-data; boundary={}", boundary),
+        ))
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_payload(multipart_body.clone())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status().as_u16(),
+        201,
+        "上传资源应返回 201, 实际: {}",
+        resp.status()
+    );
+
+    // GET 验证目录包含文件
+    let req = test::TestRequest::get()
+        .uri("/geoserver/resources?path=uploads")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"]["entries"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|e| e["name"].as_str().map(|s| s.to_string()))
+        .collect();
+    assert!(
+        names.contains(&"res_test.txt".to_string()),
+        "uploads 目录应包含 res_test.txt, 实际: {:?}",
+        names
+    );
+
+    // 未认证上传 → 400
+    let req = test::TestRequest::post()
+        .uri("/geoserver/resources")
+        .insert_header((
+            "Content-Type",
+            format!("multipart/form-data; boundary={}", boundary),
+        ))
+        .set_payload(multipart_body.clone())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(!resp.status().is_success(), "未认证上传应失败");
+
+    // DELETE 删除 (需认证)
+    let req = test::TestRequest::delete()
+        .uri("/geoserver/resources?path=uploads/res_test.txt")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "删除资源应返回 200");
+
+    // 删除后不存在 → 404
+    let req = test::TestRequest::delete()
+        .uri("/geoserver/resources?path=uploads/res_test.txt")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[actix_rt::test]
+async fn test_rest_update_feature_type() {
+    use std::collections::HashMap;
+
+    // 1. 写入 GeoPackage fixture
+    let dir = std::env::temp_dir().join(format!("terrane-gpkg-ft-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("ft.gpkg");
+    let mut p1 = HashMap::new();
+    p1.insert(
+        "name".to_string(),
+        terrane::models::PropertyValue::String("alpha".to_string()),
+    );
+    let features = vec![terrane::models::Feature::with_id(
+        "f1".into(),
+        terrane::models::GeoJsonGeometry::Point {
+            coordinates: vec![1.0, 1.0],
+        },
+        p1,
+    )];
+    let bounds = terrane::models::Bounds::new(1.0, 1.0, 2.0, 2.0);
+    terrane::utils::geopackage::write_geopackage_features(
+        &path, "ft", "POINT", 4326, &features, &bounds,
+    )
+    .expect("应能写入 GeoPackage");
+
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    // 2. 发布数据源 + 图层
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(serde_json::json!({
+            "name": "gpkg_ft",
+            "type": "geopackage",
+            "workspace": "default",
+            "enabled": true,
+            "connection": { "file_path": path.to_str(), "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(serde_json::json!({
+            "name": "ft_layer",
+            "title": "FT",
+            "workspace": "default",
+            "store": "gpkg_ft",
+            "native_name": "ft",
+            "srs": "EPSG:4326",
+            "minx": 1.0, "miny": 1.0, "maxx": 2.0, "maxy": 2.0,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // 3. PUT 新增列
+    let update = test::TestRequest::put()
+        .uri("/geoserver/layers/ft_layer/feature-type")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "properties": [
+                { "name": "population", "type": "INTEGER" },
+                { "name": "note", "type": "TEXT" }
+            ]
+        }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert!(
+        resp.status().is_success(),
+        "PUT feature-type 应返回 200, 实际: {}",
+        resp.status()
+    );
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["added"].as_array().map(|a| a.len()), Some(2));
+
+    // 4. GET 验证新列存在
+    let req = test::TestRequest::get()
+        .uri("/geoserver/layers/ft_layer/feature-type")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|c| c["name"].as_str().map(|s| s.to_string()))
+        .collect();
+    for col in ["population", "note"] {
+        assert!(
+            names.contains(&col.to_string()),
+            "feature-type 应包含新列 {}, 实际: {:?}",
+            col,
+            names
+        );
+    }
+
+    // 5. 重复新增已存在列 → 400
+    let update = test::TestRequest::put()
+        .uri("/geoserver/layers/ft_layer/feature-type")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "properties": [ { "name": "population", "type": "INTEGER" } ]
+        }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert_eq!(resp.status().as_u16(), 400, "重复列应返回 400");
+
+    // 6. 非 GeoPackage 图层 → 4xx
+    let update = test::TestRequest::put()
+        .uri("/geoserver/layers/world/feature-type")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "properties": [ { "name": "x", "type": "TEXT" } ]
+        }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert!(
+        !resp.status().is_success(),
+        "非 GeoPackage 应返回 4xx, 实际: {}",
+        resp.status()
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}

@@ -27,7 +27,8 @@ pub fn add_routes(scope: Scope) -> Scope {
         )
         .service(
             web::resource("/layers/{layer}/feature-type")
-                .route(web::get().to(crate::handlers::get_layer_feature_type)),
+                .route(web::get().to(crate::handlers::get_layer_feature_type))
+                .route(web::put().to(crate::handlers::update_layer_feature_type)),
         )
         .service(
             web::resource("/layers/{layer}/features")

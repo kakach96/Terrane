@@ -66,6 +66,25 @@ pub fn add_routes(scope: Scope) -> Scope {
             "/tiles/cache/stats",
             web::get().to(crate::handlers::get_tile_cache_stats),
         )
+        // 系统信息 (GeoServer 兼容路径)
+        .route(
+            "/about/version",
+            web::get().to(crate::handlers::about_version),
+        )
+        .route(
+            "/about/system-status",
+            web::get().to(crate::handlers::about_system_status),
+        )
+        // 数据目录资源管理
+        .route("/resources", web::get().to(crate::handlers::list_resources))
+        .route(
+            "/resources",
+            web::post().to(crate::handlers::upload_resource),
+        )
+        .route(
+            "/resources",
+            web::delete().to(crate::handlers::delete_resource),
+        )
         // 监控
         .route(
             "/monitor/stats",
