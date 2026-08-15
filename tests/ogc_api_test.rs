@@ -115,7 +115,7 @@ async fn test_ogc_collection_single_and_not_found() {
 async fn test_ogc_items() {
     let app = build_test_app!();
 
-    // world 图层空发布 (无数据源, 只读平台), items 返回空集合
+    // world 图层空发布 (无数据源), items 返回空集合
     let req = test::TestRequest::get()
         .uri("/ogc/features/collections/world/items")
         .to_request();

@@ -59,7 +59,7 @@ Overall progress █████████████░░░  69%
 | | LockFeature (加锁 / 续锁 / RELEASEACTION 释放, lockAction ALL/SOME, EXPIRY) | ✅ |
 | | GetPropertyValue (WFS 2.0, `wfs:ValueCollection`) | ✅ |
 | | GetGmlObject (WFS 2.0, `wfs:GMLObjectCollection`) | ✅ |
-| | Transaction (Insert/Update/Delete) | ❌ 只读发布平台, 501 |
+| | Transaction (Insert/Update/Delete) | ⏳ 后续实现 (当前 501) |
 | **WCS 1.0/1.1/2.0** | GetCapabilities | ✅ |
 | | DescribeCoverage | ✅ |
 | | GetCoverage (空间子集 + **波段 range 子集** + **INTERPOLATION** nearest/bilinear/cubic/lanczos) | ✅ |

@@ -71,11 +71,11 @@ pub async fn health_ready(state: web::Data<AppState>) -> HttpResponse {
         }));
     }
 
-    // 2. 数据源可用性 — 数据源通过元数据存储管理 (只读发布), 元数据存储就绪即可
+    // 2. 数据源可用性 — 数据源通过元数据存储管理, 元数据存储就绪即可
     checks.push(serde_json::json!({
         "name": "data_sources",
         "status": "ok",
-        "detail": "managed by metadata store (read-only publishing)"
+        "detail": "managed by metadata store"
     }));
 
     // 3. 瓦片缓存目录 (可选) — 已配置但不可用时不阻塞就绪, 仅记录

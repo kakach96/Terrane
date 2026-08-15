@@ -1,10 +1,10 @@
 //! WFS feature-lock registry (in-process, in-memory).
 //!
 //! Implements the locking semantics behind the WFS `LockFeature` and
-//! `GetFeatureWithLock` operations (WFS 1.1.0 / 2.0.0). Terrane is a
-//! read-only publishing platform, so locks are purely coordination state
-//! (no persistence, no writes): they guard concurrent consumers against
-//! editing the same feature, and are lost on restart.
+//! `GetFeatureWithLock` operations (WFS 1.1.0 / 2.0.0). WFS-T writes are not
+//! implemented yet, so locks are purely coordination state (no persistence,
+//! no writes): they guard concurrent consumers against editing the same
+//! feature, and are lost on restart.
 //!
 //! Locks are keyed per layer and per feature id. Each lock records the
 //! owning `lockId` (an opaque token returned to the client) and an optional

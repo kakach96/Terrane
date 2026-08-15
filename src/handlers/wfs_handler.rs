@@ -29,10 +29,9 @@ pub async fn handle_wfs_request(
             handle_get_property_value(&state, &wfs_request).await
         },
         wfs::WfsOperation::GetGmlObject => handle_get_gml_object(&state, &wfs_request).await,
-        // Terrane 是数据发布平台, 不提供 WFS Transaction 写入
+        // WFS-T 尚未实现 (计划后续支持)
         wfs::WfsOperation::Transaction => Err(GeoServerError::NotImplemented(
-            "WFS Transaction is not supported: Terrane is a read-only data publishing platform"
-                .to_string(),
+            "WFS Transaction is not implemented yet (planned for a later milestone)".to_string(),
         )),
     }
 }
@@ -44,11 +43,10 @@ pub async fn handle_wfs_post_request(
     body: String,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
-    // WFS-T (Transaction XML) 不支持: Terrane 是只读数据发布平台
+    // WFS-T (Transaction XML) 尚未实现 (计划后续支持)
     if body.contains("Transaction") || body.contains("<wfs:") {
         return Err(GeoServerError::NotImplemented(
-            "WFS Transaction is not supported: Terrane is a read-only data publishing platform"
-                .to_string(),
+            "WFS Transaction is not implemented yet (planned for a later milestone)".to_string(),
         ));
     }
 
@@ -71,10 +69,9 @@ pub async fn handle_wfs_post_request(
             handle_describe_feature_type(&state, &wfs_request).await
         },
         wfs::WfsOperation::GetFeature => handle_get_feature(&state, &wfs_request).await,
-        // Terrane 是数据发布平台, 不提供 WFS Transaction 写入
+        // WFS-T 尚未实现 (计划后续支持)
         wfs::WfsOperation::Transaction => Err(GeoServerError::NotImplemented(
-            "WFS Transaction is not supported: Terrane is a read-only data publishing platform"
-                .to_string(),
+            "WFS Transaction is not implemented yet (planned for a later milestone)".to_string(),
         )),
         _ => Err(GeoServerError::BadRequest(
             "Operation not implemented".to_string(),

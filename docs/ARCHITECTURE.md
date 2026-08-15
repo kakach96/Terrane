@@ -29,7 +29,7 @@
 
 ### Storage model
 
-Terrane is a **read-only data publishing platform**: business data lives in external
+Terrane is a **data publishing platform**: business data lives in external
 stores (PostGIS tables / data files) registered **per data source** in the metadata
 store (workspaces, data sources, layer definitions, styles, permissions). The
 configuration file only keeps `[metadata]` (SQLite / PostgreSQL); file data sources
@@ -251,7 +251,11 @@ sequenceDiagram
     H-->>UI: resource
 ```
 
-### 5.4 WFS Transaction
+### 5.4 WFS Transaction (WFS-T) — planned
+
+WFS-T (Insert / Update / Delete via `POST /wfs Transaction`) is **not implemented
+yet** (currently returns 501); it is planned for a later milestone. The intended
+data flow once implemented:
 
 ```mermaid
 flowchart LR

@@ -194,7 +194,7 @@ async fn test_wfs_get_feature_with_lock() {
 
 #[actix_rt::test]
 async fn test_wfs_transaction_not_supported() {
-    // Terrane 是只读数据发布平台: WFS-T Transaction 应返回 501 Not Implemented
+    // WFS-T Transaction 尚未实现 (计划后续支持): 应返回 501 Not Implemented
     let app = build_test_app!();
 
     let xml = r#"<?xml version="1.0" encoding="UTF-8"?>

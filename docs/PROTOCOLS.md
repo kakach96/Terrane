@@ -16,7 +16,7 @@ and *which remain to be adapted*.
 | Protocol            | Version(s)                     | Status  | Notes |
 |---------------------|--------------------------------|---------|-------|
 | **WMS**             | 1.1.1 / 1.3.0                  | ✅ Core | GetCapabilities / GetMap / GetFeatureInfo / DescribeLayer / GetLegendGraphic / GetStyles / PutStyles; multi-format + vendor params |
-| **WFS**             | 1.0.0 / 1.1.0 / 2.0.0          | ✅ Core | GetCapabilities / DescribeFeatureType / GetFeature / GetFeatureWithLock / LockFeature / Transaction (WFS-T) |
+| **WFS**             | 1.0.0 / 1.1.0 / 2.0.0          | ✅ Core | GetCapabilities / DescribeFeatureType / GetFeature / GetFeatureWithLock / LockFeature (WFS-T 后续实现) |
 | **WCS**             | 1.0.0 / 1.1.x / 2.0.1          | ✅ Core | GetCapabilities / DescribeCoverage / GetCoverage; WCS 2.0 subsetting |
 | **WMTS**            | 1.0.0                          | ✅ Core | GetCapabilities / GetTile / GetFeatureInfo; KVP + RESTful tile template |
 | **MVT (vector tiles)** | —                          | ✅      | Pure-Rust protobuf encoder; `/tiles/{layer}/{z}/{x}/{y}.pbf`, `/mvt/{layer}/{z}/{x}/{y}` |
@@ -73,7 +73,7 @@ Endpoint `/wfs` (`src/services/wfs.rs`, `src/handlers/wfs_handler.rs`). GET + PO
 | LockFeature         | ✅     | 加锁 / 续锁 (LOCKID+EXPIRY) / 释放 (LOCKID+RELEASEACTION=ALL), `lockAction` ALL/SOME; `wfs:LockFeatureResponse` (1.1/2.0 命名空间) |
 | GetPropertyValue    | ✅     | WFS 2.0 核心操作 (OGC 09-025r2): `PROPERTYNAME` 取值 → `wfs:ValueCollection` (几何属性输出 GML) |
 | GetGmlObject        | ✅     | WFS 2.0 核心操作 (OGC 09-025r2): `GMLOBJECTID` 查要素 → `wfs:GMLObjectCollection` (GML 3.2) |
-| Transaction         | ❌     | WFS-T 写入不支持 (501): Terrane 是只读数据发布平台 |
+| Transaction         | ⏳     | WFS-T 写入尚未实现 (当前 501); 计划后续实现 |
 
 **Gaps vs reference**: deeper GML 3.2 schema fidelity.
 
@@ -96,7 +96,7 @@ comma `x(10,20)` or colon `Band(1:2)` syntax), `SUBSETTINGCRS`.
 
 **Gaps vs reference**: no full WCS 1.1 range-subset / interpolation *semantics*
 (2.0 GetCoverage 上的波段子集与插值已实现, 1.1 语义未完整建模), no
-Web Coverage Transaction (WCS-T, 只读平台不支持).
+Web Coverage Transaction (WCS-T, 暂不实现).
 
 ## 5. Tiling — WMTS / MVT / TMS / WMS-C
 
@@ -256,7 +256,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
 | `tests/wms_test.rs` | 30 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, **GetFeatureInfo GML output**, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
-| `tests/wfs_test.rs` | 15    | WFS (all operations + **LockFeature acquire/conflict/renew/release** + **GetFeatureWithLock lockId** + **GetPropertyValue** + **GetGmlObject** + WFS-T 501 contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
+| `tests/wfs_test.rs` | 15    | WFS (all operations + **LockFeature acquire/conflict/renew/release** + **GetFeatureWithLock lockId** + **GetPropertyValue** + **GetGmlObject** + WFS-T 501 (未实现, 计划后续) contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
 | `tests/rest_test.rs`| 31 (+1 ignored live) | health / probes / metrics, REST CRUD, MVT, auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 14    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, **range 波段子集 Band(a:b)**, **INTERPOLATION** bilinear/nearest/未知回退, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
@@ -286,7 +286,7 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 | Layer              | Coverage                                                                 |
 |--------------------|--------------------------------------------------------------------------|
 | WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain / **GML application/vnd.ogc.gml**), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
-| WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV / KML 2.2 / Shapefile SHAPE-ZIP), GetFeatureWithLock (真实加锁 + `lockId` 响应), LockFeature (加锁 / lockAction ALL/SOME 冲突 / 续锁 / RELEASEACTION 释放), GetPropertyValue (`wfs:ValueCollection` + FEATUREID 过滤 + 缺 PROPERTYNAME 400), GetGmlObject (`wfs:GMLObjectCollection` + 未知 id 空集合 + 缺 GMLOBJECTID 400), Transaction (501 只读契约), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
+| WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV / KML 2.2 / Shapefile SHAPE-ZIP), GetFeatureWithLock (真实加锁 + `lockId` 响应), LockFeature (加锁 / lockAction ALL/SOME 冲突 / 续锁 / RELEASEACTION 释放), GetPropertyValue (`wfs:ValueCollection` + FEATUREID 过滤 + 缺 PROPERTYNAME 400), GetGmlObject (`wfs:GMLObjectCollection` + 未知 id 空集合 + 缺 GMLOBJECTID 400), Transaction (501 未实现契约, 计划后续实现), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
 | WPS                | GetCapabilities (ServiceIdentification / OperationsMetadata / ProcessOfferings / Languages), DescribeProcess (DataInputs / ProcessOutputs + xsd:double), Execute (KVP `response=raw` → GeoJSON + document XML, POST XML with `Reference xlink:href="layer:…"`), built-in `vec:Centroid` / `vec:Buffer` / `gs:Bounds` — integration + 6 unit tests (`services/wps.rs`: KVP DataInputs, operation parse, Execute XML, capabilities structure, features_to_geojson, run_process) |
 | OGC API Maps       | Landing / conformance / collections / collection / styles, `map` operation (`bbox` + `width`/`height`, PNG/JPEG via `?f=`, `transparent` / `bgcolor` / `datetime` / `cql_filter` pass-through) reusing the shared WMS GetMap pipeline — integration + 8 unit tests (`services/ogc_maps.rs`: landing, conformance, collections, collection links, styles, bbox parse, map href formats) |
 | OGC API Processes  | Landing / conformance / process list / process description; synchronous job surface (`POST /jobs` → 201 status document, `GET /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/results`, `DELETE /jobs/{id}`) over the WPS engine, inputs as `layer:` reference / inline GeoJSON / OGC API href / literals — integration + 9 unit tests (`services/ogc_processes.rs`: landing, conformance, process list/description, job status/results, job request parse) |

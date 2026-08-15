@@ -28,7 +28,7 @@
 
 **Goal**: containerization + 12-Factor configuration + observability + horizontal scaling, suitable for Docker / Kubernetes deployment.
 
-**Dual-mode**: one codebase, two deployment profiles — standalone (SQLite metadata, local data files, in-memory session & cache) and cloud-native (PostgreSQL/PostGIS metadata, object-storage file backends, Redis session & cache, stateless replicas). Terrane is a **data publishing platform**: business data lives in external stores (PostGIS tables / data files) registered per data source, and Terrane focuses on publishing & OGC protocol adaptation (read-only). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
+**Dual-mode**: one codebase, two deployment profiles — standalone (SQLite metadata, local data files, in-memory session & cache) and cloud-native (PostgreSQL/PostGIS metadata, object-storage file backends, Redis session & cache, stateless replicas). Terrane is a **data publishing platform**: business data lives in external stores (PostGIS tables / data files) registered per data source, and Terrane focuses on publishing & OGC protocol adaptation (WFS-T / WCS-T writes not implemented yet). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 
 **Current status
 

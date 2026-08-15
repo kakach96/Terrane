@@ -284,7 +284,7 @@ async fn test_rest_features_readonly() {
 async fn test_rest_feature_write_not_supported() {
     let app = build_test_app!();
 
-    // POST 创建要素 → 405 (接口已移除, 只读发布)
+    // POST 创建要素 → 405 (要素写入接口尚未实现)
     let create = test::TestRequest::post()
         .uri("/geoserver/layers/world/features")
         .set_json(serde_json::json!({
@@ -619,7 +619,7 @@ async fn test_mvt_endpoint() {
 async fn test_rest_feature_readonly() {
     let app = build_test_app!();
 
-    // 只读发布: world 图层空发布, GET 单要素应返回 404 (要素不存在)
+    // world 图层空发布 (无数据源), GET 单要素应返回 404 (要素不存在)
     let req = test::TestRequest::get()
         .uri("/geoserver/layers/world/features/nonexistent")
         .to_request();
