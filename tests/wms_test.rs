@@ -425,6 +425,26 @@ async fn test_wms_get_legend_graphic() {
 }
 
 #[actix_rt::test]
+async fn test_wms_get_legend_graphic_width_and_scale() {
+    let app = build_test_app!();
+
+    // WIDTH 参数应被采纳 (色块宽度受限); SCALE 参数不应导致错误。
+    let req = test::TestRequest::get()
+        .uri("/wms?SERVICE=WMS&REQUEST=GetLegendGraphic&LAYERS=world&FORMAT=image/png&WIDTH=80&SCALE=100000")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "带 WIDTH/SCALE 的 GetLegendGraphic 应返回 200, 实际: {}",
+        resp.status()
+    );
+    let body = test::read_body(resp).await;
+    assert!(!body.is_empty(), "图例应返回非空 PNG 字节");
+    // PNG 魔数校验。
+    assert_eq!(&body[..4], b"\x89PNG", "响应应为 PNG 图像");
+}
+
+#[actix_rt::test]
 async fn test_wms_get_styles() {
     let app = build_test_app!();
 

@@ -193,6 +193,9 @@ subdirs `0/1/2/…`, level chosen by requested resolution; same WCS / WMS / tile
 - **Map rotation**: WMS GetMap `ANGLE` vendor parameter rotates the vector geometry
   around the request BBOX center (labels stay horizontal, matching GeoServer);
   passed through to cascaded WMS upstreams.
+- **GetLegendGraphic**: per-rule color swatches with point-marker icons, optional
+  `SCALE` scale-denominator rule filtering, `WIDTH` control, and rule-name labels
+  rendered with the built-in bitmap font.
 - **Style formats**: SLD / CSS / YSLD / MBStyle all dispatch to the same rule pipeline in
   WMS GetMap (previously only SLD reached the WMS renderer).
 - **SLD parsing**: TextSymbolizer (`Label` property/literal, `Font` size, `Fill`, `Halo`

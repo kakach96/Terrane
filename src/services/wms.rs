@@ -34,6 +34,8 @@ pub struct WmsRequest {
     pub feature_id: Option<String>,
     /// GeoServer Vendor 参数: 地图旋转角度
     pub angle: Option<f64>,
+    /// GetLegendGraphic 参数: 比例尺分母 (SCALE) — 仅显示匹配规则的图例
+    pub scale: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -424,6 +426,7 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
     let mut env = None;
     let mut feature_id = None;
     let mut angle = None;
+    let mut scale = None;
 
     for (key, value) in params {
         match key.to_uppercase().as_str() {
@@ -488,6 +491,8 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
             "ENV" => env = Some(value.clone()),
             "FEATUREID" | "FEATURE_ID" => feature_id = Some(value.clone()),
             "ANGLE" => angle = value.parse().ok(),
+            // GetLegendGraphic 比例尺过滤参数
+            "SCALE" => scale = value.parse().ok(),
             _ => {},
         }
     }
@@ -530,6 +535,7 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
         env,
         feature_id,
         angle,
+        scale,
     })
 }
 
@@ -661,4 +667,40 @@ pub fn validate_wms_get_map_request(req: &WmsRequest) -> Result<(), GeoServerErr
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_scale_parameter() {
+        let params = vec![
+            ("SERVICE".to_string(), "WMS".to_string()),
+            ("REQUEST".to_string(), "GetLegendGraphic".to_string()),
+            ("LAYER".to_string(), "roads".to_string()),
+            ("SCALE".to_string(), "25000".to_string()),
+            ("FORMAT".to_string(), "image/png".to_string()),
+            ("WIDTH".to_string(), "60".to_string()),
+        ];
+        let req = parse_wms_request(&params).expect("parse");
+        assert_eq!(req.scale, Some(25000.0));
+        assert_eq!(req.width, Some(60));
+    }
+
+    #[test]
+    fn test_parse_angle_parameter() {
+        let params = vec![
+            ("SERVICE".to_string(), "WMS".to_string()),
+            ("REQUEST".to_string(), "GetMap".to_string()),
+            ("LAYERS".to_string(), "a,b".to_string()),
+            ("BBOX".to_string(), "0,0,10,10".to_string()),
+            ("WIDTH".to_string(), "100".to_string()),
+            ("HEIGHT".to_string(), "100".to_string()),
+            ("FORMAT".to_string(), "image/png".to_string()),
+            ("ANGLE".to_string(), "30.5".to_string()),
+        ];
+        let req = parse_wms_request(&params).expect("parse");
+        assert_eq!(req.angle, Some(30.5));
+    }
 }

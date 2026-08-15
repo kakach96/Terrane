@@ -169,6 +169,7 @@ pub async fn render_ogc_map(
         env: None,
         feature_id: None,
         angle: None,
+        scale: None,
     };
     handle_get_map(state, &request).await
 }
@@ -1760,7 +1761,28 @@ async fn handle_get_legend_graphic(
         .find(|l| l.name == *layer_name)
         .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
-    let rules = get_layer_rules(request, &styles_lock, layer);
+    // 规则列表; 若请求带 SCALE (比例尺分母), 仅保留在该比例尺下激活的规则。
+    let all_rules = get_layer_rules(request, &styles_lock, layer);
+    let rules: Vec<&ParsedRule> = match request.scale {
+        Some(scale) => all_rules
+            .iter()
+            .filter(|r| {
+                if let Some(min) = r.min_scale {
+                    if scale < min {
+                        return false;
+                    }
+                }
+                if let Some(max) = r.max_scale {
+                    if scale > max {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect(),
+        None => all_rules.iter().collect(),
+    };
+
     let padding = 5u32;
     let icon_size = 20u32;
     let row_height = icon_size + 4;
@@ -1769,7 +1791,10 @@ async fn handle_get_legend_graphic(
     } else {
         (rules.len() as u32) * row_height + padding * 2
     };
-    let total_width = 40u32;
+    // 请求 WIDTH 限制色块宽度; 宽度不足时缩小图标。
+    let req_width = request.width.unwrap_or(40).max(icon_size);
+    let icon_size = icon_size.min(req_width - 4);
+    let total_width = req_width;
 
     let mut img = image::RgbaImage::new(total_width, total_height);
     for pixel in img.pixels_mut() {
@@ -1783,7 +1808,23 @@ async fn handle_get_legend_graphic(
         let swatch_x = (total_width - icon_size) / 2;
         let swatch_y = y + 2;
 
-        if let Some(fill) = &style.fill {
+        // 点标记: 居中绘制标记 (circle/square/cross/...)。
+        if let Some(mark) = &style.mark {
+            let r = (style.point_size.unwrap_or(6.0) / 2.0) as i32;
+            let (cx, cy) = (
+                swatch_x as i32 + icon_size as i32 / 2,
+                swatch_y as i32 + icon_size as i32 / 2,
+            );
+            let fill = style.parse_fill_color().unwrap_or([255, 0, 0, 255]);
+            let stroke = style.parse_stroke_color().unwrap_or([0, 0, 0, 255]);
+            match mark.as_str() {
+                "square" => draw_legend_square(&mut img, cx, cy, r, fill, stroke),
+                "cross" => draw_legend_cross(&mut img, cx, cy, r, stroke),
+                "x" | "X" => draw_legend_x(&mut img, cx, cy, r, stroke),
+                "triangle" => draw_legend_triangle(&mut img, cx, cy, r, fill, stroke),
+                _ => draw_legend_circle(&mut img, cx, cy, r, fill, stroke),
+            }
+        } else if let Some(fill) = &style.fill {
             if let Some(color) = parse_color_opt(&fill.color) {
                 for dy in 0..icon_size {
                     for dx in 0..icon_size {
@@ -1816,6 +1857,30 @@ async fn handle_get_legend_graphic(
                 }
             }
         }
+
+        // 规则名标签 (使用内置位图字体)。
+        if let Some(name) = rule.name.as_deref().filter(|n| !n.trim().is_empty()) {
+            let label = rule.style.label.as_ref();
+            let color = label
+                .and_then(|l| l.parse_color())
+                .unwrap_or([40, 40, 40, 255]);
+            // 图例宽度大于色块时, 在色块右侧绘制规则名。
+            if total_width > icon_size + 6 {
+                let label_x = swatch_x + icon_size + 3;
+                let label_y = swatch_y as i32 + (icon_size / 2) as i32 - 3;
+                crate::utils::bitmap_font::draw_text(
+                    label_x as i32,
+                    label_y,
+                    name,
+                    1.0,
+                    |px, py| {
+                        if px < total_width && py < total_height {
+                            img.put_pixel(px, py, image::Rgba(color));
+                        }
+                    },
+                );
+            }
+        }
     }
 
     let mut buffer = Cursor::new(Vec::new());
@@ -1825,6 +1890,151 @@ async fn handle_get_legend_graphic(
     Ok(HttpResponse::Ok()
         .content_type("image/png")
         .body(buffer.into_inner()))
+}
+
+// ---- GetLegendGraphic 点标记绘制原语 (复用渲染器的几何语义) ----
+
+fn draw_legend_circle(
+    img: &mut image::RgbaImage,
+    cx: i32,
+    cy: i32,
+    r: i32,
+    fill: [u8; 4],
+    stroke: [u8; 4],
+) {
+    for dy in -r..=r {
+        for dx in -r..=r {
+            let dist = dx * dx + dy * dy;
+            if dist > r * r {
+                continue;
+            }
+            let px = (cx + dx) as u32;
+            let py = (cy + dy) as u32;
+            if px < img.width() && py < img.height() {
+                let c = if dist >= (r - 1) * (r - 1) {
+                    stroke
+                } else {
+                    fill
+                };
+                img.put_pixel(px, py, image::Rgba(c));
+            }
+        }
+    }
+}
+
+fn draw_legend_square(
+    img: &mut image::RgbaImage,
+    cx: i32,
+    cy: i32,
+    r: i32,
+    fill: [u8; 4],
+    stroke: [u8; 4],
+) {
+    for dy in -r..=r {
+        for dx in -r..=r {
+            let px = (cx + dx) as u32;
+            let py = (cy + dy) as u32;
+            if px < img.width() && py < img.height() {
+                let c = if dx.abs() == r || dy.abs() == r {
+                    stroke
+                } else {
+                    fill
+                };
+                img.put_pixel(px, py, image::Rgba(c));
+            }
+        }
+    }
+}
+
+fn draw_legend_cross(img: &mut image::RgbaImage, cx: i32, cy: i32, r: i32, color: [u8; 4]) {
+    for i in -r..=r {
+        for w in -1..=1 {
+            for (px, py) in [(cx + i, cy + w), (cx + w, cy + i)] {
+                if px >= 0 && py >= 0 && (px as u32) < img.width() && (py as u32) < img.height() {
+                    img.put_pixel(px as u32, py as u32, image::Rgba(color));
+                }
+            }
+        }
+    }
+}
+
+fn draw_legend_x(img: &mut image::RgbaImage, cx: i32, cy: i32, r: i32, color: [u8; 4]) {
+    for i in -r..=r {
+        for w in -1..=1 {
+            for (px, py) in [(cx + i, cy + i + w), (cx + i, cy - i + w)] {
+                if px >= 0 && py >= 0 && (px as u32) < img.width() && (py as u32) < img.height() {
+                    img.put_pixel(px as u32, py as u32, image::Rgba(color));
+                }
+            }
+        }
+    }
+}
+
+fn draw_legend_triangle(
+    img: &mut image::RgbaImage,
+    cx: i32,
+    cy: i32,
+    r: i32,
+    fill: [u8; 4],
+    stroke: [u8; 4],
+) {
+    let pts = [(cx, cy - r), (cx - r, cy + r), (cx + r, cy + r)];
+    // 边框。
+    for i in 0..3 {
+        let j = (i + 1) % 3;
+        draw_legend_line(img, pts[i], pts[j], stroke);
+    }
+    // 扫描线填充。
+    let min_y = pts.iter().map(|p| p.1).min().unwrap_or(0);
+    let max_y = pts.iter().map(|p| p.1).max().unwrap_or(0);
+    for y in min_y..=max_y {
+        let mut xs: Vec<i32> = Vec::new();
+        for i in 0..3 {
+            let j = (i + 1) % 3;
+            let (x1, y1) = pts[i];
+            let (x2, y2) = pts[j];
+            if ((y1 <= y && y2 > y) || (y2 <= y && y1 > y)) && y1 != y2 {
+                let x = x1 as f64 + (y - y1) as f64 / (y2 - y1) as f64 * (x2 - x1) as f64;
+                xs.push(x as i32);
+            }
+        }
+        xs.sort();
+        for pair in xs.chunks(2) {
+            if pair.len() == 2 {
+                for x in pair[0]..=pair[1] {
+                    if x >= 0 && y >= 0 && (x as u32) < img.width() && (y as u32) < img.height() {
+                        img.put_pixel(x as u32, y as u32, image::Rgba(fill));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn draw_legend_line(img: &mut image::RgbaImage, a: (i32, i32), b: (i32, i32), color: [u8; 4]) {
+    let dx = (b.0 - a.0).abs();
+    let dy = -(b.1 - a.1).abs();
+    let sx = if a.0 < b.0 { 1 } else { -1 };
+    let sy = if a.1 < b.1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    let (mut x, mut y) = a;
+    loop {
+        if x >= 0 && y >= 0 && (x as u32) < img.width() && (y as u32) < img.height() {
+            img.put_pixel(x as u32, y as u32, image::Rgba(color));
+        }
+        if x == b.0 && y == b.1 {
+            break;
+        }
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
+        }
+    }
 }
 
 fn get_layer_rules(

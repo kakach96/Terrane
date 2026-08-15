@@ -160,6 +160,8 @@ Overall progress █████████████░░░  67%
   the per-layer style
 - ✅ **WMS ANGLE rotation**: GetMap `ANGLE` rotates vector geometry around the request
   BBOX center (labels stay horizontal); passed through to cascaded upstreams
+- ✅ **GetLegendGraphic enhancements**: point-marker icons, `SCALE` rule filtering,
+  `WIDTH` control, rule-name labels (bitmap font)
 - ✅ **KML style-aware output**: deduplicated `<Style>` definitions + `styleUrl`
   references, KML `aabbggrr` colors, label as Placemark name
 - ✅ **Compositing / blend modes**: SLD `VendorOption name="composite"` / CSS `composite`
