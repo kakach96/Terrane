@@ -91,6 +91,8 @@ pub struct AppState {
     pub ogc_jobs: Arc<Mutex<HashMap<String, crate::services::ogc_processes::OgcJob>>>,
     /// WFS 要素锁注册表 (LockFeature / GetFeatureWithLock; 进程内内存实现)
     pub wfs_locks: Arc<crate::utils::wfs_lock::WfsLockRegistry>,
+    /// OGC 服务设置缓存 (service -> settings; 元数据存储为真源, 写后即更新)
+    pub service_settings: Arc<RwLock<HashMap<String, crate::models::ServiceSettings>>>,
 }
 
 impl AppState {
@@ -334,6 +336,15 @@ impl AppState {
             std::time::Duration::from_secs(config.server.cascaded_circuit_reset_secs),
         ));
 
+        // 从元数据存储加载 OGC 服务设置 (service -> settings)
+        let mut service_settings_init: HashMap<String, crate::models::ServiceSettings> =
+            HashMap::new();
+        if let Some(ref store) = store {
+            if let Ok(map) = store.get_service_settings().await {
+                service_settings_init = map;
+            }
+        }
+
         // 目录定时刷新: 多副本部署时周期性地从元数据存储重载图层/样式/图层组,
         // 收敛副本间内存缓存差异 (`[server] catalog_refresh_secs`, 0 = 禁用)
         let catalog_refresh_secs = config.server.catalog_refresh_secs;
@@ -368,6 +379,7 @@ impl AppState {
             cascaded_circuits,
             ogc_jobs: Arc::new(Mutex::new(HashMap::new())),
             wfs_locks: Arc::new(crate::utils::wfs_lock::WfsLockRegistry::new()),
+            service_settings: Arc::new(RwLock::new(service_settings_init)),
         };
 
         // 启动目录定时刷新任务 (独立 tokio 任务, 不影响请求路径):

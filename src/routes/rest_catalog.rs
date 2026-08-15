@@ -48,6 +48,19 @@ pub fn add_routes(scope: Scope) -> Scope {
                 .route(web::put().to(crate::handlers::update_workspace))
                 .route(web::delete().to(crate::handlers::delete_workspace)),
         )
+        // 工作空间维度端点 (GeoServer 标准路径)
+        .route(
+            "/workspaces/{workspace}/layers",
+            web::get().to(crate::handlers::list_workspace_layers),
+        )
+        .route(
+            "/workspaces/{workspace}/datastores",
+            web::get().to(crate::handlers::list_workspace_datastores),
+        )
+        .route(
+            "/workspaces/{workspace}/coveragestores",
+            web::get().to(crate::handlers::list_workspace_coveragestores),
+        )
         .service(
             web::resource("/namespaces")
                 .route(web::get().to(crate::handlers::list_namespaces))
@@ -62,6 +75,12 @@ pub fn add_routes(scope: Scope) -> Scope {
         .route(
             "/server/status",
             web::get().to(crate::handlers::get_server_status),
+        )
+        // OGC 服务设置 (WMS/WFS/WCS/WMTS/WPS/CSW)
+        .service(
+            web::resource("/services/{service}/settings")
+                .route(web::get().to(crate::handlers::get_service_settings))
+                .route(web::put().to(crate::handlers::update_service_settings)),
         )
         .service(
             web::resource("/data-sources")

@@ -184,6 +184,22 @@ async fn handle_get_capabilities(
     );
     let mut capabilities = WmsCapabilities::new(&base_url);
 
+    // 应用服务级设置 (标题/摘要/关键字, 经 /services/wms/settings 配置)
+    {
+        let map = state.service_settings.read().await;
+        if let Some(settings) = map.get("wms") {
+            if let Some(title) = &settings.title {
+                capabilities.service.title = title.clone();
+            }
+            if let Some(ab) = &settings.abstract_text {
+                capabilities.service.abstract_text = Some(ab.clone());
+            }
+            if !settings.keywords.is_empty() {
+                capabilities.service.keywords = settings.keywords.clone();
+            }
+        }
+    }
+
     let layers = state.layers.read().await;
     for layer in layers.iter() {
         capabilities.add_layer(layer);

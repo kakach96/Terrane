@@ -3,6 +3,7 @@ use crate::models::sql_view::SqlView;
 use crate::models::{DataSource, DataSourceConnection, DataSourceType};
 use chrono::Utc;
 use rusqlite::{params, Connection, Result as SqlResult};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 // 导入并重新导出共享类型，保持 `sqlite_store::Layer` 等旧路径兼容
 pub use super::types::{
@@ -282,6 +283,17 @@ impl SqliteStore {
                 revoked INTEGER DEFAULT 0,
                 user_agent TEXT,
                 ip_address TEXT
+            )",
+            [],
+        )?;
+
+        // OGC 服务设置表 (WMS/WFS/WCS 等服务的标题/摘要/关键字)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS service_settings (
+                service TEXT PRIMARY KEY,
+                title TEXT,
+                abstract_text TEXT,
+                keywords TEXT DEFAULT '[]'
             )",
             [],
         )?;
@@ -2128,6 +2140,58 @@ impl super::Store for SqliteStore {
         let conn = self.conn.lock().unwrap();
         let count = conn.execute("DELETE FROM sessions WHERE expires_at < ?", [now])?;
         Ok(count)
+    }
+
+    // ---- OGC 服务设置 ----
+
+    async fn get_service_settings(
+        &self,
+    ) -> Result<HashMap<String, crate::models::ServiceSettings>, super::StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT service, title, abstract_text, keywords FROM service_settings")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(3).unwrap_or_else(|_| "[]".to_string()),
+            ))
+        })?;
+        let mut map = HashMap::new();
+        for row in rows.flatten() {
+            let keywords: Vec<String> = serde_json::from_str(&row.3).unwrap_or_default();
+            map.insert(
+                row.0,
+                crate::models::ServiceSettings {
+                    title: row.1,
+                    abstract_text: row.2,
+                    keywords,
+                },
+            );
+        }
+        Ok(map)
+    }
+
+    async fn save_service_settings(
+        &self,
+        service: &str,
+        settings: &crate::models::ServiceSettings,
+    ) -> Result<(), super::StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let keywords_json =
+            serde_json::to_string(&settings.keywords).unwrap_or_else(|_| "[]".to_string());
+        conn.execute(
+            "INSERT OR REPLACE INTO service_settings (service, title, abstract_text, keywords)
+             VALUES (?, ?, ?, ?)",
+            params![
+                service,
+                settings.title,
+                settings.abstract_text,
+                keywords_json
+            ],
+        )?;
+        Ok(())
     }
 }
 

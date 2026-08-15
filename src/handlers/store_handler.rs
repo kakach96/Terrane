@@ -25,7 +25,7 @@ impl std::fmt::Display for StoreType {
     }
 }
 
-fn ds_type_to_store_type(ds_type: &DataSourceType) -> &'static str {
+pub(crate) fn ds_type_to_store_type(ds_type: &DataSourceType) -> &'static str {
     match ds_type {
         DataSourceType::Postgis
         | DataSourceType::Mysql

@@ -2071,3 +2071,193 @@ async fn test_rest_mvt_pbf_route() {
         content_type
     );
 }
+
+// ---------------------------------------------------------------------------
+// R2: 工作空间维度端点 + OGC 服务设置
+// ---------------------------------------------------------------------------
+
+#[actix_rt::test]
+async fn test_rest_workspace_dimension_endpoints() {
+    let app = build_test_app!();
+
+    // 创建 workspace
+    let create = test::TestRequest::post()
+        .uri("/geoserver/workspaces")
+        .set_json(serde_json::json!({
+            "name": "ws_dim",
+            "uri": "http://geoserver.org/ws_dim",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert!(resp.status().is_success(), "创建工作空间应成功");
+
+    // datastore (postgis) + coveragestore (geotiff)
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(serde_json::json!({
+            "name": "ds_vec",
+            "type": "postgis",
+            "workspace": "ws_dim",
+            "enabled": true,
+            "connection": { "host": "127.0.0.1", "port": 5432, "database": "geo" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(serde_json::json!({
+            "name": "ds_raster",
+            "type": "geotiff",
+            "workspace": "ws_dim",
+            "enabled": true,
+            "connection": { "file_path": "C:/tmp/x.tif", "file_storage_type": "local" },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // datastores → 仅 ds_vec
+    let req = test::TestRequest::get()
+        .uri("/geoserver/workspaces/ws_dim/datastores")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|s| s["name"].as_str().map(|v| v.to_string()))
+        .collect();
+    assert_eq!(
+        names,
+        vec!["ds_vec".to_string()],
+        "datastores 应只含 ds_vec"
+    );
+
+    // coveragestores → 仅 ds_raster
+    let req = test::TestRequest::get()
+        .uri("/geoserver/workspaces/ws_dim/coveragestores")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|s| s["name"].as_str().map(|v| v.to_string()))
+        .collect();
+    assert_eq!(
+        names,
+        vec!["ds_raster".to_string()],
+        "coveragestores 应只含 ds_raster"
+    );
+
+    // 创建图层 → /workspaces/ws_dim/layers 包含
+    let create = test::TestRequest::post()
+        .uri("/geoserver/layers")
+        .set_json(serde_json::json!({
+            "name": "layer_dim",
+            "title": "Dim",
+            "workspace": "ws_dim",
+            "store": "ds_vec",
+            "srs": "EPSG:4326",
+            "minx": -180.0, "miny": -90.0, "maxx": 180.0, "maxy": 90.0,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let req = test::TestRequest::get()
+        .uri("/geoserver/workspaces/ws_dim/layers")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let names: Vec<String> = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|s| s["name"].as_str().map(|v| v.to_string()))
+        .collect();
+    assert!(
+        names.contains(&"layer_dim".to_string()),
+        "工作空间 layers 应包含 layer_dim, 实际: {:?}",
+        names
+    );
+
+    // 不存在工作空间 → 404
+    let req = test::TestRequest::get()
+        .uri("/geoserver/workspaces/nonexistent/layers")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[actix_rt::test]
+async fn test_rest_service_settings() {
+    let app = build_test_app!();
+    let token = login_admin_token!(app);
+
+    // GET 默认 (未设置 → 空)
+    let req = test::TestRequest::get()
+        .uri("/geoserver/services/wms/settings")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "GET settings 应返回 200");
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["service"].as_str(), Some("wms"));
+
+    // PUT 设置标题 (需 admin)
+    let update = test::TestRequest::put()
+        .uri("/geoserver/services/wms/settings")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "title": "Terrane WMS Custom",
+            "abstract": "Custom abstract",
+            "keywords": ["WMS", "Terrane"],
+        }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert!(
+        resp.status().is_success(),
+        "PUT settings 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    // GET 验证回读
+    let req = test::TestRequest::get()
+        .uri("/geoserver/services/wms/settings")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["title"].as_str(), Some("Terrane WMS Custom"));
+
+    // WMS GetCapabilities 反映标题
+    let req = test::TestRequest::get()
+        .uri("/wms?SERVICE=WMS&REQUEST=GetCapabilities")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let xml = String::from_utf8_lossy(&test::read_body(resp).await).to_string();
+    assert!(
+        xml.contains("Terrane WMS Custom"),
+        "GetCapabilities 应包含自定义标题, 实际: {}",
+        xml
+    );
+
+    // 未认证 PUT → 400
+    let update = test::TestRequest::put()
+        .uri("/geoserver/services/wms/settings")
+        .set_json(serde_json::json!({ "title": "X" }))
+        .to_request();
+    let resp = test::call_service(&app, update).await;
+    assert!(!resp.status().is_success(), "未认证 PUT 应失败");
+
+    // 未知服务 → 400
+    let req = test::TestRequest::get()
+        .uri("/geoserver/services/foo/settings")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status().as_u16(), 400);
+}

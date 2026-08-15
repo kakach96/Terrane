@@ -22,8 +22,9 @@ use crate::auth::{User, UserRole};
 use crate::handlers::CreateWorkspaceRequest;
 use crate::models::permission::Permission;
 use crate::models::sql_view::SqlView;
-use crate::models::{DataSource, DataSourceConnection, DataSourceType};
+use crate::models::{DataSource, DataSourceConnection, DataSourceType, ServiceSettings};
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 /// 存储抽象层 — SqliteStore 与 PostgresStore 共同实现。
 ///
@@ -186,6 +187,14 @@ pub trait Store: Send + Sync {
     async fn get_layer_group(&self, name: &str) -> Result<Option<LayerGroupRecord>, StoreError>;
     async fn create_layer_group(&self, group: &LayerGroupRecord) -> Result<(), StoreError>;
     async fn delete_layer_group(&self, name: &str) -> Result<(), StoreError>;
+
+    // ---- OGC 服务设置 ----
+    async fn get_service_settings(&self) -> Result<HashMap<String, ServiceSettings>, StoreError>;
+    async fn save_service_settings(
+        &self,
+        service: &str,
+        settings: &ServiceSettings,
+    ) -> Result<(), StoreError>;
 
     // ---- 会话 ----
     async fn create_session(&self, session: &SessionRecord) -> Result<(), StoreError>;

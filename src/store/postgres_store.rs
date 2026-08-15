@@ -13,6 +13,7 @@ use crate::handlers::CreateWorkspaceRequest;
 use crate::models::permission::Permission;
 use crate::models::sql_view::SqlView;
 use crate::models::{DataSource, DataSourceConnection, DataSourceType};
+use std::collections::HashMap;
 
 use super::types::{
     AuditLogRecord, Layer, LayerGroupRecord, NamespaceRecord, SessionRecord, StyleRecord, Workspace,
@@ -224,6 +225,13 @@ impl PostgresStore {
                 revoked BOOLEAN NOT NULL DEFAULT FALSE,
                 user_agent TEXT,
                 ip_address TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS service_settings (
+                service TEXT PRIMARY KEY,
+                title TEXT,
+                abstract_text TEXT,
+                keywords TEXT DEFAULT '[]'
             );
 
             INSERT INTO permissions (username, role, resource_type, resource_name, access_mode, effect, priority)
@@ -1537,6 +1545,64 @@ impl Store for PostgresStore {
             .execute("DELETE FROM sessions WHERE expires_at < $1", &[&ts])
             .await?;
         Ok(res as usize)
+    }
+
+    // ---- OGC 服务设置 ----
+
+    async fn get_service_settings(
+        &self,
+    ) -> Result<HashMap<String, crate::models::ServiceSettings>, StoreError> {
+        let client = self.pool.get().await?;
+        let rows = client
+            .query(
+                "SELECT service, title, abstract_text, keywords FROM service_settings",
+                &[],
+            )
+            .await?;
+        let mut map = HashMap::new();
+        for row in rows {
+            let service: String = row.get(0);
+            let title: Option<String> = row.get(1);
+            let abstract_text: Option<String> = row.get(2);
+            let keywords_json: String = row.get(3);
+            let keywords: Vec<String> = serde_json::from_str(&keywords_json).unwrap_or_default();
+            map.insert(
+                service,
+                crate::models::ServiceSettings {
+                    title,
+                    abstract_text,
+                    keywords,
+                },
+            );
+        }
+        Ok(map)
+    }
+
+    async fn save_service_settings(
+        &self,
+        service: &str,
+        settings: &crate::models::ServiceSettings,
+    ) -> Result<(), StoreError> {
+        let client = self.pool.get().await?;
+        let keywords_json =
+            serde_json::to_string(&settings.keywords).unwrap_or_else(|_| "[]".to_string());
+        client
+            .execute(
+                "INSERT INTO service_settings (service, title, abstract_text, keywords)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (service) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    abstract_text = EXCLUDED.abstract_text,
+                    keywords = EXCLUDED.keywords",
+                &[
+                    &service,
+                    &settings.title,
+                    &settings.abstract_text,
+                    &keywords_json,
+                ],
+            )
+            .await?;
+        Ok(())
     }
 }
 
