@@ -437,24 +437,19 @@ fn generate_csv_response(collection: &crate::models::FeatureCollection) -> Strin
             }
         }
     }
-    csv.push_str(&headers.join(","));
+    // 表头也可能是用户可控的属性名: 统一做 CSV 引号转义。
+    let escaped_headers: Vec<String> = headers.iter().map(|h| csv_escape(h)).collect();
+    csv.push_str(&escaped_headers.join(","));
     csv.push('\n');
 
     for feature in &collection.features {
         let mut row = vec![
-            feature.id.clone(),
+            csv_escape(&feature.id),
             format!("\"{:?}\"", std::mem::discriminant(&feature.geometry)),
         ];
         for h in headers.iter().skip(2) {
             let val = match feature.properties.get(h) {
-                Some(v) => {
-                    let s = v.to_string();
-                    if s.contains(',') || s.contains('"') {
-                        format!("\"{}\"", s.replace('"', "\"\""))
-                    } else {
-                        s
-                    }
-                },
+                Some(v) => csv_escape(&v.to_string()),
                 None => String::new(),
             };
             row.push(val);
@@ -463,6 +458,15 @@ fn generate_csv_response(collection: &crate::models::FeatureCollection) -> Strin
         csv.push('\n');
     }
     csv
+}
+
+/// CSV 字段转义: 含逗号/引号/换行时用双引号包裹, 内部引号翻倍。
+fn csv_escape(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
 }
 
 /// GML 2.1.2 输出
@@ -714,4 +718,46 @@ fn generate_kml_response(collection: &crate::models::FeatureCollection, type_nam
     out.push_str("  </Document>\n");
     out.push_str("</kml>\n");
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_csv_escape_basic_and_special() {
+        // 纯文本保持不变。
+        assert_eq!(csv_escape("plain"), "plain");
+        // 含逗号/引号/换行时双引号包裹, 内部引号翻倍。
+        assert_eq!(csv_escape("a,b"), "\"a,b\"");
+        assert_eq!(csv_escape("say \"hi\""), "\"say \"\"hi\"\"\"");
+        assert_eq!(csv_escape("line\nbreak"), "\"line\nbreak\"");
+    }
+
+    #[test]
+    fn test_generate_csv_response_escapes_headers_and_values() {
+        let mut props = std::collections::HashMap::new();
+        props.insert(
+            "name".to_string(),
+            crate::models::PropertyValue::String("Alice, Bob".to_string()),
+        );
+        let feature = crate::models::Feature::with_id(
+            "f1".to_string(),
+            crate::models::GeoJsonGeometry::Point {
+                coordinates: vec![1.0, 2.0],
+            },
+            props,
+        );
+        let coll = crate::models::FeatureCollection {
+            features: vec![feature],
+            total_count: 1,
+        };
+        let csv = generate_csv_response(&coll);
+        assert!(csv.starts_with("id,geometry_type,name\n"));
+        assert!(
+            csv.contains("\"Alice, Bob\""),
+            "含逗号属性值应被引号包裹, 实际: {}",
+            csv
+        );
+    }
 }

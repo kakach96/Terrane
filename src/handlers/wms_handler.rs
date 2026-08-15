@@ -1506,11 +1506,19 @@ async fn handle_get_feature_info(
                 .map(|(layer, fid, props)| {
                     let prop_rows: String = props
                         .iter()
-                        .map(|(k, v)| format!("<tr><td>{}</td><td>{}</td></tr>", k, v))
+                        .map(|(k, v)| {
+                            format!(
+                                "<tr><td>{}</td><td>{}</td></tr>",
+                                escape_html(k),
+                                escape_html(v)
+                            )
+                        })
                         .collect();
                     format!(
                         "<h3>Layer: {} (ID: {})</h3><table border='1'>{}</table>",
-                        layer, fid, prop_rows
+                        escape_html(layer),
+                        escape_html(fid),
+                        prop_rows
                     )
                 })
                 .collect();
@@ -2454,6 +2462,15 @@ fn parse_color(color: &str) -> [u8; 4] {
     }
 }
 
+/// HTML 转义 (GetFeatureInfo 的 text/html 输出, 防 XSS)。
+fn escape_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
 /// 绕点 (cx, cy) 旋转坐标 (角度制, 逆时针为正, 与 GeoServer ANGLE 语义一致)。
 fn rotate_coord(x: f64, y: f64, cx: f64, cy: f64, angle_deg: f64) -> (f64, f64) {
     let rad = angle_deg.to_radians();
@@ -2779,5 +2796,21 @@ mod tests {
             },
             _ => panic!("应为 Polygon"),
         }
+    }
+
+    #[test]
+    fn test_escape_html_prevents_xss() {
+        // GetFeatureInfo text/html 输出必须转义属性值, 防止脚本注入。
+        let malicious = r#"<script>alert('x')</script>&"'<>"#;
+        let escaped = escape_html(malicious);
+        assert!(!escaped.contains('<'), "不应保留 '<': {}", escaped);
+        assert!(!escaped.contains('>'), "不应保留 '>'");
+        assert!(!escaped.contains("\"<script"), "不应保留原始 <script>");
+        assert!(escaped.contains("&lt;script&gt;"), "应转义 <script>");
+        assert!(escaped.contains("&amp;"), "应转义 &");
+        assert!(escaped.contains("&#39;"), "应转义单引号");
+        assert!(escaped.contains("&quot;"), "应转义双引号");
+        // 纯文本保持不变。
+        assert_eq!(escape_html("plain text 123"), "plain text 123");
     }
 }

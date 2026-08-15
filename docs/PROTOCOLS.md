@@ -197,6 +197,8 @@ subdirs `0/1/2/…`, level chosen by requested resolution; same WCS / WMS / tile
 - **GetLegendGraphic**: per-rule color swatches with point-marker icons, optional
   `SCALE` scale-denominator rule filtering, `WIDTH` control, and rule-name labels
   rendered with the built-in bitmap font.
+- **Output safety**: WMS GetFeatureInfo `text/html` escapes layer/feature-id/property
+  values (XSS); WFS CSV output quotes+escapes headers and values (CSV injection-safe).
 - **Style formats**: SLD / CSS / YSLD / MBStyle all dispatch to the same rule pipeline in
   WMS GetMap (previously only SLD reached the WMS renderer).
 - **SLD parsing**: TextSymbolizer (`Label` property/literal, `Font` size, `Fill`, `Halo`
