@@ -39,7 +39,7 @@ actix-multipart = "0.6"
 # GeoTIFF 原生标签读取
 tiff = "0.9"
 # ZIP 解压 (用于 shapefile 上传)
-zip = "2"
+zip = "8"
 # 临时文件
 tempfile = "3"
 # HTTP 客户端 (级联服务)
