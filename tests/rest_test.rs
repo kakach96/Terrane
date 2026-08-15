@@ -387,6 +387,57 @@ async fn test_rest_data_sources_crud() {
 }
 
 #[actix_rt::test]
+async fn test_rest_image_pyramid_data_source_crud() {
+    let app = build_test_app!();
+
+    // 建一个含数字层级子目录的临时金字塔目录。
+    let dir = std::env::temp_dir().join(format!("terrane-pyramid-rest-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("0")).unwrap();
+    std::fs::write(dir.join("0").join("tile.tif"), b"fake").unwrap();
+    std::fs::write(dir.join("properties"), "levels=1\n").unwrap();
+
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(serde_json::json!({
+            "name": "pyr_test_1",
+            "type": "image_pyramid",
+            "workspace": "default",
+            "enabled": true,
+            "connection": {
+                "file_path": dir.to_string_lossy().replace('\\', "/"),
+                "file_storage_type": "local",
+            },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建 ImagePyramid 数据源应返回 201"
+    );
+
+    // 列表应包含且类型持久化为 image_pyramid。
+    let req = test::TestRequest::get()
+        .uri("/geoserver/data-sources")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let found = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .find(|d| d["name"] == "pyr_test_1");
+    let found = found.expect("ImagePyramid 数据源应存在");
+    assert_eq!(
+        found["type"], "image_pyramid",
+        "类型应持久化为 image_pyramid"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[actix_rt::test]
 async fn test_browse_local_directory() {
     let app = build_test_app!();
 

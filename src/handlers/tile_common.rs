@@ -123,11 +123,13 @@ pub async fn render_tile_bytes(
                     | crate::models::DataSourceType::WorldImage
                     | crate::models::DataSourceType::ArcGrid
                     | crate::models::DataSourceType::ImageMosaic
+                    | crate::models::DataSourceType::ImagePyramid
             ) {
                 if let Some(conn) = &ds.connection {
                     let materialized = match ds.data_source_type {
                         crate::models::DataSourceType::WorldImage
-                        | crate::models::DataSourceType::ImageMosaic => {
+                        | crate::models::DataSourceType::ImageMosaic
+                        | crate::models::DataSourceType::ImagePyramid => {
                             crate::store::materialize_dir(conn).await.ok().flatten()
                         },
                         _ => crate::store::materialize_file(conn).await.ok().flatten(),
@@ -157,6 +159,23 @@ pub async fn render_tile_bytes(
                                         &granules, &bb, 1024, 1024,
                                     )
                                     .map(|img| (img, Some(bb))),
+                                    None => None,
+                                }
+                            },
+                            crate::models::DataSourceType::ImagePyramid => {
+                                let levels = crate::utils::pyramid::load_pyramid(&m.path);
+                                let b = crate::utils::pyramid::pyramid_bounds(&levels);
+                                match b {
+                                    Some(bb) => {
+                                        let lvl = crate::utils::pyramid::select_level(
+                                            &levels,
+                                            f64::MIN_POSITIVE,
+                                        );
+                                        lvl.and_then(|l| {
+                                            crate::utils::pyramid::render_level(l, &bb, 1024, 1024)
+                                                .map(|img| (img, Some(bb)))
+                                        })
+                                    },
                                     None => None,
                                 }
                             },

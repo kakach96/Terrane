@@ -25,6 +25,7 @@ impl DataSource {
                 | DataSourceType::ArcGrid
                 | DataSourceType::GeoJson
                 | DataSourceType::ImageMosaic
+                | DataSourceType::ImagePyramid
         )
     }
 
@@ -41,6 +42,7 @@ impl DataSource {
                 | DataSourceType::WorldImage
                 | DataSourceType::ArcGrid
                 | DataSourceType::ImageMosaic
+                | DataSourceType::ImagePyramid
         )
     }
 }
@@ -68,6 +70,10 @@ pub enum DataSourceType {
     /// ArcGrid/PNG/JPEG 作为 granule, 整体作为一个覆盖发布)
     #[serde(rename = "image_mosaic")]
     ImageMosaic,
+    /// ImagePyramid — 金字塔影像数据源 (目录下数字子目录 0/1/2/… 各含一层
+    /// granule, 按请求分辨率选择最合适层级)
+    #[serde(rename = "image_pyramid")]
+    ImagePyramid,
     ArcGrid,
     /// GeoJSON 文件数据源 (存储位置由 connection.file_storage_type 决定: local/s3/oss)
     #[serde(rename = "geojson")]
@@ -87,6 +93,7 @@ impl std::fmt::Display for DataSourceType {
             DataSourceType::CascadedWms => write!(f, "cascaded_wms"),
             DataSourceType::Redis => write!(f, "redis"),
             DataSourceType::ImageMosaic => write!(f, "image_mosaic"),
+            DataSourceType::ImagePyramid => write!(f, "image_pyramid"),
             DataSourceType::ArcGrid => write!(f, "arcgrid"),
             DataSourceType::GeoJson => write!(f, "geojson"),
             DataSourceType::Metadata => write!(f, "metadata"),
@@ -220,6 +227,7 @@ mod tests {
             ("cascaded_wms", DataSourceType::CascadedWms),
             ("redis", DataSourceType::Redis),
             ("image_mosaic", DataSourceType::ImageMosaic),
+            ("image_pyramid", DataSourceType::ImagePyramid),
             ("arcgrid", DataSourceType::ArcGrid),
             ("geojson", DataSourceType::GeoJson),
             ("metadata", DataSourceType::Metadata),

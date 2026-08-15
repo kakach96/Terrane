@@ -13,25 +13,25 @@
 |---------|:-----:|:--------:|:-----:|:-----:|
 | OGC Core Services | 5/7 | 0 | 2 | **71%** |
 | REST API | 11/16 | 0 | 5 | **69%** |
-| Data Source Types | 9/15 | 0 | 6 | **60%** |
+| Data Source Types | 10/15 | 0 | 5 | **67%** |
 | Styling System | 5/5 | 0 | 0 | **100%** |
 | Tile Caching | 3/6 | 0 | 3 | **50%** |
 | Security | 3/7 | 0 | 4 | **43%** |
 | Extensions | 8/14 | 0 | 6 | **57%** |
 | Cloud-Native | 4/7 | 0 | 3 | **57%** |
-| **Overall Progress** | | | | **~63%** |
+| **Overall Progress** | | | | **~64%** |
 
 ```
 OGC services     █████████████░░░░  71%
 REST API         █████████████░░░░  69%
-Data sources     ████████████░░░░░  60%
+Data sources     ██████████████░░░  67%
 Styling system   ██████████████████ 100%
 Tile caching     ██████████░░░░░░░  50%
 Security         ████████░░░░░░░░  43%
 Extensions       █████████░░░░░░░  57%
 Cloud-Native     █████████░░░░░░░  57%
 ──────────────────────────────
-Overall progress █████████████░░░  63%
+Overall progress █████████████░░░  64%
 ```
 
 ---
@@ -90,6 +90,7 @@ Overall progress █████████████░░░  63%
 | **CascadedWms** | Cascaded external WMS service | ✅ **P2** |
 | **ArcGrid** | ESRI ASCII Grid raster format | ✅ **P2** |
 | **ImageMosaic** | 栅格目录马赛克 — 目录下多个 GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granule 作为一个覆盖发布 (WCS GetCoverage / WMS GetMap / 瓦片管线) | ✅ **New** |
+| **ImagePyramid** | 金字塔影像 — 目录下数字子目录 0/1/2/… 各含一层 granule, 按请求分辨率选择最合适层级 (WCS GetCoverage / WMS GetMap / 瓦片管线) | ✅ **New** |
 | **Redis** | Redis 缓存数据源 — 切片图层缓存后端 (经 `Layer.cache_store` 选择) | ✅ **New** |
 
 ### 1.4 Extended REST API
@@ -191,7 +192,7 @@ Overall progress █████████████░░░  63%
 - ✅ **ArcGrid** — ESRI ASCII Grid raster format
 - ✅ **Cascaded WMS service** — HTTP proxy of WMS upstream services
 - ✅ **ImageMosaic** — 栅格目录马赛克 (GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granule 合成)
-- ❌ ImagePyramid — pyramid imagery
+- ✅ **ImagePyramid** — 金字塔影像 (数字层级子目录, 按分辨率选层)
 - ❌ Oracle / MySQL / SQL Server — additional database support
 - ❌ MongoDB — MongoDB GeoJSON data source
 
@@ -235,7 +236,7 @@ Overall progress █████████████░░░  63%
 📅 Week 7-8:  WFS 2.0 enhancements + multi-format output + ECQL filters
 ```
 
-### Phase 2: Data Source Extensions ✅ Partially Completed (5/8)
+### Phase 2: Data Source Extensions ✅ Partially Completed (6/8)
 
 ```
 📅 GeoPackage    ✅ Completed
@@ -243,7 +244,7 @@ Overall progress █████████████░░░  63%
 📅 ArcGrid       ✅ Completed
 📅 Cascaded WMS  ✅ Completed
 📅 ImageMosaic   ✅ Completed
-📅 ImagePyramid  ⏳
+📅 ImagePyramid  ✅ Completed
 📅 More databases ⏳
 📅 MongoDB       ⏳
 ```

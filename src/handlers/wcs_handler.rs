@@ -31,7 +31,7 @@ async fn materialize_raster(
     ds_type: &DataSourceType,
 ) -> Result<Option<crate::store::file_resolver::MaterializedFile>, GeoServerError> {
     match ds_type {
-        DataSourceType::WorldImage | DataSourceType::ImageMosaic => {
+        DataSourceType::WorldImage | DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => {
             crate::store::materialize_dir(conn).await
         },
         _ => crate::store::materialize_file(conn).await,
@@ -52,6 +52,7 @@ async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::pa
                     || ds.data_source_type == DataSourceType::WorldImage
                     || ds.data_source_type == DataSourceType::ArcGrid
                     || ds.data_source_type == DataSourceType::ImageMosaic
+                    || ds.data_source_type == DataSourceType::ImagePyramid
                 {
                     if let Some(conn) = &ds.connection {
                         if let Some(file_path) = conn.file_path.as_ref() {
@@ -174,6 +175,14 @@ async fn handle_describe_coverage(
                                     granules.iter().map(|g| g.image.width() as u64).sum();
                                 description.set_size(total.max(1) as u32, 1, 4);
                             },
+                            DataSourceType::ImagePyramid => {
+                                // 金字塔: 聚合所有层级的边界。
+                                let levels = crate::utils::pyramid::load_pyramid(&path);
+                                if let Some(b) = crate::utils::pyramid::pyramid_bounds(&levels) {
+                                    description.set_bounds(b.minx, b.miny, b.maxx, b.maxy);
+                                }
+                                description.set_size(1024, 1024, 4);
+                            },
                             _ => {},
                         }
                     }
@@ -250,6 +259,43 @@ async fn handle_get_coverage(
                     }
                 }
                 // 读取失败/无 granule: 落入通用回退 (测试图像)。
+            }
+        }
+    }
+
+    // ImagePyramid: 金字塔栅格 — 按请求分辨率选择层级, 子集 bbox 选择
+    // 该层相交 granule 并合成。
+    if let Some(store) = &state.store {
+        if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
+            if ds.data_source_type == DataSourceType::ImagePyramid {
+                if let Some(conn) = &ds.connection {
+                    if let Ok(Some(materialized)) =
+                        materialize_raster(conn, &ds.data_source_type).await
+                    {
+                        let dir = materialized.path;
+                        let levels = crate::utils::pyramid::load_pyramid(&dir);
+                        if let Some(pyr_b) = crate::utils::pyramid::pyramid_bounds(&levels) {
+                            let (target, size) =
+                                mosaic_target(&pyr_b, &request.subsets, &request.size);
+                            let (w, h) = size;
+                            // 目标分辨率 = 输出像素对应的地面分辨率。
+                            let target_res =
+                                (target.maxx - target.minx).max(1e-9) / w.max(1) as f64;
+                            if let Some(lvl) =
+                                crate::utils::pyramid::select_level(&levels, target_res)
+                            {
+                                if let Some(img) =
+                                    crate::utils::pyramid::render_level(lvl, &target, w, h)
+                                {
+                                    let final_img =
+                                        encode_coverage_output(img, &output_format, coverage_id);
+                                    return final_img;
+                                }
+                            }
+                        }
+                    }
+                }
+                // 读取失败/无层级: 落入通用回退 (测试图像)。
             }
         }
     }

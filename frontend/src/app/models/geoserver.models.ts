@@ -190,7 +190,8 @@ export interface CreateDataSourceRequest {
     | 'arcgrid'
     | 'geojson'
     | 'redis'
-    | 'image_mosaic';
+    | 'image_mosaic'
+    | 'image_pyramid';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;
@@ -207,7 +208,8 @@ export interface UpdateDataSourceRequest {
     | 'arcgrid'
     | 'geojson'
     | 'redis'
-    | 'image_mosaic';
+    | 'image_mosaic'
+    | 'image_pyramid';
   workspace?: string;
   enabled?: boolean;
   connection?: DataSourceConnection;

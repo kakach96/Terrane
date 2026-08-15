@@ -40,8 +40,42 @@ pub async fn compute_layer_bounds(
         DataSourceType::CascadedWms => Ok(None),
         DataSourceType::ArcGrid => compute_arcgrid_bounds(ds),
         DataSourceType::ImageMosaic => compute_mosaic_bounds(ds),
+        DataSourceType::ImagePyramid => compute_pyramid_bounds(ds),
         DataSourceType::Redis => Ok(None),
         DataSourceType::Metadata => Ok(None),
+    }
+}
+
+/// 从 ImagePyramid 目录计算边界 (聚合所有层级 granule 边界)
+fn compute_pyramid_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+    let file_path = ds
+        .connection
+        .as_ref()
+        .and_then(|c| c.file_path.as_ref())
+        .ok_or_else(|| GeoServerError::BadRequest("ImagePyramid 数据源缺少目录路径".to_string()))?;
+
+    info!("[Bounds] 从 ImagePyramid 计算边界: {}", file_path);
+
+    let dir = std::path::Path::new(file_path);
+    if !dir.is_dir() {
+        info!("[Bounds] ImagePyramid 目录不存在: {}", file_path);
+        return Ok(None);
+    }
+    let levels = crate::utils::pyramid::load_pyramid(dir);
+    match crate::utils::pyramid::pyramid_bounds(&levels) {
+        Some(bounds) => {
+            let crs = CoordinateReferenceSystem::EPSG4326;
+            info!(
+                "[Bounds] ImagePyramid 边界: {:?}, 层级数: {}",
+                bounds,
+                levels.len()
+            );
+            Ok(Some(ComputedBounds { bounds, crs }))
+        },
+        None => {
+            info!("[Bounds] ImagePyramid 无有效层级, 返回 None");
+            Ok(None)
+        },
     }
 }
 

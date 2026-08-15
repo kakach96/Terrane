@@ -356,17 +356,18 @@ pub async fn test_connection(
     Ok(HttpResponse::Ok().json(result))
 }
 
-/// 按数据源类型分发连接测试: Redis → PING; ImageMosaic → 目录栅格检查;
-/// 其余 → PostGIS 语义。
+/// 按数据源类型分发连接测试: Redis → PING; ImageMosaic / ImagePyramid →
+/// 目录栅格检查; 其余 → PostGIS 语义。
 async fn test_datasource_connection(ds: &DataSource) -> serde_json::Value {
     match ds.data_source_type {
         DataSourceType::Redis => test_redis_connection(ds).await,
-        DataSourceType::ImageMosaic => test_mosaic_connection(ds),
+        DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => test_mosaic_connection(ds),
         _ => test_postgis_connection(ds).await,
     }
 }
 
-/// ImageMosaic 数据源连接测试: 目录存在且包含至少一个受支持栅格文件。
+/// ImageMosaic / ImagePyramid 数据源连接测试: 目录存在且包含至少一个
+/// 受支持栅格文件 (pyramid 需含数字层级子目录)。
 fn test_mosaic_connection(ds: &DataSource) -> serde_json::Value {
     let dir = match &ds.connection {
         Some(c) => c.file_path.clone(),
@@ -375,7 +376,7 @@ fn test_mosaic_connection(ds: &DataSource) -> serde_json::Value {
     let Some(dir) = dir else {
         return serde_json::json!({
             "success": false,
-            "message": "ImageMosaic requires a directory path (file_path)",
+            "message": "ImageMosaic/ImagePyramid requires a directory path (file_path)",
         });
     };
     let path = std::path::Path::new(&dir);
@@ -385,19 +386,25 @@ fn test_mosaic_connection(ds: &DataSource) -> serde_json::Value {
             "message": format!("Directory not found: {}", dir),
         });
     }
-    let files = crate::utils::mosaic::scan_raster_files(path);
-    if files.is_empty() {
+    // ImagePyramid: 数字层级子目录内有栅格文件; ImageMosaic: 目录内直接有栅格。
+    let files = if ds.data_source_type == DataSourceType::ImagePyramid {
+        let levels = crate::utils::pyramid::load_pyramid(path);
+        levels.iter().map(|l| l.granules.len() as u64).sum::<u64>()
+    } else {
+        crate::utils::mosaic::scan_raster_files(path).len() as u64
+    };
+    if files == 0 {
         return serde_json::json!({
             "success": false,
             "message": format!(
-                "No supported raster files (GeoTIFF/WorldImage/ArcGrid/PNG/JPEG) in {}",
+                "No supported raster granules found in {}",
                 dir
             ),
         });
     }
     serde_json::json!({
         "success": true,
-        "message": format!("Found {} raster granule(s)", files.len()),
+        "message": format!("Found {} raster granule(s)", files),
     })
 }
 

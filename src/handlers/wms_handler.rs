@@ -490,13 +490,14 @@ async fn query_all_layer_features(
             metadata.layer_name
         );
 
-        // 栅格图层: 加载栅格图像 (GeoTIFF / WorldImage / ArcGrid / ImageMosaic),
-        // 不查询矢量要素。
+        // 栅格图层: 加载栅格图像 (GeoTIFF / WorldImage / ArcGrid / ImageMosaic /
+        // ImagePyramid), 不查询矢量要素。
         let raster = match metadata.data_source_type {
             DataSourceType::Geotiff
             | DataSourceType::WorldImage
             | DataSourceType::ArcGrid
-            | DataSourceType::ImageMosaic => Some(load_raster_layer(state, metadata).await),
+            | DataSourceType::ImageMosaic
+            | DataSourceType::ImagePyramid => Some(load_raster_layer(state, metadata).await),
             _ => None,
         };
 
@@ -575,13 +576,14 @@ async fn query_all_layer_features(
     Ok(contexts)
 }
 
-/// 加载栅格图层数据 (GeoTIFF / WorldImage / ArcGrid / ImageMosaic) 并归一化为
-/// RGBA 图像 + 地理边界 (EPSG:4326)。
+/// 加载栅格图层数据 (GeoTIFF / WorldImage / ArcGrid / ImageMosaic /
+/// ImagePyramid) 并归一化为 RGBA 图像 + 地理边界 (EPSG:4326)。
 async fn load_raster_layer(_state: &AppState, metadata: &LayerMetadata) -> Option<RasterLayerData> {
     let conn = metadata.connection.as_ref()?;
-    // WorldImage / ImageMosaic 是目录/伴生文件, 走目录物化; 其余单文件。
+    // WorldImage / ImageMosaic / ImagePyramid 是目录/伴生文件, 走目录物化;
+    // 其余单文件。
     let materialized = match metadata.data_source_type {
-        DataSourceType::WorldImage | DataSourceType::ImageMosaic => {
+        DataSourceType::WorldImage | DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => {
             crate::store::materialize_dir(conn).await.ok()??
         },
         _ => crate::store::materialize_file(conn).await.ok()??,
@@ -605,6 +607,14 @@ async fn load_raster_layer(_state: &AppState, metadata: &LayerMetadata) -> Optio
             let granules = crate::utils::mosaic::load_mosaic(&path);
             let b = crate::utils::mosaic::mosaic_bounds(&granules)?;
             let img = crate::utils::mosaic::render_mosaic(&granules, &b, 1024, 1024)?;
+            (img, b)
+        },
+        DataSourceType::ImagePyramid => {
+            // 金字塔: 选最精细层级 (level 0) 渲染整幅。
+            let levels = crate::utils::pyramid::load_pyramid(&path);
+            let b = crate::utils::pyramid::pyramid_bounds(&levels)?;
+            let lvl = crate::utils::pyramid::select_level(&levels, f64::MIN_POSITIVE)?;
+            let img = crate::utils::pyramid::render_level(lvl, &b, 1024, 1024)?;
             (img, b)
         },
         _ => return None,

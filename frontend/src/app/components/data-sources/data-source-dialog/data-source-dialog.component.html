@@ -274,7 +274,8 @@
       isTesting ||
       (selectedType !== 'postgis' &&
         selectedType !== 'redis' &&
-        selectedType !== 'image_mosaic')
+        selectedType !== 'image_mosaic' &&
+        selectedType !== 'image_pyramid')
     "
   >
     <mat-icon>{{ isTesting ? 'hourglass_empty' : 'network_check' }}</mat-icon>

@@ -32,6 +32,7 @@ fn parse_ds_type(type_str: &str) -> DataSourceType {
         "cascaded_wms" => DataSourceType::CascadedWms,
         "redis" => DataSourceType::Redis,
         "image_mosaic" => DataSourceType::ImageMosaic,
+        "image_pyramid" => DataSourceType::ImagePyramid,
         "arcgrid" => DataSourceType::ArcGrid,
         _ => DataSourceType::Postgis,
     }

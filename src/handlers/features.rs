@@ -101,6 +101,13 @@ pub async fn query_layer_features(
                 );
                 return Ok(Vec::new());
             },
+            DataSourceType::ImagePyramid => {
+                info!(
+                    "[Features] ImagePyramid 数据源 '{}' 是金字塔栅格, 通过 WCS 访问",
+                    ds.name
+                );
+                return Ok(Vec::new());
+            },
             DataSourceType::Redis => {
                 info!(
                     "[Features] Redis 数据源 '{}' 是瓦片缓存后端, 不发布要素",

@@ -11,6 +11,7 @@ pub mod mbstyle_parser;
 pub mod mosaic;
 pub mod mvt;
 pub mod projection;
+pub mod pyramid;
 pub mod rendering;
 pub mod shapefile;
 pub mod shapefile_export;

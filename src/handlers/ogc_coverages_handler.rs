@@ -40,20 +40,21 @@ fn is_raster_type(ds_type: &DataSourceType) -> bool {
             | DataSourceType::WorldImage
             | DataSourceType::ArcGrid
             | DataSourceType::ImageMosaic
+            | DataSourceType::ImagePyramid
     )
 }
 
 /// Materialize a raster data source to a local file (supports local / s3).
 ///
-/// WorldImage needs its world-file sibling and ImageMosaic is a directory, so
-/// they go through `materialize_dir`; GeoTIFF / ArcGrid are single files via
-/// `materialize_file`.
+/// WorldImage needs its world-file sibling and ImageMosaic / ImagePyramid are
+/// directories, so they go through `materialize_dir`; GeoTIFF / ArcGrid are
+/// single files via `materialize_file`.
 async fn materialize_raster(
     conn: &crate::models::DataSourceConnection,
     ds_type: &DataSourceType,
 ) -> Result<Option<crate::store::file_resolver::MaterializedFile>, crate::error::GeoServerError> {
     match ds_type {
-        DataSourceType::WorldImage | DataSourceType::ImageMosaic => {
+        DataSourceType::WorldImage | DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => {
             crate::store::materialize_dir(conn).await
         },
         _ => crate::store::materialize_file(conn).await,
@@ -102,6 +103,7 @@ async fn discover_coverages(state: &AppState) -> Vec<CoverageCollection> {
                 DataSourceType::WorldImage => "WorldImage",
                 DataSourceType::ArcGrid => "ArcGrid",
                 DataSourceType::ImageMosaic => "ImageMosaic",
+                DataSourceType::ImagePyramid => "ImagePyramid",
                 _ => "Raster",
             }
             .to_string(),
@@ -150,6 +152,16 @@ async fn discover_coverages(state: &AppState) -> Vec<CoverageCollection> {
                         let total: u64 = granules.iter().map(|g| g.image.width() as u64).sum();
                         cc.width = total.max(1) as u32;
                         cc.height = 1;
+                        cc.band_count = 4;
+                    },
+                    DataSourceType::ImagePyramid => {
+                        // 金字塔: 聚合所有层级的边界。
+                        let levels = crate::utils::pyramid::load_pyramid(&path);
+                        if let Some(b) = crate::utils::pyramid::pyramid_bounds(&levels) {
+                            cc.bbox = b;
+                        }
+                        cc.width = 1024;
+                        cc.height = 1024;
                         cc.band_count = 4;
                     },
                     _ => {},
@@ -209,6 +221,14 @@ async fn read_raster_image(
             let granules = crate::utils::mosaic::load_mosaic(&path);
             let bounds = crate::utils::mosaic::mosaic_bounds(&granules)?;
             let img = crate::utils::mosaic::render_mosaic(&granules, &bounds, 1024, 1024)?;
+            Some((img, Some(bounds)))
+        },
+        DataSourceType::ImagePyramid => {
+            // 金字塔: 选最精细层级 (level 0) 渲染整幅。
+            let levels = crate::utils::pyramid::load_pyramid(&path);
+            let bounds = crate::utils::pyramid::pyramid_bounds(&levels)?;
+            let lvl = crate::utils::pyramid::select_level(&levels, f64::MIN_POSITIVE)?;
+            let img = crate::utils::pyramid::render_level(lvl, &bounds, 1024, 1024)?;
             Some((img, Some(bounds)))
         },
         _ => None,
