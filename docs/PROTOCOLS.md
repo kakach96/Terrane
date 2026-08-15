@@ -190,6 +190,9 @@ subdirs `0/1/2/…`, level chosen by requested resolution; same WCS / WMS / tile
   WMS GetMap and in the shared tile pipeline (crop to BBOX + resample + source-over).
 - **Style selection**: WMS GetMap `STYLES` parameter selects the per-layer style
   (comma-separated, empty entry = layer default), matching GeoServer semantics.
+- **Map rotation**: WMS GetMap `ANGLE` vendor parameter rotates the vector geometry
+  around the request BBOX center (labels stay horizontal, matching GeoServer);
+  passed through to cascaded WMS upstreams.
 - **Style formats**: SLD / CSS / YSLD / MBStyle all dispatch to the same rule pipeline in
   WMS GetMap (previously only SLD reached the WMS renderer).
 - **SLD parsing**: TextSymbolizer (`Label` property/literal, `Font` size, `Fill`, `Halo`

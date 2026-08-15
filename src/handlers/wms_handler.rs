@@ -548,6 +548,18 @@ async fn query_all_layer_features(
             filter_by_elevation(&mut features, elev_str);
         }
 
+        // 应用地图旋转 (ANGLE): 绕请求 bbox 中心旋转所有要素几何。
+        // GeoServer 语义 — 地图旋转而标注保持水平 (标注基于旋转后几何锚点)。
+        if let Some(angle) = context.angle {
+            if angle.abs() > 1e-6 {
+                let cx = (context.bounds.minx + context.bounds.maxx) / 2.0;
+                let cy = (context.bounds.miny + context.bounds.maxy) / 2.0;
+                for feature in features.iter_mut() {
+                    feature.geometry = rotate_geometry(&feature.geometry, cx, cy, angle);
+                }
+            }
+        }
+
         debug!(
             "[query_all_layer_features] 图层 '{}' 过滤后剩余 {} 个要素",
             metadata.layer_name,
@@ -2216,6 +2228,81 @@ fn parse_color(color: &str) -> [u8; 4] {
     }
 }
 
+/// 绕点 (cx, cy) 旋转坐标 (角度制, 逆时针为正, 与 GeoServer ANGLE 语义一致)。
+fn rotate_coord(x: f64, y: f64, cx: f64, cy: f64, angle_deg: f64) -> (f64, f64) {
+    let rad = angle_deg.to_radians();
+    let cos = rad.cos();
+    let sin = rad.sin();
+    let dx = x - cx;
+    let dy = y - cy;
+    (cx + dx * cos - dy * sin, cy + dx * sin + dy * cos)
+}
+
+/// 递归旋转 GeoJSON 几何的所有坐标。
+fn rotate_geometry(geom: &GeoJsonGeometry, cx: f64, cy: f64, angle: f64) -> GeoJsonGeometry {
+    match geom {
+        GeoJsonGeometry::Point { coordinates } => {
+            if coordinates.len() >= 2 {
+                let (x, y) = rotate_coord(coordinates[0], coordinates[1], cx, cy, angle);
+                GeoJsonGeometry::Point {
+                    coordinates: vec![x, y],
+                }
+            } else {
+                geom.clone()
+            }
+        },
+        GeoJsonGeometry::MultiPoint { coordinates } => GeoJsonGeometry::MultiPoint {
+            coordinates: rotate_coords(coordinates, cx, cy, angle),
+        },
+        GeoJsonGeometry::LineString { coordinates } => GeoJsonGeometry::LineString {
+            coordinates: rotate_coords(coordinates, cx, cy, angle),
+        },
+        GeoJsonGeometry::Polygon { coordinates } => GeoJsonGeometry::Polygon {
+            coordinates: coordinates
+                .iter()
+                .map(|ring| rotate_coords(ring, cx, cy, angle))
+                .collect(),
+        },
+        GeoJsonGeometry::MultiLineString { coordinates } => GeoJsonGeometry::MultiLineString {
+            coordinates: coordinates
+                .iter()
+                .map(|ring| rotate_coords(ring, cx, cy, angle))
+                .collect(),
+        },
+        GeoJsonGeometry::MultiPolygon { coordinates } => GeoJsonGeometry::MultiPolygon {
+            coordinates: coordinates
+                .iter()
+                .map(|poly| {
+                    poly.iter()
+                        .map(|ring| rotate_coords(ring, cx, cy, angle))
+                        .collect()
+                })
+                .collect(),
+        },
+        GeoJsonGeometry::GeometryCollection { geometries } => GeoJsonGeometry::GeometryCollection {
+            geometries: geometries
+                .iter()
+                .map(|g| rotate_geometry(g, cx, cy, angle))
+                .collect(),
+        },
+    }
+}
+
+/// 旋转一组坐标点。
+fn rotate_coords(coords: &[Vec<f64>], cx: f64, cy: f64, angle: f64) -> Vec<Vec<f64>> {
+    coords
+        .iter()
+        .map(|c| {
+            if c.len() >= 2 {
+                let (x, y) = rotate_coord(c[0], c[1], cx, cy, angle);
+                vec![x, y]
+            } else {
+                c.clone()
+            }
+        })
+        .collect()
+}
+
 /// 将栅格图像裁剪 + 缩放为与请求 bbox 对齐的瓦片图像。
 ///
 /// 栅格覆盖的边界 (EPSG:4326) 与请求 bbox 求交, 相交区域按比例映射到
@@ -2408,5 +2495,63 @@ mod tests {
         assert_eq!(px[0], 255);
         assert_eq!(px[1], 127);
         assert_eq!(px[3], 255);
+    }
+
+    #[test]
+    fn test_rotate_coord_90_degrees() {
+        // 绕原点旋转 (1,0) 逆时针 90° → (0,1)。
+        let (x, y) = rotate_coord(1.0, 0.0, 0.0, 0.0, 90.0);
+        assert!((x - 0.0).abs() < 1e-9, "x 应 ≈ 0, 实际 {}", x);
+        assert!((y - 1.0).abs() < 1e-9, "y 应 ≈ 1, 实际 {}", y);
+        // 旋转 360° 回到原位。
+        let (x2, y2) = rotate_coord(3.0, 4.0, 0.0, 0.0, 360.0);
+        assert!((x2 - 3.0).abs() < 1e-9 && (y2 - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_rotate_geometry_all_types() {
+        let pt = GeoJsonGeometry::Point {
+            coordinates: vec![1.0, 0.0],
+        };
+        // 绕 (0,0) 旋转 90°: 点 (1,0) → (0,1)。
+        let rp = rotate_geometry(&pt, 0.0, 0.0, 90.0);
+        if let GeoJsonGeometry::Point { coordinates } = rp {
+            assert!((coordinates[0] - 0.0).abs() < 1e-9);
+            assert!((coordinates[1] - 1.0).abs() < 1e-9);
+        } else {
+            panic!("应为 Point");
+        }
+
+        // MultiPoint / LineString / Polygon 递归旋转。
+        let mp = GeoJsonGeometry::MultiPoint {
+            coordinates: vec![vec![1.0, 0.0], vec![0.0, 1.0]],
+        };
+        let rm = rotate_geometry(&mp, 0.0, 0.0, 90.0);
+        match rm {
+            GeoJsonGeometry::MultiPoint { coordinates } => {
+                assert_eq!(coordinates.len(), 2);
+                assert!((coordinates[0][0] - 0.0).abs() < 1e-9);
+            },
+            _ => panic!("应为 MultiPoint"),
+        }
+
+        let poly = GeoJsonGeometry::Polygon {
+            coordinates: vec![vec![
+                vec![1.0, 0.0],
+                vec![1.0, 1.0],
+                vec![0.0, 1.0],
+                vec![1.0, 0.0],
+            ]],
+        };
+        let rpoly = rotate_geometry(&poly, 0.0, 0.0, 90.0);
+        match rpoly {
+            GeoJsonGeometry::Polygon { coordinates } => {
+                assert_eq!(coordinates.len(), 1);
+                assert_eq!(coordinates[0].len(), 4);
+                assert!((coordinates[0][0][0] - 0.0).abs() < 1e-9);
+                assert!((coordinates[0][0][1] - 1.0).abs() < 1e-9);
+            },
+            _ => panic!("应为 Polygon"),
+        }
     }
 }

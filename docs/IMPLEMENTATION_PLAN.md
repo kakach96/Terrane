@@ -158,6 +158,8 @@ Overall progress █████████████░░░  67%
 - ✅ **SVG style-aware output**: WMS `image/svg+xml` honors per-feature styles
   (colors/opacity/width/dash + labels with halo); WMS GetMap `STYLES` parameter selects
   the per-layer style
+- ✅ **WMS ANGLE rotation**: GetMap `ANGLE` rotates vector geometry around the request
+  BBOX center (labels stay horizontal); passed through to cascaded upstreams
 - ✅ **KML style-aware output**: deduplicated `<Style>` definitions + `styleUrl`
   references, KML `aabbggrr` colors, label as Placemark name
 - ✅ **Compositing / blend modes**: SLD `VendorOption name="composite"` / CSS `composite`
