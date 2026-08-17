@@ -3020,3 +3020,98 @@ async fn test_upload_geotiff_s3_missing_bucket_rejected() {
         resp.status()
     );
 }
+
+/// End-to-end smoke test that builds the *production* middleware stack
+/// (CORS + Logger + Compress + RequestTimeout + RateLimit + TraceId) plus the
+/// full route table and static-file serving — mirroring `main.rs` exactly.
+///
+/// Regression: the protocol test apps only wrapped `Logger`, so a middleware
+/// panic (e.g. `HeaderName::from_static` on an uppercase header name) could
+/// slip through untested and blank the real server on every request.
+#[actix_web::test]
+async fn test_production_stack_serves_index_and_api() {
+    let mut config = common::create_test_config();
+    // enable the full resilience middleware like production
+    config.server.request_timeout_secs = 60;
+    config.server.rate_limit_max_requests = 10000;
+    config.server.rate_limit_window_secs = 60;
+    let state = actix_web::web::Data::new(terrane::state::AppState::new(config).await);
+
+    let cors_config = state.config.cors.clone();
+    let static_dir = std::env::temp_dir().join("terrane-smoke-static");
+    std::fs::create_dir_all(&static_dir).ok();
+    std::fs::write(static_dir.join("index.html"), "<html>smoke</html>").ok();
+    let static_str = static_dir.to_string_lossy().to_string();
+
+    let app = actix_web::test::init_service(
+        actix_web::App::new()
+            .app_data(state.clone())
+            .wrap(actix_cors::Cors::permissive())
+            .wrap(actix_web::middleware::Logger::default())
+            .wrap(actix_web::middleware::Compress::default())
+            .wrap(terrane::middleware::RequestTimeout::new(
+                std::time::Duration::from_secs(cors_config.max_age.max(1)),
+            ))
+            .wrap(terrane::middleware::RateLimit::new(10000, 60))
+            .wrap(terrane::middleware::TraceId)
+            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver"))
+            .service(
+                actix_files::Files::new("/", &static_str)
+                    .index_file("index.html")
+                    .use_etag(false)
+                    .use_last_modified(false),
+            )
+            .default_service(
+                actix_web::web::route()
+                    .to(|| async { actix_web::HttpResponse::NotFound().body("Not Found") }),
+            ),
+    )
+    .await;
+
+    // 1) static index
+    let req = actix_web::test::TestRequest::get().uri("/").to_request();
+    let resp = actix_web::test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "index should serve");
+    assert!(
+        resp.headers().get("X-Trace-Id").is_some(),
+        "TraceId response header should be present"
+    );
+
+    // 2) API under /geoserver
+    let req = actix_web::test::TestRequest::get()
+        .uri("/geoserver/layers")
+        .insert_header(("X-Trace-Id", "smoke-trace"))
+        .to_request();
+    let resp = actix_web::test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "/geoserver/layers should succeed under production stack, got {}",
+        resp.status()
+    );
+
+    // 3) OGC
+    let req = actix_web::test::TestRequest::get()
+        .uri("/wms?service=WMS&request=GetCapabilities")
+        .insert_header(("X-Trace-Id", "smoke-trace"))
+        .to_request();
+    let resp = actix_web::test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS GetCapabilities should succeed, got {}",
+        resp.status()
+    );
+
+    // 4) trace id echoed on the API response (regression for the panic)
+    let req = actix_web::test::TestRequest::get()
+        .uri("/geoserver/layers")
+        .insert_header(("X-Trace-Id", "smoke-trace"))
+        .to_request();
+    let resp = actix_web::test::call_service(&app, req).await;
+    assert_eq!(
+        resp.headers()
+            .get("X-Trace-Id")
+            .map(|v| v.to_str().unwrap_or("")),
+        Some("smoke-trace"),
+        "X-Trace-Id should be echoed (regression: uppercase header name panicked)"
+    );
+}
