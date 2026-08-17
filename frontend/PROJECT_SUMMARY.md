@@ -22,7 +22,7 @@ A production-grade Angular application, including:
 
 #### Core application files
 - ✅ `src/main.ts` — application entry point
-- ✅ `src/index.html` — HTML template (no external font/CDN dependencies; system font stack)
+- ✅ `src/index.html` — HTML template (with Google Fonts)
 - ✅ `src/styles.scss` — global styles and theme configuration
 
 #### App module & routing

@@ -1211,8 +1211,8 @@ fn render_openlayers_preview(
   <title>Layer Preview - {layer_name}</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="/assets/vendor/ol/ol.css" type="text/css">
-  <script src="/assets/vendor/ol/ol.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v10.4.0/ol.css" type="text/css">
+  <script src="https://cdn.jsdelivr.net/npm/ol@v10.4.0/dist/ol.min.js"></script>
   <style>
     html, body, #map {{ height: 100%; width: 100%; margin: 0; padding: 0; }}
     .ol-zoom {{ top: 1em; left: 1em; }}
