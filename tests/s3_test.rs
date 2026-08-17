@@ -1,4 +1,4 @@
-﻿//! S3 object storage integration tests (live).
+//! S3 object storage integration tests (live).
 //!
 //! Requires an S3-compatible server at `127.0.0.1:9000` (e.g. MinIO from
 //! `build/docker-compose.yml`, default credentials `terrane` / `terrane-secret`).
@@ -327,4 +327,3 @@ async fn test_s3_geotiff_upload() {
 
     delete_bucket(&bucket).await;
 }
-

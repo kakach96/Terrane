@@ -258,9 +258,9 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **261 lib unit tests + 194 integration tests**, plus
-**6 `#[ignore]`-marked live tests** (PostGIS metadata/vector + PostGIS data-source
-HTTP + 2× S3 + 2× cascaded-WMS live) that require
+`cargo test` currently green: **289 lib unit tests + 197 integration tests**, plus
+**7 `#[ignore]`-marked live tests** (PostGIS metadata/vector + PostGIS data-source
+HTTP + 3× S3 + 2× cascaded-WMS live) that require
 running services and are verified with `cargo test -- --ignored`.
 
 The integration tests are split by protocol into separate test crates (Rust
@@ -271,7 +271,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 |---------------------|-------|-----------------------------------------------------------|
 | `tests/wms_test.rs` | 30 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, **GetFeatureInfo GML output**, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
 | `tests/wfs_test.rs` | 15    | WFS (all operations + **LockFeature acquire/conflict/renew/release** + **GetFeatureWithLock lockId** + **GetPropertyValue** + **GetGmlObject** + WFS-T 501 (not implemented, planned) contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
-| `tests/rest_test.rs`| 45 (+1 ignored live) | health / probes / metrics, REST CRUD (layers / workspaces / namespaces / **stores full CRUD** / **layer-groups PUT** / styles / sql-views / **users PUT**), **workspace-dimension endpoints** (`/workspaces/{ws}/layers|datastores|coveragestores`), **service settings** (`/services/wms/settings` + GetCapabilities title), **`/about/version` + `/about/system-status`**, **`/resources`** (list/upload/delete + path-traversal protection), **feature-type PUT** (GeoPackage columns), **tile seed/truncate REST** (`/tiles/seed` create/list/progress/cancel + truncate), **tile conditional requests** (ETag/Last-Modified → 304), MVT (incl. `.pbf` route), auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
+| `tests/rest_test.rs`| 48 (+1 ignored live) | health / probes / metrics, REST CRUD (layers / workspaces / namespaces / **stores full CRUD** / **layer-groups PUT** / styles / sql-views / **users PUT**), **workspace-dimension endpoints** (`/workspaces/{ws}/layers|datastores|coveragestores`), **service settings** (`/services/wms/settings` + GetCapabilities title), **`/about/version` + `/about/system-status`**, **`/resources`** (list/upload/delete + path-traversal protection), **feature-type PUT** (GeoPackage columns), **tile seed/truncate REST** (`/tiles/seed` create/list/progress/cancel + truncate), **tile conditional requests** (ETag/Last-Modified → 304), **GeoFence ACL** (deny anonymous WMS/WFS → forbidden, admin bypass, allow rule for role user), **S3 upload validation** (`storage=s3` without bucket → 400), MVT (incl. `.pbf` route), auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `tests/wcs_test.rs` | 14    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, **range band subset Band(a:b)**, **INTERPOLATION** bilinear/nearest/unknown fallback, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
 | `tests/tms_test.rs` | 7     | TMS (GetCapabilities RESTful + KVP, TileMap document, GetTile geodetic/mercator PNG + JPEG, KVP GetTile) |
@@ -327,6 +327,7 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 | Store (cache)      | 4 `LocalSessionCache` unit tests (set/get/remove/remove_user/TTL) + 4 `LocalTileCacheBackend` (put/get/clear/stats/gridset-path sanitize) |
 | Store (vector/raster) | 4 `LocalVectorStore` (save/load/delete/list/sanitize) + 4 `LocalRasterStore` (put/get/delete/list/.tif) + 8 `sqlite_store` (workspace / namespace / layer+features / user+permission / session / styles CRUD / layer-groups CRUD / audit logs) + 2 live `PostgresStore` (metadata CRUD) / `PostgresVectorStore` (feature round-trip) — `#[ignore]` |
 | Data-source adapters | 4 `arcgrid` (read/meta/errors) + 5 `worldimage` (ext/meta/crop) + 5 `cascaded` (config extract + **vendor-param URL encoding** + live `fetch_cascaded_map` via WMS proxy: CQL_FILTER valid/invalid + TIME pass-through) + 8 `geopackage` (layers / validation / features read round-trip / limit + **write→read round-trip** for Point & LineString + **typed attributes: INTEGER/REAL/BOOLEAN/TEXT inference + round-trip** + **stable feature ids `table.rowid`**) + 2 `data_source` (serde type round-trip incl. `cascaded_wms`, postgis connection constructor) + 4 `wkb` (Point/LineString/Polygon round-trip + **Multi*/GeometryCollection round-trip** + byte lengths + big-endian decode, all 7 WKB types now parse) + 7 `wfs_lock` (acquire / conflict ALL / SOME skip / expiry / never-expire / renew+release / per-layer) + 3 `gml` (escape / point / feature GML 3.2) |
+| Security           | 12 `geofence` (no-rules allow / anonymous deny / allow rule / workspace + store scopes / qualified layer name / specific-beats-wildcard / deny-wins-tie / priority tiebreak / mode hierarchy / service-global) + 7 `ldap` (filter substitution / DN escaping / DN building / role mapping / parse-role / disabled config) + 6 `secrets` (no-placeholder / env expand / missing env / unterminated / connection resolve / redact) + 3 `config` (ldap defaults / ldap parse / geofence parse) |
 
 ### 11.2 Coverage gaps (adapted but untested)
 

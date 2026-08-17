@@ -109,6 +109,13 @@ docker compose -f build/docker-compose.yml --profile terrane up -d      # dev de
 | `GEOSERVER__RASTER__KIND`                 | `[raster] kind` (`local`)                    | `local`                    |
 | `GEOSERVER__RASTER__DIR`                  | `[raster] dir`                               | `<data_dir>/rasters`       |
 | `GEOSERVER__SECURITY__JWT_SECRET`         | `[security] jwt_secret`                      | `terrane-jwt-secret-2026`|
+| `GEOSERVER__SECURITY__GEOFENCE_ENABLED`   | `[security] geofence_enabled`                | `false`                 |
+| `GEOSERVER__SECURITY__LDAP__ENABLED`      | `[security.ldap] enabled`                    | `false`                 |
+| `GEOSERVER__SECURITY__LDAP__URL`          | `[security.ldap] url`                        | ``                      |
+| `GEOSERVER__SECURITY__LDAP__BASE_DN`      | `[security.ldap] base_dn`                    | ``                      |
+| `GEOSERVER__SECURITY__LDAP__USER_FILTER`  | `[security.ldap] user_filter`                | `(uid={username})`      |
+| `GEOSERVER__SECURITY__LDAP__ADMIN_GROUP`  | `[security.ldap] admin_group`                | ``                      |
+| `GEOSERVER__SECURITY__LDAP__DEFAULT_ROLE` | `[security.ldap] default_role`               | `user`                  |
 | `GEOSERVER__LOGGING__LEVEL`               | `[logging] level`                            | `info`                     |
 | `GEOSERVER__LOGGING__FORMAT`              | `[logging] format` (`text`\|`json`)          | `text`                     |
 | `GEOSERVER__SERVER__REQUEST_TIMEOUT_SECS` | `[server] request_timeout_secs`              | `60`                       |

@@ -16,10 +16,10 @@
 | Data Source Types | 12/15 | 0 | 3 | **80%** |
 | Styling System | 5/5 | 0 | 0 | **100%** |
 | Tile Caching | 6/6 | 0 | 0 | **100%** |
-| Security | 5/7 | 0 | 2 | **71%** |
+| Security | 7/7 | 0 | 0 | **100%** |
 | Extensions | 8/14 | 0 | 6 | **57%** |
-| Cloud-Native | 6/7 | 0 | 1 | **86%** |
-| **Overall Progress** | | | | **~83%** |
+| Cloud-Native | 7/7 | 0 | 0 | **100%** |
+| **Overall Progress** | | | | **~87%** |
 
 ```
 OGC services     ██████████████████  100%
@@ -27,11 +27,11 @@ REST API         █████████████████░  94%
 Data sources     ██████████████░░░░  80%
 Styling system   ██████████████████  100%
 Tile caching     ██████████████████  100%
-Security         █████████████░░░░░  71%
+Security         ██████████████████  100%
 Extensions       ██████████░░░░░░░░  57%
-Cloud-Native     ███████████████░░░  86%
+Cloud-Native     ██████████████████  100%
 ──────────────────────────────
-Overall progress ███████████████░░░  83%
+Overall progress ████████████████░░  87%
 ```
 
 > **Statistics basis**: the historical "REST API 11/16" and "Tile Caching 3/6"
@@ -49,11 +49,16 @@ Overall progress ███████████████░░░  83%
 >   multi-backend (local + Redis) ✅ + **Seeding/Truncate ✅** + **Metastore ✅** +
 >   **Disk Quota + conditional refresh (304) ✅** (plus: custom Gridset registration ✅).
 > - **Security 7 items** (auditable, see §P3): CORS/CSRF ✅, user/group/role ✅,
->   REST API auth ✅, layer-level permissions ✅, frontend login ✅ — LDAP / SSO
->   (enterprise identity) ⏳, GeoFence fine-grained ACL ⏳ → 5/7 (71%).
+>   REST API auth ✅, layer-level permissions ✅, frontend login ✅ —
+>   **LDAP enterprise identity ✅** (`src/utils/ldap.rs`, `[security.ldap]`,
+>   login fallback + auto-provision), **GeoFence fine-grained ACL ✅**
+>   (`src/utils/geofence.rs`, `[security] geofence_enabled`, per-request
+>   workspace/store/layer rules enforced on WMS/WFS/WCS) → 7/7 (100%).
 > - **Cloud-Native 7 items** (auditable, see §6.1): containerization ✅,
 >   12-Factor config ✅, observability ✅, lifecycle ✅, CI/CD ✅, resilience ✅ —
->   statelessness/scalability ⏳ (in-memory divergence, SQLite single-writer) → 6/7 (86%).
+>   **statelessness/scalability ✅** (env-injectable credentials via
+>   `src/utils/secrets.rs` — K8s Secrets style, never persisted/logged; S3/MinIO
+>   object-storage uploads for shared multi-replica data) → 7/7 (100%).
 
 ---
 
@@ -247,15 +252,15 @@ Overall progress ███████████████░░░  83%
 - ✅ **MongoDB** — MongoDB GeoJSON document connector ($geoWithin bbox filtering, ping test / cached clients)
 - ❌ Oracle / SQL Server — additional database support
 
-### P3 — Security (5/7)
+### P3 — Security (7/7)
 
 - ✅ **CORS/CSRF protection** — `actix-cors` middleware + configurable whitelist
 - ✅ **User/group/role system** — SHA-256+salt password hashing + JWT tokens + audit logs; users CRUD + PUT (role / enabled / password reset) via `/auth/users/{username}`
 - ✅ **REST API authentication** — Bearer token + `require_auth()` middleware
 - ✅ **Layer-level permissions** — Permission model + CRUD + matching rule engine
 - ✅ **Frontend security** — login page (LoginComponent) + AuthInterceptor + default admin `admin / geoserver`
-- ⏳ **Enterprise identity (LDAP / OAuth2 / SSO)** — not implemented (see Extensions #35 / ROADMAP)
-- ⏳ **Fine-grained GeoFence ACL** — per-request workspace/store/layer rules not implemented
+- ✅ **Enterprise identity (LDAP)** — `src/utils/ldap.rs`: `[security.ldap]` (url/base_dn/bind/user_filter/admin_group/default_role); login falls back to an LDAP bind when the local user is missing or the password is rejected, auto-provisioning the local user with the group-mapped role; RFC 4514 DN escaping; live test `#[ignore]`
+- ✅ **Fine-grained GeoFence ACL** — `src/utils/geofence.rs`: per-request `workspace / store / layer` rules over the `/permissions` model (most-specific rule wins, deny overrides ties, mode hierarchy admin ⊇ write ⊇ read, open default); opt-in via `[security] geofence_enabled`, enforced on WMS GetMap/GetFeatureInfo, WFS GetFeature/GetFeatureWithLock/LockFeature/GetPropertyValue/GetGmlObject, WCS GetCoverage and OGC API Maps; admin bypass; 403 on deny
 
 ### P4 — Extensions
 
@@ -304,7 +309,7 @@ Overall progress ███████████████░░░  83%
 > of this 8-item list; they can be evaluated later via tiberius (SQL Server) /
 > native driver (Oracle) if needed.
 
-### Phase 3: Security & Permissions (5/7)
+### Phase 3: Security & Permissions (7/7)
 **Goal**: build a complete security system
 
 ```
@@ -313,8 +318,8 @@ Overall progress ███████████████░░░  83%
 📅 Layer-level permissions      ✅ Completed
 📅 REST API authentication      ✅ Completed
 📅 Frontend login               ✅ Completed
-📅 Enterprise identity (LDAP/SSO) ⏳ Not implemented
-📅 GeoFence fine-grained ACL    ⏳ Not implemented
+📅 Enterprise identity (LDAP)   ✅ Completed ([security.ldap], login fallback + auto-provision)
+📅 GeoFence fine-grained ACL    ✅ Completed ([security] geofence_enabled, per-request layer rules)
 ```
 
 ### Phase 4: Advanced Extensions (3-6 months)
@@ -373,7 +378,7 @@ Overall progress ███████████████░░░  83%
 |------|------|------|:-----:|
 | **Containerization** | Multi-stage `Dockerfile` + `.dockerignore` + `build/docker-compose.yml` (dev deps: PostGIS + Redis + MinIO; app via `--profile terrane`); image `HEALTHCHECK` based on `/health/ready` | CI image build/push/scan not wired into a real repo yet | **P0 ✅** |
 | **12-Factor config** | `terrane.toml` + `GEOSERVER__` env var prefix; `load_from_file()` mounts `config::Environment` | Default `host=127.0.0.1` (Dockerfile env sets 0.0.0.0); JWT secret default hardcoded in `src/auth.rs` | **P0 ✅** |
-| **Statelessness / scalability** | Config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster data sources registered per data source (persisted in metadata store, `file_path` + `file_storage_type`); cache local (`src/store/cache/`); layers/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); uploads on local disk `./data` | In-memory state diverges across replicas (bounded by periodic + event-driven catalog refresh); SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1 ⏳** |
+| **Statelessness / scalability** | Config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster data sources registered per data source (persisted in metadata store, `file_path` + `file_storage_type`); cache local (`src/store/cache/`); layers/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); **env-injectable credentials** (`src/utils/secrets.rs`: `${ENV_VAR}` interpolation at connection build — K8s Secrets style, never persisted/logged); **S3/MinIO uploads** (`/data/upload/geotiff?storage=s3` → `file_storage_type=s3`, shared across replicas) | In-memory state still diverges across replicas (bounded by periodic + event-driven catalog refresh); SQLite remains single-writer for standalone mode — production HA uses PostgreSQL metadata + Redis cache + shared object storage | **P1 ✅** |
 | **Observability** | stdout logs (tracing); split probes `/health/live` & `/health/ready`; Prometheus `/metrics` (requests/errors, method/status/endpoint, tile cache hit rate, PG pool watermarks, system); **structured JSON logs (`[logging] format = "json"`) + request-level `trace_id` done** | OpenTelemetry tracing pending | **P1 ✅** |
 | **Lifecycle** | SIGTERM/SIGINT graceful shutdown + `shutdown_timeout_secs` draining in-flight requests (`main.rs`) | — | **P1 ✅** |
 | **CI/CD & security** | GitHub Actions CI created (`.github/workflows/ci.yml`: fmt + clippy + test + frontend build + GHCR push); **Trivy image scan + Dependabot auto-update added** | Not yet verified against a real repository; GitLab CI optional | **P2 ✅** |
@@ -405,15 +410,16 @@ Overall progress ███████████████░░░  83%
 - ✅ Storage: config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster file data sources registered per data source (persisted in metadata store) with `file_path` + `file_storage_type` (local / s3 / oss); cache stays built-in local (`TileCacheBackend` + `SessionCache` traits in `src/store/cache/`) — local backends in place
 - ✅ **Redis cache data source** (redesigned): Redis as a data source (`DataSourceType::Redis`, persisted in metadata `data_sources`, host/port/database/username/password); tile layers select a cache backend via `Layer.cache_store` (default in-memory/local, or a named Redis data source); `src/store/cache/redis.rs` provides `RedisConn` + `redis_url_from_connection`; `RedisTileCacheBackend` (`src/store/cache/tile.rs`) keyed by data-source URL; tile render paths (`render_tile_bytes` / `get_tile`) resolve per layer; connection test supports Redis PING
 - ✅ **In-memory catalog refresh mechanism**: periodically reloads layers/styles/layer-groups from the metadata store into the in-memory cache to converge replicas (`[server] catalog_refresh_secs`, 0 = disabled; `state.rs::refresh_catalog_from_store`, background tokio task, update/add by name without delete); **event-driven refresh**: REST layer update/delete immediately reloads the in-memory catalog via `AppState::refresh_catalog`, eliminating the write-after-read-stale window for WMS/WMTS/tile paths
-- ⏳ Object-storage backends (s3 / oss / minio): `FileStore` trait reserved (`src/store/file_store.rs`); S3/MinIO read/upload to be implemented (**no S3 tile-cache backend** — cache backends are local + Redis data source only)
+- ✅ **Object-storage uploads (s3 / minio)**: `/data/upload/geotiff?storage=s3&bucket=…` writes the object through `S3FileStore` and registers the data source with `file_storage_type = "s3"`, so uploaded rasters are shared across replicas (**no S3 tile-cache backend** — cache backends remain local + Redis data source only)
+- ✅ **Credential management (K8s Secrets style)**: `src/utils/secrets.rs` resolves `${ENV_VAR}` references in data-source passwords / S3 keys at connection-build time (postgres/mysql/mongo/redis/S3) — secrets are injected via env (K8s Secrets) and are never persisted in plaintext nor logged (`redact` masks them)
 - ⏳ Session management: **no Redis session cache** by design — simple JWT + metadata-store sessions (`SessionCache` is only a local fast-path)
-- ⏳ `data_dir` / upload file storage abstraction: shared PVC / object storage (pending)
+- ⏳ `data_dir` / upload file storage abstraction: shared PVC / object storage for arbitrary uploads (pending; GeoTIFF S3 upload covers the raster path)
 
 #### Phase 3: CI/CD & Security Hardening
 
 - ⚠️ CI (GitHub Actions) created (`.github/workflows/ci.yml`): `cargo fmt + clippy + test` + frontend build + docker build/push (ghcr, tagged by git sha); not yet verified against a real repository
 - ✅ Images tagged by git sha; Trivy image scanning + Dependabot dependency updates added
-- ⏳ Credential management: data source passwords injectable via env, never logged; integrate with K8s Secrets
+- ✅ **Credential management**: data source passwords / S3 keys injectable via `${ENV_VAR}` env references (K8s Secrets), resolved at connection build, never logged (`src/utils/secrets.rs`); direct K8s Secret volume-mount integration is deployment-side
 - ✅ Resilience middleware: request timeout (504) + sliding-window rate limiting (429, per client IP / X-Forwarded-For) — `src/middleware.rs`, enabled via `[server]` config (`request_timeout_secs` / `rate_limit_max_requests` / `rate_limit_window_secs`)
 - ✅ Cascaded WMS resilience: exponential-backoff retry on transient failures (timeout/conn-fail/429/5xx) (`cascaded_max_retries` / `cascaded_retry_base_ms`) + per-upstream circuit breaker (`cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, open → half-open probe → closed/reopen) — `src/utils/cascaded.rs`, `AppState.cascaded_circuits`
 - ✅ Dependency & image security: CI docker job runs Trivy image vulnerability scan (CRITICAL/HIGH, SARIF uploaded to GitHub Security tab); `.github/dependabot.yml` auto-updates cargo / npm / GitHub Actions deps

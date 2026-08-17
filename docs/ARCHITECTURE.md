@@ -233,9 +233,15 @@ sequenceDiagram
     participant S as Store
     participant SC as SessionCache
     participant A as auth.rs (JWT)
+    participant L as LDAP (optional)
 
     UI->>H: POST /geoserver/auth/login
     H->>S: validate user (sha256 + salt)
+    alt local user missing / password rejected AND [security.ldap] enabled
+        H->>L: LDAP bind (user DN or service account + search)
+        L-->>H: OK + groups
+        H->>S: auto-provision local user (group-mapped role)
+    end
     H->>A: sign JWT (jti, role)
     H->>S: create_session (persist jti)
     H->>SC: set(session) (write-through fast path)
@@ -247,9 +253,33 @@ sequenceDiagram
         H->>S: get_session(jti)
         H->>SC: set(session) (backfill)
     end
-    H->>S: check layer permission
+    alt [security] geofence_enabled
+        H->>S: evaluate /permissions rules (workspace/store/layer, user/role, allow/deny)
+    else
+        H->>S: check layer permission
+    end
     H-->>UI: resource
 ```
+
+**Security building blocks**:
+
+- **Enterprise identity (LDAP)** — `src/utils/ldap.rs`: `[security.ldap]`
+  (`url` / `base_dn` / optional service `bind_dn`+`bind_password` /
+  `user_filter` template / `admin_group` / `default_role`). Login falls back to
+  an LDAP bind when the local user is missing or the password is rejected, then
+  auto-provisions the local user with the group-mapped role (RFC 4514 DN
+  escaping). Enabled via `GEOSERVER__SECURITY__LDAP__*`.
+- **Fine-grained GeoFence ACL** — `src/utils/geofence.rs`: per-request
+  `workspace / store / layer` rules over the `/permissions` model. Most-specific
+  rule wins (user > role, layer > store > workspace > global), deny wins
+  equal-priority ties, mode hierarchy admin ⊇ write ⊇ read, open default.
+  Opt-in via `[security] geofence_enabled`; enforced in WMS GetMap/GetFeatureInfo,
+  WFS GetFeature(+WithLock/LockFeature/GetPropertyValue/GetGmlObject), WCS
+  GetCoverage and OGC API Maps; admin bypass; 403 on deny.
+- **Credential management** — `src/utils/secrets.rs`: data-source passwords /
+  S3 keys may reference `${ENV_VAR}` (K8s Secrets style); resolved at
+  connection-build time (postgres/mysql/mongo/redis/S3) and never persisted or
+  logged (`redact` masks values).
 
 ### 5.4 WFS Transaction (WFS-T) — planned
 

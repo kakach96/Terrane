@@ -38,10 +38,11 @@
 - ✅ Prometheus `/metrics` endpoint (requests/errors, tile cache hit rate, PG pool watermarks, system resources)
 - ✅ Graceful shutdown on SIGTERM/SIGINT with `shutdown_timeout_secs` in-flight drain
 - ⚠️ TODO: JWT secret default is hardcoded in `src/auth.rs`; use `GEOSERVER__SECURITY__JWT_SECRET` env injection in prod
-- ✅ Storage: config keeps only `[metadata]` (workspaces / data sources / layers / styles, default SQLite / PostgreSQL); vector/raster file data sources registered per data source (`file_storage_type`: local / s3 / oss, object storage reserved); tile + session cache stay built-in local, see `src/config.rs`
+- ✅ Storage: config keeps only `[metadata]` (workspaces / data sources / layers / styles, default SQLite / PostgreSQL); vector/raster file data sources registered per data source (`file_storage_type`: local / s3 / oss); **S3/MinIO uploads** (`/data/upload/geotiff?storage=s3`) share uploaded rasters across replicas; **credentials via env** (`${ENV_VAR}` interpolation, K8s Secrets style, never logged); tile + session cache stay built-in local, see `src/config.rs`
 - ⚠️ TODO: in-memory caches (`src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL / object storage
-- ⚠️ TODO: tile cache / uploaded data on local disk, needs PVC or object storage
+- ⚠️ TODO: tile cache on local disk, needs PVC or object storage
 - ✅ CI pipeline: `.github/workflows/ci.yml` (fmt + clippy + test + frontend build + GHCR image push on main) + Trivy image scan + Dependabot — created, not yet exercised against a real repository
+- ✅ Security: CORS whitelist, JWT auth + users/roles (+ users PUT), layer-level permissions, **LDAP enterprise identity** (`[security.ldap]`, login fallback + auto-provision), **GeoFence fine-grained ACL** (`[security] geofence_enabled`, per-request layer rules on WMS/WFS/WCS)
 
 **Cloud-native roadmap**: containerization → 12-Factor/observability → state convergence → CI/CD. See section 6 of [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
@@ -266,6 +267,21 @@ port = 8080
 workers = 12
 shutdown_timeout_secs = 30   # Graceful shutdown drain timeout for in-flight requests (container rolling updates)
 
+# Enterprise identity: LDAP login fallback (local users remain authoritative)
+[security.ldap]
+enabled = true
+url = "ldap://ldap.example.com:389"
+base_dn = "dc=example,dc=com"
+bind_dn = "cn=svc,dc=example,dc=com"   # optional service account
+bind_password = "svc-secret"
+user_filter = "(uid={username})"        # {username} is substituted
+admin_group = "cn=admins,dc=example,dc=com"
+default_role = "user"
+
+# Fine-grained GeoFence ACL: enforce /permissions rules per OGC request
+[security]
+geofence_enabled = false
+
 [workspaces]
 [[workspaces.stores.layers]]
 name = "world"
@@ -273,7 +289,7 @@ title = "World"
 srs = "EPSG:4326"
 ```
 
-> **Environment variable overrides**: all configuration options can be overridden via `GEOSERVER__<section>__<key>` (e.g. `GEOSERVER__SERVER__PORT=9090`). In container deployments, use K8s ConfigMap / Secret injection.
+> **Environment variable overrides**: all configuration options can be overridden via `GEOSERVER__<section>__<key>` (e.g. `GEOSERVER__SERVER__PORT=9090`). In container deployments, use K8s ConfigMap / Secret injection. Data-source credentials may reference env vars (`${DB_PASSWORD}`) and are resolved at connection time — never stored or logged in plaintext.
 
 ## 📚 Documentation
 

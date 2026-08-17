@@ -23,8 +23,11 @@ src/              — Rust backend (Actix-web)
   utils/          — Rendering + format readers
     bitmap_font.rs — built-in 5×7 bitmap font for SLD label (TextSymbolizer) rendering (zero deps)
     gml.rs        — shared GML serialization helpers (escape_xml, GeoJSON→GML, GML 3.2 feature) used by WFS GetFeature/GetGmlObject and WMS GetFeatureInfo
+    geofence.rs   — GeoFence fine-grained ACL: per-request workspace/store/layer rules over the /permissions model, enforced on WMS/WFS/WCS when [security] geofence_enabled
+    ldap.rs       — LDAP enterprise identity: [security.ldap] config, login fallback + auto-provision, group-based role mapping
     mosaic.rs     — ImageMosaic data source: raster-directory granule scan + bounds + composite
     pyramid.rs    — ImagePyramid data source: numeric level subdirs + resolution-based level selection
+    secrets.rs    — credential management: ${ENV_VAR} interpolation for data-source secrets (K8s Secrets style) + redaction
     tile_seed.rs  — GWC-style tile seeding engine: background seed jobs over a zoom range, progress + cooperative cancel (see /tiles/seed)
     wfs_lock.rs   — WFS feature-lock registry (LockFeature / GetFeatureWithLock): in-memory, TTL expiry, lockAction ALL/SOME
   routes.rs       — All route registrations in one file
