@@ -37,7 +37,12 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Header carrying the trace id (echoed back on responses).
-pub const TRACE_ID_HEADER: &str = "X-Trace-Id";
+///
+/// Must be lowercase: `http::HeaderName::from_static` panics on uppercase
+/// names (HTTP/2 header names are lowercase; the `http` crate's H2 table
+/// rejects `A-Z`). Header names are case-insensitive on the wire, so clients
+/// reading `X-Trace-Id` still work.
+pub const TRACE_ID_HEADER: &str = "x-trace-id";
 
 /// Sliding-window rate limiter keyed by client identifier.
 ///

@@ -258,7 +258,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **289 lib unit tests + 197 integration tests**, plus
+`cargo test` currently green: **289 lib unit tests + 199 integration tests**, plus
 **7 `#[ignore]`-marked live tests** (PostGIS metadata/vector + PostGIS data-source
 HTTP + 3× S3 + 2× cascaded-WMS live) that require
 running services and are verified with `cargo test -- --ignored`.
@@ -283,7 +283,7 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | `tests/ogc_processes_test.rs` | 9 | OGC API Processes (landing, conformance, process list, description, execute centroid/buffer, jobs list, results, cancel 409, 400/404) |
 | `tests/ogc_coverages_test.rs` | 9 | OGC API Coverages (landing, conformance, collections empty/with real GeoTIFF, collection detail with real 8x8 metadata + bounds, coverage GeoTIFF/PNG/JPEG, bbox crop 2x2 + resize 8x8, disjoint bbox 400, 404) |
 | `tests/ogc_styles_test.rs` | 7 | OGC API Styles (landing, conformance, style list + SLD content + 404, metadata, create 401/201, get/put(CSS content-type)/delete lifecycle, collections + layer styles) |
-| `tests/resilience_test.rs` | 4 | Resilience middleware (rate limit 429, per-client X-Forwarded-For buckets, request timeout 504, fast requests pass) |
+| `tests/resilience_test.rs` | 6 | Resilience middleware (rate limit 429, per-client X-Forwarded-For buckets, request timeout 504, fast requests pass) + **TraceId echo regression** (X-Trace-Id passthrough + generated) + **full middleware stack** (TraceId + RateLimit + RequestTimeout + Compress serves without panic) |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
 has at least one request/response test validating status codes, content types,
@@ -306,7 +306,7 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 | OGC API Processes  | Landing / conformance / process list / process description; synchronous job surface (`POST /jobs` → 201 status document, `GET /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/results`, `DELETE /jobs/{id}`) over the WPS engine, inputs as `layer:` reference / inline GeoJSON / OGC API href / literals — integration + 9 unit tests (`services/ogc_processes.rs`: landing, conformance, process list/description, job status/results, job request parse) |
 | OGC API Coverages | Landing / conformance / collections (empty + with a real 8x8 georeferenced GeoTIFF data source) / collection detail (real bounds + grid scale + band fields) / `coverage` operation (GeoTIFF default, PNG + JPEG via `?f=`, bbox crop 2×2 + width/height resample 8×8, disjoint bbox 400, unknown collection 404) — integration + 7 unit tests (`services/ogc_coverages.rs`: landing, conformance, collections, collection links/dimensions, bbox parse, coverage hrefs) |
 | OGC API Styles     | Landing / conformance / style list (built-in `default` SLD) + style content with native media type + 404 / metadata / create (401 without token, 201 with JWT) / get–put (CSS content-type after replace)–delete lifecycle / collections + layer styles — integration + 8 unit tests (`services/ogc_styles.rs`: mime mapping, landing, conformance, list, metadata, collections, layer-style resolution, hrefs) |
-| Resilience (middleware) | Rate limit (429 over limit, per-client `X-Forwarded-For` buckets) + request timeout (504 over a real HTTP server, fast requests pass) — integration + 5 unit tests (`middleware.rs`: allow/deny, disabled limiter, per-client independence, window slide, count after prune) |
+| Resilience (middleware) | Rate limit (429 over limit, per-client `X-Forwarded-For` buckets) + request timeout (504 over a real HTTP server, fast requests pass) + **TraceId echo** (X-Trace-Id passthrough / generated) + **full production middleware stack** (TraceId + RateLimit + RequestTimeout + Compress serves without panic — regression for the `HeaderName::from_static` uppercase panic) — integration + 5 unit tests (`middleware.rs`: allow/deny, disabled limiter, per-client independence, window slide, count after prune) |
 | WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8, **range band subset `Band(a:b)` constant/gradient output assertions**, **INTERPOLATION=bilinear/nearest/unknown fallback**) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | TMS                | GetCapabilities (RESTful + KVP), TileMap document (SRS / BoundingBox / Origin / TileFormat / TileSets + units-per-pixel), GetTile (global-geodetic + global-mercator, PNG + JPEG, TMS bottom-up y flip) — integration |

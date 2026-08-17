@@ -163,3 +163,89 @@ async fn test_request_timeout_fast_requests_pass() {
     let body = resp.text().await.unwrap();
     assert_eq!(body, "fast");
 }
+
+/// Regression: the TraceId middleware must echo the trace id back via the
+/// `X-Trace-Id` response header without panicking. `HeaderName::from_static`
+/// rejects uppercase header names (HTTP/2 requires lowercase), so the constant
+/// must stay lowercase — a previous "X-Trace-Id" caused a panic on every
+/// request through the real server's middleware stack.
+#[actix_rt::test]
+async fn test_trace_id_echoes_response_header() {
+    let app = test::init_service(App::new().wrap(terrane::middleware::TraceId).route(
+        "/ping",
+        web::get().to(|| async { HttpResponse::Ok().body("pong") }),
+    ))
+    .await;
+
+    // 传入的 X-Trace-Id 被透传并回显到响应头
+    let req = test::TestRequest::get()
+        .uri("/ping")
+        .insert_header(("X-Trace-Id", "regression-test-trace"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "请求应成功, 实际: {}",
+        resp.status()
+    );
+    assert_eq!(
+        resp.headers()
+            .get("X-Trace-Id")
+            .map(|v| v.to_str().unwrap_or("")),
+        Some("regression-test-trace"),
+        "X-Trace-Id 应回显透传值"
+    );
+
+    // 无传入头时生成新 trace id 并回显
+    let req = test::TestRequest::get().uri("/ping").to_request();
+    let resp = test::call_service(&app, req).await;
+    let echoed = resp
+        .headers()
+        .get("X-Trace-Id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(!echoed.is_empty(), "无传入头时应生成并回显 trace id");
+}
+
+/// Regression: the full production middleware chain (TraceId + RateLimit +
+/// RequestTimeout + Compress) must serve requests without panicking — the
+/// bug that panicked on every real-server request only appeared when the
+/// whole stack was assembled, which the protocol test apps never did.
+#[actix_rt::test]
+async fn test_full_middleware_stack_serves_requests() {
+    let app = test::init_service(
+        App::new()
+            .wrap(terrane::middleware::TraceId)
+            .wrap(terrane::middleware::RateLimit::new(1000, 60))
+            .wrap(terrane::middleware::RequestTimeout::new(
+                Duration::from_secs(5),
+            ))
+            .wrap(actix_web::middleware::Compress::default())
+            .route(
+                "/ping",
+                web::get().to(|| async { HttpResponse::Ok().body("pong") }),
+            ),
+    )
+    .await;
+
+    for _ in 0..3 {
+        let req = test::TestRequest::get()
+            .uri("/ping")
+            .insert_header(("X-Trace-Id", "stack-test"))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(
+            resp.status().is_success(),
+            "完整中间件栈请求应成功, 实际: {}",
+            resp.status()
+        );
+        assert_eq!(
+            resp.headers()
+                .get("X-Trace-Id")
+                .map(|v| v.to_str().unwrap_or("")),
+            Some("stack-test"),
+            "TraceId 应回显"
+        );
+    }
+}
