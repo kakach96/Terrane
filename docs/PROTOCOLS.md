@@ -16,7 +16,7 @@ and *which remain to be adapted*.
 | Protocol            | Version(s)                     | Status  | Notes |
 |---------------------|--------------------------------|---------|-------|
 | **WMS**             | 1.1.1 / 1.3.0                  | ✅ Core | GetCapabilities / GetMap / GetFeatureInfo / DescribeLayer / GetLegendGraphic / GetStyles / PutStyles; multi-format + vendor params |
-| **WFS**             | 1.0.0 / 1.1.0 / 2.0.0          | ✅ Core | GetCapabilities / DescribeFeatureType / GetFeature / GetFeatureWithLock / LockFeature (WFS-T 后续实现) |
+| **WFS**             | 1.0.0 / 1.1.0 / 2.0.0          | ✅ Core | GetCapabilities / DescribeFeatureType / GetFeature / GetFeatureWithLock / LockFeature (WFS-T planned for later) |
 | **WCS**             | 1.0.0 / 1.1.x / 2.0.1          | ✅ Core | GetCapabilities / DescribeCoverage / GetCoverage; WCS 2.0 subsetting |
 | **WMTS**            | 1.0.0                          | ✅ Core | GetCapabilities / GetTile / GetFeatureInfo; KVP + RESTful tile template |
 | **MVT (vector tiles)** | —                          | ✅      | Pure-Rust protobuf encoder; `/tiles/{layer}/{z}/{x}/{y}.pbf`, `/mvt/{layer}/{z}/{x}/{y}` |
@@ -44,7 +44,7 @@ Endpoint `/wms` (`src/services/wms.rs`, `src/handlers/wms_handler.rs`).
 |---------------------|--------|-------|
 | GetCapabilities     | ✅     | Layers from the catalog |
 | GetMap              | ✅     | Raster (PNG/JPEG/GIF/WebP), vector (SVG), KML, GeoJSON, GeoRSS, PDF, OpenLayers preview; CascadedWms proxy |
-| GetFeatureInfo      | ✅     | `text/plain`, `text/html`, `application/json`, **`application/vnd.ogc.gml`** (GML 3.1.1 要素集合) |
+| GetFeatureInfo      | ✅     | `text/plain`, `text/html`, `application/json`, **`application/vnd.ogc.gml`** (GML 3.1.1 feature collection) |
 | DescribeLayer       | ✅     | WMS 1.1.1 DescribeLayerResponse |
 | GetLegendGraphic    | ✅     | SLD-based legend |
 | GetStyles / PutStyles | ✅   | SLD style read/write |
@@ -69,11 +69,11 @@ Endpoint `/wfs` (`src/services/wfs.rs`, `src/handlers/wfs_handler.rs`). GET + PO
 | GetCapabilities     | ✅     | Advertises 2.0.0 (incl. GetFeatureWithLock / LockFeature / GetPropertyValue / GetGmlObject) |
 | DescribeFeatureType | ✅     | XSD schema (real typed columns for published GeoPackage layers) |
 | GetFeature          | ✅     | GML 2.1.2 / GML 3.1.1 / GML 3.2, GeoJSON, CSV, KML 2.2, Shapefile (SHAPE-ZIP) |
-| GetFeatureWithLock  | ✅     | 真实加锁 (内存锁注册表, TTL 过期, `lockAction=SOME` 跳过已锁要素), 响应携带 `lockId` |
-| LockFeature         | ✅     | 加锁 / 续锁 (LOCKID+EXPIRY) / 释放 (LOCKID+RELEASEACTION=ALL), `lockAction` ALL/SOME; `wfs:LockFeatureResponse` (1.1/2.0 命名空间) |
-| GetPropertyValue    | ✅     | WFS 2.0 核心操作 (OGC 09-025r2): `PROPERTYNAME` 取值 → `wfs:ValueCollection` (几何属性输出 GML) |
-| GetGmlObject        | ✅     | WFS 2.0 核心操作 (OGC 09-025r2): `GMLOBJECTID` 查要素 → `wfs:GMLObjectCollection` (GML 3.2) |
-| Transaction         | ⏳     | WFS-T 写入尚未实现 (当前 501); 计划后续实现 |
+| GetFeatureWithLock  | ✅     | Real locking (in-memory lock registry, TTL expiry, `lockAction=SOME` skips locked features), response carries `lockId` |
+| LockFeature         | ✅     | Acquire / renew (LOCKID+EXPIRY) / release (LOCKID+RELEASEACTION=ALL), `lockAction` ALL/SOME; `wfs:LockFeatureResponse` (1.1/2.0 namespaces) |
+| GetPropertyValue    | ✅     | WFS 2.0 core operation (OGC 09-025r2): `PROPERTYNAME` selection → `wfs:ValueCollection` (geometry properties as GML) |
+| GetGmlObject        | ✅     | WFS 2.0 core operation (OGC 09-025r2): lookup by `GMLOBJECTID` → `wfs:GMLObjectCollection` (GML 3.2) |
+| Transaction         | ⏳     | WFS-T writes not implemented yet (currently 501); planned for a later milestone |
 
 **Gaps vs reference**: deeper GML 3.2 schema fidelity.
 
@@ -89,14 +89,15 @@ Endpoint `/wcs` (`src/services/wcs.rs`, `src/handlers/wcs_handler.rs`).
 |---------------------|--------|-------|
 | GetCapabilities     | ✅     | |
 | DescribeCoverage    | ✅     | |
-| GetCoverage         | ✅     | GeoTIFF (`image/tiff`), ArcGrid (`application/x-arcgrid`); 空间子集 + **range 波段子集** (`SUBSET=Band(a:b)`, r/g/b/a 轴) + **`INTERPOLATION`** (nearest / bilinear / cubic / lanczos) |
+| GetCoverage         | ✅     | GeoTIFF (`image/tiff`), ArcGrid (`application/x-arcgrid`); spatial subset + **range band subset** (`SUBSET=Band(a:b)`, r/g/b/a axes) + **`INTERPOLATION`** (nearest / bilinear / cubic / lanczos) |
 
 **Subsetting**: WCS 2.0 `SUBSET` (intervals / position, with CRS + resolution,
 comma `x(10,20)` or colon `Band(1:2)` syntax), `SUBSETTINGCRS`.
 
 **Gaps vs reference**: no full WCS 1.1 range-subset / interpolation *semantics*
-(2.0 GetCoverage 上的波段子集与插值已实现, 1.1 语义未完整建模), no
-Web Coverage Transaction (WCS-T, 暂不实现).
+(band subset and interpolation are implemented on 2.0 GetCoverage, but the
+1.1 semantics are not fully modelled), no
+Web Coverage Transaction (WCS-T, deferred).
 
 ## 5. Tiling — WMTS / MVT / TMS / WMS-C
 
@@ -269,9 +270,9 @@ convention: every file directly under `tests/` is its own binary), sharing a
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
 | `tests/wms_test.rs` | 30 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, **GetFeatureInfo GML output**, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
-| `tests/wfs_test.rs` | 15    | WFS (all operations + **LockFeature acquire/conflict/renew/release** + **GetFeatureWithLock lockId** + **GetPropertyValue** + **GetGmlObject** + WFS-T 501 (未实现, 计划后续) contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
+| `tests/wfs_test.rs` | 15    | WFS (all operations + **LockFeature acquire/conflict/renew/release** + **GetFeatureWithLock lockId** + **GetPropertyValue** + **GetGmlObject** + WFS-T 501 (not implemented, planned) contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
 | `tests/rest_test.rs`| 45 (+1 ignored live) | health / probes / metrics, REST CRUD (layers / workspaces / namespaces / **stores full CRUD** / **layer-groups PUT** / styles / sql-views / **users PUT**), **workspace-dimension endpoints** (`/workspaces/{ws}/layers|datastores|coveragestores`), **service settings** (`/services/wms/settings` + GetCapabilities title), **`/about/version` + `/about/system-status`**, **`/resources`** (list/upload/delete + path-traversal protection), **feature-type PUT** (GeoPackage columns), **tile seed/truncate REST** (`/tiles/seed` create/list/progress/cancel + truncate), **tile conditional requests** (ETag/Last-Modified → 304), MVT (incl. `.pbf` route), auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
-| `tests/wcs_test.rs` | 14    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, **range 波段子集 Band(a:b)**, **INTERPOLATION** bilinear/nearest/未知回退, JPEG / netCDF) |
+| `tests/wcs_test.rs` | 14    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, **range band subset Band(a:b)**, **INTERPOLATION** bilinear/nearest/unknown fallback, JPEG / netCDF) |
 | `tests/wmts_test.rs`| 4     | WMTS (GetCapabilities / GetTile / GetFeatureInfo)         |
 | `tests/tms_test.rs` | 7     | TMS (GetCapabilities RESTful + KVP, TileMap document, GetTile geodetic/mercator PNG + JPEG, KVP GetTile) |
 | `tests/wps_test.rs` | 6     | WPS (GetCapabilities, DescribeProcess, Execute KVP raw centroid/buffer/bounds + XML POST) |
@@ -299,14 +300,14 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 | Layer              | Coverage                                                                 |
 |--------------------|--------------------------------------------------------------------------|
 | WMS                | GetCapabilities, GetMap (PNG / JPEG / GIF / SVG / KML / GeoJSON, 1.1.1 + 1.3.0 axis-order), GetFeatureInfo (JSON / text/html / text/plain / **GML application/vnd.ogc.gml**), DescribeLayer, GetLegendGraphic, GetStyles, vendor params CQL_FILTER / TIME / ELEVATION / ENV / ANGLE / FEATUREID — integration |
-| WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV / KML 2.2 / Shapefile SHAPE-ZIP), GetFeatureWithLock (真实加锁 + `lockId` 响应), LockFeature (加锁 / lockAction ALL/SOME 冲突 / 续锁 / RELEASEACTION 释放), GetPropertyValue (`wfs:ValueCollection` + FEATUREID 过滤 + 缺 PROPERTYNAME 400), GetGmlObject (`wfs:GMLObjectCollection` + 未知 id 空集合 + 缺 GMLOBJECTID 400), Transaction (501 未实现契约, 计划后续实现), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
+| WFS                | GetCapabilities, DescribeFeatureType (real typed columns for published GeoPackage layers), GetFeature (GeoJSON / GML 2.1.2 / GML 3.1.1 / GML 3.2 / CSV / KML 2.2 / Shapefile SHAPE-ZIP), GetFeatureWithLock (real locking + `lockId` response), LockFeature (acquire / lockAction ALL/SOME conflict / renew / RELEASEACTION release), GetPropertyValue (`wfs:ValueCollection` + FEATUREID filter + missing PROPERTYNAME → 400), GetGmlObject (`wfs:GMLObjectCollection` + unknown id → empty collection + missing GMLOBJECTID → 400), Transaction (501 not-implemented contract, planned for later), URL `FILTER=` (OGC XML PropertyIsEqualTo / PropertyIsGreaterThan + ECQL `name='x'` / `bbox(...)` / `LIKE`+`AND`) and `CQL_FILTER` (ECQL) — integration |
 | WPS                | GetCapabilities (ServiceIdentification / OperationsMetadata / ProcessOfferings / Languages), DescribeProcess (DataInputs / ProcessOutputs + xsd:double), Execute (KVP `response=raw` → GeoJSON + document XML, POST XML with `Reference xlink:href="layer:…"`), built-in `vec:Centroid` / `vec:Buffer` / `gs:Bounds` — integration + 6 unit tests (`services/wps.rs`: KVP DataInputs, operation parse, Execute XML, capabilities structure, features_to_geojson, run_process) |
 | OGC API Maps       | Landing / conformance / collections / collection / styles, `map` operation (`bbox` + `width`/`height`, PNG/JPEG via `?f=`, `transparent` / `bgcolor` / `datetime` / `cql_filter` pass-through) reusing the shared WMS GetMap pipeline — integration + 8 unit tests (`services/ogc_maps.rs`: landing, conformance, collections, collection links, styles, bbox parse, map href formats) |
 | OGC API Processes  | Landing / conformance / process list / process description; synchronous job surface (`POST /jobs` → 201 status document, `GET /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/results`, `DELETE /jobs/{id}`) over the WPS engine, inputs as `layer:` reference / inline GeoJSON / OGC API href / literals — integration + 9 unit tests (`services/ogc_processes.rs`: landing, conformance, process list/description, job status/results, job request parse) |
 | OGC API Coverages | Landing / conformance / collections (empty + with a real 8x8 georeferenced GeoTIFF data source) / collection detail (real bounds + grid scale + band fields) / `coverage` operation (GeoTIFF default, PNG + JPEG via `?f=`, bbox crop 2×2 + width/height resample 8×8, disjoint bbox 400, unknown collection 404) — integration + 7 unit tests (`services/ogc_coverages.rs`: landing, conformance, collections, collection links/dimensions, bbox parse, coverage hrefs) |
 | OGC API Styles     | Landing / conformance / style list (built-in `default` SLD) + style content with native media type + 404 / metadata / create (401 without token, 201 with JWT) / get–put (CSS content-type after replace)–delete lifecycle / collections + layer styles — integration + 8 unit tests (`services/ogc_styles.rs`: mime mapping, landing, conformance, list, metadata, collections, layer-style resolution, hrefs) |
 | Resilience (middleware) | Rate limit (429 over limit, per-client `X-Forwarded-For` buckets) + request timeout (504 over a real HTTP server, fast requests pass) — integration + 5 unit tests (`middleware.rs`: allow/deny, disabled limiter, per-client independence, window slide, count after prune) |
-| WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8, **range 波段子集 `Band(a:b)` 输出常量/渐变断言**, **INTERPOLATION=bilinear/nearest/未知回退**) — integration |
+| WCS                | GetCapabilities, DescribeCoverage (incl. real GeoTIFF / ArcGrid / WorldImage metadata enrichment), GetCoverage (TIFF / PNG / JPEG / default-format + netCDF→TIFF fallback, real GeoTIFF 8×8 bytes, real ArcGrid 4×3 bytes, SUBSET/SIZE on real ArcGrid AND real georeferenced GeoTIFF: crop→2×2 + resize→8×8, **range band subset `Band(a:b)` constant/gradient output assertions**, **INTERPOLATION=bilinear/nearest/unknown fallback**) — integration |
 | WMTS               | GetCapabilities, GetTile (KVP + RESTful template), GetFeatureInfo — integration |
 | TMS                | GetCapabilities (RESTful + KVP), TileMap document (SRS / BoundingBox / Origin / TileFormat / TileSets + units-per-pixel), GetTile (global-geodetic + global-mercator, PNG + JPEG, TMS bottom-up y flip) — integration |
 | WMS-C              | GetCapabilities (`WMT_MS_Capabilities` 1.1.1), GetMap `TILED=true` (geodetic + mercator grid-aligned BBOX → cached tile), GetMap without TILED (plain WMS 1.1.1) — integration |
@@ -588,24 +589,29 @@ integration: 9 (ogc_coverages_test.rs) + 7 (ogc_styles_test.rs) + 4
 frontend build + GHCR image push on main).
 Next candidates:
 
-Batch 23 completed: **cascaded WMS 韧性 (retry/backoff + 熔断), 结构化 JSON 日志
-+ request `trace_id`, Redis 缓存数据源** — (1) `src/utils/cascaded.rs` 为级联
-WMS 上游加入指数退避重试 (`cascaded_max_retries` / `cascaded_retry_base_ms`,
-瞬时故障 = 超时/连接失败/429/5xx) 与按上游 URL 隔离的熔断器
-(`cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, 打开→半开试探→
-关闭/重开), 由 `[server]` 配置驱动, `AppState.cascaded_circuits` 持有状态。
-(2) `[logging] format = "json"` 输出结构化日志; `TraceId` 中间件为每个请求
-分配 `trace_id` (透传 `X-Trace-Id`/`X-Request-Id`, 否则生成 UUID), 挂到
-tracing span 并在 `X-Trace-Id` 响应头回显, JSON/text 日志均可跨副本关联。
-(3) Redis 作为**数据源** (`DataSourceType::Redis`, 持久化于元数据
-`data_sources` 表, 连接字段 host/port/database/username/password); 切片图层
-经 `Layer.cache_store` 选择缓存后端 — 为空用默认内存/本地缓存, 指向 Redis
-数据源则该图层瓦片缓存走 Redis (`src/store/cache/redis.rs` + `RedisTileCacheBackend`,
-`render_tile_bytes` / `get_tile` 按图层解析); 数据源连接测试支持 Redis PING;
-备份/恢复与 REST 图层 CRUD 均携带 `cache_store`。会话管理保持简单 JWT
-(Redis 会话缓存不做)。新单元测试: 10 (cascaded.rs) + 6 (cache/redis.rs) +
-1 (sqlite_store cache_store CRUD); 前端: 数据源对话框新增 Redis 类型,
-图层详情页新增瓦片缓存后端选择。
+Batch 23 completed: **cascaded WMS resilience (retry/backoff + circuit breaking),
+structured JSON logs + request `trace_id`, Redis cache data source** — (1)
+`src/utils/cascaded.rs` adds exponential-backoff retry for cascaded WMS upstreams
+(`cascaded_max_retries` / `cascaded_retry_base_ms`; transient failures = timeout /
+connection failure / 429 / 5xx) and per-upstream circuit breakers
+(`cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, open → half-open
+probe → closed/reopen), driven by `[server]` config, with state held in
+`AppState.cascaded_circuits`. (2) `[logging] format = "json"` emits structured
+logs; the `TraceId` middleware assigns each request a `trace_id` (pass-through
+`X-Trace-Id`/`X-Request-Id`, otherwise generates a UUID), attaches it to the
+tracing span and echoes it in the `X-Trace-Id` response header — JSON/text logs
+can be correlated across replicas. (3) Redis as a **data source**
+(`DataSourceType::Redis`, persisted in metadata `data_sources`, connection fields
+host/port/database/username/password); tile layers select a cache backend via
+`Layer.cache_store` — empty uses the default in-memory/local cache, pointing at a
+Redis data source routes that layer's tile cache through Redis
+(`src/store/cache/redis.rs` + `RedisTileCacheBackend`, resolved per layer in
+`render_tile_bytes` / `get_tile`); data-source connection test supports Redis
+PING; backup/restore and REST layer CRUD both carry `cache_store`. Session
+management stays simple JWT (no Redis session cache). New unit tests: 10
+(cascaded.rs) + 6 (cache/redis.rs) + 1 (sqlite_store cache_store CRUD); frontend:
+data-source dialog adds a Redis type, layer detail adds a tile-cache backend
+selector.
 Next candidates:
 
 1. ImageMosaic / ImagePyramid data sources (P2)

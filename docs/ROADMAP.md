@@ -36,10 +36,12 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Angular 17 + Material admin console
 - Cloud-native foundation: multi-stage Docker image, `build/docker-compose.yml`, split health probes, Prometheus `/metrics`, graceful shutdown
 - WMS rendering engine: multi-geometry + opacity compositing + polygon holes + z-order + label (TextSymbolizer) rendering with collision avoidance; raster layers (GeoTIFF/WorldImage/ArcGrid/ImageMosaic) render in WMS GetMap and tiles
-- OGC core services 7/7: WMS / WFS (incl. LockFeature + GetFeatureWithLock + GetPropertyValue + GetGmlObject) / WCS (incl. range 波段子集 + INTERPOLATION) / WMTS / WPS / CSW / OGC API series; WMS GetFeatureInfo GML output
+- OGC core services 7/7: WMS / WFS (incl. LockFeature + GetFeatureWithLock + GetPropertyValue + GetGmlObject) / WCS (incl. range band subset + INTERPOLATION) / WMTS / WPS / CSW / OGC API series; WMS GetFeatureInfo GML output
 - REST API 15/16: store / layer-group / user CRUD, workspace-dimension endpoints, service settings, about + resources, feature-type PUT, tile seed REST (Importer pending)
 - Tile caching 6/6: seeding/truncate, metastore, disk quota (LRU), ETag/Last-Modified 304, custom gridsets
-- Overall progress: ~78% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
+- Security 5/7: CORS, user/group/role (+ users PUT), REST API auth, layer permissions, frontend login (LDAP/SSO and GeoFence ACL pending)
+- Cloud-native 6/7: containerization, 12-Factor config, observability (JSON logs + trace_id), lifecycle, CI/CD (Trivy + Dependabot), resilience (statelessness convergence pending)
+- Overall progress: ~83% (see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md))
 
 ### v1.1 — State Convergence (target: 2026 Q3–Q4)
 

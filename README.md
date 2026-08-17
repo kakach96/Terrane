@@ -38,10 +38,10 @@
 - ✅ Prometheus `/metrics` endpoint (requests/errors, tile cache hit rate, PG pool watermarks, system resources)
 - ✅ Graceful shutdown on SIGTERM/SIGINT with `shutdown_timeout_secs` in-flight drain
 - ⚠️ TODO: JWT secret default is hardcoded in `src/auth.rs`; use `GEOSERVER__SECURITY__JWT_SECRET` env injection in prod
-- ✅ Storage: 配置文件只保留 `[metadata]`（workspaces / data sources / layers / styles, default SQLite / PostgreSQL）; 数据源记录（元数据）按数据源指定矢量/栅格文件存储（`file_storage_type`: local / s3 / oss, 对象存储预留）; 瓦片+会话缓存保持内置 local, 见 `src/config.rs`
+- ✅ Storage: config keeps only `[metadata]` (workspaces / data sources / layers / styles, default SQLite / PostgreSQL); vector/raster file data sources registered per data source (`file_storage_type`: local / s3 / oss, object storage reserved); tile + session cache stay built-in local, see `src/config.rs`
 - ⚠️ TODO: in-memory caches (`src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL / object storage
 - ⚠️ TODO: tile cache / uploaded data on local disk, needs PVC or object storage
-- ⚠️ TODO: CI pipeline + image registry push (GitHub Actions / GitLab CI)
+- ✅ CI pipeline: `.github/workflows/ci.yml` (fmt + clippy + test + frontend build + GHCR image push on main) + Trivy image scan + Dependabot — created, not yet exercised against a real repository
 
 **Cloud-native roadmap**: containerization → 12-Factor/observability → state convergence → CI/CD. See section 6 of [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 

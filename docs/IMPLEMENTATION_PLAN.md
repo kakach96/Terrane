@@ -16,44 +16,55 @@
 | Data Source Types | 12/15 | 0 | 3 | **80%** |
 | Styling System | 5/5 | 0 | 0 | **100%** |
 | Tile Caching | 6/6 | 0 | 0 | **100%** |
-| Security | 3/7 | 0 | 4 | **43%** |
+| Security | 5/7 | 0 | 2 | **71%** |
 | Extensions | 8/14 | 0 | 6 | **57%** |
-| Cloud-Native | 4/7 | 0 | 3 | **57%** |
-| **Overall Progress** | | | | **~78%** |
+| Cloud-Native | 6/7 | 0 | 1 | **86%** |
+| **Overall Progress** | | | | **~83%** |
 
 ```
-OGC services     ██████████████████ 100%
-REST API         ████████████████░░  94%
-Data sources     ████████████████░░  80%
-Styling system   ██████████████████ 100%
-Tile caching     ██████████████████ 100%
-Security         ████████░░░░░░░░░  43%
-Extensions       █████████░░░░░░░  57%
-Cloud-Native     █████████░░░░░░░  57%
+OGC services     ██████████████████  100%
+REST API         █████████████████░  94%
+Data sources     ██████████████░░░░  80%
+Styling system   ██████████████████  100%
+Tile caching     ██████████████████  100%
+Security         █████████████░░░░░  71%
+Extensions       ██████████░░░░░░░░  57%
+Cloud-Native     ███████████████░░░  86%
 ──────────────────────────────
-Overall progress ████████████████░  78%
+Overall progress ███████████████░░░  83%
 ```
 
-> **统计口径说明**:历史 "REST API 11/16" 与 "Tile Caching 3/6" 的原始 16/6 项清单
-> 已不可追溯 (文档考古确认最早版本即为该数字且未留明细)。本轮按
-> [REST/Tile 缺口补全计划](#四phased-implementation-roadmap) 重新定义了可审计口径:
+> **Statistics basis**: the historical "REST API 11/16" and "Tile Caching 3/6"
+> numbers came from an original 16/6-item list that is no longer traceable
+> (document archaeology confirms the earliest version already carried those
+> figures without a breakdown). The REST/Tile, Security and Cloud-Native counts
+> below are re-defined on an auditable basis (see
+> [REST/Tile gap-closure plan](#4-phased-implementation-roadmap) and §6.1):
 >
-> - **REST API 16 项** = 原已实现 11 项 + 本轮补齐 5 组 (Stores 完整 CRUD、
->   工作空间维度端点、/services/settings、/about + /resources、feature-type PUT);
->   剩余 1 项未实现 = **Importer** (批量导入工作流, 独立大项暂缓)。
-> - **Tile Caching 6 项** = 基本瓦片服务 ✅ + 缓存引擎 (磁盘+TTL+Gridset) ✅ +
->   多后端 (local + Redis) ✅ + **Seeding/Truncate ✅** + **Metastore ✅** +
->   **Disk Quota + 条件刷新 (304) ✅** (附: 自定义 Gridset 注册 ✅)。
+> - **REST API 16 items** = original 11 implemented + 5 groups closed this round
+>   (full Stores CRUD, workspace-dimension endpoints, `/services/settings`,
+>   `/about` + `/resources`, feature-type PUT); the 1 remaining gap is **Importer**
+>   (bulk-import workflow, deferred as a standalone large item).
+> - **Tile Caching 6 items** = basic tile service ✅ + cache engine (disk+TTL+Gridset) ✅ +
+>   multi-backend (local + Redis) ✅ + **Seeding/Truncate ✅** + **Metastore ✅** +
+>   **Disk Quota + conditional refresh (304) ✅** (plus: custom Gridset registration ✅).
+> - **Security 7 items** (auditable, see §P3): CORS/CSRF ✅, user/group/role ✅,
+>   REST API auth ✅, layer-level permissions ✅, frontend login ✅ — LDAP / SSO
+>   (enterprise identity) ⏳, GeoFence fine-grained ACL ⏳ → 5/7 (71%).
+> - **Cloud-Native 7 items** (auditable, see §6.1): containerization ✅,
+>   12-Factor config ✅, observability ✅, lifecycle ✅, CI/CD ✅, resilience ✅ —
+>   statelessness/scalability ⏳ (in-memory divergence, SQLite single-writer) → 6/7 (86%).
 
 ---
 
-## 一、✅ Implemented Features
+## 1. ✅ Implemented Features
 
 ### 1.1 OGC Standard Services
 
-> OGC 核心服务 **7/7 (100%)**: WMS / WFS / WCS / WMTS / WPS / CSW / OGC API 系列。
-> 早期文档中的 "2 项未实现" (WPS、CSW) 已完成; 本计划另补齐了操作级缺口
-> (WFS 锁 + GetPropertyValue + GetGmlObject、WMS GetFeatureInfo GML、WCS 波段子集 + 插值)。
+> OGC core services **7/7 (100%)**: WMS / WFS / WCS / WMTS / WPS / CSW / OGC API series.
+> The earlier "2 not implemented" (WPS, CSW) are now complete; this plan also closed
+> operation-level gaps (WFS locks + GetPropertyValue + GetGmlObject, WMS GetFeatureInfo
+> GML, WCS band subset + interpolation).
 
 | Service | Operation | Status |
 |------|------|:----:|
@@ -66,14 +77,14 @@ Overall progress ████████████████░  78%
 | **WFS 1.0/1.1/2.0** | GetCapabilities | ✅ |
 | | DescribeFeatureType | ✅ |
 | | GetFeature (GML 2/3.1.1/3.2 · GeoJSON · CSV · KML · SHAPE-ZIP) | ✅ |
-| | GetFeatureWithLock (真实加锁, 响应携带 lockId) | ✅ |
-| | LockFeature (加锁 / 续锁 / RELEASEACTION 释放, lockAction ALL/SOME, EXPIRY) | ✅ |
+| | GetFeatureWithLock (real locking, response carries `lockId`) | ✅ |
+| | LockFeature (acquire / renew / RELEASEACTION release, lockAction ALL/SOME, EXPIRY) | ✅ |
 | | GetPropertyValue (WFS 2.0, `wfs:ValueCollection`) | ✅ |
 | | GetGmlObject (WFS 2.0, `wfs:GMLObjectCollection`) | ✅ |
-| | Transaction (Insert/Update/Delete) | ⏳ 后续实现 (当前 501) |
+| | Transaction (Insert/Update/Delete) | ⏳ planned later (currently 501) |
 | **WCS 1.0/1.1/2.0** | GetCapabilities | ✅ |
 | | DescribeCoverage | ✅ |
-| | GetCoverage (空间子集 + **波段 range 子集** + **INTERPOLATION** nearest/bilinear/cubic/lanczos) | ✅ |
+| | GetCoverage (spatial subset + **range band subset** + **INTERPOLATION** nearest/bilinear/cubic/lanczos) | ✅ |
 
 ### 1.2 REST API
 
@@ -95,37 +106,37 @@ Overall progress ████████████████░  78%
 | `/health` | Health check | ✅ |
 | `/tiles/{layer}/{z}/{x}/{y}` | Tile service | ✅ |
 
-> **本轮补齐的 REST 端点** (见四、Phased Roadmap 之后的补全批次):
+> **REST endpoints closed in this round** (batches after the Phased Roadmap):
 >
-> | 端点 | 功能 | 批次 |
+> | Endpoint | Function | Batch |
 > |------|------|:----:|
-> | `/stores` POST、`/stores/{name}` PUT/DELETE | Store CRUD (数据源别名视图) | R1 |
-> | `/workspaces/{ws}/stores` POST | 按工作空间创建 store | R1 |
-> | `/layer-groups/{name}` PUT | 更新图层组 | R1 |
-> | `/auth/users/{username}` PUT | 更新用户 (角色/启用/密码重置) | R1 |
-> | `/workspaces/{ws}/layers\|datastores\|coveragestores` | 工作空间维度端点 (GeoServer 标准路径) | R2 |
-> | `/services/{wms,wfs,wcs,wmts,wps,csw}/settings` GET/PUT | 服务标题/摘要/关键字 (WMS capabilities 生效) | R2 |
-> | `/about/version`、`/about/system-status` | 系统信息 (GeoServer 兼容) | R3 |
-> | `/resources` GET/POST/DELETE | 数据目录资源管理 (防路径穿越) | R3 |
-> | `/layers/{name}/feature-type` PUT | GeoPackage 属性列扩展 | R3 |
-> | `/tiles/seed` POST/GET、`/tiles/seed/{id}` GET/DELETE、`/tiles/seed/truncate` POST | GWC 风格种子任务/取消/清除 | T1 |
+> | `/stores` POST、`/stores/{name}` PUT/DELETE | Store CRUD (data-source view) | R1 |
+> | `/workspaces/{ws}/stores` POST | Create store under a workspace | R1 |
+> | `/layer-groups/{name}` PUT | Update layer group | R1 |
+> | `/auth/users/{username}` PUT | Update user (role/enabled/password reset) | R1 |
+> | `/workspaces/{ws}/layers\|datastores\|coveragestores` | Workspace-dimension endpoints (GeoServer standard paths) | R2 |
+> | `/services/{wms,wfs,wcs,wmts,wps,csw}/settings` GET/PUT | Service title/abstract/keywords (effective in WMS capabilities) | R2 |
+> | `/about/version`、`/about/system-status` | System info (GeoServer compatible) | R3 |
+> | `/resources` GET/POST/DELETE | Data-dir resource management (path-traversal protected) | R3 |
+> | `/layers/{name}/feature-type` PUT | GeoPackage attribute column extension | R3 |
+> | `/tiles/seed` POST/GET、`/tiles/seed/{id}` GET/DELETE、`/tiles/seed/truncate` POST | GWC-style seed jobs / cancel / truncate | T1 |
 
 ### 1.3 Data Source Types
 
 | Type | Description | Status |
 |------|------|:----:|
 | **PostGIS** | PostgreSQL/PostGIS database | ✅ |
-| **MySQL** | MySQL 空间数据库 — MBR 空间过滤 + ST_AsGeoJSON 几何输出, 连接池缓存 | ✅ **New** |
-| **MongoDB** | MongoDB GeoJSON 文档数据库 — collection 内 GeoJSON 几何, $geoWithin bbox 过滤, 客户端缓存 | ✅ **New** |
+| **MySQL** | MySQL spatial database — MBR spatial filtering + ST_AsGeoJSON geometry output, pooled connections | ✅ **New** |
+| **MongoDB** | MongoDB GeoJSON document database — GeoJSON geometries in a collection, $geoWithin bbox filtering, cached clients | ✅ **New** |
 | **Shapefile** | ESRI Shapefile vector format | ✅ |
 | **GeoTIFF** | GeoTIFF raster format | ✅ |
 | **GeoPackage** | OGC GeoPackage vector format (WKB) | ✅ **P2** |
 | **WorldImage** | Image + world file (.pgw/.jgw/.tfw) | ✅ **P2** |
 | **CascadedWms** | Cascaded external WMS service | ✅ **P2** |
 | **ArcGrid** | ESRI ASCII Grid raster format | ✅ **P2** |
-| **ImageMosaic** | 栅格目录马赛克 — 目录下多个 GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granule 作为一个覆盖发布 (WCS GetCoverage / WMS GetMap / 瓦片管线) | ✅ **New** |
-| **ImagePyramid** | 金字塔影像 — 目录下数字子目录 0/1/2/… 各含一层 granule, 按请求分辨率选择最合适层级 (WCS GetCoverage / WMS GetMap / 瓦片管线) | ✅ **New** |
-| **Redis** | Redis 缓存数据源 — 切片图层缓存后端 (经 `Layer.cache_store` 选择) | ✅ **New** |
+| **ImageMosaic** | Raster-directory mosaic — multiple GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granules under one directory served as a single coverage (WCS GetCoverage / WMS GetMap / tile pipelines) | ✅ **New** |
+| **ImagePyramid** | Pyramid imagery — numeric level subdirs `0/1/2/…` each holding one level of granules, best-matching level selected by request resolution (WCS GetCoverage / WMS GetMap / tile pipelines) | ✅ **New** |
+| **Redis** | Redis cache data source — tile-layer cache backend (selected via `Layer.cache_store`) | ✅ **New** |
 
 ### 1.4 Extended REST API
 
@@ -155,7 +166,7 @@ Overall progress ████████████████░  78%
 
 ### 1.7 Infrastructure
 
-- ✅ **GeoWebCache tile caching**: disk cache + expiry + Gridset + **Seeding/Truncate 种子任务** (`/tiles/seed`) + **Metastore** (瓦片元数据 JSON, 快速统计/断点续传) + **按层磁盘配额 LRU 淘汰** (`layer_quota_bytes`) + **ETag/Last-Modified 304 条件请求** + **自定义 Gridset 注册** (运行时按分辨率定义)
+- ✅ **GeoWebCache tile caching**: disk cache + expiry + Gridset + **Seeding/Truncate** (`/tiles/seed`) + **Metastore** (tile-metadata JSON: fast stats / resume) + **per-layer disk-quota LRU eviction** (`layer_quota_bytes`) + **ETag/Last-Modified 304 conditional requests** + **custom Gridset registration** (runtime, per-resolution)
 - ✅ **SQL views**: parameterized SQL → virtual layers
 - ✅ **WCS subset enhancements**: spatial clipping + resolution resampling
 
@@ -177,7 +188,7 @@ Overall progress ████████████████░  78%
 
 ---
 
-## 二、⚠️ Partially Implemented Features
+## 2. ⚠️ Partially Implemented Features
 
 ### 2.1 Style Rendering Enhancements ✅ Completed
 
@@ -205,7 +216,7 @@ Overall progress ████████████████░  78%
 
 ---
 
-## 三、❌ Not Implemented Features (sorted by priority)
+## 3. ❌ Not Implemented Features (sorted by priority)
 
 ### P0 — Core Foundations ✅ Completed
 
@@ -230,21 +241,21 @@ Overall progress ████████████████░  78%
 - ✅ **WorldImage** — world image format (.pgw/.jgw/.tfw)
 - ✅ **ArcGrid** — ESRI ASCII Grid raster format
 - ✅ **Cascaded WMS service** — HTTP proxy of WMS upstream services
-- ✅ **ImageMosaic** — 栅格目录马赛克 (GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granule 合成)
-- ✅ **ImagePyramid** — 金字塔影像 (数字层级子目录, 按分辨率选层)
-- ✅ **MySQL** — MySQL 空间数据库连接器 (MBR 过滤 + ST_AsGeoJSON, 连接测试/池缓存)
-- ✅ **MongoDB** — MongoDB GeoJSON 文档连接器 ($geoWithin bbox 过滤, ping 测试/客户端缓存)
+- ✅ **ImageMosaic** — raster-directory mosaic (composites GeoTIFF/WorldImage/ArcGrid/PNG/JPEG granules)
+- ✅ **ImagePyramid** — pyramid imagery (numeric level subdirs, resolution-based level selection)
+- ✅ **MySQL** — MySQL spatial database connector (MBR filtering + ST_AsGeoJSON, connection test / pooled clients)
+- ✅ **MongoDB** — MongoDB GeoJSON document connector ($geoWithin bbox filtering, ping test / cached clients)
 - ❌ Oracle / SQL Server — additional database support
 
-### P3 — Security ✅ Completed
+### P3 — Security (5/7)
 
 - ✅ **CORS/CSRF protection** — `actix-cors` middleware + configurable whitelist
-- ✅ **User/group/role system** — SHA-256+salt password hashing + JWT tokens + audit logs
+- ✅ **User/group/role system** — SHA-256+salt password hashing + JWT tokens + audit logs; users CRUD + PUT (role / enabled / password reset) via `/auth/users/{username}`
 - ✅ **REST API authentication** — Bearer token + `require_auth()` middleware
 - ✅ **Layer-level permissions** — Permission model + CRUD + matching rule engine
-- ✅ Frontend login page (LoginComponent) + AuthInterceptor
-- ✅ Default admin: `admin / geoserver`
-- 🔐 New endpoints: `/auth/login`, `/auth/verify`, `/auth/users`, `/permissions`
+- ✅ **Frontend security** — login page (LoginComponent) + AuthInterceptor + default admin `admin / geoserver`
+- ⏳ **Enterprise identity (LDAP / OAuth2 / SSO)** — not implemented (see Extensions #35 / ROADMAP)
+- ⏳ **Fine-grained GeoFence ACL** — per-request workspace/store/layer rules not implemented
 
 ### P4 — Extensions
 
@@ -264,7 +275,7 @@ Overall progress ████████████████░  78%
 
 ---
 
-## 四、📋 Phased Implementation Roadmap
+## 4. 📋 Phased Implementation Roadmap
 
 ### Phase 1: Core Enhancements (1-2 months)
 **Goal**: complete the OGC core services and fill in essential data management features
@@ -289,17 +300,21 @@ Overall progress ████████████████░  78%
 📅 MongoDB       ✅ Completed
 ```
 
-> 注: 计划中"More databases"中的 Oracle / SQL Server 未列入此 8 项清单;
-> 如需可后续按 tiberius (SQL Server) / 原生驱动 (Oracle) 评估接入。
+> Note: Oracle / SQL Server from the plan's "More databases" section are not part
+> of this 8-item list; they can be evaluated later via tiberius (SQL Server) /
+> native driver (Oracle) if needed.
 
-### Phase 3: Security & Permissions ✅ Completed
+### Phase 3: Security & Permissions (5/7)
 **Goal**: build a complete security system
 
 ```
 📅 CORS/CSRF protection         ✅ Completed
-📅 User/group/role system       ✅ Completed
+📅 User/group/role system       ✅ Completed (incl. users PUT)
 📅 Layer-level permissions      ✅ Completed
 📅 REST API authentication      ✅ Completed
+📅 Frontend login               ✅ Completed
+📅 Enterprise identity (LDAP/SSO) ⏳ Not implemented
+📅 GeoFence fine-grained ACL    ⏳ Not implemented
 ```
 
 ### Phase 4: Advanced Extensions (3-6 months)
@@ -315,7 +330,7 @@ Overall progress ████████████████░  78%
 
 ---
 
-## 五、📝 Technical Recommendations
+## 5. 📝 Technical Recommendations
 
 ### 5.1 Architecture Improvements
 
@@ -346,7 +361,7 @@ Overall progress ████████████████░  78%
 
 ---
 
-## 六、☁️ Cloud-Native Evolution Roadmap
+## 6. ☁️ Cloud-Native Evolution Roadmap
 
 > **Goal**: equip the application with **containerization, 12-Factor configuration, observability, horizontal scalability, and automated delivery** so it can run on modern infrastructure such as Docker / Kubernetes.
 >
@@ -356,53 +371,52 @@ Overall progress ████████████████░  78%
 
 | Dimension | Current State | Gap | Priority |
 |------|------|------|:-----:|
-| **Containerization** | Multi-stage `Dockerfile` + `.dockerignore` + `build/docker-compose.yml` (开发依赖: PostGIS + Redis + MinIO; app 经 `--profile terrane`); image `HEALTHCHECK` 基于 `/health/ready` | 未接入 CI 镜像构建/推送/扫描 | **P0 ✅** |
-| **12-Factor config** | `terrane.toml` + `GEOSERVER__` env var prefix; `load_from_file()` 已挂载 `config::Environment` | 默认 `host=127.0.0.1` (容器内通过 Dockerfile env 设 0.0.0.0); JWT secret 默认值硬编码于 `src/auth.rs` | **P0 ✅** |
-| **Statelessness / scalability** | Config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster data sources registered per data source (persisted in metadata store, `file_path` + `file_storage_type`); cache local (`src/store/cache/`); layers/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); uploads on local disk `./data` | In-memory state diverges across replicas; SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1** |
-| **Observability** | stdout logs (tracing); `/health` + 拆分 `/health/live` & `/health/ready`; Prometheus `/metrics` (请求/错误、方法/状态码/端点、瓦片命中率、PG 池水位、系统资源) | 无 structured JSON logs, 无 OpenTelemetry tracing | **P1 ✅** |
-| **Lifecycle** | SIGTERM/SIGINT 优雅关闭 + `shutdown_timeout_secs` 在途请求排空 (`main.rs`) | — | **P1 ✅** |
-| **CI/CD & security** | GitHub Actions CI created (`.github/workflows/ci.yml`: fmt + clippy + test + frontend build + GHCR push); **Trivy 镜像扫描 + Dependabot 自动更新 added** | 未在真实仓库验证; GitLab CI 可选 | **P2 ✅** |
-| **Resilience** | CORS defaults to `["*"]`; rate limiting / request-timeout middleware **done** (`src/middleware.rs`, `[server]` config, HTTP 429/504); **cascaded WMS retry/backoff + circuit breaking done** (`src/utils/cascaded.rs`, `[server]` config `cascaded_max_retries` / `cascaded_retry_base_ms` / `cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, per-upstream 熔断器) | — | **P2 ✅** |
+| **Containerization** | Multi-stage `Dockerfile` + `.dockerignore` + `build/docker-compose.yml` (dev deps: PostGIS + Redis + MinIO; app via `--profile terrane`); image `HEALTHCHECK` based on `/health/ready` | CI image build/push/scan not wired into a real repo yet | **P0 ✅** |
+| **12-Factor config** | `terrane.toml` + `GEOSERVER__` env var prefix; `load_from_file()` mounts `config::Environment` | Default `host=127.0.0.1` (Dockerfile env sets 0.0.0.0); JWT secret default hardcoded in `src/auth.rs` | **P0 ✅** |
+| **Statelessness / scalability** | Config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster data sources registered per data source (persisted in metadata store, `file_path` + `file_storage_type`); cache local (`src/store/cache/`); layers/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); uploads on local disk `./data` | In-memory state diverges across replicas (bounded by periodic + event-driven catalog refresh); SQLite is single-writer and unsuitable for HA; needs shared volume/PVC or object storage | **P1 ⏳** |
+| **Observability** | stdout logs (tracing); split probes `/health/live` & `/health/ready`; Prometheus `/metrics` (requests/errors, method/status/endpoint, tile cache hit rate, PG pool watermarks, system); **structured JSON logs (`[logging] format = "json"`) + request-level `trace_id` done** | OpenTelemetry tracing pending | **P1 ✅** |
+| **Lifecycle** | SIGTERM/SIGINT graceful shutdown + `shutdown_timeout_secs` draining in-flight requests (`main.rs`) | — | **P1 ✅** |
+| **CI/CD & security** | GitHub Actions CI created (`.github/workflows/ci.yml`: fmt + clippy + test + frontend build + GHCR push); **Trivy image scan + Dependabot auto-update added** | Not yet verified against a real repository; GitLab CI optional | **P2 ✅** |
+| **Resilience** | CORS defaults to `["*"]`; rate limiting / request-timeout middleware **done** (`src/middleware.rs`, `[server]` config, HTTP 429/504); **cascaded WMS retry/backoff + circuit breaking done** (`src/utils/cascaded.rs`, `[server]` config `cascaded_max_retries` / `cascaded_retry_base_ms` / `cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, per-upstream circuit breakers) | — | **P2 ✅** |
 
 ### 6.2 Phased Roadmap
 
-#### Phase 0: Containerization Foundations (~1 week)
+#### Phase 0: Containerization Foundations (~1 week) ✅
 
-- ✅ 多阶段 `Dockerfile`: `node` stage 构建前端 → `rust` stage `cargo build --release` → debian-slim 运行镜像 (仅二进制 + `static/`, 非 root 运行)
-- ✅ `.dockerignore` (排除 `target/`, `frontend/node_modules/`, `static/`, `data/`, 等)
-- ✅ 镜像内置 `HEALTHCHECK` (基于 `/health/ready`)
-- ✅ `build/docker-compose.yml`: 一次拉起开发依赖 (PostGIS + Redis + MinIO); app 经 `--profile terrane` 可选启动
-- ✅ 运行时默认 `host=0.0.0.0`; `static_dir` / `data_dir` / `sqlite_path` / `gwc` 经环境变量覆盖 (Dockerfile `ENV`)
+- ✅ Multi-stage `Dockerfile`: `node` stage builds the frontend → `rust` stage `cargo build --release` → debian-slim runtime image (binary + `static/` only, non-root)
+- ✅ `.dockerignore` (excludes `target/`, `frontend/node_modules/`, `static/`, `data/`, etc.)
+- ✅ Built-in image `HEALTHCHECK` (based on `/health/ready`)
+- ✅ `build/docker-compose.yml`: one command brings up dev deps (PostGIS + Redis + MinIO); app optional via `--profile terrane`
+- ✅ Runtime default `host=0.0.0.0`; `static_dir` / `data_dir` / `sqlite_path` / `gwc` overridable via env (Dockerfile `ENV`)
 
-#### Phase 1: 12-Factor Configuration & Observability
+#### Phase 1: 12-Factor Configuration & Observability ✅
 
-- ✅ 统一配置加载: `load_from_file()` 已挂载 `config::Environment` (`GEOSERVER__` 前缀), env 覆盖文件配置
-- ⚠️ JWT secret: 支持 `GEOSERVER__SECURITY__JWT_SECRET` 注入; 默认值仍硬编码于 `src/auth.rs`, 生产必须显式注入
-- ✅ 拆分健康探针: `/health/live` (liveness) + `/health/ready` (依赖元数据/业务存储就绪, 200/503)
-- ✅ 结构化日志 (tracing JSON layer, `[logging] format = "json"`) 与 request-level `trace_id` (中间件生成/透传 `X-Trace-Id`/`X-Request-Id`, 响应头回显; 默认 `text` 保持人类可读)
-- ✅ Prometheus `/metrics`: 请求/错误计数、方法/状态码/端点分布、瓦片缓存命中率、PG 连接池水位、系统资源 (纯 Rust 手工生成文本格式, 零外部依赖)
-- ✅ 优雅关闭: 捕获 SIGTERM/SIGINT + `shutdown_timeout_secs` 排空在途请求 (`main.rs::shutdown_signal` + `HttpServer::shutdown_signal`/`shutdown_timeout`)
+- ✅ Unified config loading: `load_from_file()` mounts `config::Environment` (`GEOSERVER__` prefix); env overrides file config
+- ⚠️ JWT secret: `GEOSERVER__SECURITY__JWT_SECRET` injection supported; default still hardcoded in `src/auth.rs` — production must inject explicitly
+- ✅ Split health probes: `/health/live` (liveness) + `/health/ready` (metadata/business stores ready, 200/503)
+- ✅ Structured JSON logs (tracing JSON layer, `[logging] format = "json"`) with request-level `trace_id` (middleware generates/pass-throughs `X-Trace-Id`/`X-Request-Id`, echoed in response headers; default `text` stays human-readable)
+- ✅ Prometheus `/metrics`: request/error counts, method/status/endpoint distribution, tile cache hit rate, PG pool watermarks, system resources (hand-written pure-Rust text format, zero external deps)
+- ✅ Graceful shutdown: SIGTERM/SIGINT captured + `shutdown_timeout_secs` drains in-flight requests (`main.rs::shutdown_signal` + `HttpServer::shutdown_signal`/`shutdown_timeout`)
 
-> 注: 当前阶段已并入第 9 轮实现 (监控检查 + 容器构建支持)。
+> Note: this phase was folded into round 9 of implementation (monitoring + container build support).
 
 #### Phase 2: State Convergence & Scalability
 
-- ✅ Storage: 配置文件只保留 `[metadata]` (SQLite/PostgreSQL); 矢量/栅格文件数据源按数据源登记 (persisted in metadata store), 记录 `file_path` + `file_storage_type` (local / s3 / oss); 缓存保持内置 local (`TileCacheBackend` + `SessionCache` traits in `src/store/cache/`) — local backends in place
-- ✅ **Redis 缓存数据源** (重新设计): Redis 作为数据源 (`DataSourceType::Redis`, 持久化于元数据 `data_sources` 表, host/port/database/username/password), 切片图层经 `Layer.cache_store` 选择缓存后端 (内存/本地默认 或 指定 Redis 数据源); `src/store/cache/redis.rs` 提供 `RedisConn` + `redis_url_from_connection`, `RedisTileCacheBackend` (`src/store/cache/tile.rs`) 按数据源 URL 驱动, 瓦片渲染路径 (`render_tile_bytes` / `get_tile`) 按图层解析; 连接测试支持 Redis PING
-- ✅ **In-memory catalog refresh mechanism**: 周期性地从元数据存储重载图层/样式/图层组到内存缓存, 收敛多副本间差异 (`[server] catalog_refresh_secs`, 0 = 禁用; `state.rs::refresh_catalog_from_store`, 后台 tokio 任务, 按名称更新/新增不删除); **事件驱动刷新**: REST 图层更新/删除后立即调用 `AppState::refresh_catalog` 重载内存目录, 消除 WMS/WMTS/瓦片路径的"写后读旧"窗口
-- 对象存储后端 (s3 / oss / minio) 落地: `FileStore` trait 已预留 (`src/store/file_store.rs`), 后续实现 S3/MinIO 读取/上传 (**不含瓦片缓存 S3 后端** — 缓存后端仅 local + Redis 数据源, 不做 S3)
-- 会话管理: **不引入 Redis 会话缓存**, 保持简单 JWT + 元数据存储会话 (`SessionCache` 仅 local 快速层)
-- `data_dir` / upload file storage abstraction: shared PVC / object storage (pending)
-- Graceful shutdown: catch SIGTERM + `.shutdown_timeout()` to drain in-flight requests
+- ✅ Storage: config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster file data sources registered per data source (persisted in metadata store) with `file_path` + `file_storage_type` (local / s3 / oss); cache stays built-in local (`TileCacheBackend` + `SessionCache` traits in `src/store/cache/`) — local backends in place
+- ✅ **Redis cache data source** (redesigned): Redis as a data source (`DataSourceType::Redis`, persisted in metadata `data_sources`, host/port/database/username/password); tile layers select a cache backend via `Layer.cache_store` (default in-memory/local, or a named Redis data source); `src/store/cache/redis.rs` provides `RedisConn` + `redis_url_from_connection`; `RedisTileCacheBackend` (`src/store/cache/tile.rs`) keyed by data-source URL; tile render paths (`render_tile_bytes` / `get_tile`) resolve per layer; connection test supports Redis PING
+- ✅ **In-memory catalog refresh mechanism**: periodically reloads layers/styles/layer-groups from the metadata store into the in-memory cache to converge replicas (`[server] catalog_refresh_secs`, 0 = disabled; `state.rs::refresh_catalog_from_store`, background tokio task, update/add by name without delete); **event-driven refresh**: REST layer update/delete immediately reloads the in-memory catalog via `AppState::refresh_catalog`, eliminating the write-after-read-stale window for WMS/WMTS/tile paths
+- ⏳ Object-storage backends (s3 / oss / minio): `FileStore` trait reserved (`src/store/file_store.rs`); S3/MinIO read/upload to be implemented (**no S3 tile-cache backend** — cache backends are local + Redis data source only)
+- ⏳ Session management: **no Redis session cache** by design — simple JWT + metadata-store sessions (`SessionCache` is only a local fast-path)
+- ⏳ `data_dir` / upload file storage abstraction: shared PVC / object storage (pending)
 
 #### Phase 3: CI/CD & Security Hardening
 
-- ⚠️ CI (GitHub Actions) 已创建 (`.github/workflows/ci.yml`): `cargo fmt + clippy + test` + frontend build + docker build/push (ghcr, 按 git sha 打标签); 尚未在真实仓库验证
-- Tag images by git sha; image scanning with Trivy; Dependabot / Renovate dependency updates
-- Credential management: data source passwords injectable via env, never logged; integrate with K8s Secrets
-- ✅ 韧性中间件: 请求超时 (504) + 滑动窗口速率限制 (429, 按客户端 IP / X-Forwarded-For) — `src/middleware.rs`, 经 `[server]` 配置 (`request_timeout_secs` / `rate_limit_max_requests` / `rate_limit_window_secs`) 启用
-- ✅ 级联 WMS 韧性: 瞬时故障 (超时/连接失败/429/5xx) 指数退避重试 (`cascaded_max_retries` / `cascaded_retry_base_ms`) + 按上游 URL 隔离的熔断器 (`cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, 打开→半开试探→关闭/重开) — `src/utils/cascaded.rs`, `AppState.cascaded_circuits`
-- ✅ 依赖与镜像安全: `.github/workflows/ci.yml` docker job 增加 Trivy 镜像漏洞扫描 (CRITICAL/HIGH, SARIF 上传 GitHub Security tab); `.github/dependabot.yml` 自动更新 cargo / npm / GitHub Actions 依赖
+- ⚠️ CI (GitHub Actions) created (`.github/workflows/ci.yml`): `cargo fmt + clippy + test` + frontend build + docker build/push (ghcr, tagged by git sha); not yet verified against a real repository
+- ✅ Images tagged by git sha; Trivy image scanning + Dependabot dependency updates added
+- ⏳ Credential management: data source passwords injectable via env, never logged; integrate with K8s Secrets
+- ✅ Resilience middleware: request timeout (504) + sliding-window rate limiting (429, per client IP / X-Forwarded-For) — `src/middleware.rs`, enabled via `[server]` config (`request_timeout_secs` / `rate_limit_max_requests` / `rate_limit_window_secs`)
+- ✅ Cascaded WMS resilience: exponential-backoff retry on transient failures (timeout/conn-fail/429/5xx) (`cascaded_max_retries` / `cascaded_retry_base_ms`) + per-upstream circuit breaker (`cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, open → half-open probe → closed/reopen) — `src/utils/cascaded.rs`, `AppState.cascaded_circuits`
+- ✅ Dependency & image security: CI docker job runs Trivy image vulnerability scan (CRITICAL/HIGH, SARIF uploaded to GitHub Security tab); `.github/dependabot.yml` auto-updates cargo / npm / GitHub Actions deps
 
 ### 6.3 Target Deployment Architecture
 
