@@ -70,7 +70,7 @@ struct RasterLayerData {
 }
 
 pub async fn handle_wms_request(
-    _req: HttpRequest,
+    req: HttpRequest,
     query: web::Query<Vec<(String, String)>>,
     state: web::Data<AppState>,
 ) -> HttpResponse {
@@ -82,8 +82,10 @@ pub async fn handle_wms_request(
 
     let result = match wms_request.request {
         wms::WmsOperation::GetCapabilities => handle_get_capabilities(&state, &wms_request).await,
-        wms::WmsOperation::GetMap => handle_get_map(&state, &wms_request).await,
-        wms::WmsOperation::GetFeatureInfo => handle_get_feature_info(&state, &wms_request).await,
+        wms::WmsOperation::GetMap => handle_get_map(&state, &wms_request, &req).await,
+        wms::WmsOperation::GetFeatureInfo => {
+            handle_get_feature_info(&state, &wms_request, &req).await
+        },
         wms::WmsOperation::GetLegendGraphic => {
             handle_get_legend_graphic(&state, &wms_request).await
         },
@@ -126,6 +128,7 @@ fn format_wms_error_response(err: &GeoServerError, params: &[(String, String)]) 
 #[allow(clippy::too_many_arguments)] // signature mirrors the WMS GetMap query parameters
 pub async fn render_ogc_map(
     state: &AppState,
+    req: &HttpRequest,
     layer: &str,
     bbox: &Bounds,
     width: u32,
@@ -171,7 +174,54 @@ pub async fn render_ogc_map(
         angle: None,
         scale: None,
     };
-    handle_get_map(state, &request).await
+    handle_get_map(state, &request, req).await
+}
+
+/// Enforce GeoFence access for the requested layers (opt-in via
+/// `[security] geofence_enabled`). Resolves each requested layer to its
+/// workspace/store and rejects with 403 when a deny rule matches.
+async fn enforce_geofence_for_layers(
+    state: &AppState,
+    req: &HttpRequest,
+    layers: &[String],
+) -> Result<(), GeoServerError> {
+    if !state.config.security.geofence_enabled {
+        return Ok(());
+    }
+    let layers_lock = state.layers.read().await;
+    for layer_name in layers {
+        let (workspace, short) = if let Some((ws, rest)) = layer_name.split_once(':') {
+            (ws.to_string(), rest.to_string())
+        } else {
+            (String::new(), layer_name.clone())
+        };
+        // Resolve the published layer to its real workspace/store.
+        let resolved = layers_lock.iter().find(|l| {
+            l.name == *layer_name
+                || (l.workspace == workspace && l.name == short)
+                || (workspace.is_empty() && l.name == short)
+        });
+        match resolved {
+            Some(layer) => {
+                crate::utils::geofence::enforce_layer_access(
+                    state,
+                    req,
+                    &layer.workspace,
+                    &layer.store,
+                    &layer.name,
+                    "read",
+                )
+                .await?;
+            },
+            None => {
+                crate::utils::geofence::enforce_layer_access(
+                    state, req, &workspace, "", &short, "read",
+                )
+                .await?;
+            },
+        }
+    }
+    Ok(())
 }
 
 async fn handle_get_capabilities(
@@ -221,6 +271,7 @@ async fn handle_get_capabilities(
 async fn handle_get_map(
     state: &AppState,
     request: &WmsRequest,
+    req: &HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
     info!("[GetMap] 开始处理请求");
     debug!(
@@ -229,6 +280,10 @@ async fn handle_get_map(
     );
 
     wms::validate_wms_get_map_request(request)?;
+
+    if let Some(layers) = &request.layers {
+        enforce_geofence_for_layers(state, req, layers).await?;
+    }
 
     let context = parse_get_map_params(request)?;
     info!(
@@ -1443,7 +1498,11 @@ fn render_openlayers_preview(
 async fn handle_get_feature_info(
     state: &AppState,
     request: &WmsRequest,
+    req: &HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
+    if let Some(layers) = &request.query_layers {
+        enforce_geofence_for_layers(state, req, layers).await?;
+    }
     let i = request.i.unwrap_or(0.0);
     let j = request.j.unwrap_or(0.0);
     let width = request.width.unwrap_or(512) as f64;

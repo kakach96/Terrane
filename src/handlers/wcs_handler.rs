@@ -3,11 +3,12 @@ use crate::models::{Bounds, DataSourceType};
 use crate::services::wcs::{self, CoverageDescription, WcsCapabilities, WcsRequest};
 use crate::state::AppState;
 use crate::utils::geotiff;
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use quick_xml::se::to_string;
 use tracing::{info, warn};
 
 pub async fn handle_wcs_request(
+    req: HttpRequest,
     query: web::Query<Vec<(String, String)>>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
@@ -17,7 +18,7 @@ pub async fn handle_wcs_request(
     match wcs_request.request {
         wcs::WcsOperation::GetCapabilities => handle_get_capabilities(&state, &wcs_request).await,
         wcs::WcsOperation::DescribeCoverage => handle_describe_coverage(&state, &wcs_request).await,
-        wcs::WcsOperation::GetCoverage => handle_get_coverage(&state, &wcs_request).await,
+        wcs::WcsOperation::GetCoverage => handle_get_coverage(&state, &wcs_request, &req).await,
     }
 }
 
@@ -218,10 +219,38 @@ async fn handle_describe_coverage(
 async fn handle_get_coverage(
     state: &AppState,
     request: &WcsRequest,
+    req: &HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
     let coverage_ids = request.coverage_id.as_ref().ok_or_else(|| {
         GeoServerError::BadRequest("COVERAGEID parameter is required".to_string())
     })?;
+
+    // GeoFence: per-coverage layer access (opt-in via geofence_enabled).
+    for cid in coverage_ids {
+        if state.config.security.geofence_enabled {
+            let layers_lock = state.layers.read().await;
+            let resolved = layers_lock.iter().find(|l| {
+                l.name == *cid || l.store == *cid || l.native_name.as_deref() == Some(cid.as_str())
+            });
+            match resolved {
+                Some(layer) => {
+                    crate::utils::geofence::enforce_layer_access(
+                        state,
+                        req,
+                        &layer.workspace,
+                        &layer.store,
+                        &layer.name,
+                        "read",
+                    )
+                    .await?;
+                },
+                None => {
+                    crate::utils::geofence::enforce_layer_access(state, req, "", "", cid, "read")
+                        .await?;
+                },
+            }
+        }
+    }
 
     let coverage_id = coverage_ids.first().ok_or_else(|| {
         GeoServerError::BadRequest("At least one COVERAGEID is required".to_string())

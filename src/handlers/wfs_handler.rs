@@ -9,6 +9,7 @@ use quick_xml::se::to_string;
 // ---- GET handler ----
 
 pub async fn handle_wfs_request(
+    req: HttpRequest,
     query: web::Query<Vec<(String, String)>>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
@@ -20,15 +21,15 @@ pub async fn handle_wfs_request(
         wfs::WfsOperation::DescribeFeatureType => {
             handle_describe_feature_type(&state, &wfs_request).await
         },
-        wfs::WfsOperation::GetFeature => handle_get_feature(&state, &wfs_request).await,
+        wfs::WfsOperation::GetFeature => handle_get_feature(&state, &wfs_request, &req).await,
         wfs::WfsOperation::GetFeatureWithLock => {
-            handle_get_feature_with_lock(&state, &wfs_request).await
+            handle_get_feature_with_lock(&state, &wfs_request, &req).await
         },
-        wfs::WfsOperation::LockFeature => handle_lock_feature(&state, &wfs_request).await,
+        wfs::WfsOperation::LockFeature => handle_lock_feature(&state, &wfs_request, &req).await,
         wfs::WfsOperation::GetPropertyValue => {
-            handle_get_property_value(&state, &wfs_request).await
+            handle_get_property_value(&state, &wfs_request, &req).await
         },
-        wfs::WfsOperation::GetGmlObject => handle_get_gml_object(&state, &wfs_request).await,
+        wfs::WfsOperation::GetGmlObject => handle_get_gml_object(&state, &wfs_request, &req).await,
         // WFS-T 尚未实现 (计划后续支持)
         wfs::WfsOperation::Transaction => Err(GeoServerError::NotImplemented(
             "WFS Transaction is not implemented yet (planned for a later milestone)".to_string(),
@@ -39,7 +40,7 @@ pub async fn handle_wfs_request(
 // ---- POST handler (解析 KVP body) ----
 
 pub async fn handle_wfs_post_request(
-    _req: HttpRequest,
+    req: HttpRequest,
     body: String,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, GeoServerError> {
@@ -68,7 +69,7 @@ pub async fn handle_wfs_post_request(
         wfs::WfsOperation::DescribeFeatureType => {
             handle_describe_feature_type(&state, &wfs_request).await
         },
-        wfs::WfsOperation::GetFeature => handle_get_feature(&state, &wfs_request).await,
+        wfs::WfsOperation::GetFeature => handle_get_feature(&state, &wfs_request, &req).await,
         // WFS-T 尚未实现 (计划后续支持)
         wfs::WfsOperation::Transaction => Err(GeoServerError::NotImplemented(
             "WFS Transaction is not implemented yet (planned for a later milestone)".to_string(),
@@ -80,6 +81,42 @@ pub async fn handle_wfs_post_request(
 }
 
 // ---- 原有操作处理函数保持不变 ----
+
+/// GeoFence: enforce layer access for a WFS typename (`ws:layer` or `layer`).
+async fn enforce_geofence_typename(
+    state: &AppState,
+    req: &HttpRequest,
+    typename: &str,
+) -> Result<(), GeoServerError> {
+    if !state.config.security.geofence_enabled {
+        return Ok(());
+    }
+    let (workspace, short) = match typename.split_once(':') {
+        Some((ws, rest)) => (ws.to_string(), rest.to_string()),
+        None => (String::new(), typename.to_string()),
+    };
+    let layers_lock = state.layers.read().await;
+    let resolved = layers_lock
+        .iter()
+        .find(|l| l.name == *typename || (l.workspace == workspace && l.name == short));
+    match resolved {
+        Some(layer) => {
+            crate::utils::geofence::enforce_layer_access(
+                state,
+                req,
+                &layer.workspace,
+                &layer.store,
+                &layer.name,
+                "read",
+            )
+            .await
+        },
+        None => {
+            crate::utils::geofence::enforce_layer_access(state, req, &workspace, "", &short, "read")
+                .await
+        },
+    }
+}
 
 async fn handle_get_capabilities(
     state: &AppState,
@@ -180,11 +217,17 @@ async fn handle_describe_feature_type(
 async fn handle_get_feature(
     state: &AppState,
     request: &WfsRequest,
+    req: &HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
     let type_names = request
         .type_names
         .as_ref()
         .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
+
+    // GeoFence: per-request layer access (opt-in via geofence_enabled).
+    for tn in type_names {
+        enforce_geofence_typename(state, req, tn).await?;
+    }
 
     let output_format = request
         .output_format
@@ -382,11 +425,16 @@ async fn query_layer_fids(
 async fn handle_get_feature_with_lock(
     state: &AppState,
     request: &WfsRequest,
+    req: &HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
     let type_names = request
         .type_names
         .as_ref()
         .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
+
+    for tn in type_names {
+        enforce_geofence_typename(state, req, tn).await?;
+    }
 
     let output_format = request
         .output_format
@@ -450,11 +498,16 @@ async fn handle_get_feature_with_lock(
 async fn handle_lock_feature(
     state: &AppState,
     request: &WfsRequest,
+    req: &HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
     let type_names = request
         .type_names
         .as_ref()
         .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
+
+    for tn in type_names {
+        enforce_geofence_typename(state, req, tn).await?;
+    }
     let version = request.version.as_deref().unwrap_or("2.0.0").to_string();
     let ttl = lock_ttl(request, state.config.wfs.lock_timeout_secs);
     let lock_all = !request
@@ -568,7 +621,13 @@ fn lock_feature_response_xml(
 async fn handle_get_property_value(
     state: &AppState,
     request: &WfsRequest,
+    req: &HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
+    if let Some(tns) = request.type_names.as_ref() {
+        for tn in tns {
+            enforce_geofence_typename(state, req, tn).await?;
+        }
+    }
     let property_name = request
         .property_name
         .as_ref()
@@ -632,6 +691,7 @@ async fn handle_get_property_value(
 async fn handle_get_gml_object(
     state: &AppState,
     request: &WfsRequest,
+    req: &HttpRequest,
 ) -> Result<HttpResponse, GeoServerError> {
     let object_ids = request.gml_object_id.as_ref().ok_or_else(|| {
         GeoServerError::BadRequest("GMLOBJECTID parameter is required".to_string())
@@ -646,6 +706,9 @@ async fn handle_get_gml_object(
             .map(|l| l.name)
             .collect(),
     };
+    for tn in &layers {
+        enforce_geofence_typename(state, req, tn).await?;
+    }
 
     let mut members = String::new();
     for layer_name in &layers {

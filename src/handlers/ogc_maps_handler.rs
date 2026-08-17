@@ -95,6 +95,7 @@ pub async fn handle_ogc_maps_styles(
 pub async fn handle_ogc_maps_map(
     path: web::Path<String>,
     query: web::Query<MapQuery>,
+    req: actix_web::HttpRequest,
     state: web::Data<AppState>,
 ) -> HttpResponse {
     let name = path.into_inner();
@@ -126,6 +127,7 @@ pub async fn handle_ogc_maps_map(
 
     match wms_handler::render_ogc_map(
         state.get_ref(),
+        &req,
         &name,
         &bounds,
         width,

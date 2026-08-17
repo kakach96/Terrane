@@ -1,4 +1,4 @@
-﻿//! REST API + probes + MVT integration tests.
+//! REST API + probes + MVT integration tests.
 //!
 //! Covers: health / split probes / metrics, server status, layers, and CRUD for
 //! workspaces / namespaces / styles / layer-groups / features / sql-views /
@@ -2829,3 +2829,161 @@ async fn test_ldap_login_fallback_live() {
     assert!(!resp.status().is_success(), "wrong LDAP password must fail");
 }
 
+/// GeoFence fine-grained ACL integration:
+/// 1. Create a deny rule for layer `world` for anonymous/guest.
+/// 2. Enable geofence and request WMS GetMap without auth → 403.
+/// 3. As admin (rule bypass) → success.
+/// 4. With an allow rule for a user role → success.
+#[actix_web::test]
+async fn test_geofence_denies_anonymous_wms() {
+    // custom config with geofence enabled
+    let mut config = common::create_test_config();
+    config.security.geofence_enabled = true;
+    let state = actix_web::web::Data::new(terrane::state::AppState::new(config).await);
+    let app = actix_web::test::init_service(
+        actix_web::App::new()
+            .app_data(state.clone())
+            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+    )
+    .await;
+
+    let token = login_admin_token!(app);
+
+    // deny rule: anonymous/guest → no read on layer "world"
+    let create = test::TestRequest::post()
+        .uri("/geoserver/permissions")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(serde_json::json!({
+            "username": "*",
+            "role": "guest",
+            "resource_type": "layer",
+            "resource_name": "world",
+            "access_mode": "read",
+            "effect": "deny",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(resp.status(), StatusCode::CREATED, "create deny rule");
+
+    // anonymous WMS GetMap → denied (WMS convention: HTTP 200 + ServiceException body)
+    let req = test::TestRequest::get()
+        .uri("/wms?service=WMS&request=GetMap&layers=world&bbox=-180,-90,180,90&width=10&height=10&format=image/png")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body = actix_web::test::read_body(resp).await;
+    let text = String::from_utf8_lossy(&body).to_string();
+    assert!(
+        text.contains("denied by GeoFence") || text.contains("GEOFENCE"),
+        "anonymous GetMap should be denied by GeoFence, body: {}",
+        text
+    );
+
+    // anonymous WFS GetFeature → 403
+    let req = test::TestRequest::get()
+        .uri("/wfs?service=WFS&version=1.1.0&request=GetFeature&typeName=world")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::FORBIDDEN,
+        "anonymous WFS denied, got {}",
+        resp.status()
+    );
+
+    // admin bypass → success (GetMap)
+    let req = test::TestRequest::get()
+        .uri("/wms?service=WMS&request=GetMap&layers=world&bbox=-180,-90,180,90&width=10&height=10&format=image/png")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "admin GetMap allowed, got {}",
+        resp.status()
+    );
+}
+
+/// GeoFence allow rule for an authenticated user role restores access.
+#[actix_web::test]
+async fn test_geofence_allow_rule_for_user() {
+    let mut config = common::create_test_config();
+    config.security.geofence_enabled = true;
+    let state = actix_web::web::Data::new(terrane::state::AppState::new(config).await);
+    let app = actix_web::test::init_service(
+        actix_web::App::new()
+            .app_data(state.clone())
+            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+    )
+    .await;
+
+    let token = login_admin_token!(app);
+
+    // deny anonymous, allow role "user"
+    for rule in [
+        serde_json::json!({
+            "username": "*", "role": "guest", "resource_type": "layer",
+            "resource_name": "world", "access_mode": "read", "effect": "deny",
+        }),
+        serde_json::json!({
+            "username": "*", "role": "user", "resource_type": "layer",
+            "resource_name": "world", "access_mode": "read", "effect": "allow",
+        }),
+    ] {
+        let create = test::TestRequest::post()
+            .uri("/geoserver/permissions")
+            .insert_header(("Authorization", format!("Bearer {}", token)))
+            .set_json(rule)
+            .to_request();
+        let resp = test::call_service(&app, create).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    // anonymous still denied (WMS 200 + ServiceException body)
+    let req = test::TestRequest::get()
+        .uri("/wms?service=WMS&request=GetMap&layers=world&bbox=-180,-90,180,90&width=10&height=10&format=image/png")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body = actix_web::test::read_body(resp).await;
+    let text = String::from_utf8_lossy(&body).to_string();
+    assert!(
+        text.contains("denied by GeoFence") || text.contains("GEOFENCE"),
+        "anonymous GetMap should be denied by GeoFence, body: {}",
+        text
+    );
+
+    // create a user with role "user" and log in
+    let create = test::TestRequest::post()
+        .uri("/geoserver/auth/users")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(
+            serde_json::json!({ "username": "alice", "password": "pw123456", "role": "user" }),
+        )
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert!(
+        resp.status().is_success(),
+        "create user alice: {}",
+        resp.status()
+    );
+
+    let login = test::TestRequest::post()
+        .uri("/geoserver/auth/login")
+        .set_json(serde_json::json!({ "username": "alice", "password": "pw123456" }))
+        .to_request();
+    let resp = test::call_service(&app, login).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let user_token = body["data"]["token"].as_str().unwrap_or("").to_string();
+    assert!(!user_token.is_empty(), "alice should log in");
+
+    // alice (role user) → allowed by the allow rule
+    let req = test::TestRequest::get()
+        .uri("/wfs?service=WFS&version=1.1.0&request=GetFeature&typeName=world")
+        .insert_header(("Authorization", format!("Bearer {}", user_token)))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "alice WFS allowed, got {}",
+        resp.status()
+    );
+}

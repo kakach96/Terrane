@@ -4,6 +4,7 @@ pub mod bounds;
 pub mod cascaded;
 pub mod cql_filter;
 pub mod css_parser;
+pub mod geofence;
 pub mod geometry;
 pub mod geopackage;
 pub mod geotiff;

@@ -52,11 +52,11 @@ pub async fn handle_ows_request(
     let service = query_param(query.as_ref(), "service").map(|s| s.to_ascii_uppercase());
     match service.as_deref() {
         Some("WMS") => crate::handlers::handle_wms_request(req, query, state).await,
-        Some("WFS") => match crate::handlers::handle_wfs_request(query, state).await {
+        Some("WFS") => match crate::handlers::handle_wfs_request(req, query, state).await {
             Ok(resp) => resp,
             Err(e) => e.error_response(),
         },
-        Some("WCS") => match crate::handlers::handle_wcs_request(query, state).await {
+        Some("WCS") => match crate::handlers::handle_wcs_request(req, query, state).await {
             Ok(resp) => resp,
             Err(e) => e.error_response(),
         },
