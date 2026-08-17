@@ -164,6 +164,46 @@ pub struct SecurityConfig {
     /// JWT 签名密钥 (建议通过 GEOSERVER__SECURITY__JWT_SECRET 环境变量注入)
     #[serde(default = "default_jwt_secret")]
     pub jwt_secret: String,
+    /// LDAP 企业身份认证 (可选; 未配置时仅使用本地用户)
+    #[serde(default)]
+    pub ldap: LdapConfig,
+    /// 图层级权限 (GeoFence) 强制开关: 开启后 WMS/WFS/WCS 请求按权限规则
+    /// 逐层检查, 拒绝返回 403 (默认关闭, 保持开放访问语义)
+    #[serde(default)]
+    pub geofence_enabled: bool,
+}
+
+/// LDAP 企业身份认证配置 (对应 `[security.ldap]` / `GEOSERVER__SECURITY__LDAP__*`)。
+///
+/// 启用后登录流程为: 先查本地用户; 本地缺失或密码校验失败时回退到 LDAP
+/// bind 认证; 成功后自动在本地登记用户 (角色按组映射), 再签发 JWT。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LdapConfig {
+    /// 是否启用 LDAP 认证 (默认 false)
+    #[serde(default)]
+    pub enabled: bool,
+    /// LDAP 服务器 URL (ldap://host:389 或 ldaps://host:636)
+    #[serde(default)]
+    pub url: String,
+    /// 搜索基准 DN (例如 "dc=example,dc=com")
+    #[serde(default)]
+    pub base_dn: String,
+    /// 服务账号 DN (可选; 为空时直接以用户 DN bind)
+    #[serde(default)]
+    pub bind_dn: String,
+    /// 服务账号密码 (可选)
+    #[serde(default)]
+    pub bind_password: String,
+    /// 用户过滤模板, `{username}` 占位符替换为登录名
+    /// (例如 "(uid={username})"; 默认)
+    #[serde(default = "default_ldap_user_filter")]
+    pub user_filter: String,
+    /// 管理员组 DN (可选; 用户属于该组时映射为 admin 角色)
+    #[serde(default)]
+    pub admin_group: String,
+    /// 默认角色 (LDAP 用户非管理员时的角色; 默认 "user")
+    #[serde(default = "default_ldap_default_role")]
+    pub default_role: String,
 }
 
 fn default_db_kind() -> String {
@@ -208,6 +248,14 @@ fn default_db_pool_size() -> u32 {
 
 fn default_jwt_secret() -> String {
     "terrane-jwt-secret-2026".to_string()
+}
+
+fn default_ldap_user_filter() -> String {
+    "(uid={username})".to_string()
+}
+
+fn default_ldap_default_role() -> String {
+    "user".to_string()
 }
 
 fn default_expire() -> u64 {
@@ -262,6 +310,23 @@ impl Default for SecurityConfig {
     fn default() -> Self {
         SecurityConfig {
             jwt_secret: default_jwt_secret(),
+            ldap: LdapConfig::default(),
+            geofence_enabled: false,
+        }
+    }
+}
+
+impl Default for LdapConfig {
+    fn default() -> Self {
+        LdapConfig {
+            enabled: false,
+            url: String::new(),
+            base_dn: String::new(),
+            bind_dn: String::new(),
+            bind_password: String::new(),
+            user_filter: default_ldap_user_filter(),
+            admin_group: String::new(),
+            default_role: default_ldap_default_role(),
         }
     }
 }
@@ -501,6 +566,17 @@ impl Default for GeoServerConfig {
             cache: CacheConfig::default(),
             security: SecurityConfig {
                 jwt_secret: default_jwt_secret(),
+                ldap: LdapConfig {
+                    enabled: false,
+                    url: String::new(),
+                    base_dn: String::new(),
+                    bind_dn: String::new(),
+                    bind_password: String::new(),
+                    user_filter: default_ldap_user_filter(),
+                    admin_group: String::new(),
+                    default_role: default_ldap_default_role(),
+                },
+                geofence_enabled: false,
             },
             logging: LoggingConfig {
                 level: default_log_level(),
@@ -637,5 +713,54 @@ mod tests {
         assert_eq!(c.cache_dir, PathBuf::from("./data/gwc"));
         assert_eq!(c.meta_dir, PathBuf::from("./data/gwc/meta"));
         assert_eq!(c.session_ttl_secs, 86400);
+    }
+
+    #[test]
+    fn test_ldap_defaults() {
+        let cfg = GeoServerConfig::default();
+        let l = &cfg.security.ldap;
+        assert!(!l.enabled);
+        assert!(l.url.is_empty());
+        assert!(l.base_dn.is_empty());
+        assert_eq!(l.user_filter, "(uid={username})");
+        assert_eq!(l.default_role, "user");
+        assert!(!cfg.security.geofence_enabled);
+    }
+
+    #[test]
+    fn test_ldap_config_parse() {
+        let cfg = parse_toml(
+            r#"
+            [security.ldap]
+            enabled = true
+            url = "ldap://ldap.example.com:389"
+            base_dn = "dc=example,dc=com"
+            bind_dn = "cn=svc,dc=example,dc=com"
+            bind_password = "svc-secret"
+            user_filter = "(sAMAccountName={username})"
+            admin_group = "cn=admins,dc=example,dc=com"
+            default_role = "manager"
+            "#,
+        );
+        let l = &cfg.security.ldap;
+        assert!(l.enabled);
+        assert_eq!(l.url, "ldap://ldap.example.com:389");
+        assert_eq!(l.base_dn, "dc=example,dc=com");
+        assert_eq!(l.bind_dn, "cn=svc,dc=example,dc=com");
+        assert_eq!(l.bind_password, "svc-secret");
+        assert_eq!(l.user_filter, "(sAMAccountName={username})");
+        assert_eq!(l.admin_group, "cn=admins,dc=example,dc=com");
+        assert_eq!(l.default_role, "manager");
+    }
+
+    #[test]
+    fn test_geofence_config_parse() {
+        let cfg = parse_toml(
+            r#"
+            [security]
+            geofence_enabled = true
+            "#,
+        );
+        assert!(cfg.security.geofence_enabled);
     }
 }

@@ -8,6 +8,7 @@ pub mod geometry;
 pub mod geopackage;
 pub mod geotiff;
 pub mod gml;
+pub mod ldap;
 pub mod mbstyle_parser;
 pub mod mosaic;
 pub mod mvt;

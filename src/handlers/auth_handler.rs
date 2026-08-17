@@ -59,8 +59,59 @@ pub async fn login(
     let lang = i18n::from_accept_language(req.headers());
 
     if let Some(store) = &state.store {
-        match store.get_user(&body.username).await {
-            Ok(Some(user)) => {
+        let local_user = store.get_user(&body.username).await.ok().flatten();
+        let local_ok = local_user
+            .as_ref()
+            .map(|u| u.enabled && verify_password(&body.password, &u.salt, &u.password_hash))
+            .unwrap_or(false);
+
+        // LDAP fallback: local user missing or password rejected → try the
+        // directory bind; on success auto-provision the local user.
+        if !local_ok && state.config.security.ldap.enabled {
+            match crate::utils::ldap::authenticate_ldap(
+                &state.config.security.ldap,
+                &body.username,
+                &body.password,
+            )
+            .await
+            {
+                Ok(Some(role)) => {
+                    let username = body.username.clone();
+                    if local_user.is_none() {
+                        // Auto-provision: random local password so the local
+                        // path cannot be used to bypass LDAP.
+                        let salt = generate_salt();
+                        let hash = hash_password(&uuid::Uuid::new_v4().to_string(), &salt);
+                        let _ = store
+                            .create_user(&username, &hash, &salt, &role, true)
+                            .await;
+                    } else if local_user.as_ref().map(|u| !u.enabled).unwrap_or(true) {
+                        let _ = store
+                            .audit_log(
+                                &username,
+                                "LOGIN_FAILED",
+                                None,
+                                Some("账号已禁用"),
+                                ip.as_deref(),
+                            )
+                            .await;
+                        return Err(GeoServerError::localized(
+                            "LOGIN_DISABLED",
+                            StatusCode::BAD_REQUEST,
+                            i18n::tr(lang, "login.disabled", &[]),
+                        ));
+                    }
+                    return issue_login(&state, &req, lang, ip.as_deref(), username, &role).await;
+                },
+                Ok(None) => {},
+                Err(e) => {
+                    tracing::warn!("[Auth] LDAP 认证失败: {}", e);
+                },
+            }
+        }
+
+        match local_user {
+            Some(user) => {
                 if !user.enabled {
                     let _ = store
                         .audit_log(
@@ -79,55 +130,15 @@ pub async fn login(
                 }
 
                 if verify_password(&body.password, &user.salt, &user.password_hash) {
-                    let token = generate_token(&user.username, &user.role, 24)
-                        .map_err(GeoServerError::InternalError)?;
-
-                    // 记录会话到数据库 (支持登出/吊销) 并写入会话缓存
-                    if let Ok(claims) = verify_token(&token) {
-                        let now = chrono::Utc::now();
-                        let now_str = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-                        let expires_at = (now + chrono::Duration::hours(24))
-                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-                        let session = crate::store::SessionRecord {
-                            jti: claims.jti.clone(),
-                            username: user.username.clone(),
-                            role: user.role.to_string(),
-                            issued_at: now_str.clone(),
-                            expires_at,
-                            last_seen_at: now_str,
-                            revoked: false,
-                            user_agent: req_user_agent(&req),
-                            ip_address: ip.clone(),
-                        };
-                        let _ = store.create_session(&session).await;
-                        if let Some(cache) = &state.session_cache {
-                            let _ = cache.set(session.clone()).await;
-                        }
-                        let _ = store.cleanup_expired_sessions().await;
-                    }
-
-                    let _ = store
-                        .audit_log(
-                            &body.username,
-                            "LOGIN",
-                            None,
-                            Some("登录成功"),
-                            ip.as_deref(),
-                        )
-                        .await;
-
-                    info!(
-                        "[Auth] 用户 '{}' 登录成功 (角色: {})",
-                        user.username, user.role
-                    );
-                    Ok(
-                        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                            "token": token,
-                            "username": user.username,
-                            "role": user.role.to_string(),
-                            "message": i18n::tr(lang, "login.success", &[]),
-                        }))),
+                    return issue_login(
+                        &state,
+                        &req,
+                        lang,
+                        ip.as_deref(),
+                        user.username.clone(),
+                        &user.role,
                     )
+                    .await;
                 } else {
                     let _ = store
                         .audit_log(
@@ -145,19 +156,11 @@ pub async fn login(
                     ))
                 }
             },
-            Ok(None) => Err(GeoServerError::localized(
+            None => Err(GeoServerError::localized(
                 "LOGIN_INVALID_CREDENTIALS",
                 StatusCode::BAD_REQUEST,
                 i18n::tr(lang, "login.invalid_credentials", &[]),
             )),
-            Err(e) => {
-                eprintln!("[Auth] 查询用户失败: {}", e);
-                Err(GeoServerError::localized(
-                    "LOGIN_FAILED",
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    i18n::tr(lang, "login.failed", &[]),
-                ))
-            },
         }
     } else {
         Err(GeoServerError::localized(
@@ -166,6 +169,59 @@ pub async fn login(
             i18n::tr(lang, "login.db_unavailable", &[]),
         ))
     }
+}
+
+/// Issue a JWT for a successfully authenticated user: record the session in
+/// the metadata store + session cache, write an audit entry and return the
+/// token payload.
+async fn issue_login(
+    state: &AppState,
+    req: &HttpRequest,
+    lang: i18n::Lang,
+    ip: Option<&str>,
+    username: String,
+    role: &UserRole,
+) -> Result<HttpResponse, GeoServerError> {
+    let token = generate_token(&username, role, 24).map_err(GeoServerError::InternalError)?;
+
+    if let Some(store) = &state.store {
+        if let Ok(claims) = verify_token(&token) {
+            let now = chrono::Utc::now();
+            let now_str = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+            let expires_at = (now + chrono::Duration::hours(24))
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+            let session = crate::store::SessionRecord {
+                jti: claims.jti.clone(),
+                username: username.clone(),
+                role: role.to_string(),
+                issued_at: now_str.clone(),
+                expires_at,
+                last_seen_at: now_str,
+                revoked: false,
+                user_agent: req_user_agent(req),
+                ip_address: ip.map(|s| s.to_string()),
+            };
+            let _ = store.create_session(&session).await;
+            if let Some(cache) = &state.session_cache {
+                let _ = cache.set(session.clone()).await;
+            }
+            let _ = store.cleanup_expired_sessions().await;
+        }
+
+        let _ = store
+            .audit_log(&username, "LOGIN", None, Some("登录成功"), ip)
+            .await;
+    }
+
+    info!("[Auth] 用户 '{}' 登录成功 (角色: {})", username, role);
+    Ok(
+        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "token": token,
+            "username": username,
+            "role": role.to_string(),
+            "message": i18n::tr(lang, "login.success", &[]),
+        }))),
+    )
 }
 
 /// 登出 — 吊销数据库中的会话

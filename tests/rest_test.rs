@@ -1,4 +1,4 @@
-//! REST API + probes + MVT integration tests.
+﻿//! REST API + probes + MVT integration tests.
 //!
 //! Covers: health / split probes / metrics, server status, layers, and CRUD for
 //! workspaces / namespaces / styles / layer-groups / features / sql-views /
@@ -2773,3 +2773,59 @@ async fn test_tile_conditional_requests() {
         resp.status()
     );
 }
+
+/// Live LDAP login fallback test — requires a reachable LDAP directory:
+///   TERrane_TEST_LDAP_URL      ldap://host:389
+///   TERRANE_TEST_LDAP_BASE     dc=example,dc=com
+///   TERRANE_TEST_LDAP_USER     alice
+///   TERRANE_TEST_LDAP_PASSWORD alice-password
+/// Runs with `cargo test -- --ignored`.
+#[actix_web::test]
+#[ignore]
+async fn test_ldap_login_fallback_live() {
+    let url = std::env::var("TERRANE_TEST_LDAP_URL").unwrap_or_default();
+    let base = std::env::var("TERRANE_TEST_LDAP_BASE").unwrap_or_default();
+    let user = std::env::var("TERRANE_TEST_LDAP_USER").unwrap_or_default();
+    let password = std::env::var("TERRANE_TEST_LDAP_PASSWORD").unwrap_or_default();
+    if url.is_empty() || base.is_empty() || user.is_empty() || password.is_empty() {
+        eprintln!("skipping: set TERRANE_TEST_LDAP_* env vars to run");
+        return;
+    }
+
+    let mut config = common::create_test_config();
+    config.security.ldap = terrane::config::LdapConfig {
+        enabled: true,
+        url,
+        base_dn: base,
+        bind_dn: String::new(),
+        bind_password: String::new(),
+        user_filter: "(uid={username})".to_string(),
+        admin_group: String::new(),
+        default_role: "user".to_string(),
+    };
+    let state = actix_web::web::Data::new(terrane::state::AppState::new(config).await);
+    let app = actix_web::test::init_service(
+        actix_web::App::new()
+            .app_data(state.clone())
+            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+    )
+    .await;
+
+    let req = actix_web::test::TestRequest::post()
+        .uri("/geoserver/auth/login")
+        .set_json(serde_json::json!({ "username": user, "password": password }))
+        .to_request();
+    let resp = actix_web::test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "LDAP login should succeed");
+    let body: serde_json::Value = actix_web::test::read_body_json(resp).await;
+    assert!(!body["data"]["token"].as_str().unwrap_or("").is_empty());
+
+    // Wrong password → rejected
+    let req = actix_web::test::TestRequest::post()
+        .uri("/geoserver/auth/login")
+        .set_json(serde_json::json!({ "username": user, "password": "wrong-password" }))
+        .to_request();
+    let resp = actix_web::test::call_service(&app, req).await;
+    assert!(!resp.status().is_success(), "wrong LDAP password must fail");
+}
+
