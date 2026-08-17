@@ -588,6 +588,18 @@ async fn test_wms_openlayers_preview_angle() {
         html
     );
     assert!(html.contains("rotation:"), "预览页视图应设置 rotation");
+    // Regression: the OpenLayers preview must load from local assets — a CDN
+    // dependency (jsdelivr) blanked the iframe on restricted networks.
+    assert!(
+        html.contains("/assets/vendor/ol/ol.min.js") && html.contains("/assets/vendor/ol/ol.css"),
+        "OpenLayers 预览页应引用本地 assets/vendor/ol, 实际: {}",
+        html
+    );
+    assert!(
+        !html.contains("jsdelivr") && !html.contains("cdn."),
+        "OpenLayers 预览页不应引用外部 CDN, 实际: {}",
+        html
+    );
 }
 
 #[actix_rt::test]
