@@ -1,4 +1,4 @@
-//! S3 object storage integration tests (live).
+﻿//! S3 object storage integration tests (live).
 //!
 //! Requires an S3-compatible server at `127.0.0.1:9000` (e.g. MinIO from
 //! `build/docker-compose.yml`, default credentials `terrane` / `terrane-secret`).
@@ -229,3 +229,102 @@ async fn test_s3_geojson_data_source_features() {
 
     delete_bucket(&bucket).await;
 }
+
+/// Live: GeoTIFF upload with `storage=s3` stores the object in MinIO/S3 and
+/// registers the data source with file_storage_type = "s3".
+#[actix_rt::test]
+#[ignore]
+async fn test_s3_geotiff_upload() {
+    let bucket = format!("terrane-s3upload-{}", std::process::id());
+    ensure_bucket(&bucket).await;
+
+    let config = common::create_test_config();
+    let state = actix_web::web::Data::new(terrane::state::AppState::new(config).await);
+    let app = actix_web::test::init_service(
+        actix_web::App::new()
+            .app_data(state.clone())
+            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+    )
+    .await;
+
+    // minimal valid GeoTIFF bytes (8x8, 1 band, 1 tile)
+    let tif: Vec<u8> = {
+        let mut v = vec![0u8; 0];
+        v.extend_from_slice(&[0x49, 0x49, 0x2A, 0x00]); // little-endian TIFF header
+                                                        // tags: ImageWidth(8), ImageLength(8), BitsPerSample(8), Compression(1),
+                                                        // Photometric(1), StripOffsets, SamplesPerPixel(1), RowsPerStrip(8), StripByteCounts(64)
+        let tags: Vec<(u16, u16, u32, u32)> = vec![
+            (0x0100, 3, 1, 8),  // ImageWidth LONG
+            (0x0101, 3, 1, 8),  // ImageLength LONG
+            (0x0102, 3, 1, 8),  // BitsPerSample SHORT
+            (0x0103, 3, 1, 1),  // Compression SHORT
+            (0x0106, 3, 1, 1),  // PhotometricInterpretation SHORT
+            (0x0111, 3, 1, 0),  // StripOffsets LONG (patched below)
+            (0x0115, 3, 1, 1),  // SamplesPerPixel SHORT
+            (0x0116, 3, 1, 8),  // RowsPerStrip LONG
+            (0x0117, 3, 1, 64), // StripByteCounts LONG
+        ];
+        let n = tags.len() as u16;
+        v.extend_from_slice(&n.to_le_bytes());
+        let data_offset: u32 = 8 + 2 + 12 * n as u32;
+        for (i, &(tag, typ, count, val)) in tags.iter().enumerate() {
+            v.extend_from_slice(&tag.to_le_bytes());
+            v.extend_from_slice(&typ.to_le_bytes());
+            v.extend_from_slice(&count.to_le_bytes());
+            if tag == 0x0111 {
+                v.extend_from_slice(&(data_offset + 64).to_le_bytes());
+            } else {
+                v.extend_from_slice(&val.to_le_bytes());
+            }
+            let _ = i;
+        }
+        v.extend_from_slice(&[0u8; 64]); // pixel data
+        v
+    };
+
+    // multipart upload with storage=s3 query params
+    let boundary = "----terrane-test-boundary";
+    let mut body = Vec::new();
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(
+        b"Content-Disposition: form-data; name=\"file\"; filename=\"sample.tif\"\r\n",
+    );
+    body.extend_from_slice(b"Content-Type: image/tiff\r\n\r\n");
+    body.extend_from_slice(&tif);
+    body.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());
+
+    let uri = format!(
+        "/geoserver/data/upload/geotiff?storage=s3&bucket={}&endpoint={}&region={}&access_key={}&secret_key={}",
+        bucket, ENDPOINT, REGION, ACCESS_KEY, SECRET_KEY
+    );
+    let req = actix_web::test::TestRequest::post()
+        .uri(&uri)
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={}", boundary),
+        ))
+        .set_payload(body)
+        .to_request();
+    let resp = actix_web::test::call_service(&app, req).await;
+    let status = resp.status();
+    let bytes = actix_web::test::read_body(resp).await;
+    assert!(
+        status.is_success(),
+        "S3 GeoTIFF upload should succeed, status={:?}, body={:?}",
+        status,
+        String::from_utf8_lossy(&bytes)
+    );
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or_default();
+    assert_eq!(body["data"]["file_storage_type"], "s3");
+
+    // object should be readable back from the bucket
+    let store = S3FileStore::from_connection(&s3_conn(&bucket, "sample.tif")).unwrap();
+    let fetched = store.get("sample.tif").await.unwrap();
+    assert!(
+        fetched.is_some(),
+        "uploaded GeoTIFF should exist in the bucket"
+    );
+
+    delete_bucket(&bucket).await;
+}
+

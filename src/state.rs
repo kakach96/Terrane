@@ -434,6 +434,11 @@ impl AppState {
     ) -> deadpool_postgres::Pool {
         let start = Instant::now();
 
+        // 解析 ${ENV_VAR} 引用的凭据 (K8s Secrets 注入), 仅本地副本, 不落库
+        let mut resolved = conn_info.clone();
+        crate::utils::secrets::resolve_connection_secrets(&mut resolved);
+        let conn_info = &resolved;
+
         let t1 = Instant::now();
         let mut pools = self.pg_pools.lock().unwrap();
         let lock_elapsed = t1.elapsed();
@@ -508,6 +513,10 @@ impl AppState {
         ds_name: &str,
         conn_info: &crate::models::DataSourceConnection,
     ) -> mysql_async::Pool {
+        let mut resolved = conn_info.clone();
+        crate::utils::secrets::resolve_connection_secrets(&mut resolved);
+        let conn_info = &resolved;
+
         let mut pools = self.mysql_pools.lock().unwrap();
         if let Some(pool) = pools.get(ds_name) {
             return pool.clone();
@@ -552,6 +561,10 @@ impl AppState {
                 return client.clone();
             }
         }
+
+        let mut resolved = conn_info.clone();
+        crate::utils::secrets::resolve_connection_secrets(&mut resolved);
+        let conn_info = &resolved;
 
         let host = conn_info.host.as_deref().unwrap_or("127.0.0.1");
         let port = conn_info.port.unwrap_or(27017);

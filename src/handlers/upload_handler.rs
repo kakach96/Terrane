@@ -118,8 +118,11 @@ pub async fn upload_shapefile(
 
 /// 上传 GeoTIFF（接收 .tif/.tiff 文件）
 ///
-/// 保存到服务数据目录 `<data_dir>/rasters/` (本地存储后端), 并以
-/// `file_storage_type = "local"` 登记为 GeoTIFF 数据源。
+/// 保存到服务数据目录 `<data_dir>/rasters/` (本地存储后端) 并以
+/// `file_storage_type = "local"` 登记为 GeoTIFF 数据源; 或当查询参数
+/// `storage=s3` (附 `bucket` / `endpoint` / `region` / `access_key` /
+/// `secret_key`) 时, 对象写入 S3/MinIO 并以 `file_storage_type = "s3"`
+/// 登记, 供多副本共享。
 pub async fn upload_geotiff(
     req: HttpRequest,
     payload: Multipart,
@@ -172,22 +175,71 @@ pub async fn upload_geotiff(
         }
     }
 
-    // 保存到服务数据目录 <data_dir>/rasters/<ds_name>.tif (本地存储后端)
-    let data_dir = state.config.data_dir.clone();
-    let raster_dir = data_dir.join("rasters");
-    let file_store = crate::store::LocalFileStore::new(raster_dir.clone());
+    // 存储后端选择: 查询参数 `storage=s3` 时写入 S3/MinIO, 否则本地磁盘。
+    let storage = req
+        .query_string()
+        .split('&')
+        .find_map(|pair| {
+            let mut parts = pair.splitn(2, '=');
+            if parts.next()? == "storage" {
+                parts.next()
+            } else {
+                None
+            }
+        })
+        .map(|s| s.to_string());
+
     let file_name = format!("{}.tif", ds_name);
-    file_store
-        .put(&file_name, &data)
-        .await
-        .map_err(|e| GeoServerError::InternalError(format!("保存栅格文件失败: {}", e)))?;
-    let file_path = file_store
-        .local_path(&file_name)
-        .unwrap_or_else(|| raster_dir.join(&file_name));
 
-    info!("[Upload] GeoTIFF 已保存: {:?}", file_path);
+    let (connection, storage_type) = if storage.as_deref() == Some("s3") {
+        // 从查询参数读取 S3 连接字段 (endpoint/bucket/region/access_key/secret_key)
+        let q = |key: &str| -> Option<String> {
+            req.query_string().split('&').find_map(|pair| {
+                let mut parts = pair.splitn(2, '=');
+                if parts.next()? == key {
+                    parts.next().map(|v| v.to_string())
+                } else {
+                    None
+                }
+            })
+        };
+        let bucket = q("bucket")
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| GeoServerError::BadRequest("storage=s3 需要 bucket 参数".to_string()))?;
+        let mut conn = DataSourceConnection::file(file_name.clone());
+        conn.file_storage_type = Some("s3".to_string());
+        conn.s3_endpoint = q("endpoint");
+        conn.s3_region = q("region");
+        conn.s3_bucket = Some(bucket);
+        conn.s3_access_key = q("access_key");
+        conn.s3_secret_key = q("secret_key");
 
-    let connection = DataSourceConnection::file(file_path.to_string_lossy().to_string());
+        let store = crate::store::S3FileStore::from_connection(&conn)
+            .map_err(|e| GeoServerError::InternalError(format!("S3 配置无效: {}", e)))?;
+        store
+            .put(&file_name, &data)
+            .await
+            .map_err(|e| GeoServerError::InternalError(format!("S3 上传失败: {}", e)))?;
+        info!("[Upload] GeoTIFF 已上传至 S3: {}", file_name);
+        (conn, "s3")
+    } else {
+        // 保存到服务数据目录 <data_dir>/rasters/<ds_name>.tif (本地存储后端)
+        let data_dir = state.config.data_dir.clone();
+        let raster_dir = data_dir.join("rasters");
+        let file_store = crate::store::LocalFileStore::new(raster_dir.clone());
+        file_store
+            .put(&file_name, &data)
+            .await
+            .map_err(|e| GeoServerError::InternalError(format!("保存栅格文件失败: {}", e)))?;
+        let file_path = file_store
+            .local_path(&file_name)
+            .unwrap_or_else(|| raster_dir.join(&file_name));
+        info!("[Upload] GeoTIFF 已保存: {:?}", file_path);
+        (
+            DataSourceConnection::file(file_path.to_string_lossy().to_string()),
+            "local",
+        )
+    };
 
     if let Some(store) = &state.store {
         match store
@@ -206,7 +258,7 @@ pub async fn upload_geotiff(
                     "name": ds.name,
                     "type": "geotiff",
                     "file_path": ds.connection.as_ref().and_then(|c| c.file_path.as_ref()),
-                    "file_storage_type": "local",
+                    "file_storage_type": storage_type,
                     "message": format!("GeoTIFF '{}' uploaded and data source created", ds.name),
                 }))))
             },

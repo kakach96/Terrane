@@ -2987,3 +2987,36 @@ async fn test_geofence_allow_rule_for_user() {
         resp.status()
     );
 }
+
+/// S3 upload validation: `storage=s3` without a `bucket` param → 400
+/// (no network involved; the endpoint rejects the request before connecting).
+#[actix_web::test]
+async fn test_upload_geotiff_s3_missing_bucket_rejected() {
+    let app = build_test_app!();
+
+    let boundary = "----terrane-test-boundary";
+    let mut body = Vec::new();
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(
+        b"Content-Disposition: form-data; name=\"file\"; filename=\"sample.tif\"\r\n",
+    );
+    body.extend_from_slice(b"Content-Type: image/tiff\r\n\r\n");
+    body.extend_from_slice(&[0u8; 32]);
+    body.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());
+
+    let req = test::TestRequest::post()
+        .uri("/geoserver/data/upload/geotiff?storage=s3")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={}", boundary),
+        ))
+        .set_payload(body)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "storage=s3 without bucket should be rejected, got {}",
+        resp.status()
+    );
+}

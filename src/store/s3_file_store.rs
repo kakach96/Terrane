@@ -27,6 +27,11 @@ impl S3FileStore {
     /// selects a custom endpoint (MinIO, etc.), otherwise the AWS region
     /// endpoint is used. Blank credentials fall back to anonymous access.
     pub fn from_connection(conn: &DataSourceConnection) -> Result<Self, StoreError> {
+        // 解析 ${ENV_VAR} 引用的凭据 (K8s Secrets 注入), 仅本地副本, 不落库
+        let mut resolved = conn.clone();
+        crate::utils::secrets::resolve_connection_secrets(&mut resolved);
+        let conn = &resolved;
+
         let bucket_name = conn
             .s3_bucket
             .as_deref()

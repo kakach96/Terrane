@@ -63,6 +63,10 @@ impl RedisConn {
 /// `host`/`port`/`database` (DB index, default `0`)/`username`/`password` map
 /// to `redis://[username:password@]host:port/db`.
 pub fn redis_url_from_connection(conn: &crate::models::DataSourceConnection) -> Option<String> {
+    let mut resolved = conn.clone();
+    crate::utils::secrets::resolve_connection_secrets(&mut resolved);
+    let conn = &resolved;
+
     let host = conn.host.as_deref()?.to_string();
     let port = conn.port.unwrap_or(6379);
     let db = conn.database.clone().unwrap_or_else(|| "0".to_string());
