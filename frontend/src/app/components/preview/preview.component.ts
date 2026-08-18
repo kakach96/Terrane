@@ -44,8 +44,19 @@ export class PreviewComponent implements OnInit {
     crs: 'EPSG:4326',
   };
 
-  get formatOptions(): { value: string; label: string }[] {
-    return [
+  // Built once in the constructor instead of a getter: a getter returning a fresh
+  // array + objects on every change detection forced *ngFor (default identity
+  // tracking) to rebuild all mat-options on each CD, which combined with the
+  // iframe's continuous change detection caused a render storm that froze the page.
+  formatOptions: { value: string; label: string }[] = [];
+
+  constructor(
+    private route: ActivatedRoute,
+    private geoserverService: GeoserverService,
+    private sanitizer: DomSanitizer,
+    private translate: TranslateService,
+  ) {
+    this.formatOptions = [
       {
         value: 'application/openlayers',
         label: this.translate.instant('preview.formatOpenLayers'),
@@ -54,13 +65,6 @@ export class PreviewComponent implements OnInit {
       { value: 'image/jpeg', label: this.translate.instant('preview.formatJpeg') },
     ];
   }
-
-  constructor(
-    private route: ActivatedRoute,
-    private geoserverService: GeoserverService,
-    private sanitizer: DomSanitizer,
-    private translate: TranslateService,
-  ) {}
 
   get isStaticFormat(): boolean {
     return this.previewOptions.format !== 'application/openlayers';
@@ -258,6 +262,12 @@ export class PreviewComponent implements OnInit {
 
   isActiveGroup(group: LayerGroup): boolean {
     return group.name === this.selectedGroup;
+  }
+
+  // Track by stable identifier so *ngFor reuses DOM nodes even when the source
+  // array is recreated on each change detection (avoids DOM rebuild storms).
+  trackByKey(index: number, item: { name?: string; value?: string }): string {
+    return item?.value || item?.name || String(index);
   }
 
   openInNewWindow(): void {
