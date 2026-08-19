@@ -100,4 +100,8 @@ export class PermissionsComponent implements OnInit {
       role: '',
     };
   }
+  trackByIndex(index: number): number {
+    return index;
+  }
+
 }

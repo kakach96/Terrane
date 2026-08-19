@@ -85,4 +85,8 @@ export class LayersComponent implements OnInit {
   refresh(): void {
     this.loadLayers();
   }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
 }

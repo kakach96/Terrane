@@ -429,4 +429,8 @@ export class DataSourceDialogComponent implements OnInit {
   onCancel(): void {
     this.dialogRef.close(false);
   }
+  trackByIndex(index: number): number {
+    return index;
+  }
+
 }

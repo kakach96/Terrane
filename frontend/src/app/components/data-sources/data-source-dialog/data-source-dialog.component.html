@@ -17,7 +17,7 @@
       <mat-form-field class="form-field">
         <mat-label>{{ 'dataSources.typeLabel' | translate }}</mat-label>
         <mat-select formControlName="type">
-          <mat-option *ngFor="let type of dataSourceTypes" [value]="type.value">
+          <mat-option *ngFor="let type of dataSourceTypes; trackBy: trackByIndex" [value]="type.value">
             {{ type.label }}
           </mat-option>
         </mat-select>
@@ -30,7 +30,7 @@
         <mat-option value="" disabled>{{
           'dataSources.workspacePlaceholder' | translate
         }}</mat-option>
-        <mat-option *ngFor="let ws of workspaces" [value]="ws.name">
+        <mat-option *ngFor="let ws of workspaces; trackBy: trackByIndex" [value]="ws.name">
           {{ ws.title || ws.name }}
         </mat-option>
       </mat-select>

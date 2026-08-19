@@ -98,4 +98,8 @@ export class TileLayersComponent implements OnInit {
       },
     });
   }
+  trackByIndex(index: number): number {
+    return index;
+  }
+
 }

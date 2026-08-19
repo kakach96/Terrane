@@ -212,4 +212,8 @@ export class LayerCreateComponent implements OnInit {
   goBack(): void {
     this.router.navigate(['/layers']);
   }
+  trackByIndex(index: number): number {
+    return index;
+  }
+
 }

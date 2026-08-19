@@ -69,7 +69,7 @@
       <mat-form-field appearance="outline" class="layer-select">
         <mat-label>{{ 'tileLayers.selectLayer' | translate }}</mat-label>
         <mat-select [(ngModel)]="selectedLayer">
-          <mat-option *ngFor="let layer of availableLayers" [value]="layer">
+          <mat-option *ngFor="let layer of availableLayers; trackBy: trackByIndex" [value]="layer">
             {{ layer }}
           </mat-option>
         </mat-select>

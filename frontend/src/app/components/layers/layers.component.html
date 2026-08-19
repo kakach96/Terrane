@@ -25,7 +25,7 @@
       <mat-label>{{ 'common.workspace' | translate }}</mat-label>
       <mat-select [(value)]="selectedWorkspace">
         <mat-option value="">{{ 'common.all' | translate }}</mat-option>
-        <mat-option *ngFor="let ws of workspaces" [value]="ws">
+        <mat-option *ngFor="let ws of workspaces; trackBy: trackByIndex" [value]="ws">
           {{ ws }}
         </mat-option>
       </mat-select>

@@ -17,7 +17,7 @@
         <mat-form-field appearance="outline">
           <mat-label>{{ 'permissions.resourceType' | translate }}</mat-label>
           <mat-select [(ngModel)]="newPerm.resourceType">
-            <mat-option *ngFor="let t of typeOptions" [value]="t">{{ t }}</mat-option>
+            <mat-option *ngFor="let t of typeOptions; trackBy: trackByIndex" [value]="t">{{ t }}</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
@@ -27,13 +27,13 @@
         <mat-form-field appearance="outline">
           <mat-label>{{ 'permissions.accessMode' | translate }}</mat-label>
           <mat-select [(ngModel)]="newPerm.accessMode">
-            <mat-option *ngFor="let m of modeOptions" [value]="m">{{ m }}</mat-option>
+            <mat-option *ngFor="let m of modeOptions; trackBy: trackByIndex" [value]="m">{{ m }}</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>{{ 'permissions.effect' | translate }}</mat-label>
           <mat-select [(ngModel)]="newPerm.effect">
-            <mat-option *ngFor="let e of effectOptions" [value]="e">{{
+            <mat-option *ngFor="let e of effectOptions; trackBy: trackByIndex" [value]="e">{{
               e === 'allow' ? ('permissions.allow' | translate) : ('permissions.deny' | translate)
             }}</mat-option>
           </mat-select>
@@ -46,7 +46,7 @@
           <mat-label>{{ 'permissions.roleOptional' | translate }}</mat-label>
           <mat-select [(ngModel)]="newPerm.role">
             <mat-option value="">{{ 'permissions.none' | translate }}</mat-option>
-            <mat-option *ngFor="let r of roleOptions" [value]="r">{{ r }}</mat-option>
+            <mat-option *ngFor="let r of roleOptions; trackBy: trackByIndex" [value]="r">{{ r }}</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
