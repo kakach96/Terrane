@@ -54,16 +54,11 @@ export class LayerDetailComponent implements OnInit {
     crs: 'EPSG:4326',
   };
 
-  get previewFormats(): { value: string; label: string }[] {
-    return [
-      {
-        value: 'application/openlayers',
-        label: this.translate.instant('layerDetail.formatOpenLayers'),
-      },
-      { value: 'image/png', label: this.translate.instant('layerDetail.formatPng') },
-      { value: 'image/jpeg', label: this.translate.instant('layerDetail.formatJpeg') },
-    ];
-  }
+  // Built once in constructor instead of a getter: returning a fresh array on
+  // every change detection (with translate.instant) would cause *ngFor to
+  // rebuild all mat-option nodes on each cycle — the same freeze that was
+  // fixed in preview.component.ts.
+  previewFormats: { value: string; label: string }[] = [];
 
   previewCrsOptions = ['EPSG:4326', 'EPSG:3857', 'EPSG:4490'];
 
@@ -78,7 +73,16 @@ export class LayerDetailComponent implements OnInit {
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
     private translate: TranslateService,
-  ) {}
+  ) {
+    this.previewFormats = [
+      {
+        value: 'application/openlayers',
+        label: this.translate.instant('layerDetail.formatOpenLayers'),
+      },
+      { value: 'image/png', label: this.translate.instant('layerDetail.formatPng') },
+      { value: 'image/jpeg', label: this.translate.instant('layerDetail.formatJpeg') },
+    ];
+  }
 
   ngOnInit(): void {
     const layerName = this.route.snapshot.paramMap.get('name');
@@ -256,5 +260,9 @@ export class LayerDetailComponent implements OnInit {
     if (this.previewUrl) {
       window.open(this.previewUrl, '_blank');
     }
+  }
+
+  trackByIndex(index: number): number {
+    return index;
   }
 }
