@@ -1,5 +1,14 @@
 @import '../node_modules/@angular/material/prebuilt-themes/indigo-pink.css';
 
+// Self-hosted fonts (bundled via npm, no external CDN requests)
+@import '../node_modules/@fontsource/inter/400.css';
+@import '../node_modules/@fontsource/inter/500.css';
+@import '../node_modules/@fontsource/inter/600.css';
+@import '../node_modules/@fontsource/inter/700.css';
+@import '../node_modules/@fontsource/jetbrains-mono/400.css';
+@import '../node_modules/@fontsource/jetbrains-mono/500.css';
+@import './assets/fonts/material-icons/material-icons.css';
+
 :root {
   --primary-color: #3f51b5;
   --primary-light: #7986cb;

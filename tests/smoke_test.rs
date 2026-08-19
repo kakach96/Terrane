@@ -170,16 +170,25 @@ async fn smoke_wms_openlayers_preview_html() {
         "Preview HTML should contain the OL map div, body length: {}",
         html.len()
     );
-    // Must load OpenLayers JS (either from CDN or local bundle).
+    // Must load OpenLayers from local vendor bundle (no external CDN).
     assert!(
-        html.contains("ol.min.js") || html.contains("ol.js"),
-        "Preview HTML should load OpenLayers JS, body length: {}",
+        html.contains("/assets/vendor/ol/ol.min.js"),
+        "Preview HTML should reference local OpenLayers JS, body length: {}",
         html.len()
     );
     assert!(
-        html.contains("ol.css"),
-        "Preview HTML should load OpenLayers CSS, body length: {}",
+        html.contains("/assets/vendor/ol/ol.css"),
+        "Preview HTML should reference local OpenLayers CSS, body length: {}",
         html.len()
+    );
+    // Must NOT reference external CDN (prevents offline freeze regression).
+    assert!(
+        !html.contains("cdn.jsdelivr.net"),
+        "Preview HTML must not reference jsdelivr CDN"
+    );
+    assert!(
+        !html.contains("fonts.googleapis.com"),
+        "Preview HTML must not reference Google Fonts CDN"
     );
 }
 
