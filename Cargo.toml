@@ -68,3 +68,9 @@ ldap3 = "0.12.1"
 
 [dev-dependencies]
 actix-rt = "2"
+
+[patch.crates-io]
+# proc-macro-error2 2.0.1 triggers the E0365 future-incompat lint
+# ("extern crate proc_macro is private and cannot be re-exported", rust#127909).
+# Vendored copy applies the compiler-suggested one-line fix (pub extern crate).
+proc-macro-error2 = { path = "vendor/proc-macro-error2" }
