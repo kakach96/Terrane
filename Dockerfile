@@ -3,7 +3,7 @@
 # Terrane - multi-stage container image
 #
 # Stages:
-#   1. frontend : build the Angular frontend with Node 20 -> /app/dist/terrane-ui
+#   1. frontend : build the Angular frontend with Node 24 -> /app/dist/terrane-ui
 #   2. builder  : compile the Rust backend -> /build/target/release/terrane
 #   3. runtime  : debian-slim image (binary + static/ only, non-root)
 #
@@ -17,7 +17,7 @@
 # To pull base images from a domestic (China) registry mirror instead of Docker
 # Hub, override the base-image ARGs:
 #   docker build \
-#     --build-arg NODE_IMAGE=docker.1ms.run/library/node:20-alpine \
+#     --build-arg NODE_IMAGE=docker.1ms.run/library/node:24-alpine \
 #     --build-arg RUST_IMAGE=docker.1ms.run/library/rust:1.95-bookworm \
 #     --build-arg RUNTIME_IMAGE=docker.1ms.run/library/debian:bookworm-slim \
 #     -t terrane:latest .
@@ -34,7 +34,7 @@
 # Base image selection (override via --build-arg, e.g. for domestic mirrors)
 # NOTE: ARGs referenced by FROM must be declared before the first FROM
 # ---------------------------------------------------------------------------
-ARG NODE_IMAGE=node:20-alpine
+ARG NODE_IMAGE=node:24-alpine
 ARG RUST_IMAGE=rust:1.95-bookworm
 ARG RUNTIME_IMAGE=debian:bookworm-slim
 

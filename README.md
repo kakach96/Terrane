@@ -103,7 +103,7 @@ docker compose -f build/docker-compose.yml --profile terrane up -d
 
 # Build with domestic base-image mirrors (China):
 #   docker build \
-#     --build-arg NODE_IMAGE=docker.1ms.run/library/node:20-alpine \
+#     --build-arg NODE_IMAGE=docker.1ms.run/library/node:24-alpine \
 #     --build-arg RUST_IMAGE=docker.1ms.run/library/rust:1.85-bookworm \
 #     --build-arg RUNTIME_IMAGE=docker.1ms.run/library/debian:bookworm-slim \
 #     -t terrane:latest .
