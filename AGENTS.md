@@ -112,6 +112,30 @@ publishing & OGC protocol adaptation. WFS-T / WCS-T writes are not implemented y
   and descriptions in newly added files MUST be written in English (applies to
   Docker files, config templates, scripts, and code comments alike)
 
+## Pre-commit CI checks
+
+- **Always run the CI checks locally before every commit** and fix any reported
+  issues, so the CI pipeline does not fail after push. The checks mirror
+  `.github/workflows/ci.yml` (backend: fmt + clippy + test; frontend: build).
+  Frontend lint is an additional project quality gate (not in CI, but required).
+
+  ```powershell
+  # Backend
+  cargo fmt --all -- --check
+  cargo clippy --all-targets -- -D warnings
+  cargo test --all
+
+  # Frontend
+  cd frontend
+  npm run lint
+  npm run build
+  ```
+
+- If any check fails, fix the reported issue and re-run until all pass **before**
+  committing. Do not commit with failing checks.
+- Note: a running dev server locks `target/debug/terrane.exe`; stop it first
+  (`Stop-Process -Name terrane`) so `cargo clippy` / `cargo test` can rebuild.
+
 ## Commit Messages Stype
 
 - **Format**: `type: changes content`, 

@@ -34,7 +34,10 @@ Material** frontend.
   (`terrane.toml: api_context`).
 - Storage is split: metadata store (SQLite/PostgreSQL) vs vector store vs
   raster store vs cache — see `AGENTS.md` "Storage split".
-- No test suite is currently wired into CI.
+- **Run the CI checks before every commit** (fmt + clippy + test + frontend
+  build + lint) and fix any issues so the CI pipeline does not fail after push —
+  see `AGENTS.md` "Pre-commit CI checks". CI runs `cargo test --all` and the
+  frontend build (`.github/workflows/ci.yml`).
 
 ## Tooling (installed)
 
