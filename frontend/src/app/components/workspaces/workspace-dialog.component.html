@@ -10,8 +10,8 @@
       />
       <mat-hint>{{ 'workspaces.nameHint' | translate }}</mat-hint>
       <mat-error *ngIf="name?.invalid">
-        <span *ngIf="name?.errors?.['required']">{{ 'workspaces.nameRequired' | translate }}</span>
-        <span *ngIf="name?.errors?.['pattern']">{{ 'workspaces.namePattern' | translate }}</span>
+        <span *ngIf="name.errors?.['required']">{{ 'workspaces.nameRequired' | translate }}</span>
+        <span *ngIf="name.errors?.['pattern']">{{ 'workspaces.namePattern' | translate }}</span>
       </mat-error>
     </mat-form-field>
 
