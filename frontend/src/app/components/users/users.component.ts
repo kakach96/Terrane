@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { AuthService } from '../../services/auth.service';
@@ -33,6 +33,7 @@ export class UsersComponent implements OnInit {
     private auth: AuthService,
     private notificationService: NotificationService,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -45,10 +46,12 @@ export class UsersComponent implements OnInit {
       next: (users) => {
         this.users = users;
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: () => {
         this.error = this.translate.instant('users.loadFail');
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }

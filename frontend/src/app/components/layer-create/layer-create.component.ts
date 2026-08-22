@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { TranslateService } from '@ngx-translate/core';
@@ -29,6 +29,7 @@ export class LayerCreateComponent implements OnInit {
     private notificationService: NotificationService,
     private router: Router,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -179,6 +180,7 @@ export class LayerCreateComponent implements OnInit {
           this.translate.instant('layerCreate.success', { name: layer.name }),
         );
         this.loading = false;
+        this.cdr.detectChanges();
         this.router.navigate(['/layers', layer.name]);
       },
       error: (error) => {
@@ -188,6 +190,7 @@ export class LayerCreateComponent implements OnInit {
           }),
         );
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }

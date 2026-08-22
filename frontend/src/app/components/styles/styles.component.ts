@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
@@ -21,6 +21,7 @@ export class StylesComponent implements OnInit {
     private notificationService: NotificationService,
     private dialog: MatDialog,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -33,10 +34,12 @@ export class StylesComponent implements OnInit {
       next: (data) => {
         this.styles = data;
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: () => {
         this.notificationService.error(this.translate.instant('styles.loadListFail'));
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }

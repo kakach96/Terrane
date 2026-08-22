@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
@@ -22,6 +22,7 @@ export class DataSourcesComponent implements OnInit {
     private notificationService: NotificationService,
     private dialog: MatDialog,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -34,11 +35,13 @@ export class DataSourcesComponent implements OnInit {
       next: (data: DataSource[]) => {
         this.dataSources = data;
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: (err) => {
         console.error('Failed to load data sources:', err);
         this.loading = false;
         this.notificationService.error(this.translate.instant('dataSources.loadFail'));
+        this.cdr.detectChanges();
       },
     });
   }

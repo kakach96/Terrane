@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
@@ -24,6 +24,7 @@ export class LayerGroupsComponent implements OnInit {
     private notificationService: NotificationService,
     private dialog: MatDialog,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -36,13 +37,15 @@ export class LayerGroupsComponent implements OnInit {
   loadGroups(): void {
     this.loading = true;
     this.geoserverService.getLayerGroups().subscribe({
-      next: (data) => {
-        this.groups = data;
+      next: (groups) => {
+        this.groups = groups;
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: () => {
         this.notificationService.error(this.translate.instant('layerGroups.loadFail'));
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }

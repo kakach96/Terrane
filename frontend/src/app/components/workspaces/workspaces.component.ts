@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { WorkspaceDialogComponent } from './workspace-dialog.component';
@@ -26,6 +26,7 @@ export class WorkspacesComponent implements OnInit {
     private notificationService: NotificationService,
     private dialog: MatDialog,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -38,11 +39,13 @@ export class WorkspacesComponent implements OnInit {
       next: (data) => {
         this.workspaces = data;
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Failed to load workspaces:', error);
         this.workspaces = this.getDefaultWorkspaces();
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }
@@ -105,11 +108,13 @@ export class WorkspacesComponent implements OnInit {
         this.workspaces.push(workspace);
         this.notificationService.success(this.translate.instant('workspaces.createSuccess'));
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Failed to create workspace:', error);
         this.notificationService.error(this.translate.instant('workspaces.createFail'));
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }
@@ -124,11 +129,13 @@ export class WorkspacesComponent implements OnInit {
         }
         this.notificationService.success(this.translate.instant('workspaces.updateSuccess'));
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Failed to update workspace:', error);
         this.notificationService.error(this.translate.instant('workspaces.updateFail'));
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }
@@ -152,11 +159,13 @@ export class WorkspacesComponent implements OnInit {
               this.workspaces = this.workspaces.filter((w) => w.name !== workspace.name);
               this.notificationService.success(this.translate.instant('workspaces.deleteSuccess'));
               this.loading = false;
+              this.cdr.detectChanges();
             },
             error: (error) => {
               console.error('Failed to delete workspace:', error);
               this.notificationService.error(this.translate.instant('workspaces.deleteFail'));
               this.loading = false;
+              this.cdr.detectChanges();
             },
           });
         }
@@ -177,11 +186,13 @@ export class WorkspacesComponent implements OnInit {
           }),
         );
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Failed to update workspace status:', error);
         this.notificationService.error(this.translate.instant('workspaces.operationFail'));
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateService } from '@ngx-translate/core';
@@ -56,6 +56,7 @@ export class PreviewComponent implements OnInit {
     private geoserverService: GeoserverService,
     private sanitizer: DomSanitizer,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {
     this.formatOptions = [
       {
@@ -138,8 +139,12 @@ export class PreviewComponent implements OnInit {
           this.selectLayer(this.selectedLayer || (this.layers[0]?.name ?? ''));
         }
         this.loading = false;
+        this.cdr.detectChanges();
       },
-      error: () => (this.loading = false),
+      error: () => {
+        this.loading = false;
+        this.cdr.detectChanges();
+      },
     });
 
     this.geoserverService.getLayerGroups().subscribe({

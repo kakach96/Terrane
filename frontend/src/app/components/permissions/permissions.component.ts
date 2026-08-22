@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
@@ -37,6 +37,7 @@ export class PermissionsComponent implements OnInit {
     private geoserver: GeoserverService,
     private notificationService: NotificationService,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -49,10 +50,12 @@ export class PermissionsComponent implements OnInit {
       next: (perms) => {
         this.permissions = perms;
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: () => {
-        this.error = this.translate.instant('permissions.loadFail');
+        this.notificationService.error(this.translate.instant('permissions.loadFail'));
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { MonitorStats, RequestRecord, AuditLogEntry } from '../../models/geoserver.models';
@@ -25,6 +25,7 @@ export class MonitorComponent implements OnInit, OnDestroy {
   constructor(
     private geoserver: GeoserverService,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -45,10 +46,12 @@ export class MonitorComponent implements OnInit, OnDestroy {
       next: (s) => {
         this.stats = s;
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: (e) => {
         this.error = this.translate.instant('monitor.loadFail', { message: e.message });
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
 

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateService } from '@ngx-translate/core';
@@ -74,6 +74,7 @@ export class LayerDetailComponent implements OnInit {
     private geoserverService: GeoserverService,
     private notificationService: NotificationService,
     private translate: TranslateService,
+    private cdr: ChangeDetectorRef,
   ) {
     this.previewFormats = [
       {
@@ -104,10 +105,12 @@ export class LayerDetailComponent implements OnInit {
         this.previewOptions.crs = this.displayCrs;
         this.refreshPreview();
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: () => {
         this.notificationService.error(this.translate.instant('layerDetail.loadFail'));
         this.loading = false;
+        this.cdr.detectChanges();
       },
     });
   }
