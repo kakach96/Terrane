@@ -29,16 +29,15 @@ pub async fn handle_mvt_tile(
         .parse()
         .map_err(|_| GeoServerError::BadRequest(format!("无效的 y: {}", y_str)))?;
 
-    // 确保图层存在
-    {
+    // 确保图层存在 (支持 `workspace:layer` 限定名, 与 WMS 一致)
+    let layer = {
         let layers = state.layers.read().await;
-        if !layers.iter().any(|l| l.name == layer_name) {
-            return Err(GeoServerError::NotFound(format!(
-                "图层 '{}' 未找到",
-                layer_name
-            )));
-        }
-    }
+        crate::handlers::features::resolve_layer(&layers, layer_name).cloned()
+    };
+    let layer = layer
+        .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+    // 统一使用短名 (Layer.name 不带 workspace 前缀) 查询要素与编码
+    let layer_name = layer.name.as_str();
 
     // 计算瓦片地理边界
     let bbox = mvt::tile_bounds(z, x, y);

@@ -8,6 +8,23 @@ use crate::utils::wkb;
 use futures_util::TryStreamExt;
 use tracing::info;
 
+/// Resolve a layer by name, supporting the `workspace:layer` qualified form
+/// (mirrors WMS `resolve_layer_metadata`). `Layer.name` stores the short name
+/// (e.g. `hot_scenic_spots`) while `Layer.workspace` is a separate field, so a
+/// qualified name like `demo:hot_scenic_spots` must be split before matching.
+pub fn resolve_layer<'a>(
+    layers: &'a [crate::models::Layer],
+    layer_name: &str,
+) -> Option<&'a crate::models::Layer> {
+    let (workspace, short) = match layer_name.split_once(':') {
+        Some((ws, rest)) => (ws.to_string(), rest.to_string()),
+        None => (String::new(), layer_name.to_string()),
+    };
+    layers
+        .iter()
+        .find(|l| l.name == layer_name || (l.workspace == workspace && l.name == short))
+}
+
 pub async fn query_layer_features(
     state: &AppState,
     layer_name: &str,
@@ -17,7 +34,7 @@ pub async fn query_layer_features(
 ) -> Result<Vec<Feature>, GeoServerError> {
     let layer = {
         let layers = state.layers.read().await;
-        layers.iter().find(|l| l.name == layer_name).cloned()
+        resolve_layer(&layers, layer_name).cloned()
     };
     let layer = layer
         .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;

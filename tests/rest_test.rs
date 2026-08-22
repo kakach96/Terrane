@@ -611,9 +611,74 @@ async fn test_mvt_endpoint() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Batch 3: 单要素只读查询 + 认证 + 权限 + 备份 + 上传
-// ---------------------------------------------------------------------------
+#[actix_rt::test]
+async fn test_mvt_endpoint_qualified_name() {
+    let app = build_test_app!();
+
+    // 带 workspace 前缀的限定名 (workspace:layer) 应能解析到图层 (与 WMS 一致)。
+    // 内置 world 图层 workspace = "default"。
+    let req = test::TestRequest::get()
+        .uri("/geoserver/tiles/default:world/0/0/0.pbf")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "MVT 瓦片 (限定名) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("mapbox-vector-tile"),
+        "Content-Type 应为 MVT, 实际: {}",
+        content_type
+    );
+
+    // 不存在的 workspace 前缀应 404
+    let req = test::TestRequest::get()
+        .uri("/geoserver/tiles/nope:world/0/0/0.pbf")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "未知 workspace 前缀应返回 404, 实际: {}",
+        resp.status()
+    );
+}
+
+#[actix_rt::test]
+async fn test_png_tile_qualified_name() {
+    let app = build_test_app!();
+
+    // PNG 瓦片也应支持 workspace:layer 限定名
+    let req = test::TestRequest::get()
+        .uri("/geoserver/tiles/default:world/0/0/0")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "PNG 瓦片 (限定名) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/png"),
+        "Content-Type 应为 image/png, 实际: {}",
+        content_type
+    );
+}
 
 #[actix_rt::test]
 async fn test_rest_feature_readonly() {

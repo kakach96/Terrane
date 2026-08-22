@@ -559,9 +559,10 @@ pub async fn get_tile(
         .unwrap_or("EPSG:4326");
 
     // 解析图层级缓存后端 (layer.cache_store → Redis 数据源; 否则默认本地缓存)
+    // 支持 `workspace:layer` 限定名 (与 WMS 一致)
     let layer_obj = {
         let layers = state.layers.read().await;
-        layers.iter().find(|l| l.name == layer_name).cloned()
+        crate::handlers::features::resolve_layer(&layers, layer_name).cloned()
     };
     let cache = match &layer_obj {
         Some(l) => state.tile_cache_for(l).await,
@@ -618,7 +619,7 @@ pub async fn get_tile(
     let meta_lock = state.styles_meta.read().await;
     let mut render_items = Vec::new();
 
-    if let Some(layer) = layers_lock.iter().find(|l| l.name == layer_name) {
+    if let Some(layer) = crate::handlers::features::resolve_layer(&layers_lock, layer_name) {
         let layer_crs = layer.srs.to_epsg();
         let needs_reproject = layer_crs != "EPSG:4326";
         let rules = get_style_rules(&styles_lock, &meta_lock, layer);
