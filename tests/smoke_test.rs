@@ -91,10 +91,12 @@ async fn smoke_wms_get_map_png() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
+        .uri(
+            "/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
               &LAYERS=world&BBOX=-180,-90,180,90\
               &WIDTH=256&HEIGHT=256&SRS=EPSG:4326\
-              &FORMAT=image/png")
+              &FORMAT=image/png",
+        )
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(
@@ -137,10 +139,12 @@ async fn smoke_wms_openlayers_preview_html() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
+        .uri(
+            "/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
               &LAYERS=world&BBOX=-180,-90,180,90\
               &WIDTH=800&HEIGHT=600&SRS=EPSG:4326\
-              &FORMAT=application/openlayers")
+              &FORMAT=application/openlayers",
+        )
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(
@@ -254,10 +258,12 @@ async fn smoke_wms_get_feature_info() {
 
     // Click near the center of the world layer
     let req = test::TestRequest::get()
-        .uri("/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo\
+        .uri(
+            "/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo\
               &LAYERS=world&QUERY_LAYERS=world\
               &BBOX=-180,-90,180,90&WIDTH=256&HEIGHT=256&SRS=EPSG:4326\
-              &I=128&J=128&INFO_FORMAT=application/json")
+              &I=128&J=128&INFO_FORMAT=application/json",
+        )
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(
@@ -286,8 +292,10 @@ async fn smoke_wfs_get_feature_gml() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/wfs?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetFeature\
-              &TYPENAME=world&MAXFEATURES=1")
+        .uri(
+            "/wfs?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetFeature\
+              &TYPENAME=world&MAXFEATURES=1",
+        )
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(
@@ -359,10 +367,12 @@ async fn smoke_nonexistent_layer_does_not_panic() {
     // return 500 or the handler may return 200 with empty body depending on
     // implementation). The key invariant: no server crash.
     let req = test::TestRequest::get()
-        .uri("/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
+        .uri(
+            "/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
               &LAYERS=nonexistent_layer_xyz\
               &BBOX=-180,-90,180,90&WIDTH=256&HEIGHT=256\
-              &SRS=EPSG:4326&FORMAT=image/png")
+              &SRS=EPSG:4326&FORMAT=image/png",
+        )
         .to_request();
     let resp = test::call_service(&app, req).await;
     let status = resp.status();
@@ -424,10 +434,12 @@ async fn smoke_wms_get_map_latency() {
 
     let start = std::time::Instant::now();
     let req = test::TestRequest::get()
-        .uri("/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
+        .uri(
+            "/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
               &LAYERS=world&BBOX=-180,-90,180,90\
               &WIDTH=512&HEIGHT=512&SRS=EPSG:4326\
-              &FORMAT=image/png")
+              &FORMAT=image/png",
+        )
         .to_request();
     let resp = test::call_service(&app, req).await;
     let elapsed = start.elapsed();
@@ -449,10 +461,12 @@ async fn smoke_wms_openlayers_preview_has_view_params() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
+        .uri(
+            "/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap\
               &LAYERS=world&BBOX=-180,-90,180,90\
               &WIDTH=800&HEIGHT=600&SRS=EPSG:4326\
-              &FORMAT=application/openlayers")
+              &FORMAT=application/openlayers",
+        )
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body = test::read_body(resp).await;
@@ -467,12 +481,6 @@ async fn smoke_wms_openlayers_preview_has_view_params() {
         html.contains("center:"),
         "Preview should contain map center"
     );
-    assert!(
-        html.contains("zoom:"),
-        "Preview should contain zoom level"
-    );
-    assert!(
-        html.contains("extent:"),
-        "Preview should contain extent"
-    );
+    assert!(html.contains("zoom:"), "Preview should contain zoom level");
+    assert!(html.contains("extent:"), "Preview should contain extent");
 }
