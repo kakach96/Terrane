@@ -19,7 +19,7 @@
     <mat-form-field appearance="outline" class="format-field">
       <mat-label>{{ 'preview.formatLabel' | translate }}</mat-label>
       <mat-select [(ngModel)]="previewOptions.format" (selectionChange)="refreshPreview()">
-        <mat-option *ngFor="let f of formatOptions; trackBy: trackByKey" [value]="f.value">
+        <mat-option *ngFor="let f of formatOptions(); trackBy: trackByKey" [value]="f.value">
           {{ f.label }}
         </mat-option>
       </mat-select>

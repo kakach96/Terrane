@@ -1,7 +1,7 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, computed } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
-import { filter } from 'rxjs/operators';
-import { Subscription } from 'rxjs';
+import { filter, map } from 'rxjs/operators';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { AuthService } from './services/auth.service';
@@ -14,12 +14,10 @@ import { LoginComponent } from './components/login/login.component';
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
 })
-export class AppComponent implements OnInit, OnDestroy {
+export class AppComponent {
   title = 'Terrane';
-  pageTitle = 'Terrane';
   sidenavOpened = true;
-  currentLang: SupportedLanguage = 'zh-CN';
-  private langSub!: Subscription;
+  currentLang = this.languageService.currentLang;
 
   // Translate keys for the toolbar page title (indexed by route path).
   private menuTitleKeys: { [key: string]: string } = {
@@ -53,6 +51,23 @@ export class AppComponent implements OnInit, OnDestroy {
     this.navGroups[group] = !this.navGroups[group];
   }
 
+  private currentUrl = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      map(() => this.router.url),
+    ),
+    { initialValue: this.router.url },
+  );
+
+  /** Toolbar page title, reactive to both route changes and language switches. */
+  pageTitle = computed(() => {
+    // Read currentLang to establish a dependency so the title re-translates on switch.
+    this.currentLang();
+    const basePath = this.currentUrl()?.split('?')[0] ?? '';
+    const key = this.menuTitleKeys[basePath];
+    return key ? this.translate.instant(key) : 'Terrane';
+  });
+
   constructor(
     private router: Router,
     public auth: AuthService,
@@ -61,34 +76,8 @@ export class AppComponent implements OnInit, OnDestroy {
     public languageService: LanguageService,
   ) {}
 
-  ngOnInit(): void {
-    this.currentLang = this.languageService.currentLang;
-    this.langSub = this.translate.onLangChange.subscribe((event) => {
-      this.currentLang = event.lang as SupportedLanguage;
-      this.updatePageTitle(this.router.url);
-    });
-
-    this.router.events
-      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
-      .subscribe((event) => {
-        this.updatePageTitle(event.url);
-      });
-
-    this.updatePageTitle(this.router.url);
-  }
-
-  ngOnDestroy(): void {
-    this.langSub?.unsubscribe();
-  }
-
   setLanguage(lang: SupportedLanguage): void {
     this.languageService.setLanguage(lang);
-  }
-
-  private updatePageTitle(url: string): void {
-    const basePath = url.split('?')[0];
-    const key = this.menuTitleKeys[basePath];
-    this.pageTitle = key ? this.translate.instant(key) : 'Terrane';
   }
 
   openLoginDialog(): void {

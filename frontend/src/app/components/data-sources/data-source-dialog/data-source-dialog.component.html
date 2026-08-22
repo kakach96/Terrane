@@ -1,4 +1,6 @@
-<h2 mat-dialog-title>{{ title }}</h2>
+<h2 mat-dialog-title>
+  <span style="display: none">{{ currentLang() }}</span>{{ title }}
+</h2>
 <mat-dialog-content>
   <form [formGroup]="form" class="data-source-form">
     <div class="form-row">
@@ -17,7 +19,7 @@
       <mat-form-field class="form-field">
         <mat-label>{{ 'dataSources.typeLabel' | translate }}</mat-label>
         <mat-select formControlName="type">
-          <mat-option *ngFor="let type of dataSourceTypes; trackBy: trackByIndex" [value]="type.value">
+          <mat-option *ngFor="let type of dataSourceTypes(); trackBy: trackByIndex" [value]="type.value">
             {{ type.label }}
           </mat-option>
         </mat-select>
@@ -143,7 +145,7 @@
         <mat-label>{{ 'dataSources.storageType' | translate }}</mat-label>
         <mat-select formControlName="file_storage_type">
           <mat-option
-            *ngFor="let st of fileStorageTypes"
+            *ngFor="let st of fileStorageTypes()"
             [value]="st.value"
             [matTooltip]="st.description"
             matTooltipPosition="right"

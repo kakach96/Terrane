@@ -1,10 +1,11 @@
-import { Component, Inject, inject } from '@angular/core';
+import { Component, Inject, inject, computed } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { GeoserverService } from '../../../services/geoserver.service';
 import { NotificationService } from '../../../services/notification.service';
+import { LanguageService } from '../../../services/language.service';
 import {
   DataSource,
   DataSourceConnection,
@@ -33,37 +34,49 @@ export class DataSourceDialogComponent {
   private geoserverService = inject(GeoserverService);
   private notificationService = inject(NotificationService);
   private translate = inject(TranslateService);
+  private languageService = inject(LanguageService);
+
+  /** Current language signal – read in the template to re-render on switch. */
+  currentLang = this.languageService.currentLang;
 
   form: FormGroup;
   mode: 'create' | 'edit';
   dataSource?: DataSource;
-  dataSourceTypes = [
-    { value: 'postgis', label: 'PostGIS' },
-    { value: 'mysql', label: 'MySQL' },
-    { value: 'mongo', label: 'MongoDB' },
-    { value: 'shapefile', label: 'Shapefile' },
-    { value: 'geotiff', label: 'GeoTIFF' },
-    { value: 'geopackage', label: 'GeoPackage' },
-    { value: 'geojson', label: 'GeoJSON' },
-    { value: 'worldimage', label: 'WorldImage' },
-    { value: 'cascaded_wms', label: this.translate.instant('dataSources.cascadedWms') },
-    { value: 'arcgrid', label: 'ArcGrid' },
-    { value: 'image_mosaic', label: 'ImageMosaic' },
-    { value: 'image_pyramid', label: 'ImagePyramid' },
-    { value: 'redis', label: 'Redis Cache' },
-  ];
-  fileStorageTypes = [
-    {
-      value: 'local',
-      label: this.translate.instant('dataSources.storageTypeLocal'),
-      description: this.translate.instant('dataSources.storageTypeLocalDesc'),
-    },
-    {
-      value: 's3',
-      label: this.translate.instant('dataSources.storageTypeS3'),
-      description: this.translate.instant('dataSources.storageTypeS3Desc'),
-    },
-  ];
+  // Computed so labels re-translate on language switch; reading currentLang()
+  // makes the computed re-evaluate when the language changes.
+  dataSourceTypes = computed(() => {
+    this.languageService.currentLang();
+    return [
+      { value: 'postgis', label: 'PostGIS' },
+      { value: 'mysql', label: 'MySQL' },
+      { value: 'mongo', label: 'MongoDB' },
+      { value: 'shapefile', label: 'Shapefile' },
+      { value: 'geotiff', label: 'GeoTIFF' },
+      { value: 'geopackage', label: 'GeoPackage' },
+      { value: 'geojson', label: 'GeoJSON' },
+      { value: 'worldimage', label: 'WorldImage' },
+      { value: 'cascaded_wms', label: this.translate.instant('dataSources.cascadedWms') },
+      { value: 'arcgrid', label: 'ArcGrid' },
+      { value: 'image_mosaic', label: 'ImageMosaic' },
+      { value: 'image_pyramid', label: 'ImagePyramid' },
+      { value: 'redis', label: 'Redis Cache' },
+    ];
+  });
+  fileStorageTypes = computed(() => {
+    this.languageService.currentLang();
+    return [
+      {
+        value: 'local',
+        label: this.translate.instant('dataSources.storageTypeLocal'),
+        description: this.translate.instant('dataSources.storageTypeLocalDesc'),
+      },
+      {
+        value: 's3',
+        label: this.translate.instant('dataSources.storageTypeS3'),
+        description: this.translate.instant('dataSources.storageTypeS3Desc'),
+      },
+    ];
+  });
   isTesting = false;
   selectedFile: File | null = null;
 

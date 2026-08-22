@@ -1,12 +1,12 @@
-import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { TranslateService } from '@ngx-translate/core';
-import { toSignal, toObservable } from '@angular/core/rxjs-interop';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Workspace, DataSource } from '../../models/geoserver.models';
-import { switchMap, tap, map, distinctUntilChanged, startWith, catchError, of } from 'rxjs';
+import { switchMap, tap, map, distinctUntilChanged, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,

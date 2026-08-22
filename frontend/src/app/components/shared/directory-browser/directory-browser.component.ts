@@ -1,7 +1,8 @@
-import { Component, Inject, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../../services/geoserver.service';
+import { LanguageService } from '../../../services/language.service';
 import { FileEntry, S3BrowseRequest } from '../../../models/geoserver.models';
 
 export interface DirectoryBrowserData {
@@ -32,6 +33,11 @@ export class DirectoryBrowserComponent implements OnInit {
   loading = false;
   error = '';
   selectedPath = '';
+
+  private languageService = inject(LanguageService);
+
+  /** Current language signal – read in the template to re-render on switch. */
+  currentLang = this.languageService.currentLang;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: DirectoryBrowserData,

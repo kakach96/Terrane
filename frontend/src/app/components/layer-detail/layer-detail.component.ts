@@ -5,7 +5,8 @@ import { TranslateService } from '@ngx-translate/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
-import { Layer } from '../../models/geoserver.models';
+import { LanguageService } from '../../services/language.service';
+import { Layer, FeatureCollection, StyleInfo, DataSource } from '../../models/geoserver.models';
 import { switchMap, tap, filter, map, startWith, catchError, of } from 'rxjs';
 
 @Component({
@@ -22,6 +23,7 @@ export class LayerDetailComponent {
   private geoserverService = inject(GeoserverService);
   private notificationService = inject(NotificationService);
   private translate = inject(TranslateService);
+  private languageService = inject(LanguageService);
 
   previewUrl = '';
   safePreviewUrl: SafeResourceUrl = '';
@@ -37,16 +39,12 @@ export class LayerDetailComponent {
     crs: 'EPSG:4326',
   };
 
-  // Built once in constructor instead of a getter: returning a fresh array on
-  // every change detection (with translate.instant) would cause *ngFor to
-  // rebuild all mat-option nodes on each cycle — the same freeze that was
-  // fixed in preview.component.ts.
-  previewFormats: { value: string; label: string }[] = [];
-
-  previewCrsOptions = ['EPSG:4326', 'EPSG:3857', 'EPSG:4490'];
-
-  constructor() {
-    this.previewFormats = [
+  // Computed so labels re-translate on language switch. Reading currentLang()
+  // makes the computed re-evaluate when the language changes; the array is
+  // memoized so *ngFor does not rebuild mat-option nodes on every CD cycle.
+  previewFormats = computed<{ value: string; label: string }[]>(() => {
+    this.languageService.currentLang();
+    return [
       {
         value: 'application/openlayers',
         label: this.translate.instant('layerDetail.formatOpenLayers'),
@@ -54,7 +52,9 @@ export class LayerDetailComponent {
       { value: 'image/png', label: this.translate.instant('layerDetail.formatPng') },
       { value: 'image/jpeg', label: this.translate.instant('layerDetail.formatJpeg') },
     ];
-  }
+  });
+
+  previewCrsOptions = ['EPSG:4326', 'EPSG:3857', 'EPSG:4490'];
 
   /** Layer name from route – read once. */
   private layerName = this.route.snapshot.paramMap.get('name') ?? '';
@@ -88,7 +88,7 @@ export class LayerDetailComponent {
     filter(() => !!this.layerName),
     switchMap(() =>
       this.geoserverService.getLayerFeatures(this.layerName).pipe(
-        catchError(() => of({ features: [] } as any)),
+        catchError(() => of({ type: 'FeatureCollection', features: [] } as FeatureCollection)),
       ),
     ),
   );
@@ -102,13 +102,13 @@ export class LayerDetailComponent {
     startWith(0),
     switchMap(() =>
       this.geoserverService.getStyles().pipe(
-        catchError(() => of([] as any[])),
+        catchError(() => of([] as StyleInfo[])),
       ),
     ),
   );
 
   styleNames = toSignal(
-    this.styleNames$.pipe(map((data) => data.map((s: any) => s.name))),
+    this.styleNames$.pipe(map((data) => data.map((s) => s.name))),
     { initialValue: [] as string[] },
   );
 
@@ -116,16 +116,16 @@ export class LayerDetailComponent {
     startWith(0),
     switchMap(() =>
       this.geoserverService.getDataSources().pipe(
-        catchError(() => of([] as any[])),
+        catchError(() => of([] as DataSource[])),
       ),
     ),
   );
 
   redisCacheSources = toSignal(
     this.redisCacheSources$.pipe(
-      map((sources) => sources.filter((s: any) => s.type === 'redis' && s.enabled)),
+      map((sources) => sources.filter((s) => s.type === 'redis' && s.enabled)),
     ),
-    { initialValue: [] as { name: string }[] },
+    { initialValue: [] as DataSource[] },
   );
 
   // ── Computed signals ──────────────────────────────────────────────

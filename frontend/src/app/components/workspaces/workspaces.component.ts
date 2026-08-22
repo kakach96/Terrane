@@ -99,7 +99,7 @@ export class WorkspacesComponent {
   createWorkspace(request: CreateWorkspaceRequest): void {
     this.loading.set(true);
     this.geoserverService.createWorkspace(request).subscribe({
-      next: (workspace) => {
+      next: () => {
         this.notificationService.success(this.translate.instant('workspaces.createSuccess'));
         this.loading.set(false);
         this.refreshTrigger.update((v) => v + 1);

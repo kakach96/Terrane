@@ -4,6 +4,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { AuthService } from '../../services/auth.service';
 import { NotificationService } from '../../services/notification.service';
+import { LanguageService } from '../../services/language.service';
 import { User } from '../../models/geoserver.models';
 import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
@@ -19,6 +20,10 @@ export class UsersComponent {
   private auth = inject(AuthService);
   private notificationService = inject(NotificationService);
   private translate = inject(TranslateService);
+  private languageService = inject(LanguageService);
+
+  /** Current language signal – read in the template to re-render on switch. */
+  currentLang = this.languageService.currentLang;
 
   error = '';
 

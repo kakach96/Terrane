@@ -129,7 +129,7 @@
               [value]="previewOptions.format"
               (selectionChange)="updatePreviewParam('format', $event.value)"
             >
-              <mat-option *ngFor="let fmt of previewFormats; trackBy: trackByIndex" [value]="fmt.value">
+              <mat-option *ngFor="let fmt of previewFormats(); trackBy: trackByIndex" [value]="fmt.value">
                 {{ fmt.label }}
               </mat-option>
             </mat-select>

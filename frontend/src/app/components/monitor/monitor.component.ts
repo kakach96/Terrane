@@ -10,8 +10,9 @@ import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
+import { LanguageService } from '../../services/language.service';
 import { MonitorStats, RequestRecord, AuditLogEntry } from '../../models/geoserver.models';
-import { switchMap, tap, map, startWith, catchError, of, combineLatest, interval } from 'rxjs';
+import { switchMap, map, startWith, catchError, of, combineLatest, interval } from 'rxjs';
 
 interface MonitorData {
   stats: MonitorStats | null;
@@ -29,6 +30,7 @@ interface MonitorData {
 export class MonitorComponent {
   private geoserver = inject(GeoserverService);
   private translate = inject(TranslateService);
+  private languageService = inject(LanguageService);
   private destroyRef = inject(DestroyRef);
 
   activeTab: 'overview' | 'requests' | 'audit' = 'overview';
@@ -66,6 +68,8 @@ export class MonitorComponent {
 
   // ── Computed chart data ───────────────────────────────────────────
   uptimeFormatted = computed(() => {
+    // Read currentLang to re-translate on language switch.
+    this.languageService.currentLang();
     const s = this.stats();
     if (!s) return '';
     const sec = s.uptime_seconds;

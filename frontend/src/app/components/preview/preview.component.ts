@@ -5,6 +5,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
+import { LanguageService } from '../../services/language.service';
 import { Layer, LayerGroup } from '../../models/geoserver.models';
 import { transformBounds } from '../../utils/coords';
 import { switchMap, tap, map, startWith, catchError, of, combineLatest } from 'rxjs';
@@ -34,6 +35,7 @@ export class PreviewComponent {
   private sanitizer = inject(DomSanitizer);
   private translate = inject(TranslateService);
   private notificationService = inject(NotificationService);
+  private languageService = inject(LanguageService);
 
   previewMode: 'layer' | 'group' = 'layer';
   searchQuery = '';
@@ -57,17 +59,12 @@ export class PreviewComponent {
     crs: 'EPSG:4326',
   };
 
-  // Built once in the constructor instead of a getter: a getter returning a fresh
-  // array + objects on every change detection forced *ngFor (default identity
-  // tracking) to rebuild all mat-options on each CD, which combined with the
-  // iframe's continuous change detection caused a render storm that froze the page.
-  formatOptions: { value: string; label: string }[] = [];
-
-  private refreshTrigger = signal(0);
-  loading = signal(true);
-
-  constructor() {
-    this.formatOptions = [
+  // Computed so labels re-translate on language switch. Reading currentLang()
+  // makes the computed re-evaluate when the language changes; the array is
+  // memoized so *ngFor does not rebuild mat-option nodes on every CD cycle.
+  formatOptions = computed<{ value: string; label: string }[]>(() => {
+    this.languageService.currentLang();
+    return [
       {
         value: 'application/openlayers',
         label: this.translate.instant('preview.formatOpenLayers'),
@@ -75,7 +72,12 @@ export class PreviewComponent {
       { value: 'image/png', label: this.translate.instant('preview.formatPng') },
       { value: 'image/jpeg', label: this.translate.instant('preview.formatJpeg') },
     ];
+  });
 
+  private refreshTrigger = signal(0);
+  loading = signal(true);
+
+  constructor() {
     // Initialise preview mode from query params
     const layerParam = this.route.snapshot.queryParamMap.get('layer');
     const groupParam = this.route.snapshot.queryParamMap.get('group');

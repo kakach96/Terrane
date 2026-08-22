@@ -168,7 +168,7 @@
         <button mat-icon-button (click)="sidenav.toggle()">
           <mat-icon>menu</mat-icon>
         </button>
-        <span class="toolbar-title">{{ pageTitle }}</span>
+        <span class="toolbar-title">{{ pageTitle() }}</span>
         <span class="spacer"></span>
         <button
           mat-icon-button
@@ -179,11 +179,11 @@
         </button>
         <mat-menu #langMenu="matMenu">
           <button mat-menu-item (click)="setLanguage('zh-CN')">
-            <mat-icon *ngIf="currentLang === 'zh-CN'">check</mat-icon>
+            <mat-icon *ngIf="currentLang() === 'zh-CN'">check</mat-icon>
             <span>{{ 'app.chinese' | translate }}</span>
           </button>
           <button mat-menu-item (click)="setLanguage('en-US')">
-            <mat-icon *ngIf="currentLang === 'en-US'">check</mat-icon>
+            <mat-icon *ngIf="currentLang() === 'en-US'">check</mat-icon>
             <span>{{ 'app.english' | translate }}</span>
           </button>
         </mat-menu>

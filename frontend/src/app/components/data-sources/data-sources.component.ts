@@ -4,6 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
+import { LanguageService } from '../../services/language.service';
 import { DataSourceDialogComponent } from './data-source-dialog/data-source-dialog.component';
 import { DataSource } from '../../models/geoserver.models';
 import { switchMap, tap, startWith, catchError, of } from 'rxjs';
@@ -20,6 +21,10 @@ export class DataSourcesComponent {
   private notificationService = inject(NotificationService);
   private dialog = inject(MatDialog);
   private translate = inject(TranslateService);
+  private languageService = inject(LanguageService);
+
+  /** Current language signal – read in the template to re-render on switch. */
+  currentLang = this.languageService.currentLang;
 
   displayedColumns: string[] = ['name', 'type', 'workspace', 'enabled', 'actions'];
 

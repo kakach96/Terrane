@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 
 export const SUPPORTED_LANGUAGES = ['zh-CN', 'en-US'] as const;
@@ -38,19 +38,19 @@ export function detectLanguage(): SupportedLanguage {
 
 @Injectable({ providedIn: 'root' })
 export class LanguageService {
-  constructor(private translate: TranslateService) {
+  private translate = inject(TranslateService);
+
+  constructor() {
     this.translate.addLangs([...SUPPORTED_LANGUAGES]);
     this.translate.setFallbackLang(DEFAULT_LANG);
     this.init();
   }
 
-  /** Current active language (zh-CN / en-US). */
-  get currentLang(): SupportedLanguage {
-    return (
-      this.normalize(this.translate.currentLang() || this.translate.getFallbackLang()) ??
-      DEFAULT_LANG
-    );
-  }
+  /** Current active language (zh-CN / en-US) as a signal. */
+  readonly currentLang = computed<SupportedLanguage>(() => {
+    const lang = this.translate.currentLang() || this.translate.getFallbackLang();
+    return this.normalize(lang) ?? DEFAULT_LANG;
+  });
 
   private normalize(lang: string | null): SupportedLanguage | null {
     return lang ? normalizeLang(lang) : null;
@@ -70,6 +70,6 @@ export class LanguageService {
 
   /** Toggle between the two supported languages. */
   toggle(): void {
-    this.setLanguage(this.currentLang === 'zh-CN' ? 'en-US' : 'zh-CN');
+    this.setLanguage(this.currentLang() === 'zh-CN' ? 'en-US' : 'zh-CN');
   }
 }

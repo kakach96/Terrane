@@ -1,14 +1,16 @@
-import { Component, Inject, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, inject } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
+import { LanguageService } from '../../services/language.service';
 import { StyleInfo } from '../../models/geoserver.models';
 
 @Component({
   standalone: false,
   template: `
     <h2 mat-dialog-title>
+      <span style="display: none">{{ currentLang() }}</span>
       {{
         data.mode === 'create'
           ? ('styles.dialogTitleCreate' | translate)
@@ -173,6 +175,11 @@ export class StyleEditorDialogComponent implements OnInit {
   title = '';
   content = '';
   format = 'SLD';
+
+  private languageService = inject(LanguageService);
+
+  /** Current language signal – read in the template to re-render on switch. */
+  currentLang = this.languageService.currentLang;
 
   constructor(
     public dialogRef: MatDialogRef<StyleEditorDialogComponent>,

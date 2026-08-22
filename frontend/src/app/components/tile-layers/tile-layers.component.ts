@@ -3,7 +3,7 @@ import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
-import { TileCacheStats } from '../../models/geoserver.models';
+import { TileCacheStats, Layer } from '../../models/geoserver.models';
 import { switchMap, tap, map, startWith, catchError, of } from 'rxjs';
 
 @Component({
@@ -39,12 +39,12 @@ export class TileLayersComponent {
   private availableLayers$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
     switchMap(() =>
-      this.geoserverService.getLayers().pipe(catchError(() => of([] as any[]))),
+      this.geoserverService.getLayers().pipe(catchError(() => of([] as Layer[]))),
     ),
   );
 
   availableLayers = toSignal(
-    this.availableLayers$.pipe(map((layers) => layers.map((l: any) => l.name))),
+    this.availableLayers$.pipe(map((layers) => layers.map((l) => l.name))),
     { initialValue: [] as string[] },
   );
 
