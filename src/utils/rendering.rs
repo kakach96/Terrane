@@ -1795,7 +1795,7 @@ pub fn render_to_pdf(
     // RgbaImage -> raw RGB bytes (drop alpha).
     let raw = img.as_raw();
     let mut rgb = Vec::with_capacity(raw.len() / 4 * 3);
-    for px in raw.chunks_exact(4) {
+    for px in raw.as_chunks::<4>().0 {
         rgb.push(px[0]);
         rgb.push(px[1]);
         rgb.push(px[2]);
