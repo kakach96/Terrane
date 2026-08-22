@@ -10,7 +10,7 @@ actix-web = "4"
 actix-rt = "2"
 actix-files = "0.6"
 tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1"
 image = "0.24"
 geo = "0.27"
@@ -19,16 +19,16 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 config = "0.13"
 thiserror = "1"
-anyhow = "1"
+anyhow = "1.0.104"
 uuid = { version = "1", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 quick-xml = { version = "0.31", features = ["serialize"] }
 sysinfo = "0.30"
 rusqlite = { version = "0.29", features = ["chrono", "bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
 deadpool-postgres = "0.10"
-futures-util = "0.3"
+futures-util = "0.3.34"
 postgres-native-tls = "0.5"
 
 # Shapefile 解析 (纯 Rust)

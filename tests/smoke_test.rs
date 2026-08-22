@@ -392,7 +392,7 @@ async fn smoke_nonexistent_layer_does_not_panic() {
 #[actix_rt::test]
 async fn smoke_concurrent_requests() {
     let app = build_test_app!();
-    let app = std::sync::Arc::new(app);
+    let app = std::rc::Rc::new(app);
 
     let mut handles = Vec::new();
 
