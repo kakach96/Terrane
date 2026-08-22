@@ -54,8 +54,8 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Catalog refresh mechanism to converge in-memory caches across replicas — **periodic reload done** (`[server] catalog_refresh_secs`); **event-triggered refresh done** (REST layer update/delete now immediately reloads the in-memory catalog via `AppState::refresh_catalog`, eliminating the write-after-read-stale window for WMS/WMTS/tile paths)
 - Structured JSON logs + optional OpenTelemetry tracing — **JSON logs + request `trace_id` done** (`[logging] format = "json"`, `X-Trace-Id`); OTel pending
 - CI/CD pipeline (GitHub Actions / GitLab CI): fmt + clippy + test + frontend build + image push — **GitHub Actions done, incl. Trivy scan + Dependabot**
-- Performance test suite: micro-benchmarks for hot paths (GML serialization, CQL parsing, coordinate transform, label rendering) via `cargo bench`, plus an HTTP-level load harness over WMS GetMap / WFS GetFeature / tiles reporting p50/p95/p99 latency & throughput — *planned* (see IMPLEMENTATION_PLAN §5.3)
-- User guide documentation (`docs/USER_GUIDE.md`): install & quick start, data publishing workflow (workspace → data source → layer → style → preview → tiles), OGC service usage examples, security & deployment pointers — *planned*
+- Performance test suite — **done**: micro-benchmarks for hot paths (GML serialization, CQL parsing, coordinate transform, label rendering, map/MVT rendering) via `cargo bench` (`benches/core_paths.rs`), plus an HTTP-level load harness over REST / WMS / WFS / tiles reporting p50/p95/p99 latency & throughput (`tests/perf_test.rs`, `#[ignore]`)
+- User guide documentation (`docs/USER_GUIDE.md`): install & quick start, data publishing workflow (workspace → data source → layer → style → preview → tiles), OGC service usage examples, security & deployment pointers — **done**
 
 ### v2.0 — Fully Stateless & Extensions (target: 2027 Q1–Q2)
 

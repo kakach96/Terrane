@@ -363,20 +363,22 @@ Overall progress ████████████████░░  87%
   `actix-rt` HTTP integration tests split by protocol under `tests/` — see
   [DEVELOPMENT.md](DEVELOPMENT.md) §7). Remaining plans:
   - **OGC CITE tests**: reference the GeoServer CITE test suite to verify standards compliance
-  - **Performance test suite (planned, v1.1)**:
-    - *Micro-benchmarks* (`cargo bench`) over hot paths: GML serialization
-      (`src/utils/gml.rs`), CQL/ECQL filter parsing, coordinate transforms
-      (`src/utils/geometry.rs`), label rendering (`src/utils/bitmap_font.rs`),
-      raster/tile compositing pipeline
-    - *HTTP load harness*: `#[ignore]` perf test (invoked like the live
-      PostGIS/CascadedWMS tests) driving WMS GetMap / WFS GetFeature / WMTS tiles,
-      reporting throughput + p50/p95/p99 latency
-    - *Regression tracking*: record bench baselines per release so performance
-      regressions surface during review
+  - **Performance test suite ✅ (v1.1)**:
+    - *Micro-benchmarks* (`cargo bench`, `benches/core_paths.rs` — criterion) over
+      hot paths: GML serialization (`src/utils/gml.rs`), CQL/ECQL filter parsing,
+      coordinate transforms (`src/utils/geometry.rs`), label rendering
+      (`src/utils/bitmap_font.rs`), map rendering (`render_map`) and MVT encoding
+    - *HTTP load harness* ✅: `#[ignore]` perf test `tests/perf_test.rs`
+      (invoked like the live PostGIS/CascadedWMS tests) driving REST / WMS
+      GetMap / WFS GetFeature / WMTS tiles against a real embedded server,
+      reporting throughput + p50/p95/p99 latency; tunable via `PERF_REQUESTS` /
+      `PERF_CONCURRENCY` / `PERF_WARMUP`
+    - *Regression tracking*: criterion compares each re-run against the previous
+      baseline (`target/criterion/`) so performance regressions surface during review
 
 ### 5.4 Documentation Plan
 
-- **User guide** (`docs/USER_GUIDE.md`, planned v1.1) — audience is data publishers /
+- **User guide** (`docs/USER_GUIDE.md`) — **done**; audience is data publishers /
   GIS administrators rather than code contributors:
   - Installation & quick start (local run / Docker, default admin account)
   - Data publishing workflow: workspace → data source → layer → style → preview → tile seeding
@@ -385,7 +387,7 @@ Overall progress ████████████████░░  87%
   - Security operations: users & roles, layer permissions, GeoFence ACL, LDAP login
   - Configuration & deployment pointers (env vars, health probes, `/metrics`),
     deferring details to [DEVELOPMENT.md](DEVELOPMENT.md)
-- Link the guide from README and `AGENTS.md` document lists once created.
+- Linked from README and `AGENTS.md` document lists.
 
 ---
 

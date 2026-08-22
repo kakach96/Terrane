@@ -10,6 +10,7 @@
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design rationale, module dependency graph, data flow, API contracts
 - [docs/ROADMAP.md](docs/ROADMAP.md) — milestones, quarterly plan, known technical debt, future vision
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — local setup, environment variables, git commit conventions
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — end-user manual: install, publishing workflow, OGC usage examples, security & operations
 
 ## Project structure
 

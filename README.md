@@ -294,6 +294,7 @@ srs = "EPSG:4326"
 ## 📚 Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — design rationale, module dependency graph, data flows, API contracts
+- [User guide](docs/USER_GUIDE.md) — install & quick start, publishing workflow, OGC service usage, security & operations
 - [Protocols](docs/PROTOCOLS.md) — protocol adaptation matrix (adapted vs pending)
 - [Roadmap](docs/ROADMAP.md) — milestones, quarterly plan, known technical debt, future vision
 - [Development guide](docs/DEVELOPMENT.md) — local setup, environment variables, git conventions
