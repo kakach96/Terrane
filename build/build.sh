@@ -67,7 +67,7 @@ if [ $SKIP_FRONTEND -eq 0 ]; then
     
     echo "[Step 3/4] Copying frontend to static..."
     rm -rf static
-    cp -r frontend/dist/terrane-ui static
+    cp -r frontend/dist/terrane-ui/browser static
     echo "Copy OK"
     echo ""
 else

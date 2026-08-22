@@ -69,7 +69,7 @@ echo [Step 3/4] Copying frontend to static...
 if exist "static" (
     rmdir /s /q static
 )
-xcopy /s /e /i "frontend\dist\terrane-ui" "static" >nul
+xcopy /s /e /i "frontend\dist\terrane-ui\browser" "static" >nul
 if errorlevel 1 (
     echo ERROR: Copy to static failed
     exit /b 1
