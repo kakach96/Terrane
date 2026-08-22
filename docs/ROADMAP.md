@@ -57,6 +57,65 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Performance test suite — **done**: micro-benchmarks for hot paths (GML serialization, CQL parsing, coordinate transform, label rendering, map/MVT rendering) via `cargo bench` (`benches/core_paths.rs`), plus an HTTP-level load harness over REST / WMS / WFS / tiles reporting p50/p95/p99 latency & throughput (`tests/perf_test.rs`, `#[ignore]`)
 - User guide documentation (`docs/USER_GUIDE.md`): install & quick start, data publishing workflow (workspace → data source → layer → style → preview → tiles), OGC service usage examples, security & deployment pointers — **done**
 
+### v1.2 — Naming Convergence & Data Experience (target: 2026 Q4 – 2027 Q1)
+
+> New milestone covering the four planned work items (layer-preview format parity,
+> built-in sample data, database cluster connections, and the `geoserver` → `terrane`
+> naming migration) plus smaller gaps found during a full codebase review.
+
+- **Layer preview formats aligned with GeoServer** — the backend WMS GetMap already
+  emits PNG / JPEG / GIF / WebP / SVG / KML / GeoJSON / GeoRSS / PDF, but the frontend
+  preview only offers OpenLayers / PNG / JPEG. Plan:
+  - Frontend preview: add SVG, KML, GeoJSON, PDF, GIF, WebP (backend already supports them)
+  - Backend: add TIFF / Atom / UTFGrid / GML output to WMS GetMap for full GeoServer parity
+  - Wire MVT (`.pbf`) preview through the existing `/tiles/{layer}/{z}/{x}/{y}.pbf` and
+    `/mvt/{layer}/{z}/{x}/{y}` endpoints
+  - Relax the `getMapImageUrl` format type constraint (`'image/png' | 'image/jpeg'` → all
+    supported formats) and add i18n labels for every new format
+- **Built-in sample data** — only `data/geojson/uploaded_layer.geojson` exists today;
+  integration tests generate fixtures at runtime (GeoTIFF / ArcGrid) and the built-in
+  `world` layer carries no business data in SQLite metadata mode. Plan:
+  - Add a curated `data/samples/` set (GeoJSON point/line/polygon, Shapefile, GeoTIFF,
+    world-map data) mirroring GeoServer's sample data
+  - Seed/init mechanism: auto-register sample data sources + layers on first startup
+    (opt-in via config), so the product demos out-of-the-box
+  - Reuse the samples in integration tests, replacing runtime-generated fixtures
+- **Database cluster connections** — `DataSourceConnection` and the PostGIS / MySQL /
+  MongoDB pool builders (`src/state.rs`) only support a single `host`/`port`; the
+  frontend data-source dialog exposes a single host/port too. Plan:
+  - PostGIS: multi-host (comma-separated / array), read/write replica separation,
+    connection-string support
+  - MySQL: multi-host support
+  - MongoDB: replica-set URI (`mongodb://host1,host2/db?replicaSet=…`)
+  - Frontend data-source dialog: cluster fields; connection test adapted for clusters
+- **`geoserver` → `terrane` naming migration (breaking change)** — the codebase still
+  carries `geoserver` in type names, env vars, API paths, defaults, tests and docs. Plan:
+  - Backend types: `GeoServerConfig` → `TerraneConfig`, `GeoServerError` → `TerraneError`,
+    `GeoServerBackup` → `TerraneBackup`
+  - Env prefix: `GEOSERVER__` → `TERRANE__` (keep `GEOSERVER__` as a deprecated alias for
+    backward compatibility during the transition)
+  - API context: default `/geoserver` → `/terrane`
+  - Defaults: admin password `geoserver` → `terrane`, default DB name, default namespace,
+    `geoserver.sqlite` → `terrane.sqlite`
+  - Frontend: `geoserver.service.ts` → `terrane.service.ts`, `geoserver.models.ts` →
+    `terrane.models.ts`, `GeoserverService` → `TerraneService`, `apiUrl` `/geoserver` →
+    `/terrane`, localStorage keys (`geoserver_user` / `geoserver_token`)
+  - Tests: all `.uri("/geoserver/…")` → `/terrane/…`; hardcoded `/geoserver/wms` in
+    `src/utils/cascaded.rs`
+  - Docs & config: `terrane.toml.example`, `DEVELOPMENT.md`, `USER_GUIDE.md`,
+    `ARCHITECTURE.md`, `PROTOCOLS.md`, `IMPLEMENTATION_PLAN.md`, `README.md`
+  - Docker/CI: `Dockerfile` + `build/docker-compose.yml` env vars,
+    `GEOSERVER_JWT_SECRET` → `TERRANE_JWT_SECRET`
+- **Other gaps found during review** (folded into this milestone):
+  - Frontend test suite (`ng test`) not wired into CI
+  - OGC CITE compliance tests (referenced in IMPLEMENTATION_PLAN §5.3, not yet run)
+  - WFS-T Transaction (currently 501) — kept deferred to v2.0
+  - Oracle / SQL Server data sources — kept deferred (evaluated via tiberius / native driver)
+  - Importer (bulk-import workflow) — the last REST API gap
+  - Printing module — kept deferred to v2.0
+  - OpenTelemetry tracing — kept deferred to v2.0
+  - Redis session backend — kept deferred (simple JWT by design)
+
 ### v2.0 — Fully Stateless & Extensions (target: 2027 Q1–Q2)
 
 - Fully stateless services (no in-memory divergence; all state external)
@@ -70,9 +129,9 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 | Quarter    | Focus                                                                                        |
 |------------|----------------------------------------------------------------------------------------------|
 | 2026 Q3    | Redis session & cache integration; PostgreSQL HA hardening; object-storage abstraction for raster; performance test suite; user guide documentation |
-| 2026 Q4    | CI/CD pipeline; structured logging / OTel; catalog refresh & stateless convergence; v1.1 release |
-| 2027 Q1    | Resilience middleware (rate limit / timeout / circuit breaker); WPS / CSW foundation          |
-| 2027 Q2    | OGC API series + Printing / Importer; plugin architecture; v2.0 release                      |
+| 2026 Q4    | CI/CD pipeline; structured logging / OTel; catalog refresh & stateless convergence; v1.1 release; layer-preview format parity; built-in sample data |
+| 2027 Q1    | `geoserver` → `terrane` naming migration; database cluster connections; frontend test suite; v1.2 release |
+| 2027 Q2    | Resilience middleware (rate limit / timeout / circuit breaker); WPS / CSW foundation; OGC API series + Printing / Importer; plugin architecture; v2.0 release |
 
 ## Known Technical Debt
 
@@ -86,6 +145,10 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - **Human-readable stdout logs by default** — structured JSON available via `[logging] format = "json"` with request `trace_id`; OpenTelemetry still pending.
 - **Resilience**: rate limiting + request timeout (`src/middleware.rs`, HTTP 429/504) and cascaded WMS retry/backoff + circuit breaking (`src/utils/cascaded.rs`) all done; no global circuit breaking for other upstream types yet.
 - **Test suite** — unit (`#[cfg(test)]`) and protocol-split integration tests exist (see [DEVELOPMENT.md](DEVELOPMENT.md) §7); still missing a **performance test suite** (micro-benchmarks + HTTP load harness, planned for v1.1) and frontend tests (`ng test` untested).
+- **`geoserver` naming residue** — the codebase still uses `geoserver` in type names (`GeoServerConfig` / `GeoServerError` / `GeoServerBackup`), the `GEOSERVER__` env prefix, the default `/geoserver` API context, defaults (admin password, DB name, namespace, `geoserver.sqlite`), frontend files (`geoserver.service.ts` / `geoserver.models.ts`), tests, docs and Docker/CI env vars. Planned as a breaking-change migration in v1.2 (keep `GEOSERVER__` as a deprecated alias).
+- **Layer preview format gap** — the frontend preview only offers OpenLayers / PNG / JPEG while the backend WMS already emits SVG / KML / GeoJSON / GeoRSS / PDF / GIF / WebP; GeoServer parity (TIFF / Atom / UTFGrid / GML / MVT) is planned in v1.2.
+- **No built-in sample data** — only `data/geojson/uploaded_layer.geojson` exists; integration tests generate fixtures at runtime and the built-in `world` layer is empty in SQLite metadata mode. A curated `data/samples/` set + first-startup seeding is planned in v1.2.
+- **Database data sources are single-host only** — PostGIS / MySQL / MongoDB pools (`src/state.rs`) and the frontend dialog support one `host`/`port`; no cluster / replica-set / read-write separation. Planned in v1.2.
 - **Security-sensitive defaults**: CORS `["*"]` and hardcoded JWT secret — revisit before production.
 - **Broken doc link**: README referenced `BUILD_INTEGRATION.md`, which did not exist (fixed in this docs pass).
 
