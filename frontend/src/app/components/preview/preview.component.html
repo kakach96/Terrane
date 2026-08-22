@@ -146,8 +146,8 @@
           <span class="map-name">
             {{
               previewMode === 'layer'
-                ? currentLayer?.title || currentLayer?.name
-                : currentGroup?.title || currentGroup?.name
+                ? currentLayer()?.title || currentLayer()?.name
+                : currentGroup()?.title || currentGroup()?.name
             }}
           </span>
           <span class="map-crs">{{ previewOptions.crs }}</span>
@@ -180,7 +180,7 @@
         </div>
       </div>
 
-      <div class="map-container" *ngIf="previewUrl">
+      <div class="map-container" *ngIf="previewUrl && !dataSourceError()">
         <iframe
           *ngIf="!isStaticFormat()"
           [src]="safePreviewUrl"
@@ -195,7 +195,13 @@
         />
       </div>
 
-      <div class="empty-state" *ngIf="!previewUrl">
+      <div class="data-source-error" *ngIf="dataSourceError()">
+        <mat-icon>error_outline</mat-icon>
+        <p class="error-title">{{ 'preview.dataSourceUnavailable' | translate }}</p>
+        <p class="error-detail" *ngIf="dataSourceError()">{{ dataSourceError() }}</p>
+      </div>
+
+      <div class="empty-state" *ngIf="!previewUrl && !dataSourceError()">
         <mat-icon>map</mat-icon>
         <p>
           {{

@@ -613,6 +613,7 @@
     "layerItem": "图层",
     "groupItem": "图层组",
     "selectHint": "请从左侧选择一个{{type}}开始预览",
+    "dataSourceUnavailable": "所选图层的数据源不可用，无法预览",
     "formatOpenLayers": "OpenLayers 交互地图",
     "formatPng": "PNG (透明)",
     "formatJpeg": "JPEG"

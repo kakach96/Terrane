@@ -6,9 +6,9 @@ import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
-import { Layer, LayerGroup } from '../../models/geoserver.models';
+import { Layer, LayerGroup, ConnectionTestResult } from '../../models/geoserver.models';
 import { transformBounds } from '../../utils/coords';
-import { switchMap, tap, map, startWith, catchError, of, combineLatest } from 'rxjs';
+import { switchMap, tap, map, startWith, catchError, of, combineLatest, forkJoin } from 'rxjs';
 
 interface Bounds {
   minx: number;
@@ -42,11 +42,16 @@ export class PreviewComponent {
 
   selectedLayer = '';
   selectedGroup = '';
-  currentLayer: Layer | null = null;
-  currentGroup: LayerGroup | null = null;
+  // Signals so the displayBounds()/displayCrs() computeds re-evaluate when the
+  // selection changes (a plain field would leave the computed cached at null).
+  currentLayer = signal<Layer | null>(null);
+  currentGroup = signal<LayerGroup | null>(null);
 
   previewUrl = '';
   safePreviewUrl: SafeResourceUrl = '';
+  // Non-null when the selected layer's data source is unavailable; shows a
+  // friendly message instead of a blank/failed preview.
+  dataSourceError = signal<string | null>(null);
 
   featureCount = 0;
   geometryTypes: string[] = [];
@@ -101,13 +106,16 @@ export class PreviewComponent {
       ]).pipe(map(([layers, groups]) => ({ layers, groups } as PreviewData))),
     ),
     tap((data) => {
-      // Apply initial selection after data loads
+      // Apply initial selection after data loads. Use the emitted `data`
+      // directly (not the `data()` signal) because the signal is only updated
+      // AFTER this tap runs, so reading this.layers()/this.groups() here would
+      // still see the empty initial value and never select a layer.
       const enabledLayers = data.layers.filter((l) => l.enabled);
-      if (this.previewMode === 'layer' && !this.currentLayer) {
-        this.selectLayer(this.selectedLayer || (enabledLayers[0]?.name ?? ''));
+      if (this.previewMode === 'layer' && !this.currentLayer()) {
+        this.selectLayer(this.selectedLayer || (enabledLayers[0]?.name ?? ''), data.layers);
       }
-      if (this.previewMode === 'group' && !this.currentGroup) {
-        this.selectGroup(this.selectedGroup || (data.groups[0]?.name ?? ''));
+      if (this.previewMode === 'group' && !this.currentGroup()) {
+        this.selectGroup(this.selectedGroup || (data.groups[0]?.name ?? ''), data.groups);
       }
       this.loading.set(false);
     }),
@@ -121,7 +129,12 @@ export class PreviewComponent {
   layers = computed(() => this.data().layers.filter((l) => l.enabled));
   groups = computed(() => this.data().groups);
 
-  isStaticFormat = computed(() => this.previewOptions.format !== 'application/openlayers');
+  // Plain method (not computed) because previewOptions.format is a plain field,
+  // not a signal — a computed would cache the initial value and never reflect
+  // format changes (breaking the img/iframe switch and the size controls).
+  isStaticFormat(): boolean {
+    return this.previewOptions.format !== 'application/openlayers';
+  }
 
   filteredLayers = computed(() => {
     const q = this.searchQuery.trim().toLowerCase();
@@ -145,11 +158,11 @@ export class PreviewComponent {
 
   displayBounds = computed((): Bounds | null => {
     if (this.previewMode === 'layer') {
-      const l = this.currentLayer;
+      const l = this.currentLayer();
       if (!l) return null;
       return l.native_bounds?.bounds || l.bounds || null;
     }
-    const g = this.currentGroup;
+    const g = this.currentGroup();
     if (!g || g.layers.length === 0) return null;
     const first = this.layers().find((l) => l.name === g.layers[0]);
     if (!first) return null;
@@ -158,11 +171,11 @@ export class PreviewComponent {
 
   displayCrs = computed((): string => {
     if (this.previewMode === 'layer') {
-      const l = this.currentLayer;
+      const l = this.currentLayer();
       if (!l) return 'EPSG:4326';
       return l.native_bounds?.crs || l.srs || 'EPSG:4326';
     }
-    const g = this.currentGroup;
+    const g = this.currentGroup();
     if (g && g.layers.length > 0) {
       const first = this.layers().find((l) => l.name === g.layers[0]);
       if (first) {
@@ -173,36 +186,66 @@ export class PreviewComponent {
   });
 
   // ── Actions ───────────────────────────────────────────────────────
-  selectLayer(name: string): void {
+  selectLayer(name: string, layers?: Layer[]): void {
     if (!name) return;
     this.selectedLayer = name;
-    const layer = this.layers().find((l) => l.name === name);
+    const source = layers ?? this.layers();
+    const layer = source.find((l) => l.name === name);
     if (!layer) return;
-    this.currentLayer = layer;
-    this.currentGroup = null;
+    this.currentLayer.set(layer);
+    this.currentGroup.set(null);
     this.previewOptions.crs = this.displayCrs();
+    this.checkDataSource([layer.store]);
     this.refreshPreview();
     this.loadLayerStats(name);
   }
 
-  selectGroup(name: string): void {
+  selectGroup(name: string, groups?: LayerGroup[]): void {
     if (!name) return;
     this.selectedGroup = name;
-    const group = this.groups().find((g) => g.name === name);
+    const source = groups ?? this.groups();
+    const group = source.find((g) => g.name === name);
     if (!group) return;
-    this.currentGroup = group;
-    this.currentLayer = null;
+    this.currentGroup.set(group);
+    this.currentLayer.set(null);
     this.featureCount = 0;
     this.geometryTypes = [];
     this.previewOptions.crs = this.displayCrs();
+    // Check availability of every data source backing the group's layers.
+    const stores = group.layers
+      .map((ln) => this.layers().find((l) => l.name === ln)?.store)
+      .filter((s): s is string => !!s);
+    this.checkDataSource(stores);
     this.refreshPreview();
+  }
+
+  // Probe the data sources backing the selected layer(s). If any is
+  // unavailable, surface a friendly message instead of a blank/failed preview.
+  private checkDataSource(stores: string[]): void {
+    this.dataSourceError.set(null);
+    const unique = [...new Set(stores.filter(Boolean))];
+    if (unique.length === 0) return;
+    forkJoin(
+      unique.map((store) =>
+        this.geoserverService.testDataSourceConnection(store).pipe(
+          catchError(() => of({ success: false, message: '' } as ConnectionTestResult)),
+        ),
+      ),
+    ).subscribe((results) => {
+      const failed = results.find((r) => !r.success);
+      if (failed) {
+        this.dataSourceError.set(failed.message || '');
+        this.previewUrl = '';
+        this.safePreviewUrl = '';
+      }
+    });
   }
 
   onModeChange(): void {
     this.previewUrl = '';
     this.safePreviewUrl = '';
-    this.currentLayer = null;
-    this.currentGroup = null;
+    this.currentLayer.set(null);
+    this.currentGroup.set(null);
     if (this.previewMode === 'layer') {
       this.selectLayer(this.selectedLayer || (this.layers()[0]?.name ?? ''));
     } else {
@@ -212,14 +255,15 @@ export class PreviewComponent {
 
   refreshPreview(): void {
     if (this.previewMode === 'layer') {
-      if (!this.currentLayer) return;
+      const layer = this.currentLayer();
+      if (!layer) return;
       const bounds = this.displayBounds();
       if (!bounds) {
         this.previewUrl = '';
         return;
       }
       if (this.previewOptions.format === 'application/openlayers') {
-        this.previewUrl = this.geoserverService.getWmsPreviewUrl(this.currentLayer, {
+        this.previewUrl = this.geoserverService.getWmsPreviewUrl(layer, {
           width: this.previewOptions.width,
           height: this.previewOptions.height,
           crs: this.previewOptions.crs,
@@ -227,7 +271,7 @@ export class PreviewComponent {
           transparent: true,
         });
       } else {
-        this.previewUrl = this.geoserverService.getMapImageUrl(this.currentLayer, {
+        this.previewUrl = this.geoserverService.getMapImageUrl(layer, {
           width: this.previewOptions.width,
           height: this.previewOptions.height,
           crs: this.previewOptions.crs,
@@ -236,7 +280,7 @@ export class PreviewComponent {
         });
       }
     } else {
-      const group = this.currentGroup;
+      const group = this.currentGroup();
       if (!group || group.layers.length === 0) return;
       const bounds = this.displayBounds();
       if (!bounds) {

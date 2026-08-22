@@ -613,6 +613,7 @@
     "layerItem": "layer",
     "groupItem": "layer group",
     "selectHint": "Select a {{type}} on the left to start previewing",
+    "dataSourceUnavailable": "The data source for the selected layer is unavailable and cannot be previewed",
     "formatOpenLayers": "OpenLayers interactive map",
     "formatPng": "PNG (transparent)",
     "formatJpeg": "JPEG"
