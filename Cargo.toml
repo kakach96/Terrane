@@ -32,7 +32,7 @@ futures-util = "0.3.34"
 postgres-native-tls = "0.5"
 
 # Shapefile 解析 (纯 Rust)
-shapefile = "0.5"
+shapefile = "0.9"
 
 # 文件上传
 actix-multipart = "0.8"
