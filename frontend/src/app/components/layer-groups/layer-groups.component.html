@@ -10,11 +10,11 @@
     </button>
   </div>
 
-  <div *ngIf="loading" class="loading-container">
+  <div *ngIf="loading()" class="loading-container">
     <mat-spinner diameter="48"></mat-spinner>
   </div>
 
-  <div *ngIf="!loading && groups.length === 0" class="empty-state">
+  <div *ngIf="!loading() && groups().length === 0" class="empty-state">
     <mat-icon>layers</mat-icon>
     <p>{{ 'layerGroups.empty' | translate }}</p>
     <button mat-stroked-button color="primary" (click)="createGroup()">
@@ -22,9 +22,9 @@
     </button>
   </div>
 
-  <div class="card" *ngIf="!loading && groups.length > 0">
+  <div class="card" *ngIf="!loading() && groups().length > 0">
     <div class="card-content">
-      <table mat-table [dataSource]="groups" class="groups-table">
+      <table mat-table [dataSource]="groups()" class="groups-table">
         <ng-container matColumnDef="name">
           <th mat-header-cell *matHeaderCellDef>{{ 'common.name' | translate }}</th>
           <td mat-cell *matCellDef="let g">{{ g.name }}</td>

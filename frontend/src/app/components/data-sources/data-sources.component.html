@@ -10,11 +10,11 @@
     </button>
   </div>
 
-  <div *ngIf="loading" class="loading-container">
+  <div *ngIf="loading()" class="loading-container">
     <mat-spinner diameter="40"></mat-spinner>
   </div>
 
-  <mat-card *ngIf="!loading && dataSources.length === 0" class="empty-card">
+  <mat-card *ngIf="!loading() && dataSources().length === 0" class="empty-card">
     <div class="empty-state">
       <mat-icon class="empty-icon">database</mat-icon>
       <p>{{ 'dataSources.empty' | translate }}</p>
@@ -24,8 +24,8 @@
     </div>
   </mat-card>
 
-  <mat-card *ngIf="!loading && dataSources.length > 0" class="data-table-card">
-    <mat-table [dataSource]="dataSources" class="full-width-table">
+  <mat-card *ngIf="!loading() && dataSources().length > 0" class="data-table-card">
+    <mat-table [dataSource]="dataSources()" class="full-width-table">
       <ng-container matColumnDef="name">
         <mat-header-cell *matHeaderCellDef>{{
           'dataSources.nameLabel' | translate
@@ -73,7 +73,7 @@
           <mat-slide-toggle
             [checked]="ds.enabled"
             (change)="toggleEnabled(ds)"
-            [disabled]="loading || ds.builtin"
+            [disabled]="loading() || ds.builtin"
           ></mat-slide-toggle>
         </mat-cell>
       </ng-container>

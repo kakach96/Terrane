@@ -89,7 +89,7 @@
   </mat-card>
 
   <!-- 加载中 -->
-  <div *ngIf="loading" class="loading-spinner">
+  <div *ngIf="loading()" class="loading-spinner">
     <mat-spinner diameter="40"></mat-spinner>
   </div>
 
@@ -99,7 +99,7 @@
   <mat-card>
     <mat-card-header>
       <mat-icon mat-card-avatar>list</mat-icon>
-      <mat-card-title>{{ 'users.userList' | translate: { count: users.length } }}</mat-card-title>
+      <mat-card-title>{{ 'users.userList' | translate: { count: users().length } }}</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <div class="table-container">
@@ -114,7 +114,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let u of users">
+            <tr *ngFor="let u of users()">
               <td>
                 <strong>{{ u.username }}</strong>
               </td>

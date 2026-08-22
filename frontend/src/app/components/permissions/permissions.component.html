@@ -66,7 +66,7 @@
   </mat-card>
 
   <!-- 加载中 -->
-  <div *ngIf="loading" class="loading-spinner">
+  <div *ngIf="loading()" class="loading-spinner">
     <mat-spinner diameter="40"></mat-spinner>
   </div>
 
@@ -77,7 +77,7 @@
     <mat-card-header>
       <mat-icon mat-card-avatar>list</mat-icon>
       <mat-card-title>{{
-        'permissions.permList' | translate: { count: permissions.length }
+        'permissions.permList' | translate: { count: permissions().length }
       }}</mat-card-title>
     </mat-card-header>
     <mat-card-content>
@@ -96,7 +96,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let p of permissions">
+            <tr *ngFor="let p of permissions()">
               <td>{{ p.priority }}</td>
               <td>
                 <span class="type-badge">{{ p.resourceType }}</span>

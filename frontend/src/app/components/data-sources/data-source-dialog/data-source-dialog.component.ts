@@ -1,7 +1,8 @@
-import { Component, Inject, OnInit } from '@angular/core';
+import { Component, Inject, inject } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { GeoserverService } from '../../../services/geoserver.service';
 import { NotificationService } from '../../../services/notification.service';
 import {
@@ -17,6 +18,7 @@ import {
   DirectoryBrowserComponent,
   DirectoryBrowserResult,
 } from '../../shared/directory-browser/directory-browser.component';
+import { catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
@@ -24,11 +26,17 @@ import {
   templateUrl: './data-source-dialog.component.html',
   styleUrls: ['./data-source-dialog.component.scss'],
 })
-export class DataSourceDialogComponent implements OnInit {
+export class DataSourceDialogComponent {
+  private dialogRef = inject(MatDialogRef<DataSourceDialogComponent>);
+  private dialog = inject(MatDialog);
+  private fb = inject(FormBuilder);
+  private geoserverService = inject(GeoserverService);
+  private notificationService = inject(NotificationService);
+  private translate = inject(TranslateService);
+
   form: FormGroup;
   mode: 'create' | 'edit';
   dataSource?: DataSource;
-  workspaces: Workspace[] = [];
   dataSourceTypes = [
     { value: 'postgis', label: 'PostGIS' },
     { value: 'mysql', label: 'MySQL' },
@@ -38,27 +46,36 @@ export class DataSourceDialogComponent implements OnInit {
     { value: 'geopackage', label: 'GeoPackage' },
     { value: 'geojson', label: 'GeoJSON' },
     { value: 'worldimage', label: 'WorldImage' },
-    { value: 'cascaded_wms', label: 'Cascaded WMS' },
+    { value: 'cascaded_wms', label: this.translate.instant('dataSources.cascadedWms') },
     { value: 'arcgrid', label: 'ArcGrid' },
     { value: 'image_mosaic', label: 'ImageMosaic' },
     { value: 'image_pyramid', label: 'ImagePyramid' },
     { value: 'redis', label: 'Redis Cache' },
   ];
   fileStorageTypes = [
-    { value: 'local', label: 'Local', description: 'Server-local directory' },
-    { value: 's3', label: 'S3', description: 'Object storage directory' },
+    {
+      value: 'local',
+      label: this.translate.instant('dataSources.storageTypeLocal'),
+      description: this.translate.instant('dataSources.storageTypeLocalDesc'),
+    },
+    {
+      value: 's3',
+      label: this.translate.instant('dataSources.storageTypeS3'),
+      description: this.translate.instant('dataSources.storageTypeS3Desc'),
+    },
   ];
   isTesting = false;
   selectedFile: File | null = null;
 
+  // ── Signal pipeline: workspaces ───────────────────────────────────
+  private workspaces$ = this.geoserverService.getAllWorkspaces().pipe(
+    catchError(() => of([] as Workspace[])),
+  );
+
+  workspaces = toSignal(this.workspaces$, { initialValue: [] as Workspace[] });
+
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { mode: 'create' | 'edit'; dataSource?: DataSource },
-    private dialogRef: MatDialogRef<DataSourceDialogComponent>,
-    private dialog: MatDialog,
-    private fb: FormBuilder,
-    private geoserverService: GeoserverService,
-    private notificationService: NotificationService,
-    private translate: TranslateService,
   ) {
     this.mode = data.mode;
     this.dataSource = data.dataSource;
@@ -81,37 +98,6 @@ export class DataSourceDialogComponent implements OnInit {
       s3_secret_key: [''],
       enabled: [true],
     });
-  }
-
-  ngOnInit(): void {
-    this.loadWorkspaces();
-    this.dataSourceTypes = [
-      { value: 'postgis', label: 'PostGIS' },
-      { value: 'mysql', label: 'MySQL' },
-      { value: 'mongo', label: 'MongoDB' },
-      { value: 'shapefile', label: 'Shapefile' },
-      { value: 'geotiff', label: 'GeoTIFF' },
-      { value: 'geopackage', label: 'GeoPackage' },
-      { value: 'geojson', label: 'GeoJSON' },
-      { value: 'worldimage', label: 'WorldImage' },
-      { value: 'cascaded_wms', label: this.translate.instant('dataSources.cascadedWms') },
-      { value: 'arcgrid', label: 'ArcGrid' },
-      { value: 'image_mosaic', label: 'ImageMosaic' },
-      { value: 'image_pyramid', label: 'ImagePyramid' },
-      { value: 'redis', label: 'Redis Cache' },
-    ];
-    this.fileStorageTypes = [
-      {
-        value: 'local',
-        label: this.translate.instant('dataSources.storageTypeLocal'),
-        description: this.translate.instant('dataSources.storageTypeLocalDesc'),
-      },
-      {
-        value: 's3',
-        label: this.translate.instant('dataSources.storageTypeS3'),
-        description: this.translate.instant('dataSources.storageTypeS3Desc'),
-      },
-    ];
 
     if (this.mode === 'edit' && this.dataSource) {
       this.form.patchValue({
@@ -134,17 +120,6 @@ export class DataSourceDialogComponent implements OnInit {
       });
       this.form.get('name')?.disable();
     }
-  }
-
-  loadWorkspaces(): void {
-    this.geoserverService.getAllWorkspaces().subscribe({
-      next: (workspaces: Workspace[]) => {
-        this.workspaces = workspaces;
-      },
-      error: (err) => {
-        console.error('Failed to load workspaces:', err);
-      },
-    });
   }
 
   get title(): string {

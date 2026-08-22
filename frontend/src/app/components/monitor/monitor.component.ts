@@ -1,94 +1,94 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import {
+  Component,
+  ChangeDetectionStrategy,
+  computed,
+  inject,
+  signal,
+  DestroyRef,
+} from '@angular/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { MonitorStats, RequestRecord, AuditLogEntry } from '../../models/geoserver.models';
+import { switchMap, tap, map, startWith, catchError, of, combineLatest, interval } from 'rxjs';
+
+interface MonitorData {
+  stats: MonitorStats | null;
+  requests: RequestRecord[];
+  audit: AuditLogEntry[];
+}
 
 @Component({
   standalone: false,
   selector: 'app-monitor',
   templateUrl: './monitor.component.html',
   styleUrls: ['./monitor.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MonitorComponent implements OnInit, OnDestroy {
-  stats: MonitorStats | null = null;
-  recentRequests: RequestRecord[] = [];
-  auditLogs: AuditLogEntry[] = [];
-  loading = true;
-  error = '';
+export class MonitorComponent {
+  private geoserver = inject(GeoserverService);
+  private translate = inject(TranslateService);
+  private destroyRef = inject(DestroyRef);
+
   activeTab: 'overview' | 'requests' | 'audit' = 'overview';
-  refreshInterval: ReturnType<typeof setInterval> | null = null;
+  error = '';
+  private refreshTrigger = signal(0);
 
-  // 图表数据
-  requestHistory: number[] = [];
-  requestLabels: string[] = [];
+  // ── Signal pipeline ───────────────────────────────────────────────
+  private monitorData$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    switchMap(() =>
+      combineLatest([
+        this.geoserver.getMonitorStats().pipe(
+          catchError((e) => {
+            this.error = this.translate.instant('monitor.loadFail', { message: e.message });
+            return of(null as MonitorStats | null);
+          }),
+        ),
+        this.geoserver.getRecentRequests(50).pipe(catchError(() => of([] as RequestRecord[]))),
+        this.geoserver.getAuditLogs(50, 0).pipe(catchError(() => of([] as AuditLogEntry[]))),
+      ]).pipe(
+        map(([stats, requests, audit]) => ({ stats, requests, audit } as MonitorData)),
+      ),
+    ),
+  );
 
-  constructor(
-    private geoserver: GeoserverService,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  private data = toSignal(this.monitorData$, {
+    initialValue: { stats: null, requests: [], audit: [] } as MonitorData,
+  });
 
-  ngOnInit(): void {
-    this.loadData();
-    // 每 10 秒自动刷新
-    this.refreshInterval = setInterval(() => this.loadData(), 10000);
-  }
+  // Derived signals
+  stats = computed(() => this.data().stats);
+  recentRequests = computed(() => this.data().requests);
+  auditLogs = computed(() => this.data().audit);
+  loading = computed(() => this.data().stats === null && !this.error);
 
-  ngOnDestroy(): void {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-    }
-  }
-
-  loadData(): void {
-    this.loading = true;
-    this.geoserver.getMonitorStats().subscribe({
-      next: (s) => {
-        this.stats = s;
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: (e) => {
-        this.error = this.translate.instant('monitor.loadFail', { message: e.message });
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-    });
-
-    this.geoserver.getRecentRequests(50).subscribe({
-      next: (r) => (this.recentRequests = r),
-      error: () => {},
-    });
-
-    this.geoserver.getAuditLogs(50, 0).subscribe({
-      next: (l) => (this.auditLogs = l),
-      error: () => {},
-    });
-  }
-
-  get uptimeFormatted(): string {
-    if (!this.stats) return '';
-    const s = this.stats.uptime_seconds;
-    const d = Math.floor(s / 86400);
-    const h = Math.floor((s % 86400) / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
+  // ── Computed chart data ───────────────────────────────────────────
+  uptimeFormatted = computed(() => {
+    const s = this.stats();
+    if (!s) return '';
+    const sec = s.uptime_seconds;
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
     const parts: string[] = [];
     if (d > 0) parts.push(this.translate.instant('monitor.uptimeDay', { count: d }));
     if (h > 0) parts.push(this.translate.instant('monitor.uptimeHour', { count: h }));
     if (m > 0) parts.push(this.translate.instant('monitor.uptimeMinute', { count: m }));
-    parts.push(this.translate.instant('monitor.uptimeSecond', { count: sec }));
+    parts.push(this.translate.instant('monitor.uptimeSecond', { count: sec % 60 }));
     return parts.join(' ');
-  }
+  });
 
-  get errorRateFormatted(): string {
-    if (!this.stats) return '0%';
-    return this.stats.error_rate.toFixed(2) + '%';
-  }
+  errorRateFormatted = computed(() => {
+    const s = this.stats();
+    return s ? s.error_rate.toFixed(2) + '%' : '0%';
+  });
 
-  get topEndpoints(): { name: string; count: number; avgDuration: number }[] {
-    if (!this.stats) return [];
-    return Object.entries(this.stats.endpoints)
+  topEndpoints = computed(() => {
+    const s = this.stats();
+    if (!s) return [];
+    return Object.entries(s.endpoints)
       .sort((a, b) => b[1].count - a[1].count)
       .slice(0, 10)
       .map(([name, data]) => ({
@@ -96,26 +96,40 @@ export class MonitorComponent implements OnInit, OnDestroy {
         count: data.count,
         avgDuration: data.avg_duration_ms,
       }));
-  }
+  });
 
-  get methodChart(): { method: string; count: number }[] {
-    if (!this.stats) return [];
-    return Object.entries(this.stats.methods)
+  methodChart = computed(() => {
+    const s = this.stats();
+    if (!s) return [];
+    return Object.entries(s.methods)
       .sort((a, b) => b[1] - a[1])
       .map(([method, count]) => ({ method, count }));
-  }
+  });
 
-  get statusChart(): { code: string; count: number }[] {
-    if (!this.stats) return [];
-    return Object.entries(this.stats.status_codes)
+  statusChart = computed(() => {
+    const s = this.stats();
+    if (!s) return [];
+    return Object.entries(s.status_codes)
       .sort((a, b) => b[1] - a[1])
       .map(([code, count]) => ({ code, count }));
+  });
+
+  constructor() {
+    // Auto-refresh every 10 seconds
+    interval(10000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.refreshTrigger.update((v) => v + 1));
+  }
+
+  // ── Actions ───────────────────────────────────────────────────────
+  refreshData(): void {
+    this.refreshTrigger.update((v) => v + 1);
   }
 
   resetStats(): void {
     if (confirm(this.translate.instant('monitor.confirmReset'))) {
       this.geoserver.resetMonitorStats().subscribe({
-        next: () => this.loadData(),
+        next: () => this.refreshTrigger.update((v) => v + 1),
         error: (e) =>
           (this.error = this.translate.instant('monitor.resetFail', { message: e.message })),
       });
@@ -136,8 +150,9 @@ export class MonitorComponent implements OnInit, OnDestroy {
   }
 
   getMaxMethodCount(): number {
-    if (!this.stats) return 1;
-    const counts = Object.values(this.stats.methods);
+    const s = this.stats();
+    if (!s) return 1;
+    const counts = Object.values(s.methods);
     return Math.max(...counts, 1);
   }
 }

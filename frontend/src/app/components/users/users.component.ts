@@ -1,19 +1,25 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { AuthService } from '../../services/auth.service';
 import { NotificationService } from '../../services/notification.service';
 import { User } from '../../models/geoserver.models';
+import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
   selector: 'app-users',
   templateUrl: './users.component.html',
   styleUrls: ['./users.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class UsersComponent implements OnInit {
-  users: User[] = [];
-  loading = false;
+export class UsersComponent {
+  private geoserver = inject(GeoserverService);
+  private auth = inject(AuthService);
+  private notificationService = inject(NotificationService);
+  private translate = inject(TranslateService);
+
   error = '';
 
   // 创建用户
@@ -28,33 +34,24 @@ export class UsersComponent implements OnInit {
   newPassword1 = '';
   newPassword2 = '';
 
-  constructor(
-    private geoserver: GeoserverService,
-    private auth: AuthService,
-    private notificationService: NotificationService,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  private refreshTrigger = signal(0);
+  loading = signal(false);
 
-  ngOnInit(): void {
-    this.loadUsers();
-  }
+  private users$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    tap(() => this.loading.set(true)),
+    switchMap(() =>
+      this.geoserver.listUsers().pipe(
+        catchError(() => {
+          this.error = this.translate.instant('users.loadFail');
+          return of([] as User[]);
+        }),
+      ),
+    ),
+    tap(() => this.loading.set(false)),
+  );
 
-  loadUsers(): void {
-    this.loading = true;
-    this.geoserver.listUsers().subscribe({
-      next: (users) => {
-        this.users = users;
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.error = this.translate.instant('users.loadFail');
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-    });
-  }
+  users = toSignal(this.users$, { initialValue: [] as User[] });
 
   createUser(): void {
     if (!this.newUsername || !this.newPassword) return;
@@ -65,7 +62,7 @@ export class UsersComponent implements OnInit {
         this.newUsername = '';
         this.newPassword = '';
         this.newRole = 'user';
-        this.loadUsers();
+        this.refreshTrigger.update((v) => v + 1);
       },
       error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
     });
@@ -80,7 +77,7 @@ export class UsersComponent implements OnInit {
     this.geoserver.deleteUser(username).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('users.deleteSuccess'));
-        this.loadUsers();
+        this.refreshTrigger.update((v) => v + 1);
       },
       error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
     });

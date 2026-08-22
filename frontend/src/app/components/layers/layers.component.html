@@ -25,7 +25,7 @@
       <mat-label>{{ 'common.workspace' | translate }}</mat-label>
       <mat-select [(value)]="selectedWorkspace">
         <mat-option value="">{{ 'common.all' | translate }}</mat-option>
-        <mat-option *ngFor="let ws of workspaces; trackBy: trackByIndex" [value]="ws">
+        <mat-option *ngFor="let ws of workspaces(); trackBy: trackByIndex" [value]="ws">
           {{ ws }}
         </mat-option>
       </mat-select>
@@ -40,12 +40,12 @@
     </button>
   </div>
 
-  <div *ngIf="loading" class="loading-container">
+  <div *ngIf="loading()" class="loading-container">
     <mat-spinner diameter="48"></mat-spinner>
     <p>{{ 'layers.loading' | translate }}</p>
   </div>
 
-  <div *ngIf="!loading && filteredLayers.length === 0" class="empty-state">
+  <div *ngIf="!loading() && filteredLayers().length === 0" class="empty-state">
     <mat-icon class="empty-icon">layers_clear</mat-icon>
     <h3>{{ 'layers.empty' | translate }}</h3>
     <p>{{ 'layers.emptyHint' | translate }}</p>
@@ -55,8 +55,8 @@
     </button>
   </div>
 
-  <div *ngIf="!loading && filteredLayers.length > 0" class="layers-grid">
-    <mat-card *ngFor="let layer of filteredLayers" class="layer-card stagger-item">
+  <div *ngIf="!loading() && filteredLayers().length > 0" class="layers-grid">
+    <mat-card *ngFor="let layer of filteredLayers()" class="layer-card stagger-item">
       <mat-card-header>
         <div class="card-title">
           <mat-icon class="layer-icon">layers</mat-icon>

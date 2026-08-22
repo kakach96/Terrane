@@ -1,18 +1,23 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Permission, CreatePermissionRequest } from '../../models/geoserver.models';
+import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
   selector: 'app-permissions',
   templateUrl: './permissions.component.html',
   styleUrls: ['./permissions.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PermissionsComponent implements OnInit {
-  permissions: Permission[] = [];
-  loading = false;
+export class PermissionsComponent {
+  private geoserver = inject(GeoserverService);
+  private notificationService = inject(NotificationService);
+  private translate = inject(TranslateService);
+
   error = '';
 
   // 新建权限
@@ -33,32 +38,24 @@ export class PermissionsComponent implements OnInit {
   modeOptions = ['read', 'write', 'admin'];
   effectOptions = ['allow', 'deny'];
 
-  constructor(
-    private geoserver: GeoserverService,
-    private notificationService: NotificationService,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  private refreshTrigger = signal(0);
+  loading = signal(false);
 
-  ngOnInit(): void {
-    this.loadPermissions();
-  }
+  private permissions$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    tap(() => this.loading.set(true)),
+    switchMap(() =>
+      this.geoserver.getPermissions().pipe(
+        catchError(() => {
+          this.notificationService.error(this.translate.instant('permissions.loadFail'));
+          return of([] as Permission[]);
+        }),
+      ),
+    ),
+    tap(() => this.loading.set(false)),
+  );
 
-  loadPermissions(): void {
-    this.loading = true;
-    this.geoserver.getPermissions().subscribe({
-      next: (perms) => {
-        this.permissions = perms;
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.notificationService.error(this.translate.instant('permissions.loadFail'));
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-    });
-  }
+  permissions = toSignal(this.permissions$, { initialValue: [] as Permission[] });
 
   createPermission(): void {
     if (!this.newPerm.resourceName) {
@@ -70,7 +67,7 @@ export class PermissionsComponent implements OnInit {
         this.notificationService.success(this.translate.instant('permissions.createSuccess'));
         this.showCreateForm = false;
         this.resetForm();
-        this.loadPermissions();
+        this.refreshTrigger.update((v) => v + 1);
       },
       error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
     });
@@ -83,7 +80,7 @@ export class PermissionsComponent implements OnInit {
     this.geoserver.deletePermission(perm.id).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('permissions.deleteSuccess'));
-        this.loadPermissions();
+        this.refreshTrigger.update((v) => v + 1);
       },
       error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
     });

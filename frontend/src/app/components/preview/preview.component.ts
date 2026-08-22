@@ -1,10 +1,13 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateService } from '@ngx-translate/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { GeoserverService } from '../../services/geoserver.service';
+import { NotificationService } from '../../services/notification.service';
 import { Layer, LayerGroup } from '../../models/geoserver.models';
 import { transformBounds } from '../../utils/coords';
+import { switchMap, tap, map, startWith, catchError, of, combineLatest } from 'rxjs';
 
 interface Bounds {
   minx: number;
@@ -13,15 +16,25 @@ interface Bounds {
   maxy: number;
 }
 
+interface PreviewData {
+  layers: Layer[];
+  groups: LayerGroup[];
+}
+
 @Component({
   standalone: false,
   selector: 'app-preview',
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PreviewComponent implements OnInit {
-  layers: Layer[] = [];
-  groups: LayerGroup[] = [];
+export class PreviewComponent {
+  private route = inject(ActivatedRoute);
+  private geoserverService = inject(GeoserverService);
+  private sanitizer = inject(DomSanitizer);
+  private translate = inject(TranslateService);
+  private notificationService = inject(NotificationService);
+
   previewMode: 'layer' | 'group' = 'layer';
   searchQuery = '';
 
@@ -32,7 +45,6 @@ export class PreviewComponent implements OnInit {
 
   previewUrl = '';
   safePreviewUrl: SafeResourceUrl = '';
-  loading = true;
 
   featureCount = 0;
   geometryTypes: string[] = [];
@@ -51,13 +63,10 @@ export class PreviewComponent implements OnInit {
   // iframe's continuous change detection caused a render storm that froze the page.
   formatOptions: { value: string; label: string }[] = [];
 
-  constructor(
-    private route: ActivatedRoute,
-    private geoserverService: GeoserverService,
-    private sanitizer: DomSanitizer,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {
+  private refreshTrigger = signal(0);
+  loading = signal(true);
+
+  constructor() {
     this.formatOptions = [
       {
         value: 'application/openlayers',
@@ -66,62 +75,8 @@ export class PreviewComponent implements OnInit {
       { value: 'image/png', label: this.translate.instant('preview.formatPng') },
       { value: 'image/jpeg', label: this.translate.instant('preview.formatJpeg') },
     ];
-  }
 
-  get isStaticFormat(): boolean {
-    return this.previewOptions.format !== 'application/openlayers';
-  }
-
-  get filteredLayers(): Layer[] {
-    const q = this.searchQuery.trim().toLowerCase();
-    return this.layers.filter((l) => {
-      if (!q) return true;
-      return (
-        l.name.toLowerCase().includes(q) ||
-        (l.title || '').toLowerCase().includes(q) ||
-        l.workspace.toLowerCase().includes(q)
-      );
-    });
-  }
-
-  get filteredGroups(): LayerGroup[] {
-    const q = this.searchQuery.trim().toLowerCase();
-    return this.groups.filter((g) => {
-      if (!q) return true;
-      return g.name.toLowerCase().includes(q) || (g.title || '').toLowerCase().includes(q);
-    });
-  }
-
-  get displayBounds(): Bounds | null {
-    if (this.previewMode === 'layer') {
-      const l = this.currentLayer;
-      if (!l) return null;
-      return l.native_bounds?.bounds || l.bounds || null;
-    }
-    const g = this.currentGroup;
-    if (!g || g.layers.length === 0) return null;
-    const first = this.layers.find((l) => l.name === g.layers[0]);
-    if (!first) return null;
-    return first.native_bounds?.bounds || first.bounds || null;
-  }
-
-  get displayCrs(): string {
-    if (this.previewMode === 'layer') {
-      const l = this.currentLayer;
-      if (!l) return 'EPSG:4326';
-      return l.native_bounds?.crs || l.srs || 'EPSG:4326';
-    }
-    const g = this.currentGroup;
-    if (g && g.layers.length > 0) {
-      const first = this.layers.find((l) => l.name === g.layers[0]);
-      if (first) {
-        return first.native_bounds?.crs || first.srs || 'EPSG:4326';
-      }
-    }
-    return 'EPSG:4326';
-  }
-
-  ngOnInit(): void {
+    // Initialise preview mode from query params
     const layerParam = this.route.snapshot.queryParamMap.get('layer');
     const groupParam = this.route.snapshot.queryParamMap.get('group');
     if (groupParam) {
@@ -131,40 +86,99 @@ export class PreviewComponent implements OnInit {
       this.previewMode = 'layer';
       this.selectedLayer = layerParam;
     }
-
-    this.geoserverService.getLayers().subscribe({
-      next: (data) => {
-        this.layers = data.filter((l) => l.enabled);
-        if (this.previewMode === 'layer') {
-          this.selectLayer(this.selectedLayer || (this.layers[0]?.name ?? ''));
-        }
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-    });
-
-    this.geoserverService.getLayerGroups().subscribe({
-      next: (data) => {
-        this.groups = data;
-        if (this.previewMode === 'group') {
-          this.selectGroup(this.selectedGroup || (this.groups[0]?.name ?? ''));
-        }
-      },
-    });
   }
 
+  // ── Signal pipeline ───────────────────────────────────────────────
+  private previewData$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    tap(() => this.loading.set(true)),
+    switchMap(() =>
+      combineLatest([
+        this.geoserverService.getLayers().pipe(catchError(() => of([] as Layer[]))),
+        this.geoserverService.getLayerGroups().pipe(catchError(() => of([] as LayerGroup[]))),
+      ]).pipe(map(([layers, groups]) => ({ layers, groups } as PreviewData))),
+    ),
+    tap((data) => {
+      // Apply initial selection after data loads
+      const enabledLayers = data.layers.filter((l) => l.enabled);
+      if (this.previewMode === 'layer' && !this.currentLayer) {
+        this.selectLayer(this.selectedLayer || (enabledLayers[0]?.name ?? ''));
+      }
+      if (this.previewMode === 'group' && !this.currentGroup) {
+        this.selectGroup(this.selectedGroup || (data.groups[0]?.name ?? ''));
+      }
+      this.loading.set(false);
+    }),
+  );
+
+  private data = toSignal(this.previewData$, {
+    initialValue: { layers: [] as Layer[], groups: [] as LayerGroup[] },
+  });
+
+  // ── Derived signals ───────────────────────────────────────────────
+  layers = computed(() => this.data().layers.filter((l) => l.enabled));
+  groups = computed(() => this.data().groups);
+
+  isStaticFormat = computed(() => this.previewOptions.format !== 'application/openlayers');
+
+  filteredLayers = computed(() => {
+    const q = this.searchQuery.trim().toLowerCase();
+    return this.layers().filter((l) => {
+      if (!q) return true;
+      return (
+        l.name.toLowerCase().includes(q) ||
+        (l.title || '').toLowerCase().includes(q) ||
+        l.workspace.toLowerCase().includes(q)
+      );
+    });
+  });
+
+  filteredGroups = computed(() => {
+    const q = this.searchQuery.trim().toLowerCase();
+    return this.groups().filter((g) => {
+      if (!q) return true;
+      return g.name.toLowerCase().includes(q) || (g.title || '').toLowerCase().includes(q);
+    });
+  });
+
+  displayBounds = computed((): Bounds | null => {
+    if (this.previewMode === 'layer') {
+      const l = this.currentLayer;
+      if (!l) return null;
+      return l.native_bounds?.bounds || l.bounds || null;
+    }
+    const g = this.currentGroup;
+    if (!g || g.layers.length === 0) return null;
+    const first = this.layers().find((l) => l.name === g.layers[0]);
+    if (!first) return null;
+    return first.native_bounds?.bounds || first.bounds || null;
+  });
+
+  displayCrs = computed((): string => {
+    if (this.previewMode === 'layer') {
+      const l = this.currentLayer;
+      if (!l) return 'EPSG:4326';
+      return l.native_bounds?.crs || l.srs || 'EPSG:4326';
+    }
+    const g = this.currentGroup;
+    if (g && g.layers.length > 0) {
+      const first = this.layers().find((l) => l.name === g.layers[0]);
+      if (first) {
+        return first.native_bounds?.crs || first.srs || 'EPSG:4326';
+      }
+    }
+    return 'EPSG:4326';
+  });
+
+  // ── Actions ───────────────────────────────────────────────────────
   selectLayer(name: string): void {
     if (!name) return;
     this.selectedLayer = name;
-    const layer = this.layers.find((l) => l.name === name);
+    const layer = this.layers().find((l) => l.name === name);
     if (!layer) return;
     this.currentLayer = layer;
     this.currentGroup = null;
-    this.previewOptions.crs = this.displayCrs;
+    this.previewOptions.crs = this.displayCrs();
     this.refreshPreview();
     this.loadLayerStats(name);
   }
@@ -172,13 +186,13 @@ export class PreviewComponent implements OnInit {
   selectGroup(name: string): void {
     if (!name) return;
     this.selectedGroup = name;
-    const group = this.groups.find((g) => g.name === name);
+    const group = this.groups().find((g) => g.name === name);
     if (!group) return;
     this.currentGroup = group;
     this.currentLayer = null;
     this.featureCount = 0;
     this.geometryTypes = [];
-    this.previewOptions.crs = this.displayCrs;
+    this.previewOptions.crs = this.displayCrs();
     this.refreshPreview();
   }
 
@@ -188,16 +202,16 @@ export class PreviewComponent implements OnInit {
     this.currentLayer = null;
     this.currentGroup = null;
     if (this.previewMode === 'layer') {
-      this.selectLayer(this.selectedLayer || (this.layers[0]?.name ?? ''));
+      this.selectLayer(this.selectedLayer || (this.layers()[0]?.name ?? ''));
     } else {
-      this.selectGroup(this.selectedGroup || (this.groups[0]?.name ?? ''));
+      this.selectGroup(this.selectedGroup || (this.groups()[0]?.name ?? ''));
     }
   }
 
   refreshPreview(): void {
     if (this.previewMode === 'layer') {
       if (!this.currentLayer) return;
-      const bounds = this.displayBounds;
+      const bounds = this.displayBounds();
       if (!bounds) {
         this.previewUrl = '';
         return;
@@ -222,12 +236,12 @@ export class PreviewComponent implements OnInit {
     } else {
       const group = this.currentGroup;
       if (!group || group.layers.length === 0) return;
-      const bounds = this.displayBounds;
+      const bounds = this.displayBounds();
       if (!bounds) {
         this.previewUrl = '';
         return;
       }
-      const nativeCrs = this.displayCrs;
+      const nativeCrs = this.displayCrs();
       // WMS 约定 BBOX 处于请求 SRS 下, 切换坐标系时转换图层原生边界
       const converted = transformBounds(bounds, nativeCrs, this.previewOptions.crs);
       const params = new URLSearchParams({

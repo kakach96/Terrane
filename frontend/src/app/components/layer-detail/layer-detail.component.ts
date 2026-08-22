@@ -1,51 +1,33 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateService } from '@ngx-translate/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Layer } from '../../models/geoserver.models';
+import { switchMap, tap, filter, map, startWith, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
   selector: 'app-layer-detail',
   templateUrl: './layer-detail.component.html',
   styleUrls: ['./layer-detail.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class LayerDetailComponent implements OnInit {
-  layer: Layer | null = null;
-  featureCount = 0;
+export class LayerDetailComponent {
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private sanitizer = inject(DomSanitizer);
+  private geoserverService = inject(GeoserverService);
+  private notificationService = inject(NotificationService);
+  private translate = inject(TranslateService);
+
   previewUrl = '';
   safePreviewUrl: SafeResourceUrl = '';
-  styleNames: string[] = [];
   currentStyleName = '';
-  /** Redis 缓存数据源 (type = 'redis'), 供图层级缓存后端选择 */
-  redisCacheSources: { name: string }[] = [];
   currentCacheStore = '';
-  loading = true;
-
-  /** 显示的边界（优先 native_bounds，回退到 bounds） */
-  get displayBounds(): { minx: number; miny: number; maxx: number; maxy: number } {
-    const b = this.layer?.native_bounds?.bounds || this.layer?.bounds;
-    return b || { minx: -180, miny: -90, maxx: 180, maxy: 90 };
-  }
-
-  /** 显示的坐标系 */
-  get displayCrs(): string {
-    return this.layer?.native_bounds?.crs || this.layer?.srs || 'EPSG:4326';
-  }
-
-  /** 是否为默认世界范围 */
-  get isDefaultBounds(): boolean {
-    const b = this.displayBounds;
-    const is4326Default = b.minx === -180 && b.miny === -90 && b.maxx === 180 && b.maxy === 90;
-    const is3857Default =
-      Math.abs(b.minx - -20037508.34) < 0.01 &&
-      Math.abs(b.miny - -20037508.34) < 0.01 &&
-      Math.abs(b.maxx - 20037508.34) < 0.01 &&
-      Math.abs(b.maxy - 20037508.34) < 0.01;
-    return is4326Default || is3857Default;
-  }
+  private refreshTrigger = signal(0);
 
   previewOptions = {
     width: 800,
@@ -63,19 +45,7 @@ export class LayerDetailComponent implements OnInit {
 
   previewCrsOptions = ['EPSG:4326', 'EPSG:3857', 'EPSG:4490'];
 
-  get isStaticPreview(): boolean {
-    return this.previewOptions.format !== 'application/openlayers';
-  }
-
-  constructor(
-    private route: ActivatedRoute,
-    private router: Router,
-    private sanitizer: DomSanitizer,
-    private geoserverService: GeoserverService,
-    private notificationService: NotificationService,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {
+  constructor() {
     this.previewFormats = [
       {
         value: 'application/openlayers',
@@ -86,66 +56,113 @@ export class LayerDetailComponent implements OnInit {
     ];
   }
 
-  ngOnInit(): void {
-    const layerName = this.route.snapshot.paramMap.get('name');
-    if (layerName) {
-      this.loadLayer(layerName);
-      this.loadFeatures(layerName);
-      this.loadStyleNames();
-      this.loadRedisCacheSources();
-    }
-  }
+  /** Layer name from route – read once. */
+  private layerName = this.route.snapshot.paramMap.get('name') ?? '';
 
-  loadLayer(name: string): void {
-    this.geoserverService.getLayer(name).subscribe({
-      next: (layer) => {
-        this.layer = layer;
+  // ── Signal pipelines ──────────────────────────────────────────────
+  private layer$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    filter(() => !!this.layerName),
+    switchMap(() =>
+      this.geoserverService.getLayer(this.layerName).pipe(
+        catchError(() => {
+          this.notificationService.error(this.translate.instant('layerDetail.loadFail'));
+          return of(null as Layer | null);
+        }),
+      ),
+    ),
+    tap((layer) => {
+      if (layer) {
         this.currentStyleName = layer.styles?.[0]?.name || 'default';
         this.currentCacheStore = layer.cache_store || '';
-        this.previewOptions.crs = this.displayCrs;
+        this.previewOptions.crs = this.displayCrs();
         this.refreshPreview();
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.notificationService.error(this.translate.instant('layerDetail.loadFail'));
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-    });
-  }
+      }
+    }),
+  );
 
-  /** 加载 Redis 缓存数据源 (type = 'redis') */
-  loadRedisCacheSources(): void {
-    this.geoserverService.getDataSources().subscribe({
-      next: (sources) => {
-        this.redisCacheSources = sources.filter((s) => s.type === 'redis' && s.enabled);
-      },
-    });
-  }
+  layer = toSignal(this.layer$, { initialValue: null as Layer | null });
 
-  /** 切换图层的瓦片缓存后端 (Redis 数据源 / 默认内存缓存) */
-  onCacheStoreChange(cacheStore: string): void {
-    if (!this.layer) return;
-    // 空字符串 = 默认内存/本地缓存 (null); 否则 = 指定 Redis 数据源名称
-    const value = cacheStore || null;
-    this.geoserverService.updateLayer(this.layer.name, { cache_store: value }).subscribe({
-      next: () => {
-        this.layer!.cache_store = value;
-        this.currentCacheStore = cacheStore;
-        this.notificationService.success(
-          this.translate.instant('layerDetail.cacheStoreSuccess'),
-        );
-      },
-      error: () =>
-        this.notificationService.error(this.translate.instant('layerDetail.cacheStoreFail')),
-    });
-  }
+  private featureCount$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    filter(() => !!this.layerName),
+    switchMap(() =>
+      this.geoserverService.getLayerFeatures(this.layerName).pipe(
+        catchError(() => of({ features: [] } as any)),
+      ),
+    ),
+  );
 
+  featureCount = toSignal(
+    this.featureCount$.pipe(map((c) => c.features?.length ?? 0)),
+    { initialValue: 0 },
+  );
+
+  private styleNames$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    switchMap(() =>
+      this.geoserverService.getStyles().pipe(
+        catchError(() => of([] as any[])),
+      ),
+    ),
+  );
+
+  styleNames = toSignal(
+    this.styleNames$.pipe(map((data) => data.map((s: any) => s.name))),
+    { initialValue: [] as string[] },
+  );
+
+  private redisCacheSources$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    switchMap(() =>
+      this.geoserverService.getDataSources().pipe(
+        catchError(() => of([] as any[])),
+      ),
+    ),
+  );
+
+  redisCacheSources = toSignal(
+    this.redisCacheSources$.pipe(
+      map((sources) => sources.filter((s: any) => s.type === 'redis' && s.enabled)),
+    ),
+    { initialValue: [] as { name: string }[] },
+  );
+
+  // ── Computed signals ──────────────────────────────────────────────
+  /** Display bounds (prefer native_bounds, fallback to bounds) */
+  displayBounds = computed(() => {
+    const l = this.layer();
+    const b = l?.native_bounds?.bounds || l?.bounds;
+    return b || { minx: -180, miny: -90, maxx: 180, maxy: 90 };
+  });
+
+  /** Display CRS */
+  displayCrs = computed(() => {
+    const l = this.layer();
+    return l?.native_bounds?.crs || l?.srs || 'EPSG:4326';
+  });
+
+  /** Whether the bounds are the default world extent */
+  isDefaultBounds = computed(() => {
+    const b = this.displayBounds();
+    const is4326Default = b.minx === -180 && b.miny === -90 && b.maxx === 180 && b.maxy === 90;
+    const is3857Default =
+      Math.abs(b.minx - -20037508.34) < 0.01 &&
+      Math.abs(b.miny - -20037508.34) < 0.01 &&
+      Math.abs(b.maxx - 20037508.34) < 0.01 &&
+      Math.abs(b.maxy - 20037508.34) < 0.01;
+    return is4326Default || is3857Default;
+  });
+
+  /** Whether the preview format is a static image (not OpenLayers iframe) */
+  isStaticPreview = computed(() => this.previewOptions.format !== 'application/openlayers');
+
+  // ── Imperative methods ────────────────────────────────────────────
   refreshPreview(): void {
-    if (!this.layer) return;
+    const l = this.layer();
+    if (!l) return;
     if (this.previewOptions.format === 'application/openlayers') {
-      this.previewUrl = this.geoserverService.getWmsPreviewUrl(this.layer, {
+      this.previewUrl = this.geoserverService.getWmsPreviewUrl(l, {
         width: this.previewOptions.width,
         height: this.previewOptions.height,
         crs: this.previewOptions.crs,
@@ -153,8 +170,9 @@ export class LayerDetailComponent implements OnInit {
         transparent: true,
       });
     } else {
-      const bbox = `${this.displayBounds.minx},${this.displayBounds.miny},${this.displayBounds.maxx},${this.displayBounds.maxy}`;
-      this.previewUrl = this.geoserverService.getMapImageUrl(this.layer, {
+      const b = this.displayBounds();
+      const bbox = `${b.minx},${b.miny},${b.maxx},${b.maxy}`;
+      this.previewUrl = this.geoserverService.getMapImageUrl(l, {
         width: this.previewOptions.width,
         height: this.previewOptions.height,
         format: this.previewOptions.format as 'image/png' | 'image/jpeg',
@@ -171,29 +189,31 @@ export class LayerDetailComponent implements OnInit {
     this.refreshPreview();
   }
 
-  loadFeatures(layerName: string): void {
-    this.geoserverService.getLayerFeatures(layerName).subscribe({
-      next: (collection) => {
-        this.featureCount = collection.features.length;
+  /** Toggle tile cache backend (Redis data source / default in-memory) */
+  onCacheStoreChange(cacheStore: string): void {
+    const l = this.layer();
+    if (!l) return;
+    const value = cacheStore || null;
+    this.geoserverService.updateLayer(l.name, { cache_store: value }).subscribe({
+      next: () => {
+        this.currentCacheStore = cacheStore;
+        this.notificationService.success(
+          this.translate.instant('layerDetail.cacheStoreSuccess'),
+        );
       },
-      error: () => (this.featureCount = 0),
+      error: () =>
+        this.notificationService.error(this.translate.instant('layerDetail.cacheStoreFail')),
     });
   }
 
-  loadStyleNames(): void {
-    this.geoserverService.getStyles().subscribe({
-      next: (data) => {
-        this.styleNames = data.map((s) => s.name);
-      },
-    });
-  }
-
+  /** Switch layer style (nested subscribe: getStyle → updateLayerStyle) */
   onStyleChange(styleName: string): void {
-    if (!this.layer) return;
+    const l = this.layer();
+    if (!l) return;
     this.geoserverService.getStyle(styleName).subscribe({
       next: (style) => {
         if (style.content) {
-          this.geoserverService.updateLayerStyle(this.layer!.name, style.content).subscribe({
+          this.geoserverService.updateLayerStyle(l.name, style.content).subscribe({
             next: () => {
               this.currentStyleName = styleName;
               this.notificationService.success(
@@ -225,13 +245,14 @@ export class LayerDetailComponent implements OnInit {
   }
 
   downloadGeoJson(): void {
-    if (!this.layer) return;
-    this.geoserverService.exportFeaturesGeoJson(this.layer.name).subscribe({
+    const l = this.layer();
+    if (!l) return;
+    this.geoserverService.exportFeaturesGeoJson(l.name).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${this.layer!.name}.geojson`;
+        a.download = `${l.name}.geojson`;
         a.click();
         window.URL.revokeObjectURL(url);
         this.notificationService.success(
@@ -244,13 +265,14 @@ export class LayerDetailComponent implements OnInit {
   }
 
   downloadCsv(): void {
-    if (!this.layer) return;
-    this.geoserverService.exportFeaturesCsv(this.layer.name).subscribe({
+    const l = this.layer();
+    if (!l) return;
+    this.geoserverService.exportFeaturesCsv(l.name).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${this.layer!.name}.csv`;
+        a.download = `${l.name}.csv`;
         a.click();
         window.URL.revokeObjectURL(url);
         this.notificationService.success(this.translate.instant('layerDetail.downloadCsvSuccess'));

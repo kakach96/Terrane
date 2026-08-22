@@ -35,7 +35,7 @@
       />
     </mat-form-field>
 
-    <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat">
+    <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat()">
       <mat-label>{{ 'preview.width' | translate }}</mat-label>
       <input
         matInput
@@ -45,7 +45,7 @@
       />
     </mat-form-field>
 
-    <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat">
+    <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat()">
       <mat-label>{{ 'preview.height' | translate }}</mat-label>
       <input
         matInput
@@ -56,7 +56,7 @@
     </mat-form-field>
 
     <mat-checkbox
-      *ngIf="isStaticFormat"
+      *ngIf="isStaticFormat()"
       [(ngModel)]="previewOptions.transparent"
       (change)="refreshPreview()"
     >
@@ -73,13 +73,13 @@
             : ('preview.groupList' | translate)
         }}</span>
         <span class="panel-count">{{
-          previewMode === 'layer' ? filteredLayers.length : filteredGroups.length
+          previewMode === 'layer' ? filteredLayers().length : filteredGroups().length
         }}</span>
       </div>
 
       <div class="panel-list" *ngIf="previewMode === 'layer'">
         <div
-          *ngFor="let layer of filteredLayers; trackBy: trackByKey"
+          *ngFor="let layer of filteredLayers(); trackBy: trackByKey"
           class="layer-item"
           [class.active]="isActiveLayer(layer)"
           (click)="selectLayer(layer.name)"
@@ -101,7 +101,7 @@
 
       <div class="panel-list" *ngIf="previewMode === 'group'">
         <div
-          *ngFor="let group of filteredGroups; trackBy: trackByKey"
+          *ngFor="let group of filteredGroups(); trackBy: trackByKey"
           class="layer-item"
           [class.active]="isActiveGroup(group)"
           (click)="selectGroup(group.name)"
@@ -122,7 +122,7 @@
 
       <div
         class="panel-empty"
-        *ngIf="(previewMode === 'layer' ? filteredLayers.length : filteredGroups.length) === 0"
+        *ngIf="(previewMode === 'layer' ? filteredLayers().length : filteredGroups().length) === 0"
       >
         <mat-icon>search_off</mat-icon>
         <p>
@@ -141,7 +141,7 @@
     </aside>
 
     <section class="map-panel">
-      <div class="map-toolbar" *ngIf="displayBounds">
+      <div class="map-toolbar" *ngIf="displayBounds()">
         <div class="map-info">
           <span class="map-name">
             {{
@@ -182,13 +182,13 @@
 
       <div class="map-container" *ngIf="previewUrl">
         <iframe
-          *ngIf="!isStaticFormat"
+          *ngIf="!isStaticFormat()"
           [src]="safePreviewUrl"
           class="map-frame"
           title="{{ 'preview.mapPreviewTitle' | translate }}"
         ></iframe>
         <img
-          *ngIf="isStaticFormat"
+          *ngIf="isStaticFormat()"
           [src]="previewUrl"
           alt="{{ 'preview.mapPreviewTitle' | translate }}"
           class="map-image"

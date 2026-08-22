@@ -1,57 +1,54 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { TileCacheStats } from '../../models/geoserver.models';
+import { switchMap, tap, map, startWith, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
   selector: 'app-tile-layers',
   templateUrl: './tile-layers.component.html',
   styleUrls: ['./tile-layers.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TileLayersComponent implements OnInit {
-  cacheStats: TileCacheStats | null = null;
-  loading = false;
+export class TileLayersComponent {
+  private geoserverService = inject(GeoserverService);
+  private notificationService = inject(NotificationService);
+  private translate = inject(TranslateService);
+
   selectedLayer = '';
-  availableLayers: string[] = [];
+  private refreshTrigger = signal(0);
+  loading = signal(false);
 
-  constructor(
-    private geoserverService: GeoserverService,
-    private notificationService: NotificationService,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  // ── Signal pipelines ──────────────────────────────────────────────
+  private cacheStats$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    tap(() => this.loading.set(true)),
+    switchMap(() =>
+      this.geoserverService.getTileCacheStats().pipe(
+        catchError(() => of(null as TileCacheStats | null)),
+      ),
+    ),
+    tap(() => this.loading.set(false)),
+  );
 
-  ngOnInit(): void {
-    this.loadCacheStats();
-    this.loadLayers();
-  }
+  cacheStats = toSignal(this.cacheStats$, { initialValue: null as TileCacheStats | null });
 
-  loadCacheStats(): void {
-    this.loading = true;
-    this.geoserverService.getTileCacheStats().subscribe({
-      next: (stats) => {
-        this.cacheStats = stats;
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-    });
-  }
+  private availableLayers$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    switchMap(() =>
+      this.geoserverService.getLayers().pipe(catchError(() => of([] as any[]))),
+    ),
+  );
 
-  loadLayers(): void {
-    this.geoserverService.getLayers().subscribe({
-      next: (layers) => {
-        this.availableLayers = layers.map((l) => l.name);
-      },
-      error: () => {},
-    });
-  }
+  availableLayers = toSignal(
+    this.availableLayers$.pipe(map((layers) => layers.map((l: any) => l.name))),
+    { initialValue: [] as string[] },
+  );
 
+  // ── Actions ───────────────────────────────────────────────────────
   clearAllCache(): void {
     this.notificationService
       .confirm(
@@ -60,24 +57,20 @@ export class TileLayersComponent implements OnInit {
       )
       .subscribe((confirmed) => {
         if (confirmed) {
-          this.loading = true;
-          // 遍历所有图层逐个清除
+          this.loading.set(true);
+          const layers = this.availableLayers();
           const clearNext = (idx: number) => {
-            if (idx >= this.availableLayers.length) {
-              this.loading = false;
+            if (idx >= layers.length) {
+              this.loading.set(false);
               this.notificationService.success(
                 this.translate.instant('tileLayers.clearAllSuccess'),
               );
-              this.loadCacheStats();
+              this.refreshTrigger.update((v) => v + 1);
               return;
             }
-            this.geoserverService.clearTileCache(this.availableLayers[idx]).subscribe({
-              next: () => {
-                clearNext(idx + 1);
-              },
-              error: () => {
-                clearNext(idx + 1);
-              },
+            this.geoserverService.clearTileCache(layers[idx]).subscribe({
+              next: () => clearNext(idx + 1),
+              error: () => clearNext(idx + 1),
             });
           };
           clearNext(0);
@@ -87,23 +80,27 @@ export class TileLayersComponent implements OnInit {
 
   clearLayerCache(): void {
     if (!this.selectedLayer) return;
-    this.loading = true;
+    this.loading.set(true);
     this.geoserverService.clearTileCache(this.selectedLayer).subscribe({
       next: (res) => {
         this.notificationService.success(
           res.message || this.translate.instant('tileLayers.cacheCleared'),
         );
-        this.loadCacheStats();
-        this.loading = false;
+        this.refreshTrigger.update((v) => v + 1);
+        this.loading.set(false);
       },
       error: () => {
         this.notificationService.error(this.translate.instant('tileLayers.clearFail'));
-        this.loading = false;
+        this.loading.set(false);
       },
     });
   }
+
+  refreshStats(): void {
+    this.refreshTrigger.update((v) => v + 1);
+  }
+
   trackByIndex(index: number): number {
     return index;
   }
-
 }

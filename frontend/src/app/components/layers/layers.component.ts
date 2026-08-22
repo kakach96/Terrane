@@ -1,64 +1,59 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, computed, inject, signal } from '@angular/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Layer } from '../../models/geoserver.models';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
+import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
   selector: 'app-layers',
   templateUrl: './layers.component.html',
   styleUrls: ['./layers.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class LayersComponent implements OnInit {
-  layers: Layer[] = [];
-  loading = true;
+export class LayersComponent {
+  private geoserverService = inject(GeoserverService);
+  private notificationService = inject(NotificationService);
+  private dialog = inject(MatDialog);
+  private translate = inject(TranslateService);
+
   searchQuery = '';
   selectedWorkspace = '';
-  workspaces: string[] = [];
 
-  constructor(
-    private geoserverService: GeoserverService,
-    private notificationService: NotificationService,
-    private dialog: MatDialog,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  private refreshTrigger = signal(0);
+  loading = signal(true);
 
-  ngOnInit(): void {
-    this.loadLayers();
-  }
+  private layers$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    tap(() => this.loading.set(true)),
+    switchMap(() =>
+      this.geoserverService.getLayers().pipe(
+        catchError(() => {
+          this.notificationService.error(this.translate.instant('layers.loadFail'));
+          return of([] as Layer[]);
+        }),
+      ),
+    ),
+    tap(() => this.loading.set(false)),
+  );
 
-  loadLayers(): void {
-    this.loading = true;
-    this.geoserverService.getLayers().subscribe({
-      next: (layers) => {
-        this.layers = layers;
-        this.workspaces = [...new Set(layers.map((l) => l.workspace))];
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.notificationService.error(this.translate.instant('layers.loadFail'));
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-    });
-  }
+  layers = toSignal(this.layers$, { initialValue: [] as Layer[] });
 
-  get filteredLayers(): Layer[] {
-    return this.layers.filter((layer) => {
+  workspaces = computed(() => [...new Set(this.layers().map((l) => l.workspace))]);
+
+  filteredLayers = computed(() => {
+    return this.layers().filter((layer) => {
+      const q = this.searchQuery.toLowerCase();
       const matchesSearch =
-        !this.searchQuery ||
-        layer.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-        layer.title.toLowerCase().includes(this.searchQuery.toLowerCase());
-      const matchesWorkspace =
-        !this.selectedWorkspace || layer.workspace === this.selectedWorkspace;
-      return matchesSearch && matchesWorkspace;
+        !this.searchQuery || layer.name.toLowerCase().includes(q) || layer.title.toLowerCase().includes(q);
+      const matchesWs = !this.selectedWorkspace || layer.workspace === this.selectedWorkspace;
+      return matchesSearch && matchesWs;
     });
-  }
+  });
 
   deleteLayer(layer: Layer): void {
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
@@ -74,7 +69,7 @@ export class LayersComponent implements OnInit {
         this.geoserverService.deleteLayer(layer.name).subscribe({
           next: () => {
             this.notificationService.success(this.translate.instant('layers.deleteSuccess'));
-            this.loadLayers();
+            this.refreshTrigger.update((v) => v + 1);
           },
           error: (error) => {
             this.notificationService.error(
@@ -87,7 +82,7 @@ export class LayersComponent implements OnInit {
   }
 
   refresh(): void {
-    this.loadLayers();
+    this.refreshTrigger.update((v) => v + 1);
   }
 
   trackByIndex(index: number): number {

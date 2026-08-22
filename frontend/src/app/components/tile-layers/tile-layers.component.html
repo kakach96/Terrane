@@ -3,54 +3,54 @@
     <h1>{{ 'tileLayers.title' | translate }}</h1>
     <p class="subtitle">{{ 'tileLayers.subtitle' | translate }}</p>
   </div>
-  <button mat-raised-button color="warn" (click)="clearAllCache()" [disabled]="loading">
+  <button mat-raised-button color="warn" (click)="clearAllCache()" [disabled]="loading()">
     <mat-icon>delete_sweep</mat-icon>
     {{ 'tileLayers.clearAll' | translate }}
   </button>
 </div>
 
 <!-- 缓存统计卡片 -->
-<div class="stats-grid" *ngIf="cacheStats">
+<div class="stats-grid" *ngIf="cacheStats()">
   <mat-card class="stat-card">
     <mat-card-content>
-      <div class="stat-value">{{ cacheStats.hits }}</div>
+      <div class="stat-value">{{ cacheStats()!.hits }}</div>
       <div class="stat-label">{{ 'tileLayers.statHits' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
     <mat-card-content>
-      <div class="stat-value">{{ cacheStats.misses }}</div>
+      <div class="stat-value">{{ cacheStats()!.misses }}</div>
       <div class="stat-label">{{ 'tileLayers.statMisses' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
     <mat-card-content>
-      <div class="stat-value">{{ (cacheStats.hitRate * 100).toFixed(1) }}%</div>
+      <div class="stat-value">{{ (cacheStats()!.hitRate * 100).toFixed(1) }}%</div>
       <div class="stat-label">{{ 'tileLayers.statHitRate' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
     <mat-card-content>
-      <div class="stat-value">{{ cacheStats.totalTiles }}</div>
+      <div class="stat-value">{{ cacheStats()!.totalTiles }}</div>
       <div class="stat-label">{{ 'tileLayers.statTotalTiles' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
     <mat-card-content>
-      <div class="stat-value">{{ cacheStats.cacheSizeMb || '0 MB' }}</div>
+      <div class="stat-value">{{ cacheStats()!.cacheSizeMb || '0 MB' }}</div>
       <div class="stat-label">{{ 'tileLayers.statCacheSize' | translate }}</div>
     </mat-card-content>
   </mat-card>
   <mat-card class="stat-card">
     <mat-card-content>
       <div class="stat-value">
-        <mat-icon [style.color]="cacheStats.enabled ? '#4caf50' : '#f44336'">
-          {{ cacheStats.enabled ? 'check_circle' : 'cancel' }}
+        <mat-icon [style.color]="cacheStats()!.enabled ? '#4caf50' : '#f44336'">
+          {{ cacheStats()!.enabled ? 'check_circle' : 'cancel' }}
         </mat-icon>
       </div>
       <div class="stat-label">
         {{
-          cacheStats.enabled
+          cacheStats()!.enabled
             ? ('tileLayers.cacheEnabled' | translate)
             : ('tileLayers.cacheDisabled' | translate)
         }}
@@ -69,7 +69,7 @@
       <mat-form-field appearance="outline" class="layer-select">
         <mat-label>{{ 'tileLayers.selectLayer' | translate }}</mat-label>
         <mat-select [(ngModel)]="selectedLayer">
-          <mat-option *ngFor="let layer of availableLayers; trackBy: trackByIndex" [value]="layer">
+          <mat-option *ngFor="let layer of availableLayers(); trackBy: trackByIndex" [value]="layer">
             {{ layer }}
           </mat-option>
         </mat-select>
@@ -79,13 +79,13 @@
         mat-raised-button
         color="primary"
         (click)="clearLayerCache()"
-        [disabled]="!selectedLayer || loading"
+        [disabled]="!selectedLayer || loading()"
       >
         <mat-icon>cleaning_services</mat-icon>
         {{ 'tileLayers.clearLayer' | translate }}
       </button>
 
-      <button mat-raised-button (click)="loadCacheStats()" [disabled]="loading">
+      <button mat-raised-button (click)="refreshStats()" [disabled]="loading()">
         <mat-icon>refresh</mat-icon>
         {{ 'tileLayers.refreshStats' | translate }}
       </button>

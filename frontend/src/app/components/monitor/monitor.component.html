@@ -5,7 +5,7 @@
       <button mat-raised-button color="warn" (click)="resetStats()">
         <mat-icon>refresh</mat-icon> {{ 'monitor.resetStats' | translate }}
       </button>
-      <button mat-raised-button color="primary" (click)="loadData()">
+      <button mat-raised-button color="primary" (click)="refreshData()">
         <mat-icon>refresh</mat-icon> {{ 'monitor.refresh' | translate }}
       </button>
     </div>
@@ -25,7 +25,7 @@
   </div>
 
   <!-- 加载中 -->
-  <div *ngIf="loading" class="loading-spinner">
+  <div *ngIf="loading()" class="loading-spinner">
     <mat-spinner diameter="40"></mat-spinner>
     <p>{{ 'monitor.loading' | translate }}</p>
   </div>
@@ -36,38 +36,38 @@
   </mat-card>
 
   <!-- ======== 概览 Tab ======== -->
-  <div *ngIf="activeTab === 'overview' && stats && !loading">
+  <div *ngIf="activeTab === 'overview' && stats() && !loading()">
     <!-- 关键指标卡片 -->
     <div class="stats-grid">
       <mat-card class="stat-card">
         <mat-card-content>
           <div class="stat-icon"><mat-icon>timer</mat-icon></div>
-          <div class="stat-value">{{ uptimeFormatted }}</div>
+          <div class="stat-value">{{ uptimeFormatted() }}</div>
           <div class="stat-label">{{ 'monitor.statUptime' | translate }}</div>
         </mat-card-content>
       </mat-card>
       <mat-card class="stat-card">
         <mat-card-content>
           <div class="stat-icon"><mat-icon>http</mat-icon></div>
-          <div class="stat-value">{{ stats.total_requests | number }}</div>
+          <div class="stat-value">{{ stats()!.total_requests | number }}</div>
           <div class="stat-label">{{ 'monitor.statRequests' | translate }}</div>
         </mat-card-content>
       </mat-card>
       <mat-card class="stat-card">
         <mat-card-content>
           <div class="stat-icon"><mat-icon>error</mat-icon></div>
-          <div class="stat-value" [class.text-danger]="stats.error_rate > 5">
-            {{ stats.total_errors | number }}
+          <div class="stat-value" [class.text-danger]="stats()!.error_rate > 5">
+            {{ stats()!.total_errors | number }}
           </div>
           <div class="stat-label">
-            {{ 'monitor.statErrors' | translate: { rate: errorRateFormatted } }}
+            {{ 'monitor.statErrors' | translate: { rate: errorRateFormatted() } }}
           </div>
         </mat-card-content>
       </mat-card>
       <mat-card class="stat-card">
         <mat-card-content>
           <div class="stat-icon"><mat-icon>speed</mat-icon></div>
-          <div class="stat-value">{{ stats.requests_per_second | number: '1.2-2' }}</div>
+          <div class="stat-value">{{ stats()!.requests_per_second | number: '1.2-2' }}</div>
           <div class="stat-label">{{ 'monitor.statRps' | translate }}</div>
         </mat-card-content>
       </mat-card>
@@ -83,27 +83,27 @@
         <div class="info-grid">
           <div class="info-item">
             <span class="info-label">{{ 'monitor.version' | translate }}</span>
-            <span class="info-value">{{ stats.system.version }}</span>
+            <span class="info-value">{{ stats()!.system.version }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">{{ 'monitor.rustVersion' | translate }}</span>
-            <span class="info-value">{{ stats.system.rust_version }}</span>
+            <span class="info-value">{{ stats()!.system.rust_version }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">{{ 'monitor.os' | translate }}</span>
-            <span class="info-value">{{ stats.system.os }}</span>
+            <span class="info-value">{{ stats()!.system.os }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">{{ 'monitor.hostname' | translate }}</span>
-            <span class="info-value">{{ stats.system.hostname }}</span>
+            <span class="info-value">{{ stats()!.system.hostname }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">{{ 'monitor.cpuCores' | translate }}</span>
-            <span class="info-value">{{ stats.system.cpu_cores }}</span>
+            <span class="info-value">{{ stats()!.system.cpu_cores }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">{{ 'monitor.memory' | translate }}</span>
-            <span class="info-value">{{ stats.system.memory_mb | number }} MB</span>
+            <span class="info-value">{{ stats()!.system.memory_mb | number }} MB</span>
           </div>
         </div>
       </mat-card-content>
@@ -127,7 +127,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let ep of topEndpoints; let i = index">
+              <tr *ngFor="let ep of topEndpoints(); let i = index">
                 <td>{{ i + 1 }}</td>
                 <td class="endpoint-name">{{ ep.name }}</td>
                 <td>{{ ep.count | number }}</td>
@@ -146,7 +146,7 @@
         </mat-card-header>
         <mat-card-content>
           <div class="bar-chart">
-            <div *ngFor="let m of methodChart" class="bar-item">
+            <div *ngFor="let m of methodChart()" class="bar-item">
               <div class="bar-label">{{ m.method }}</div>
               <div class="bar-track">
                 <div
@@ -163,7 +163,7 @@
   </div>
 
   <!-- ======== 请求记录 Tab ======== -->
-  <div *ngIf="activeTab === 'requests' && !loading">
+  <div *ngIf="activeTab === 'requests' && !loading()">
     <mat-card class="section-card">
       <mat-card-header>
         <mat-icon mat-card-avatar>list_alt</mat-icon>
@@ -171,7 +171,7 @@
       </mat-card-header>
       <mat-card-content>
         <div class="table-container">
-          <table class="stats-table" *ngIf="recentRequests.length > 0">
+          <table class="stats-table" *ngIf="recentRequests().length > 0">
             <thead>
               <tr>
                 <th>{{ 'monitor.columnTime' | translate }}</th>
@@ -183,7 +183,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let req of recentRequests">
+              <tr *ngFor="let req of recentRequests()">
                 <td>{{ formatTimestamp(req.timestamp) }}</td>
                 <td>
                   <span class="method-badge method-{{ req.method | lowercase }}">{{
@@ -205,7 +205,7 @@
               </tr>
             </tbody>
           </table>
-          <div *ngIf="recentRequests.length === 0" class="empty-state">
+          <div *ngIf="recentRequests().length === 0" class="empty-state">
             <mat-icon>inbox</mat-icon>
             <p>{{ 'monitor.emptyRequests' | translate }}</p>
           </div>
@@ -215,7 +215,7 @@
   </div>
 
   <!-- ======== 审计日志 Tab ======== -->
-  <div *ngIf="activeTab === 'audit' && !loading">
+  <div *ngIf="activeTab === 'audit' && !loading()">
     <mat-card class="section-card">
       <mat-card-header>
         <mat-icon mat-card-avatar>audit</mat-icon>
@@ -223,7 +223,7 @@
       </mat-card-header>
       <mat-card-content>
         <div class="table-container">
-          <table class="stats-table" *ngIf="auditLogs.length > 0">
+          <table class="stats-table" *ngIf="auditLogs().length > 0">
             <thead>
               <tr>
                 <th>{{ 'monitor.columnTime' | translate }}</th>
@@ -234,7 +234,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let log of auditLogs">
+              <tr *ngFor="let log of auditLogs()">
                 <td>{{ formatTimestamp(log.timestamp) }}</td>
                 <td>{{ log.username }}</td>
                 <td>
@@ -253,7 +253,7 @@
               </tr>
             </tbody>
           </table>
-          <div *ngIf="auditLogs.length === 0" class="empty-state">
+          <div *ngIf="auditLogs().length === 0" class="empty-state">
             <mat-icon>inbox</mat-icon>
             <p>{{ 'monitor.emptyAudit' | translate }}</p>
           </div>

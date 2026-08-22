@@ -20,7 +20,7 @@
                 <mat-option value="" disabled>{{
                   'layerCreate.workspacePlaceholder' | translate
                 }}</mat-option>
-                <mat-option *ngFor="let ws of workspaces; trackBy: trackByIndex" [value]="ws.name">
+                <mat-option *ngFor="let ws of workspaces(); trackBy: trackByIndex" [value]="ws.name">
                   {{ ws.title || ws.name }}
                 </mat-option>
               </mat-select>
@@ -36,7 +36,7 @@
                   'layerCreate.dataSourcePlaceholder' | translate
                 }}</mat-option>
                 <mat-option
-                  *ngFor="let ds of dataSources"
+                  *ngFor="let ds of dataSources()"
                   [value]="ds.name"
                   [disabled]="!ds.enabled"
                 >
@@ -49,30 +49,26 @@
               <mat-error *ngIf="layerForm.get('dataSource')?.hasError('required')">
                 {{ 'layerCreate.dataSourceRequired' | translate }}
               </mat-error>
-              <mat-hint *ngIf="loadingDataSources">{{
-                'layerCreate.loadingDataSources' | translate
-              }}</mat-hint>
             </mat-form-field>
           </div>
 
           <mat-form-field
             appearance="outline"
             class="full-width"
-            *ngIf="tables.length > 0 || loadingTables"
+            *ngIf="tables().length > 0"
           >
             <mat-label>{{ 'layerCreate.tableLabel' | translate }}</mat-label>
             <mat-select formControlName="table">
               <mat-option value="" disabled>{{
                 'layerCreate.tablePlaceholder' | translate
               }}</mat-option>
-              <mat-option *ngFor="let table of tables; trackBy: trackByIndex" [value]="table">
+              <mat-option *ngFor="let table of tables(); trackBy: trackByIndex" [value]="table">
                 {{ table }}
               </mat-option>
             </mat-select>
             <mat-error *ngIf="layerForm.get('table')?.hasError('required')">
               {{ 'layerCreate.tableRequired' | translate }}
             </mat-error>
-            <mat-hint *ngIf="loadingTables">{{ 'layerCreate.loadingTables' | translate }}</mat-hint>
           </mat-form-field>
         </div>
 

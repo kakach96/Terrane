@@ -1,48 +1,44 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { StyleInfo } from '../../models/geoserver.models';
 import { StyleEditorDialogComponent } from './style-editor-dialog.component';
+import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
   selector: 'app-styles',
   templateUrl: './styles.component.html',
   styleUrls: ['./styles.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class StylesComponent implements OnInit {
-  styles: StyleInfo[] = [];
-  loading = true;
+export class StylesComponent {
+  private geoserverService = inject(GeoserverService);
+  private notificationService = inject(NotificationService);
+  private dialog = inject(MatDialog);
+  private translate = inject(TranslateService);
 
-  constructor(
-    private geoserverService: GeoserverService,
-    private notificationService: NotificationService,
-    private dialog: MatDialog,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  private refreshTrigger = signal(0);
+  loading = signal(true);
 
-  ngOnInit(): void {
-    this.loadStyles();
-  }
+  private styles$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    tap(() => this.loading.set(true)),
+    switchMap(() =>
+      this.geoserverService.getStyles().pipe(
+        catchError(() => {
+          this.notificationService.error(this.translate.instant('styles.loadListFail'));
+          return of([] as StyleInfo[]);
+        }),
+      ),
+    ),
+    tap(() => this.loading.set(false)),
+  );
 
-  loadStyles(): void {
-    this.loading = true;
-    this.geoserverService.getStyles().subscribe({
-      next: (data) => {
-        this.styles = data;
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.notificationService.error(this.translate.instant('styles.loadListFail'));
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-    });
-  }
+  styles = toSignal(this.styles$, { initialValue: [] as StyleInfo[] });
 
   createStyle(): void {
     const dialogRef = this.dialog.open(StyleEditorDialogComponent, {
@@ -51,7 +47,7 @@ export class StylesComponent implements OnInit {
       data: { mode: 'create' },
     });
     dialogRef.afterClosed().subscribe((result) => {
-      if (result) this.loadStyles();
+      if (result) this.refreshTrigger.update((v) => v + 1);
     });
   }
 
@@ -66,7 +62,7 @@ export class StylesComponent implements OnInit {
           })
           .afterClosed()
           .subscribe((result) => {
-            if (result) this.loadStyles();
+            if (result) this.refreshTrigger.update((v) => v + 1);
           });
       },
       error: () => this.notificationService.error(this.translate.instant('styles.loadFail')),
@@ -82,7 +78,7 @@ export class StylesComponent implements OnInit {
     this.geoserverService.deleteStyle(style.name).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('styles.deleteSuccess'));
-        this.loadStyles();
+        this.refreshTrigger.update((v) => v + 1);
       },
       error: () => this.notificationService.error(this.translate.instant('styles.deleteFail')),
     });

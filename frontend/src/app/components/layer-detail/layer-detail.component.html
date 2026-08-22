@@ -1,15 +1,15 @@
-<div class="layer-detail fade-in" *ngIf="layer">
+<div class="layer-detail fade-in" *ngIf="layer()">
   <div class="detail-header">
     <button mat-icon-button (click)="goBack()" class="back-btn">
       <mat-icon>arrow_back</mat-icon>
     </button>
     <div class="header-info">
-      <h1>{{ layer.title }}</h1>
-      <p class="subtitle">{{ layer.name }}</p>
+      <h1>{{ layer()!.title }}</h1>
+      <p class="subtitle">{{ layer()!.name }}</p>
     </div>
     <div class="header-actions">
-      <mat-chip [class.enabled]="layer.enabled">
-        {{ layer.enabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}
+      <mat-chip [class.enabled]="layer()!.enabled">
+        {{ layer()!.enabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}
       </mat-chip>
     </div>
   </div>
@@ -24,29 +24,29 @@
         <div class="info-grid">
           <div class="info-item">
             <span class="label">{{ 'layerDetail.workspace' | translate }}</span>
-            <span class="value">{{ layer.workspace }}</span>
+            <span class="value">{{ layer()!.workspace }}</span>
           </div>
           <div class="info-item">
             <span class="label">{{ 'layerDetail.dataSource' | translate }}</span>
-            <span class="value">{{ layer.store }}</span>
+            <span class="value">{{ layer()!.store }}</span>
           </div>
           <div class="info-item">
             <span class="label">{{ 'layerDetail.crs' | translate }}</span>
-            <span class="value">{{ layer.srs }}</span>
+            <span class="value">{{ layer()!.srs }}</span>
           </div>
         </div>
         <div class="info-item">
           <span class="label">{{ 'layerDetail.style' | translate }}</span>
           <span class="value">
             <mat-select
-              *ngIf="styleNames.length > 0"
+              *ngIf="styleNames().length > 0"
               [value]="currentStyleName"
               (selectionChange)="onStyleChange($event.value)"
               class="style-select"
             >
-              <mat-option *ngFor="let s of styleNames; trackBy: trackByIndex" [value]="s">{{ s }}</mat-option>
+              <mat-option *ngFor="let s of styleNames(); trackBy: trackByIndex" [value]="s">{{ s }}</mat-option>
             </mat-select>
-            <span *ngIf="styleNames.length === 0">{{ currentStyleName }}</span>
+            <span *ngIf="styleNames().length === 0">{{ currentStyleName }}</span>
           </span>
         </div>
         <div class="info-item">
@@ -58,7 +58,7 @@
               class="style-select"
             >
               <mat-option value="">默认 (内存/本地)</mat-option>
-              <mat-option *ngFor="let ds of redisCacheSources; trackBy: trackByIndex" [value]="ds.name">
+              <mat-option *ngFor="let ds of redisCacheSources(); trackBy: trackByIndex" [value]="ds.name">
                 {{ ds.name }}
               </mat-option>
             </mat-select>
@@ -66,11 +66,11 @@
         </div>
         <div class="native-name full-width">
           <span class="label">{{ 'layerDetail.nativeName' | translate }}</span>
-          <span class="value">{{ layer.native_name || '-' }}</span>
+          <span class="value">{{ layer()!.native_name || '-' }}</span>
         </div>
-        <div *ngIf="layer.abstract" class="abstract">
+        <div *ngIf="layer()!.abstract" class="abstract">
           <span class="label">{{ 'layerDetail.description' | translate }}</span>
-          <p>{{ layer.abstract }}</p>
+          <p>{{ layer()!.abstract }}</p>
         </div>
       </mat-card-content>
     </mat-card>
@@ -80,10 +80,10 @@
         <mat-icon matCardAvatar>fullscreen</mat-icon>
         <mat-card-title>{{ 'layerDetail.bounds' | translate }}</mat-card-title>
         <div class="header-badges">
-          <mat-chip class="bounds-source" *ngIf="isDefaultBounds" color="warn" selected>
+          <mat-chip class="bounds-source" *ngIf="isDefaultBounds()" color="warn" selected>
             {{ 'layerDetail.defaultBounds' | translate }}
           </mat-chip>
-          <mat-chip class="bounds-source" *ngIf="!isDefaultBounds" color="primary" selected>
+          <mat-chip class="bounds-source" *ngIf="!isDefaultBounds()" color="primary" selected>
             {{ 'layerDetail.customBounds' | translate }}
           </mat-chip>
         </div>
@@ -92,26 +92,26 @@
         <div class="bounds-grid">
           <div class="bounds-item">
             <span class="label">{{ 'layerDetail.minLon' | translate }}</span>
-            <span class="value mono">{{ displayBounds.minx | number: '1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds().minx | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item">
             <span class="label">{{ 'layerDetail.minLat' | translate }}</span>
-            <span class="value mono">{{ displayBounds.miny | number: '1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds().miny | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item">
             <span class="label">{{ 'layerDetail.maxLon' | translate }}</span>
-            <span class="value mono">{{ displayBounds.maxx | number: '1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds().maxx | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item">
             <span class="label">{{ 'layerDetail.maxLat' | translate }}</span>
-            <span class="value mono">{{ displayBounds.maxy | number: '1.4-4' }}</span>
+            <span class="value mono">{{ displayBounds().maxy | number: '1.4-4' }}</span>
           </div>
           <div class="bounds-item crs">
             <span class="label">{{ 'layerDetail.crsLabel' | translate }}</span>
-            <span class="value">{{ displayCrs }}</span>
+            <span class="value">{{ displayCrs() }}</span>
           </div>
         </div>
-        <p class="bounds-hint" *ngIf="isDefaultBounds">
+        <p class="bounds-hint" *ngIf="isDefaultBounds()">
           <mat-icon>info</mat-icon>
           {{ 'layerDetail.boundsHint' | translate }}
         </p>
@@ -147,7 +147,7 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticPreview">
+          <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticPreview()">
             <mat-label>{{ 'layerDetail.width' | translate }}</mat-label>
             <input
               matInput
@@ -157,7 +157,7 @@
             />
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticPreview">
+          <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticPreview()">
             <mat-label>{{ 'layerDetail.height' | translate }}</mat-label>
             <input
               matInput
@@ -168,7 +168,7 @@
           </mat-form-field>
 
           <mat-checkbox
-            *ngIf="isStaticPreview"
+            *ngIf="isStaticPreview()"
             [checked]="previewOptions.transparent"
             (change)="onTransparentChange($event)"
           >
@@ -193,11 +193,11 @@
       <mat-card-content class="preview-content">
         <div class="map-toolbar">
           <div class="map-info">
-            <span class="map-name">{{ layer.title || layer.name }}</span>
+            <span class="map-name">{{ layer()!.title || layer()!.name }}</span>
             <span class="map-crs">{{ previewOptions.crs }}</span>
-            <span class="feature-count" *ngIf="featureCount > 0">
+            <span class="feature-count" *ngIf="featureCount() > 0">
               <mat-icon>label</mat-icon>
-              {{ 'layerDetail.featureCount' | translate: { count: featureCount } }}
+              {{ 'layerDetail.featureCount' | translate: { count: featureCount() } }}
             </span>
           </div>
           <div class="map-actions">
@@ -223,13 +223,13 @@
 
         <div class="map-container">
           <iframe
-            *ngIf="!isStaticPreview"
+            *ngIf="!isStaticPreview()"
             [src]="safePreviewUrl"
             class="map-frame"
             title="{{ 'layerDetail.mapPreviewTitle' | translate }}"
           ></iframe>
           <img
-            *ngIf="isStaticPreview"
+            *ngIf="isStaticPreview()"
             [src]="previewUrl"
             alt="{{ 'layerDetail.mapPreviewTitle' | translate }}"
             class="map-image"
@@ -241,6 +241,6 @@
   </div>
 </div>
 
-<div *ngIf="loading" class="loading-container">
+<div *ngIf="!layer()" class="loading-container">
   <mat-spinner diameter="48"></mat-spinner>
 </div>

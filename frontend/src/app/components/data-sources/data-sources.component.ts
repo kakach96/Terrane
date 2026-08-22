@@ -1,50 +1,46 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { DataSourceDialogComponent } from './data-source-dialog/data-source-dialog.component';
 import { DataSource } from '../../models/geoserver.models';
+import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
   selector: 'app-data-sources',
   templateUrl: './data-sources.component.html',
   styleUrls: ['./data-sources.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class DataSourcesComponent implements OnInit {
-  dataSources: DataSource[] = [];
-  loading = true;
+export class DataSourcesComponent {
+  private geoserverService = inject(GeoserverService);
+  private notificationService = inject(NotificationService);
+  private dialog = inject(MatDialog);
+  private translate = inject(TranslateService);
+
   displayedColumns: string[] = ['name', 'type', 'workspace', 'enabled', 'actions'];
 
-  constructor(
-    private geoserverService: GeoserverService,
-    private notificationService: NotificationService,
-    private dialog: MatDialog,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  private refreshTrigger = signal(0);
+  loading = signal(true);
 
-  ngOnInit(): void {
-    this.loadDataSources();
-  }
+  private dataSources$ = toObservable(this.refreshTrigger).pipe(
+    startWith(0),
+    tap(() => this.loading.set(true)),
+    switchMap(() =>
+      this.geoserverService.getDataSources().pipe(
+        catchError(() => {
+          this.notificationService.error(this.translate.instant('dataSources.loadFail'));
+          return of([] as DataSource[]);
+        }),
+      ),
+    ),
+    tap(() => this.loading.set(false)),
+  );
 
-  loadDataSources(): void {
-    this.loading = true;
-    this.geoserverService.getDataSources().subscribe({
-      next: (data: DataSource[]) => {
-        this.dataSources = data;
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: (err) => {
-        console.error('Failed to load data sources:', err);
-        this.loading = false;
-        this.notificationService.error(this.translate.instant('dataSources.loadFail'));
-        this.cdr.detectChanges();
-      },
-    });
-  }
+  dataSources = toSignal(this.dataSources$, { initialValue: [] as DataSource[] });
 
   openCreateDialog(): void {
     const dialogRef = this.dialog.open(DataSourceDialogComponent, {
@@ -54,7 +50,7 @@ export class DataSourcesComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe((result) => {
       if (result) {
-        this.loadDataSources();
+        this.refreshTrigger.update((v) => v + 1);
       }
     });
   }
@@ -67,7 +63,7 @@ export class DataSourcesComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe((result) => {
       if (result) {
-        this.loadDataSources();
+        this.refreshTrigger.update((v) => v + 1);
       }
     });
   }
@@ -83,7 +79,7 @@ export class DataSourcesComponent implements OnInit {
           this.geoserverService.deleteDataSource(name).subscribe({
             next: () => {
               this.notificationService.success(this.translate.instant('dataSources.deleteSuccess'));
-              this.loadDataSources();
+              this.refreshTrigger.update((v) => v + 1);
             },
             error: (err) => {
               console.error('Failed to delete data source:', err);

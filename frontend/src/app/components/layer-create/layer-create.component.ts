@@ -1,43 +1,101 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { TranslateService } from '@ngx-translate/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Workspace, DataSource } from '../../models/geoserver.models';
+import { switchMap, tap, map, distinctUntilChanged, startWith, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
   selector: 'app-layer-create',
   templateUrl: './layer-create.component.html',
   styleUrls: ['./layer-create.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class LayerCreateComponent implements OnInit {
+export class LayerCreateComponent {
+  private fb = inject(FormBuilder);
+  private geoserverService = inject(GeoserverService);
+  private notificationService = inject(NotificationService);
+  private router = inject(Router);
+  private translate = inject(TranslateService);
+
   layerForm!: FormGroup;
   loading = false;
-  workspaces: Workspace[] = [];
-  dataSources: DataSource[] = [];
-  tables: string[] = [];
-  loadingDataSources = false;
-  loadingTables = false;
   /** metadata 内置数据源且无已有业务表时: 数据表自动用图层名 */
   metadataNewTable = false;
 
-  constructor(
-    private fb: FormBuilder,
-    private geoserverService: GeoserverService,
-    private notificationService: NotificationService,
-    private router: Router,
-    private translate: TranslateService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  // ── Signal pipeline: workspaces ───────────────────────────────────
+  private workspaces$ = this.geoserverService.getAllWorkspaces().pipe(
+    catchError(() => of([] as Workspace[])),
+  );
 
-  ngOnInit(): void {
-    this.initForm();
-    this.loadWorkspaces();
-  }
+  workspaces = toSignal(this.workspaces$, { initialValue: [] as Workspace[] });
 
-  initForm(): void {
+  // ── Signal pipelines: form-driven cascading data ──────────────────
+  private dataSources$ = this.layerForm?.get('workspace')?.valueChanges.pipe(
+    distinctUntilChanged(),
+    tap(() => {
+      this.layerForm.get('dataSource')?.setValue('');
+      this.layerForm.get('table')?.setValue('');
+    }),
+    switchMap((workspaceName: string) => {
+      if (!workspaceName) return of([] as DataSource[]);
+      return this.geoserverService.getDataSources().pipe(
+        map((dataSources) =>
+          dataSources.filter(
+            (ds) => ds.workspace === workspaceName || ds.name === 'metadata',
+          ),
+        ),
+        catchError(() => of([] as DataSource[])),
+      );
+    }),
+  ) ?? of([] as DataSource[]);
+
+  dataSources = toSignal(this.dataSources$, { initialValue: [] as DataSource[] });
+
+  private tables$ = this.layerForm?.get('dataSource')?.valueChanges.pipe(
+    distinctUntilChanged(),
+    switchMap((dataSourceName: string) => {
+      if (!dataSourceName) {
+        this.metadataNewTable = false;
+        this.layerForm.get('table')?.setValue('');
+        return of([] as string[]);
+      }
+      const ds = this.dataSources().find((d) => d.name === dataSourceName);
+      if (!ds || ds.type !== 'postgis') {
+        this.metadataNewTable = false;
+        this.layerForm.get('table')?.setValue('');
+        return of([] as string[]);
+      }
+      return this.geoserverService.getDataSourceTables(dataSourceName).pipe(
+        tap((tables) => {
+          if (ds.name === 'metadata') {
+            if (tables.length > 0) {
+              this.metadataNewTable = false;
+              this.layerForm.get('table')?.setValue('');
+            } else {
+              this.metadataNewTable = true;
+              const layerName = this.layerForm.get('name')?.value;
+              this.layerForm.get('table')?.setValue(layerName || '');
+            }
+          } else {
+            this.layerForm.get('table')?.setValue('');
+          }
+        }),
+        catchError(() => {
+          this.metadataNewTable = false;
+          return of([] as string[]);
+        }),
+      );
+    }),
+  ) ?? of([] as string[]);
+
+  tables = toSignal(this.tables$, { initialValue: [] as string[] });
+
+  constructor() {
     this.layerForm = this.fb.group({
       name: ['', [Validators.required, Validators.pattern(/^[a-z][a-z0-9_]*$/)]],
       title: ['', Validators.required],
@@ -52,104 +110,15 @@ export class LayerCreateComponent implements OnInit {
       maxy: [90],
     });
 
-    this.layerForm.get('workspace')?.valueChanges.subscribe((workspaceName) => {
-      if (workspaceName) {
-        this.loadDataSourcesForWorkspace(workspaceName);
-      } else {
-        this.dataSources = [];
-        this.tables = [];
-        this.layerForm.get('dataSource')?.setValue('');
-        this.layerForm.get('table')?.setValue('');
-      }
-    });
-
-    this.layerForm.get('dataSource')?.valueChanges.subscribe((dataSourceName) => {
-      if (dataSourceName) {
-        this.loadTablesForDataSource(dataSourceName);
-      } else {
-        this.tables = [];
-        this.metadataNewTable = false;
-        this.layerForm.get('table')?.setValue('');
-      }
-    });
-
     // metadata 内置数据源且无已有业务表时: 数据表自动用图层名
     this.layerForm.get('name')?.valueChanges.subscribe((name: string) => {
       if (this.metadataNewTable) {
-        this.tables = name ? [name] : [];
         this.layerForm.get('table')?.setValue(name || '');
       }
     });
   }
 
-  loadWorkspaces(): void {
-    this.geoserverService.getAllWorkspaces().subscribe({
-      next: (workspaces) => {
-        this.workspaces = workspaces;
-      },
-    });
-  }
-
-  loadDataSourcesForWorkspace(workspaceName: string): void {
-    this.loadingDataSources = true;
-    this.geoserverService.getDataSources().subscribe({
-      next: (dataSources) => {
-        // metadata 内置数据源不属任何工作空间, 对所有工作空间都可用
-        this.dataSources = dataSources.filter(
-          (ds) => ds.workspace === workspaceName || ds.name === 'metadata',
-        );
-        this.loadingDataSources = false;
-        this.layerForm.get('dataSource')?.setValue('');
-        this.tables = [];
-        this.layerForm.get('table')?.setValue('');
-      },
-      error: (err) => {
-        console.error('Failed to load data sources:', err);
-        this.loadingDataSources = false;
-        this.dataSources = [];
-      },
-    });
-  }
-
-  loadTablesForDataSource(dataSourceName: string): void {
-    const dataSource = this.dataSources.find((ds) => ds.name === dataSourceName);
-    this.metadataNewTable = false;
-    if (!dataSource || dataSource.type !== 'postgis') {
-      this.tables = [];
-      this.layerForm.get('table')?.setValue('');
-      return;
-    }
-
-    this.loadingTables = true;
-    this.geoserverService.getDataSourceTables(dataSourceName).subscribe({
-      next: (tables) => {
-        this.tables = tables;
-        this.loadingTables = false;
-        // metadata 内置数据源: 与 postgis 相同逻辑走真实表列表;
-        // 若无已有业务表, 用图层名作为默认数据表 (新建)
-        if (dataSource.name === 'metadata') {
-          if (tables.length > 0) {
-            this.metadataNewTable = false;
-            this.layerForm.get('table')?.setValue('');
-          } else {
-            this.metadataNewTable = true;
-            const layerName = this.layerForm.get('name')?.value;
-            this.tables = layerName ? [layerName] : [];
-            this.layerForm.get('table')?.setValue(layerName || '');
-          }
-        } else {
-          this.layerForm.get('table')?.setValue('');
-        }
-      },
-      error: (err) => {
-        console.error('Failed to load tables:', err);
-        this.loadingTables = false;
-        this.tables = [];
-        this.metadataNewTable = false;
-      },
-    });
-  }
-
+  // ── Actions ───────────────────────────────────────────────────────
   onSubmit(): void {
     if (this.layerForm.invalid) {
       this.notificationService.error(this.translate.instant('layerCreate.formInvalid'));
@@ -180,7 +149,6 @@ export class LayerCreateComponent implements OnInit {
           this.translate.instant('layerCreate.success', { name: layer.name }),
         );
         this.loading = false;
-        this.cdr.detectChanges();
         this.router.navigate(['/layers', layer.name]);
       },
       error: (error) => {
@@ -190,7 +158,6 @@ export class LayerCreateComponent implements OnInit {
           }),
         );
         this.loading = false;
-        this.cdr.detectChanges();
       },
     });
   }
@@ -209,15 +176,13 @@ export class LayerCreateComponent implements OnInit {
       maxx: 180,
       maxy: 90,
     });
-    this.dataSources = [];
-    this.tables = [];
   }
 
   goBack(): void {
     this.router.navigate(['/layers']);
   }
+
   trackByIndex(index: number): number {
     return index;
   }
-
 }
