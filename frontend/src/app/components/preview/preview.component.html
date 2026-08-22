@@ -182,17 +182,25 @@
 
       <div class="map-container" *ngIf="previewUrl && !dataSourceError()">
         <iframe
-          *ngIf="!isStaticFormat()"
+          *ngIf="isIframeFormat()"
           [src]="safePreviewUrl"
           class="map-frame"
           title="{{ 'preview.mapPreviewTitle' | translate }}"
         ></iframe>
         <img
-          *ngIf="isStaticFormat()"
+          *ngIf="isImageFormat()"
           [src]="previewUrl"
           alt="{{ 'preview.mapPreviewTitle' | translate }}"
           class="map-image"
         />
+        <div class="mvt-hint" *ngIf="isMvtFormat()">
+          <mat-icon>grid_on</mat-icon>
+          <p>{{ 'preview.mvtHint' | translate }}</p>
+          <button mat-stroked-button (click)="openInNewWindow()">
+            <mat-icon>open_in_new</mat-icon>
+            <span>{{ 'preview.openInNewWindow' | translate }}</span>
+          </button>
+        </div>
       </div>
 
       <div class="data-source-error" *ngIf="dataSourceError()">

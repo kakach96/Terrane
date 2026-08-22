@@ -322,6 +322,39 @@ async fn test_wms_get_map_pdf() {
 }
 
 #[actix_rt::test]
+async fn test_wms_get_map_tiff() {
+    let app = build_test_app!();
+
+    let uri = GET_MAP_BASE.replace("FORMAT=image/png", "FORMAT=image/tiff");
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS GetMap (TIFF) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("image/tiff"),
+        "Content-Type 应为 image/tiff, 实际: {}",
+        content_type
+    );
+
+    let body = actix_web::test::read_body(resp).await;
+    // TIFF 魔数: II*\0 (小端) 或 MM\0* (大端)
+    assert!(
+        body.starts_with(b"II*\0") || body.starts_with(b"MM\0*"),
+        "TIFF 应以 II*\\0 或 MM\\0* 魔数开头"
+    );
+}
+
+#[actix_rt::test]
 async fn test_wms_get_map_jpeg() {
     let app = build_test_app!();
 

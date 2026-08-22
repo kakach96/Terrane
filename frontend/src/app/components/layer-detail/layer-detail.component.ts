@@ -7,6 +7,7 @@ import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
 import { Layer, FeatureCollection, StyleInfo, DataSource } from '../../models/geoserver.models';
+import { PREVIEW_FORMATS, previewFormatCategory } from '../../utils/preview-formats';
 import { switchMap, tap, filter, map, startWith, catchError, of } from 'rxjs';
 
 @Component({
@@ -44,14 +45,10 @@ export class LayerDetailComponent {
   // memoized so *ngFor does not rebuild mat-option nodes on every CD cycle.
   previewFormats = computed<{ value: string; label: string }[]>(() => {
     this.languageService.currentLang();
-    return [
-      {
-        value: 'application/openlayers',
-        label: this.translate.instant('layerDetail.formatOpenLayers'),
-      },
-      { value: 'image/png', label: this.translate.instant('layerDetail.formatPng') },
-      { value: 'image/jpeg', label: this.translate.instant('layerDetail.formatJpeg') },
-    ];
+    return PREVIEW_FORMATS.map((f) => ({
+      value: f.value,
+      label: this.translate.instant(`layerDetail.${f.keySuffix}`),
+    }));
   });
 
   previewCrsOptions = ['EPSG:4326', 'EPSG:3857', 'EPSG:4490'];
@@ -154,13 +151,41 @@ export class LayerDetailComponent {
     return is4326Default || is3857Default;
   });
 
-  /** Whether the preview format is a static image (not OpenLayers iframe) */
-  isStaticPreview = computed(() => this.previewOptions.format !== 'application/openlayers');
+  // Plain methods (not computed) because previewOptions.format is a plain field,
+  // not a signal — a computed would cache the initial value and never reflect
+  // format changes (breaking the img/iframe switch and the size controls).
+  /** Raster or document output: show width/height/transparent controls. */
+  isStaticPreview(): boolean {
+    const c = previewFormatCategory(this.previewOptions.format);
+    return c === 'image' || c === 'document';
+  }
+
+  /** Raster output rendered as an <img>. */
+  isImagePreview(): boolean {
+    return previewFormatCategory(this.previewOptions.format) === 'image';
+  }
+
+  /** Interactive map or document output rendered in an <iframe>. */
+  isIframePreview(): boolean {
+    const c = previewFormatCategory(this.previewOptions.format);
+    return c === 'openlayers' || c === 'document';
+  }
+
+  /** Mapbox Vector Tile: binary .pbf, opened in a new tab. */
+  isMvtPreview(): boolean {
+    return previewFormatCategory(this.previewOptions.format) === 'mvt';
+  }
 
   // ── Imperative methods ────────────────────────────────────────────
   refreshPreview(): void {
     const l = this.layer();
     if (!l) return;
+    if (this.previewOptions.format === 'application/vnd.mapbox-vector-tile') {
+      // MVT: single tile at zoom 0 (whole layer extent) — open in a new tab.
+      this.previewUrl = this.geoserverService.getMvtTileUrl(l, 0, 0, 0);
+      this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
+      return;
+    }
     if (this.previewOptions.format === 'application/openlayers') {
       this.previewUrl = this.geoserverService.getWmsPreviewUrl(l, {
         width: this.previewOptions.width,
@@ -175,7 +200,7 @@ export class LayerDetailComponent {
       this.previewUrl = this.geoserverService.getMapImageUrl(l, {
         width: this.previewOptions.width,
         height: this.previewOptions.height,
-        format: this.previewOptions.format as 'image/png' | 'image/jpeg',
+        format: this.previewOptions.format,
         transparent: this.previewOptions.transparent,
         crs: this.previewOptions.crs,
         bbox,

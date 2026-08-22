@@ -375,7 +375,16 @@
     "downloadCsvFail": "Failed to download CSV",
     "formatOpenLayers": "OpenLayers interactive map",
     "formatPng": "PNG (transparent)",
-    "formatJpeg": "JPEG"
+    "formatJpeg": "JPEG",
+    "formatGif": "GIF",
+    "formatWebp": "WebP",
+    "formatTiff": "TIFF",
+    "formatSvg": "SVG",
+    "formatKml": "KML",
+    "formatGeoJson": "GeoJSON",
+    "formatPdf": "PDF",
+    "formatMvt": "MVT vector tiles",
+    "mvtHint": "MVT is a vector-tile format (.pbf binary). Use the button in the top-right to open it in a new window."
   },
   "layerGroups": {
     "title": "Layer Groups",
@@ -616,7 +625,16 @@
     "dataSourceUnavailable": "The data source for the selected layer is unavailable and cannot be previewed",
     "formatOpenLayers": "OpenLayers interactive map",
     "formatPng": "PNG (transparent)",
-    "formatJpeg": "JPEG"
+    "formatJpeg": "JPEG",
+    "formatGif": "GIF",
+    "formatWebp": "WebP",
+    "formatTiff": "TIFF",
+    "formatSvg": "SVG",
+    "formatKml": "KML",
+    "formatGeoJson": "GeoJSON",
+    "formatPdf": "PDF",
+    "formatMvt": "MVT vector tiles",
+    "mvtHint": "MVT is a vector-tile format (.pbf binary). Use the button in the top-right to open it in a new window."
   },
   "featureDetail": {
     "title": "Feature Detail",

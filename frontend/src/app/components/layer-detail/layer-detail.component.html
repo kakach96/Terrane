@@ -223,18 +223,26 @@
 
         <div class="map-container">
           <iframe
-            *ngIf="!isStaticPreview()"
+            *ngIf="isIframePreview()"
             [src]="safePreviewUrl"
             class="map-frame"
             title="{{ 'layerDetail.mapPreviewTitle' | translate }}"
           ></iframe>
           <img
-            *ngIf="isStaticPreview()"
+            *ngIf="isImagePreview()"
             [src]="previewUrl"
             alt="{{ 'layerDetail.mapPreviewTitle' | translate }}"
             class="map-image"
             (error)="onPreviewError()"
           />
+          <div class="mvt-hint" *ngIf="isMvtPreview()">
+            <mat-icon>grid_on</mat-icon>
+            <p>{{ 'layerDetail.mvtHint' | translate }}</p>
+            <button mat-stroked-button (click)="openInNewWindow()">
+              <mat-icon>open_in_new</mat-icon>
+              <span>{{ 'layerDetail.openInNewWindow' | translate }}</span>
+            </button>
+          </div>
         </div>
       </mat-card-content>
     </mat-card>

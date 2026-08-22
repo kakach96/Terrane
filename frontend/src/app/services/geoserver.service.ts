@@ -139,7 +139,7 @@ export class GeoserverService {
       height?: number;
       crs?: string;
       bbox?: string;
-      format?: 'image/png' | 'image/jpeg';
+      format?: string;
       transparent?: boolean;
       styles?: string;
     },
@@ -177,6 +177,17 @@ export class GeoserverService {
     }
 
     return `/wms?${params}`;
+  }
+
+  /**
+   * Build a Mapbox Vector Tile (MVT) URL for a layer at a given tile coordinate.
+   * Uses the shared tile endpoint (`/tiles/{layer}/{z}/{x}/{y}.pbf`), which is
+   * registered before the generic PNG tile route so the `.pbf` suffix is not
+   * shadowed.
+   */
+  getMvtTileUrl(layer: Layer, z: number, x: number, y: number): string {
+    const layerName = layer.name.includes(':') ? layer.name : `${layer.workspace}:${layer.name}`;
+    return `${this.apiUrl}/tiles/${layerName}/${z}/${x}/${y}.pbf`;
   }
 
   getWorkspaces(): Observable<string[]> {

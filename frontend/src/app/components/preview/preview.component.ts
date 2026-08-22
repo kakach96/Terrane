@@ -8,6 +8,7 @@ import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
 import { Layer, LayerGroup, ConnectionTestResult } from '../../models/geoserver.models';
 import { transformBounds } from '../../utils/coords';
+import { PREVIEW_FORMATS, previewFormatCategory } from '../../utils/preview-formats';
 import { switchMap, tap, map, startWith, catchError, of, combineLatest, forkJoin } from 'rxjs';
 
 interface Bounds {
@@ -69,14 +70,10 @@ export class PreviewComponent {
   // memoized so *ngFor does not rebuild mat-option nodes on every CD cycle.
   formatOptions = computed<{ value: string; label: string }[]>(() => {
     this.languageService.currentLang();
-    return [
-      {
-        value: 'application/openlayers',
-        label: this.translate.instant('preview.formatOpenLayers'),
-      },
-      { value: 'image/png', label: this.translate.instant('preview.formatPng') },
-      { value: 'image/jpeg', label: this.translate.instant('preview.formatJpeg') },
-    ];
+    return PREVIEW_FORMATS.map((f) => ({
+      value: f.value,
+      label: this.translate.instant(`preview.${f.keySuffix}`),
+    }));
   });
 
   private refreshTrigger = signal(0);
@@ -129,11 +126,29 @@ export class PreviewComponent {
   layers = computed(() => this.data().layers.filter((l) => l.enabled));
   groups = computed(() => this.data().groups);
 
-  // Plain method (not computed) because previewOptions.format is a plain field,
+  // Plain methods (not computed) because previewOptions.format is a plain field,
   // not a signal — a computed would cache the initial value and never reflect
   // format changes (breaking the img/iframe switch and the size controls).
+  /** Raster or document output: show width/height/transparent controls. */
   isStaticFormat(): boolean {
-    return this.previewOptions.format !== 'application/openlayers';
+    const c = previewFormatCategory(this.previewOptions.format);
+    return c === 'image' || c === 'document';
+  }
+
+  /** Raster output rendered as an <img>. */
+  isImageFormat(): boolean {
+    return previewFormatCategory(this.previewOptions.format) === 'image';
+  }
+
+  /** Interactive map or document output rendered in an <iframe>. */
+  isIframeFormat(): boolean {
+    const c = previewFormatCategory(this.previewOptions.format);
+    return c === 'openlayers' || c === 'document';
+  }
+
+  /** Mapbox Vector Tile: binary .pbf, opened in a new tab. */
+  isMvtFormat(): boolean {
+    return previewFormatCategory(this.previewOptions.format) === 'mvt';
   }
 
   filteredLayers = computed(() => {
@@ -262,6 +277,12 @@ export class PreviewComponent {
         this.previewUrl = '';
         return;
       }
+      if (this.previewOptions.format === 'application/vnd.mapbox-vector-tile') {
+        // MVT: single tile at zoom 0 (whole layer extent) — open in a new tab.
+        this.previewUrl = this.geoserverService.getMvtTileUrl(layer, 0, 0, 0);
+        this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
+        return;
+      }
       if (this.previewOptions.format === 'application/openlayers') {
         this.previewUrl = this.geoserverService.getWmsPreviewUrl(layer, {
           width: this.previewOptions.width,
@@ -275,7 +296,7 @@ export class PreviewComponent {
           width: this.previewOptions.width,
           height: this.previewOptions.height,
           crs: this.previewOptions.crs,
-          format: this.previewOptions.format as 'image/png' | 'image/jpeg',
+          format: this.previewOptions.format,
           transparent: this.previewOptions.transparent,
         });
       }
@@ -290,6 +311,11 @@ export class PreviewComponent {
       const nativeCrs = this.displayCrs();
       // WMS 约定 BBOX 处于请求 SRS 下, 切换坐标系时转换图层原生边界
       const converted = transformBounds(bounds, nativeCrs, this.previewOptions.crs);
+      // MVT 是单图层瓦片格式, 图层组预览回退到 PNG。
+      const format =
+        this.previewOptions.format === 'application/vnd.mapbox-vector-tile'
+          ? 'image/png'
+          : this.previewOptions.format;
       const params = new URLSearchParams({
         service: 'WMS',
         version: '1.1.1',
@@ -299,7 +325,7 @@ export class PreviewComponent {
         bbox: `${converted.minx},${converted.miny},${converted.maxx},${converted.maxy}`,
         width: this.previewOptions.width.toString(),
         height: this.previewOptions.height.toString(),
-        format: this.previewOptions.format,
+        format,
         transparent: this.previewOptions.transparent.toString(),
       });
       this.previewUrl = `/wms?${params}`;

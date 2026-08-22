@@ -375,7 +375,16 @@
     "downloadCsvFail": "下载 CSV 失败",
     "formatOpenLayers": "OpenLayers 交互地图",
     "formatPng": "PNG (透明)",
-    "formatJpeg": "JPEG"
+    "formatJpeg": "JPEG",
+    "formatGif": "GIF",
+    "formatWebp": "WebP",
+    "formatTiff": "TIFF",
+    "formatSvg": "SVG",
+    "formatKml": "KML",
+    "formatGeoJson": "GeoJSON",
+    "formatPdf": "PDF",
+    "formatMvt": "MVT 矢量瓦片",
+    "mvtHint": "MVT 为矢量瓦片格式（.pbf 二进制），请点击右上角按钮在新窗口打开。"
   },
   "layerGroups": {
     "title": "图层组",
@@ -616,7 +625,16 @@
     "dataSourceUnavailable": "所选图层的数据源不可用，无法预览",
     "formatOpenLayers": "OpenLayers 交互地图",
     "formatPng": "PNG (透明)",
-    "formatJpeg": "JPEG"
+    "formatJpeg": "JPEG",
+    "formatGif": "GIF",
+    "formatWebp": "WebP",
+    "formatTiff": "TIFF",
+    "formatSvg": "SVG",
+    "formatKml": "KML",
+    "formatGeoJson": "GeoJSON",
+    "formatPdf": "PDF",
+    "formatMvt": "MVT 矢量瓦片",
+    "mvtHint": "MVT 为矢量瓦片格式（.pbf 二进制），请点击右上角按钮在新窗口打开。"
   },
   "featureDetail": {
     "title": "要素详情",

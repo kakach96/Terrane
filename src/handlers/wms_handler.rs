@@ -1093,6 +1093,7 @@ fn render_map_image(
         s if s.contains("jpeg") || s.contains("jpg") => ImageFormat::Jpeg,
         s if s.contains("gif") => ImageFormat::Gif,
         s if s.contains("webp") => ImageFormat::WebP,
+        s if s.contains("tiff") || s.contains("tif") => ImageFormat::Tiff,
         _ => ImageFormat::Png,
     };
 
@@ -1138,6 +1139,7 @@ fn render_map_image(
         ImageFormat::Jpeg => "image/jpeg",
         ImageFormat::Gif => "image/gif",
         ImageFormat::WebP => "image/webp",
+        ImageFormat::Tiff => "image/tiff",
         _ => "image/png",
     };
 

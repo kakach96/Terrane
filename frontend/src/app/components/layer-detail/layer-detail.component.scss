@@ -255,6 +255,29 @@
       max-height: 100%;
       object-fit: contain;
     }
+
+    .mvt-hint {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-secondary);
+
+      mat-icon {
+        font-size: 48px;
+        width: 48px;
+        height: 48px;
+      }
+
+      p {
+        margin: 0;
+        max-width: 420px;
+        line-height: 1.6;
+      }
+    }
   }
 }
 

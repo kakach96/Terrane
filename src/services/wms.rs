@@ -289,6 +289,7 @@ impl WmsCapabilities {
                             "image/jpeg".to_string(),
                             "image/gif".to_string(),
                             "image/webp".to_string(),
+                            "image/tiff".to_string(),
                             "image/svg+xml".to_string(),
                             "application/vnd.google-earth.kml+xml".to_string(),
                             "application/json".to_string(),
