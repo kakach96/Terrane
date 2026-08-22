@@ -50,7 +50,7 @@ pub enum OgcFilter {
 
 pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
     let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut rules = Vec::new();
     let mut in_rule = false;

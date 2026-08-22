@@ -17,13 +17,13 @@ geo = "0.27"
 geo-types = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-config = "0.13"
+config = "0.15"
 thiserror = "1"
 anyhow = "1.0.104"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
-quick-xml = { version = "0.31", features = ["serialize"] }
+quick-xml = { version = "0.41", features = ["serialize"] }
 sysinfo = "0.30"
 rusqlite = { version = "0.29", features = ["chrono", "bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
@@ -35,11 +35,11 @@ postgres-native-tls = "0.5"
 shapefile = "0.5"
 
 # 文件上传
-actix-multipart = "0.6"
+actix-multipart = "0.8"
 # GeoTIFF 原生标签读取
-tiff = "0.9"
+tiff = "0.11"
 # ZIP 解压 (用于 shapefile 上传)
-zip = "2"
+zip = "8"
 # 临时文件
 tempfile = "3"
 # HTTP 客户端 (级联服务)
@@ -50,7 +50,7 @@ actix-cors = "0.7"
 sha2 = "0.10"
 hex = "0.4"
 jsonwebtoken = "9"
-rand = "0.8"
+rand = "0.10"
 serde_yaml = "0.9"
 # 异步 trait (Store 抽象层)
 async-trait = "0.1"

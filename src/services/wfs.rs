@@ -647,7 +647,7 @@ pub(crate) fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
     use quick_xml::Reader;
 
     let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
 
     let mut stack: Vec<XmlNode> = Vec::new();
@@ -1240,7 +1240,7 @@ pub fn parse_transaction_xml(
     use quick_xml::Reader;
 
     let mut reader = Reader::from_str(xml_text);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
 
     let mut transaction = TransactionRequest {
@@ -1365,7 +1365,11 @@ pub fn parse_transaction_xml(
                 }
             },
             Ok(Event::Text(ref e)) => {
-                text_content = e.unescape().unwrap_or_default().to_string();
+                text_content = e
+                    .xml10_content()
+                    .ok()
+                    .and_then(|s| quick_xml::escape::unescape(&s).ok().map(|u| u.into_owned()))
+                    .unwrap_or_default();
             },
             Ok(Event::End(ref e)) => {
                 let tag = String::from_utf8_lossy(e.name().as_ref())

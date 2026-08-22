@@ -93,7 +93,7 @@ pub async fn upload_resource(
     while let Some(Ok(mut field)) = stream.next().await {
         let filename = field
             .content_disposition()
-            .get_filename()
+            .and_then(|cd| cd.get_filename())
             .map(sanitize_resource_name)
             .unwrap_or_else(|| "upload".to_string());
         let file_path = dir.join(&filename);

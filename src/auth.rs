@@ -5,7 +5,6 @@
 
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tracing::info;
@@ -72,8 +71,7 @@ pub struct Claims {
 
 /// 生成随机 salt
 pub fn generate_salt() -> String {
-    let mut rng = rand::thread_rng();
-    let salt: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
+    let salt: Vec<u8> = (0..16).map(|_| rand::random()).collect();
     hex::encode(&salt)
 }
 

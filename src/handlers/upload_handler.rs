@@ -277,8 +277,7 @@ async fn read_multipart_bytes(mut payload: Multipart) -> Result<(Vec<u8>, String
     let mut data: Vec<u8> = Vec::new();
     let mut filename = "upload".to_string();
     while let Some(Ok(mut field)) = payload.next().await {
-        let content_disposition = field.content_disposition().clone();
-        if let Some(f) = content_disposition.get_filename() {
+        if let Some(f) = field.content_disposition().and_then(|cd| cd.get_filename()) {
             filename = sanitize_filename(f);
         }
         while let Some(Ok(chunk)) = field.next().await {
@@ -300,9 +299,9 @@ async fn save_multipart_file(
 
     while let Some(Ok(mut field)) = payload.next().await {
         // 获取文件名
-        let content_disposition = field.content_disposition().clone();
-        let filename = content_disposition
-            .get_filename()
+        let filename = field
+            .content_disposition()
+            .and_then(|cd| cd.get_filename())
             .map(sanitize_filename)
             .unwrap_or_else(|| "upload".to_string());
 
