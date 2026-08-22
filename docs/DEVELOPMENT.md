@@ -178,6 +178,8 @@ chore: bump actix-web to 4.x
 
 ## 7. Testing
 
+### Functional tests
+
 - Run `cargo test` for the full suite: **152 lib unit tests + 130 integration tests**
   (+ **5 `#[ignore]` live tests** that require running services, run with
   `cargo test -- --ignored`: 3× PostGIS via `GEOSERVER_TEST_PG_*` env, 2×
@@ -188,7 +190,39 @@ chore: bump actix-web to 4.x
   (`create_test_config` + `build_test_app!`).
   The test config uses in-memory SQLite and disables the tile cache, so tests
   write nothing to `./data`. Full coverage matrix: see [PROTOCOLS.md](PROTOCOLS.md) §11.
-- Adding `#[cfg(test)]` unit tests and actix-rt integration tests is planned — see [ROADMAP.md](ROADMAP.md).
+
+### Performance test suite
+
+Two complementary layers (planned in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) §5.3):
+
+1. **Micro-benchmarks** (`benches/core_paths.rs`, criterion) — in-process hot paths:
+   CQL parsing/filtering, GML serialization, coordinate transforms, bitmap-font
+   label rendering, vector map rendering (PNG), MVT encoding, WKB round-trip.
+
+   ```bash
+   cargo bench                                   # full suite
+   cargo bench --bench core_paths -- cql         # one group (name substring)
+   ```
+
+   Results land under `target/criterion/`; re-runs compare against the previous
+   baseline and flag regressions.
+
+2. **HTTP load harness** (`tests/perf_test.rs`, `#[ignore]`) — end-to-end: boots a real
+   server seeded with a 400-point layer, drives concurrent load over REST / WMS
+   GetCapabilities / WMS GetMap / WFS GetFeature / tiles and prints throughput +
+   p50/p95/p99 latency per scenario.
+
+   ```bash
+   cargo test --test perf_test -- --ignored --nocapture
+   PERF_REQUESTS=500 PERF_CONCURRENCY=16 cargo test --test perf_test -- --ignored --nocapture
+   ```
+
+   The harness asserts only on request success rate; latency numbers are
+   informational (hardware-dependent).
+
+### Planned
+
+- OGC CITE compliance tests; frontend tests (`ng test`) — see [ROADMAP.md](ROADMAP.md).
 
 ## 8. Troubleshooting
 

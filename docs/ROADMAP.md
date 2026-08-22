@@ -54,6 +54,8 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - Catalog refresh mechanism to converge in-memory caches across replicas — **periodic reload done** (`[server] catalog_refresh_secs`); **event-triggered refresh done** (REST layer update/delete now immediately reloads the in-memory catalog via `AppState::refresh_catalog`, eliminating the write-after-read-stale window for WMS/WMTS/tile paths)
 - Structured JSON logs + optional OpenTelemetry tracing — **JSON logs + request `trace_id` done** (`[logging] format = "json"`, `X-Trace-Id`); OTel pending
 - CI/CD pipeline (GitHub Actions / GitLab CI): fmt + clippy + test + frontend build + image push — **GitHub Actions done, incl. Trivy scan + Dependabot**
+- Performance test suite: micro-benchmarks for hot paths (GML serialization, CQL parsing, coordinate transform, label rendering) via `cargo bench`, plus an HTTP-level load harness over WMS GetMap / WFS GetFeature / tiles reporting p50/p95/p99 latency & throughput — *planned* (see IMPLEMENTATION_PLAN §5.3)
+- User guide documentation (`docs/USER_GUIDE.md`): install & quick start, data publishing workflow (workspace → data source → layer → style → preview → tiles), OGC service usage examples, security & deployment pointers — *planned*
 
 ### v2.0 — Fully Stateless & Extensions (target: 2027 Q1–Q2)
 
@@ -67,7 +69,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 | Quarter    | Focus                                                                                        |
 |------------|----------------------------------------------------------------------------------------------|
-| 2026 Q3    | Redis session & cache integration; PostgreSQL HA hardening; object-storage abstraction for raster |
+| 2026 Q3    | Redis session & cache integration; PostgreSQL HA hardening; object-storage abstraction for raster; performance test suite; user guide documentation |
 | 2026 Q4    | CI/CD pipeline; structured logging / OTel; catalog refresh & stateless convergence; v1.1 release |
 | 2027 Q1    | Resilience middleware (rate limit / timeout / circuit breaker); WPS / CSW foundation          |
 | 2027 Q2    | OGC API series + Printing / Importer; plugin architecture; v2.0 release                      |
@@ -83,7 +85,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - **CI pipeline** (`.github/workflows/ci.yml` — fmt + clippy + test + frontend build + GHCR push + Trivy scan; `.github/dependabot.yml` for cargo/npm/actions) — created but not yet exercised against a real repository.
 - **Human-readable stdout logs by default** — structured JSON available via `[logging] format = "json"` with request `trace_id`; OpenTelemetry still pending.
 - **Resilience**: rate limiting + request timeout (`src/middleware.rs`, HTTP 429/504) and cascaded WMS retry/backoff + circuit breaking (`src/utils/cascaded.rs`) all done; no global circuit breaking for other upstream types yet.
-- **No test suite** (no test deps in `Cargo.toml`; Angular `ng test` untested).
+- **Test suite** — unit (`#[cfg(test)]`) and protocol-split integration tests exist (see [DEVELOPMENT.md](DEVELOPMENT.md) §7); still missing a **performance test suite** (micro-benchmarks + HTTP load harness, planned for v1.1) and frontend tests (`ng test` untested).
 - **Security-sensitive defaults**: CORS `["*"]` and hardcoded JWT secret — revisit before production.
 - **Broken doc link**: README referenced `BUILD_INTEGRATION.md`, which did not exist (fixed in this docs pass).
 

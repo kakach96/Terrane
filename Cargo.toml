@@ -69,6 +69,13 @@ ldap3 = "0.12.1"
 [dev-dependencies]
 actix-rt = "2"
 
+# Performance test suite: criterion micro-benchmarks over hot paths (docs/IMPLEMENTATION_PLAN.md §5.3)
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support", "rayon"] }
+
+[[bench]]
+name = "core_paths"
+harness = false
+
 [patch.crates-io]
 # proc-macro-error2 2.0.1 triggers the E0365 future-incompat lint
 # ("extern crate proc_macro is private and cannot be re-exported", rust#127909).
