@@ -7,6 +7,7 @@ import { Layer } from '../../models/geoserver.models';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 
 @Component({
+  standalone: false,
   selector: 'app-layers',
   templateUrl: './layers.component.html',
   styleUrls: ['./layers.component.scss'],

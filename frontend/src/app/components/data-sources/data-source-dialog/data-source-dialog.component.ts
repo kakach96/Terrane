@@ -19,6 +19,7 @@ import {
 } from '../../shared/directory-browser/directory-browser.component';
 
 @Component({
+  standalone: false,
   selector: 'app-data-source-dialog',
   templateUrl: './data-source-dialog.component.html',
   styleUrls: ['./data-source-dialog.component.scss'],

@@ -8,6 +8,7 @@ import { LayerGroup, Layer } from '../../models/geoserver.models';
 import { CreateLayerGroupDialogComponent } from './create-layer-group-dialog.component';
 
 @Component({
+  standalone: false,
   selector: 'app-layer-groups',
   templateUrl: './layer-groups.component.html',
   styleUrls: ['./layer-groups.component.scss'],

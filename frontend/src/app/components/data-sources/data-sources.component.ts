@@ -7,6 +7,7 @@ import { DataSourceDialogComponent } from './data-source-dialog/data-source-dial
 import { DataSource } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   selector: 'app-data-sources',
   templateUrl: './data-sources.component.html',
   styleUrls: ['./data-sources.component.scss'],

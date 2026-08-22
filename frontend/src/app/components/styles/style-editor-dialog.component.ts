@@ -6,6 +6,7 @@ import { NotificationService } from '../../services/notification.service';
 import { StyleInfo } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   template: `
     <h2 mat-dialog-title>
       {{

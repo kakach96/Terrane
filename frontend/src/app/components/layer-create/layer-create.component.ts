@@ -7,6 +7,7 @@ import { NotificationService } from '../../services/notification.service';
 import { Workspace, DataSource } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   selector: 'app-layer-create',
   templateUrl: './layer-create.component.html',
   styleUrls: ['./layer-create.component.scss'],

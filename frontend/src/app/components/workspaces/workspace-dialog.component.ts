@@ -9,6 +9,7 @@ import {
 } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   selector: 'app-workspace-dialog',
   templateUrl: './workspace-dialog.component.html',
   styleUrls: ['./workspace-dialog.component.scss'],

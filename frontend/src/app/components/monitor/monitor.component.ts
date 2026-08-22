@@ -4,6 +4,7 @@ import { GeoserverService } from '../../services/geoserver.service';
 import { MonitorStats, RequestRecord, AuditLogEntry } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   selector: 'app-monitor',
   templateUrl: './monitor.component.html',
   styleUrls: ['./monitor.component.scss'],

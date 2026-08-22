@@ -5,6 +5,7 @@ import { NotificationService } from '../../services/notification.service';
 import { TileCacheStats } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   selector: 'app-tile-layers',
   templateUrl: './tile-layers.component.html',
   styleUrls: ['./tile-layers.component.scss'],

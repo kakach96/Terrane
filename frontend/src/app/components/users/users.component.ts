@@ -6,6 +6,7 @@ import { NotificationService } from '../../services/notification.service';
 import { User } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   selector: 'app-users',
   templateUrl: './users.component.html',
   styleUrls: ['./users.component.scss'],

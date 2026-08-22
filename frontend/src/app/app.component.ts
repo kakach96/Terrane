@@ -9,6 +9,7 @@ import { LanguageService, SupportedLanguage } from './services/language.service'
 import { LoginComponent } from './components/login/login.component';
 
 @Component({
+  standalone: false,
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],

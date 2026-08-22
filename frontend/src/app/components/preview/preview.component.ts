@@ -14,6 +14,7 @@ interface Bounds {
 }
 
 @Component({
+  standalone: false,
   selector: 'app-preview',
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],

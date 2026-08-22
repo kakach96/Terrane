@@ -40,19 +40,20 @@ export function detectLanguage(): SupportedLanguage {
 export class LanguageService {
   constructor(private translate: TranslateService) {
     this.translate.addLangs([...SUPPORTED_LANGUAGES]);
-    this.translate.setDefaultLang(DEFAULT_LANG);
+    this.translate.setFallbackLang(DEFAULT_LANG);
     this.init();
   }
 
   /** Current active language (zh-CN / en-US). */
   get currentLang(): SupportedLanguage {
     return (
-      this.normalize(this.translate.currentLang || this.translate.getDefaultLang()) ?? DEFAULT_LANG
+      this.normalize(this.translate.currentLang() || this.translate.getFallbackLang()) ??
+      DEFAULT_LANG
     );
   }
 
-  private normalize(lang: string): SupportedLanguage | null {
-    return normalizeLang(lang);
+  private normalize(lang: string | null): SupportedLanguage | null {
+    return lang ? normalizeLang(lang) : null;
   }
 
   /** Initialise the active language (called once from the constructor). */

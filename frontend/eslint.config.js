@@ -1,16 +1,13 @@
 // @ts-check
 /**
- * ESLint flat config for the Terrane Angular frontend (Angular 17 + ESLint 8.57).
+ * ESLint flat config for the Terrane Angular frontend (Angular 22 + ESLint 10).
  *
- * @angular-eslint v17 only ships eslintrc-style shared configs (the flat
- * `tsRecommended` / `templateRecommended` API was introduced in v18), so the
- * shared rules are applied manually from the plugin objects below.
+ * Premade configs come from the `angular-eslint` umbrella package
+ * (`tsRecommended` / `templateRecommended` / `templateAccessibility`).
  */
 const eslint = require('@eslint/js');
 const tseslint = require('typescript-eslint');
-const angular = require('@angular-eslint/eslint-plugin');
-const angularTemplate = require('@angular-eslint/eslint-plugin-template');
-const angularTemplateParser = require('@angular-eslint/template-parser');
+const angular = require('angular-eslint');
 
 module.exports = tseslint.config(
   {
@@ -19,18 +16,19 @@ module.exports = tseslint.config(
     extends: [
       eslint.configs.recommended,
       ...tseslint.configs.recommended,
+      ...angular.configs.tsRecommended,
     ],
-    plugins: {
-      '@angular-eslint': angular,
-    },
     languageOptions: {
       parser: tseslint.parser,
     },
     // Lint inline templates inside @Component({ template: `...` }) as well.
-    processor: angularTemplate.processors['extract-inline-html'],
+    processor: angular.processInlineTemplates,
     rules: {
-      // Shared recommended rules from @angular-eslint (eslintrc-style config).
-      ...angular.configs.recommended.rules,
+      // The codebase intentionally stays on NgModule + constructor injection
+      // and legacy template control flow (*ngIf/*ngFor); these stylistic
+      // migration rules are disabled to keep that style.
+      '@angular-eslint/prefer-standalone': 'off',
+      '@angular-eslint/prefer-inject': 'off',
       '@angular-eslint/directive-selector': [
         'error',
         { type: 'attribute', prefix: 'app', style: 'camelCase' },
@@ -45,15 +43,15 @@ module.exports = tseslint.config(
     // HTML template files (external templates + inline templates extracted
     // by the processor above).
     files: ['**/*.html'],
-    plugins: {
-      '@angular-eslint/template': angularTemplate,
-    },
+    extends: [
+      ...angular.configs.templateRecommended,
+      ...angular.configs.templateAccessibility,
+    ],
     languageOptions: {
-      parser: angularTemplateParser,
+      parser: angular.templateParser,
     },
     rules: {
-      ...angularTemplate.configs.recommended.rules,
-      ...angularTemplate.configs.accessibility.rules,
+      '@angular-eslint/template/prefer-control-flow': 'off',
     },
   },
   {

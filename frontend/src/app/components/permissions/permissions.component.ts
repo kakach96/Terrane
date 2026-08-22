@@ -5,6 +5,7 @@ import { NotificationService } from '../../services/notification.service';
 import { Permission, CreatePermissionRequest } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   selector: 'app-permissions',
   templateUrl: './permissions.component.html',
   styleUrls: ['./permissions.component.scss'],

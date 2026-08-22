@@ -11,6 +11,7 @@ import {
 } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   selector: 'app-workspaces',
   templateUrl: './workspaces.component.html',
   styleUrls: ['./workspaces.component.scss'],

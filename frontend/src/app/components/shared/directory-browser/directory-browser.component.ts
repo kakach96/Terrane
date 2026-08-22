@@ -19,6 +19,7 @@ export interface DirectoryBrowserResult {
 }
 
 @Component({
+  standalone: false,
   selector: 'app-directory-browser',
   templateUrl: './directory-browser.component.html',
   styleUrls: ['./directory-browser.component.scss'],

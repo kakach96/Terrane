@@ -7,6 +7,7 @@ import { NotificationService } from '../../services/notification.service';
 import { Layer } from '../../models/geoserver.models';
 
 @Component({
+  standalone: false,
   selector: 'app-layer-detail',
   templateUrl: './layer-detail.component.html',
   styleUrls: ['./layer-detail.component.scss'],

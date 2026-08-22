@@ -7,6 +7,7 @@ import { StyleInfo } from '../../models/geoserver.models';
 import { StyleEditorDialogComponent } from './style-editor-dialog.component';
 
 @Component({
+  standalone: false,
   selector: 'app-styles',
   templateUrl: './styles.component.html',
   styleUrls: ['./styles.component.scss'],
