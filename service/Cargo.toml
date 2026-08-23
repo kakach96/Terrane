@@ -27,7 +27,7 @@ quick-xml = { version = "0.41", features = ["serialize"] }
 sysinfo = "0.30"
 rusqlite = { version = "0.29", features = ["chrono", "bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
-deadpool-postgres = "0.10"
+deadpool-postgres = "0.14"
 futures-util = "0.3.34"
 postgres-native-tls = "0.5"
 
