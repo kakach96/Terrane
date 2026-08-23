@@ -62,7 +62,7 @@ proj4rs = { version = "0.1.10", features = ["crs-definitions"] }
 rust-s3 = { version = "0.34", features = ["http-credentials"] }
 # Redis 缓存后端 (会话缓存 + 瓦片缓存; 多副本共享)
 redis = { version = "1", features = ["tokio-comp", "connection-manager"] }
-mysql_async = "0.34"
+mysql_async = "0.37"
 mongodb = "2.8"
 ldap3 = "0.12.1"
 
