@@ -1,4 +1,5 @@
 # Rust
+/target/
 /service/target/
 **/*.rs.bk
 *.pdb
