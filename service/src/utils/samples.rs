@@ -14,6 +14,7 @@ use crate::models::{
 };
 use crate::store::Store;
 use crate::utils::bounds::compute_layer_bounds;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// A single built-in sample dataset descriptor.
@@ -55,6 +56,66 @@ pub const SAMPLE_DATASETS: &[SampleDataset] = &[
     },
 ];
 
+/// Resolve the samples source directory with fallbacks.
+///
+/// Tries, in order:
+/// 1. The configured `source_dir` (as-is — relative to CWD or absolute).
+/// 2. `<exe_dir>/samples` — samples bundled next to the executable (covers
+///    the Docker image layout `/app/terrane` + `/app/samples` and the release
+///    package layout `release-package/terrane.exe` + `samples/`).
+/// 3. Ancestor directories of the executable (walking up a few levels) that
+///    contain a `samples` dir with the sample files — covers running the
+///    binary from a packaged subdirectory while the samples live in the
+///    source tree (e.g. `service/target/release/release-package/` →
+///    `service/samples/`).
+///
+/// A candidate only counts when it actually holds all curated sample files, so
+/// an unrelated `samples` directory is never picked up by accident.
+fn resolve_samples_source_dir(configured: &Path) -> PathBuf {
+    let has_samples =
+        |dir: &Path| -> bool { SAMPLE_DATASETS.iter().all(|ds| dir.join(ds.file).exists()) };
+
+    // 1. Configured path (relative to CWD or absolute).
+    if has_samples(configured) {
+        return configured.to_path_buf();
+    }
+
+    // 2/3. Executable-relative candidates.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            // 2. Samples bundled next to the executable.
+            let bundled = exe_dir.join("samples");
+            if has_samples(&bundled) {
+                tracing::debug!(
+                    "[Samples] 使用可执行文件目录下的示例数据: {}",
+                    bundled.display()
+                );
+                return bundled;
+            }
+            // 3. Walk up a few ancestor levels (packaged subdirectories).
+            let mut dir = exe_dir;
+            for _ in 0..5 {
+                match dir.parent() {
+                    Some(parent) => {
+                        let candidate = parent.join("samples");
+                        if has_samples(&candidate) {
+                            tracing::debug!(
+                                "[Samples] 使用上级目录中的示例数据: {}",
+                                candidate.display()
+                            );
+                            return candidate;
+                        }
+                        dir = parent;
+                    },
+                    None => break,
+                }
+            }
+        }
+    }
+
+    configured.to_path_buf()
+}
+
 /// Seed the built-in sample data into the metadata store.
 ///
 /// 1. Copies each sample file from `config.samples.source_dir` to
@@ -65,7 +126,7 @@ pub const SAMPLE_DATASETS: &[SampleDataset] = &[
 ///
 /// Returns the newly registered layers (empty when seeding is skipped or fails).
 pub async fn seed_samples(config: &GeoServerConfig, store: &Arc<dyn Store>) -> Vec<Layer> {
-    let source_dir = config.samples.source_dir.clone();
+    let source_dir = resolve_samples_source_dir(&config.samples.source_dir);
     let target_dir = config.data_dir.join("samples");
 
     if let Err(e) = std::fs::create_dir_all(&target_dir) {

@@ -30,6 +30,23 @@ Set `enabled = false` (or `GEOSERVER__SAMPLES__ENABLED=false`) to skip seeding.
 Seeding only runs when the catalog contains no layers, so existing installs are
 never modified.
 
+### Source directory resolution
+
+`source_dir` is resolved relative to the current working directory. If the
+configured directory does not contain the sample files, the backend falls back
+to these locations (in order):
+
+1. `<exe_dir>/samples` — samples bundled next to the executable (the Docker
+   image layout `/app/terrane` + `/app/samples`, and the release package
+   layout `release-package/terrane.exe` + `samples/`).
+2. Ancestor directories of the executable that contain a `samples` dir with
+   the sample files — covers running the binary from a packaged subdirectory
+   while the samples live in the source tree (e.g.
+   `service/target/release/release-package/` → `service/samples/`).
+
+A candidate only counts when it actually holds all curated sample files, so an
+unrelated `samples` directory is never picked up by accident.
+
 ## Adding a dataset
 
 1. Drop a `.geojson` file into this directory.
