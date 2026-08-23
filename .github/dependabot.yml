@@ -8,6 +8,14 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      # Combine all minor / patch cargo dependency updates into a single PR
+      # (major updates still open as individual PRs)
+      cargo-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
 
   # Angular 前端依赖
   - package-ecosystem: npm
@@ -34,3 +42,11 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      # Combine all minor / patch GitHub Actions updates into a single PR
+      # (major updates still open as individual PRs)
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
