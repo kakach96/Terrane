@@ -5,7 +5,7 @@ they can be published through GeoServer's built-in Shapefile datastore.
 GeoServer 2.28 does not ship the GeoJSON datastore extension, so the curated
 sample datasets are converted to Shapefile before publishing.
 
-Usage: python service/tests/convert_samples_to_shapefile.py
+Usage: python service/tests/geoserver_compare/convert_samples_to_shapefile.py
 Output: <service>/samples/shp/<name>.shp (+ .shx/.dbf/.prj)
 """
 import json
@@ -13,7 +13,7 @@ import os
 import shapefile
 
 SAMPLES_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "samples"
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "samples"
 )
 OUT_DIR = os.path.join(SAMPLES_DIR, "shp")
 

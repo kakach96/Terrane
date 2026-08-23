@@ -10,7 +10,7 @@ Requires the built-in sample layers to be published on both servers:
 - Terrane:  http://127.0.0.1:8080  (layers: major_cities / sample_routes / world_countries)
 - GeoServer: http://127.0.0.1:18080/geoserver (layers: demo:major_cities / ...)
 
-Usage: python service/tests/compare_ogc_with_geoserver.py
+Usage: python service/tests/geoserver_compare/compare_ogc_with_geoserver.py
 Output: <this_dir>/ogc_compare_result.json
 """
 import json
