@@ -155,8 +155,9 @@ echo ""
 if [ "$BUILD_MODE" = "release" ]; then
     echo "Release package: service/target/release/release-package/"
     echo "Executable: service/target/release/release-package/terrane"
+    echo "Frontend: service/target/release/release-package/static/"
 else
     echo "Executable: service/target/debug/terrane"
+    echo "Frontend: service/static/"
 fi
-echo "Frontend: service/static/"
 echo ""

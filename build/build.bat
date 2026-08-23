@@ -178,10 +178,11 @@ echo.
 if %BUILD_MODE%==release (
     echo Release package: service\target\release\release-package\
     echo Executable: service\target\release\release-package\terrane.exe
+    echo Frontend: service\target\release\release-package\static\
 ) else (
     echo Executable: service\target\debug\terrane.exe
+    echo Frontend: service\static\
 )
-echo Frontend: service\static\
 echo.
 
 endlocal
