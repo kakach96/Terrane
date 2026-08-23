@@ -39,6 +39,13 @@ service/geoserver.sqlite
 # Runtime data
 service/data/
 
+# Generated shapefiles (from service/samples/*.geojson via
+# service/tests/convert_samples_to_shapefile.py — for GeoServer publishing)
+service/samples/shp/
+
+# Generated OGC comparison result (service/tests/compare_ogc_with_geoserver.py)
+service/tests/ogc_compare_result.json
+
 # Runtime logs
 service/terrane.out.log
 service/terrane.err.log
