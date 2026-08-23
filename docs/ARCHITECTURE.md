@@ -36,7 +36,7 @@ configuration file only keeps `[metadata]` (SQLite / PostgreSQL); file data sour
 record `file_path` + `file_storage_type` (`local` / `s3` / `oss`). `local` stores the
 absolute path on the server; `s3` stores an object key and carries `s3_endpoint` /
 `s3_region` / `s3_bucket` / `s3_access_key` / `s3_secret_key` (persisted in
-`data_sources`). Reads are routed through `src/store/file_resolver.rs`: GeoJSON is
+`data_sources`). Reads are routed through `service/src/store/file_resolver.rs`: GeoJSON is
 streamed from bytes, multi-file formats (Shapefile / WorldImage) and raster readers
 (GeoPackage / GeoTIFF / ArcGrid / WCS) materialize the objects to a temp file when they
 need a filesystem path. Browse endpoints (`GET /data-sources/browse` + `POST
@@ -56,7 +56,7 @@ vision without a complex multi-section config.
   `ST_Transform` (storage CRS → request CRS), and the request `BBOX` is reprojected from
   the request CRS to the storage CRS before spatial filtering. Any EPSG registered in the
   metadata PostGIS (`spatial_ref_sys`) is supported (e.g. EPSG:4326, EPSG:3857, EPSG:4490,
-  UTM zones). For file-based data sources and in-process math, `src/utils/geometry.rs`
+  UTM zones). For file-based data sources and in-process math, `service/src/utils/geometry.rs`
   `transform_coordinates` is backed by `proj4rs` (generic EPSG via `crs-definitions`) with
   a built-in WGS84/Web-Mercator fallback.
 - **WMS `BBOX` is always in the request SRS** (standard). The Angular frontend converts the
@@ -263,20 +263,20 @@ sequenceDiagram
 
 **Security building blocks**:
 
-- **Enterprise identity (LDAP)** — `src/utils/ldap.rs`: `[security.ldap]`
+- **Enterprise identity (LDAP)** — `service/src/utils/ldap.rs`: `[security.ldap]`
   (`url` / `base_dn` / optional service `bind_dn`+`bind_password` /
   `user_filter` template / `admin_group` / `default_role`). Login falls back to
   an LDAP bind when the local user is missing or the password is rejected, then
   auto-provisions the local user with the group-mapped role (RFC 4514 DN
   escaping). Enabled via `GEOSERVER__SECURITY__LDAP__*`.
-- **Fine-grained GeoFence ACL** — `src/utils/geofence.rs`: per-request
+- **Fine-grained GeoFence ACL** — `service/src/utils/geofence.rs`: per-request
   `workspace / store / layer` rules over the `/permissions` model. Most-specific
   rule wins (user > role, layer > store > workspace > global), deny wins
   equal-priority ties, mode hierarchy admin ⊇ write ⊇ read, open default.
   Opt-in via `[security] geofence_enabled`; enforced in WMS GetMap/GetFeatureInfo,
   WFS GetFeature(+WithLock/LockFeature/GetPropertyValue/GetGmlObject), WCS
   GetCoverage and OGC API Maps; admin bypass; 403 on deny.
-- **Credential management** — `src/utils/secrets.rs`: data-source passwords /
+- **Credential management** — `service/src/utils/secrets.rs`: data-source passwords /
   S3 keys may reference `${ENV_VAR}` (K8s Secrets style); resolved at
   connection-build time (postgres/mysql/mongo/redis/S3) and never persisted or
   logged (`redact` masks values).
@@ -336,10 +336,10 @@ All endpoints below live under `/geoserver` (the configurable `api_context`).
 ### 6.4 Error format
 
 Errors are returned as JSON with an HTTP status code; error mapping is centralized in
-`src/error.rs` and `src/store/error.rs`.
+`service/src/error.rs` and `service/src/store/error.rs`.
 
 ### 6.5 Configuration contract
 
-All options are externalized via `terrane.toml` + `GEOSERVER__<SECTION>__<KEY>` env
+All options are externalized via `service/terrane.toml` + `GEOSERVER__<SECTION>__<KEY>` env
 overrides (precedence: CLI > env > file > defaults). See
 [DEVELOPMENT.md](DEVELOPMENT.md) for the full variable reference.

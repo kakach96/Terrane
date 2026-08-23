@@ -66,13 +66,13 @@ if [ $SKIP_FRONTEND -eq 0 ]; then
     echo ""
     
     echo "[Step 3/4] Copying frontend to static..."
-    rm -rf static
-    cp -r frontend/dist/terrane-ui/browser static
+    rm -rf service/static
+    cp -r frontend/dist/terrane-ui/browser service/static
     echo "Copy OK"
     echo ""
 else
     echo "[Step 1/3] Skipping frontend build"
-    if [ ! -d "static" ]; then
+    if [ ! -d "service/static" ]; then
         echo "ERROR: static directory not found"
         exit 1
     fi
@@ -82,25 +82,25 @@ fi
 
 echo "[Step 3/4] Building Rust backend ($BUILD_MODE)..."
 if [ "$BUILD_MODE" = "release" ]; then
-    cargo build --release --quiet
+    cargo build --release --quiet --manifest-path service/Cargo.toml
 else
-    cargo build --quiet
+    cargo build --quiet --manifest-path service/Cargo.toml
 fi
 echo "Rust build OK"
 echo ""
 
 echo "[Step 4/4] Copying config file to artifact directory..."
 if [ "$BUILD_MODE" = "release" ]; then
-    ARTIFACT_DIR="target/release"
+    ARTIFACT_DIR="service/target/release"
 else
-    ARTIFACT_DIR="target/debug"
+    ARTIFACT_DIR="service/target/debug"
 fi
 mkdir -p "$ARTIFACT_DIR"
-if [ -f "terrane.toml" ]; then
-    cp -f "terrane.toml" "$ARTIFACT_DIR/terrane.toml"
+if [ -f "service/terrane.toml" ]; then
+    cp -f "service/terrane.toml" "$ARTIFACT_DIR/terrane.toml"
     echo "Config copied: $ARTIFACT_DIR/terrane.toml"
 else
-    cp -f "terrane.toml.example" "$ARTIFACT_DIR/terrane.toml"
+    cp -f "service/terrane.toml.example" "$ARTIFACT_DIR/terrane.toml"
     echo "Config template copied as: $ARTIFACT_DIR/terrane.toml"
 fi
 echo ""
@@ -108,27 +108,27 @@ echo ""
 if [ "$BUILD_MODE" = "release" ]; then
     echo "[Step 5/5] Preparing release package..."
     
-    RELEASE_DIR="target/release/release-package"
+    RELEASE_DIR="service/target/release/release-package"
     rm -rf "$RELEASE_DIR"
     mkdir -p "$RELEASE_DIR"
     
     echo "Copying executable..."
-    cp "target/release/terrane" "$RELEASE_DIR/"
+    cp "service/target/release/terrane" "$RELEASE_DIR/"
     
     echo "Copying static files..."
-    cp -r static "$RELEASE_DIR/"
+    cp -r service/static "$RELEASE_DIR/"
     
     echo "Copying config file..."
-    if [ -f "terrane.toml" ]; then
-        cp "terrane.toml" "$RELEASE_DIR/"
+    if [ -f "service/terrane.toml" ]; then
+        cp "service/terrane.toml" "$RELEASE_DIR/"
         echo "Config file copied"
     else
         echo "No config file found, skipping"
     fi
 
     echo "Copying config template..."
-    if [ -f "terrane.toml.example" ]; then
-        cp "terrane.toml.example" "$RELEASE_DIR/"
+    if [ -f "service/terrane.toml.example" ]; then
+        cp "service/terrane.toml.example" "$RELEASE_DIR/"
         echo "Config template copied"
     fi
 
@@ -153,10 +153,10 @@ fi
 echo "==================== Build Complete ===================="
 echo ""
 if [ "$BUILD_MODE" = "release" ]; then
-    echo "Release package: target/release/release-package/"
-    echo "Executable: target/release/release-package/terrane"
+    echo "Release package: service/target/release/release-package/"
+    echo "Executable: service/target/release/release-package/terrane"
 else
-    echo "Executable: target/debug/terrane"
+    echo "Executable: service/target/debug/terrane"
 fi
-echo "Frontend: static/"
+echo "Frontend: service/static/"
 echo ""

@@ -197,7 +197,7 @@ ng serve
 # visit http://localhost:4200
 
 # 4. Start the backend in another terminal
-cd ..
+cd ..\service
 cargo run
 # backend runs at http://localhost:8080
 ```

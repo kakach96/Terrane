@@ -4,20 +4,20 @@
 # =============================================================================
 
 # ---- Rust / build artifacts ----
-target/
+service/target/
 frontend/node_modules/
 frontend/dist/
 frontend/.angular/
 
 # ---- Local data (mounted at runtime via volumes; not baked into the image) ----
-data/
-static/
+service/data/
+service/static/
 *.sqlite
 *.sqlite3
 *.db
 
 # ---- Local config (container config is injected entirely via env vars) ----
-terrane.toml
+service/terrane.toml
 
 # ---- Version control / CI ----
 .git/

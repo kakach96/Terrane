@@ -24,7 +24,7 @@ Visit **http://localhost:4200** (the dev server automatically proxies `/api` req
 In another terminal:
 
 ```bash
-cd ..  # return to the project root
+cd ..\service  # enter the backend service directory
 cargo run
 ```
 

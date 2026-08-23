@@ -47,7 +47,7 @@ echo.
 echo 📋 启动说明：
 echo.
 echo 1. 在此终端窗口启动后端（Rust）:
-echo    cd ..
+echo    cd ..\service
 echo    cargo run
 echo.
 echo 2. 在新的终端窗口启动前端（Angular）:

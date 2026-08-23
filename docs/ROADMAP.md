@@ -47,14 +47,14 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 - Metadata + vector data on PostgreSQL (PostGIS) for HA / multi-replica
 - Session storage: Redis (cloud) / in-memory (standalone) — *deferred: session management stays simple JWT + metadata store*
-- Storage config simplified: config keeps only `[metadata]`; vector/raster file data sources registered per data source (`file_path` + `file_storage_type`) with `FileStore` abstraction (`src/store/file_store.rs`); cache stays local (`TileCacheBackend` + `SessionCache`)
+- Storage config simplified: config keeps only `[metadata]`; vector/raster file data sources registered per data source (`file_path` + `file_storage_type`) with `FileStore` abstraction (`service/src/store/file_store.rs`); cache stays local (`TileCacheBackend` + `SessionCache`)
 - Tile cache backend abstraction: local disk backend done; **Redis data source backend done** (`DataSourceType::Redis` + `Layer.cache_store`, shared across replicas); **seeding/truncate, metastore, per-layer disk quota (LRU), ETag/Last-Modified 304, and custom gridsets done** (see PROTOCOLS §5.3)
 - Raster data backend abstraction: local files backend done; MinIO / S3 pending
 - Session cache: local in-memory backend done; Redis pending (deferred — simple JWT)
 - Catalog refresh mechanism to converge in-memory caches across replicas — **periodic reload done** (`[server] catalog_refresh_secs`); **event-triggered refresh done** (REST layer update/delete now immediately reloads the in-memory catalog via `AppState::refresh_catalog`, eliminating the write-after-read-stale window for WMS/WMTS/tile paths)
 - Structured JSON logs + optional OpenTelemetry tracing — **JSON logs + request `trace_id` done** (`[logging] format = "json"`, `X-Trace-Id`); OTel pending
 - CI/CD pipeline (GitHub Actions / GitLab CI): fmt + clippy + test + frontend build + image push — **GitHub Actions done, incl. Trivy scan + Dependabot**
-- Performance test suite — **done**: micro-benchmarks for hot paths (GML serialization, CQL parsing, coordinate transform, label rendering, map/MVT rendering) via `cargo bench` (`benches/core_paths.rs`), plus an HTTP-level load harness over REST / WMS / WFS / tiles reporting p50/p95/p99 latency & throughput (`tests/perf_test.rs`, `#[ignore]`)
+- Performance test suite — **done**: micro-benchmarks for hot paths (GML serialization, CQL parsing, coordinate transform, label rendering, map/MVT rendering) via `cargo bench` (`service/benches/core_paths.rs`), plus an HTTP-level load harness over REST / WMS / WFS / tiles reporting p50/p95/p99 latency & throughput (`service/tests/perf_test.rs`, `#[ignore]`)
 - User guide documentation (`docs/USER_GUIDE.md`): install & quick start, data publishing workflow (workspace → data source → layer → style → preview → tiles), OGC service usage examples, security & deployment pointers — **done**
 
 ### v1.2 — Naming Convergence & Data Experience (target: 2026 Q4 – 2027 Q1)
@@ -81,7 +81,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
     (opt-in via config), so the product demos out-of-the-box
   - Reuse the samples in integration tests, replacing runtime-generated fixtures
 - **Database cluster connections** — `DataSourceConnection` and the PostGIS / MySQL /
-  MongoDB pool builders (`src/state.rs`) only support a single `host`/`port`; the
+  MongoDB pool builders (`service/src/state.rs`) only support a single `host`/`port`; the
   frontend data-source dialog exposes a single host/port too. Plan:
   - PostGIS: multi-host (comma-separated / array), read/write replica separation,
     connection-string support
@@ -101,8 +101,8 @@ state lives in external stores, so replicas stay stateless and interchangeable.
     `terrane.models.ts`, `GeoserverService` → `TerraneService`, `apiUrl` `/geoserver` →
     `/terrane`, localStorage keys (`geoserver_user` / `geoserver_token`)
   - Tests: all `.uri("/geoserver/…")` → `/terrane/…`; hardcoded `/geoserver/wms` in
-    `src/utils/cascaded.rs`
-  - Docs & config: `terrane.toml.example`, `DEVELOPMENT.md`, `USER_GUIDE.md`,
+    `service/src/utils/cascaded.rs`
+  - Docs & config: `service/terrane.toml.example`, `DEVELOPMENT.md`, `USER_GUIDE.md`,
     `ARCHITECTURE.md`, `PROTOCOLS.md`, `IMPLEMENTATION_PLAN.md`, `README.md`
   - Docker/CI: `Dockerfile` + `build/docker-compose.yml` env vars,
     `GEOSERVER_JWT_SECRET` → `TERRANE_JWT_SECRET`
@@ -135,20 +135,20 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 ## Known Technical Debt
 
-- **JWT secret hardcoded default** in `src/auth.rs` (`terrane-jwt-secret-2026`) — must be injected via `GEOSERVER__SECURITY__JWT_SECRET` in production.
-- **In-memory caches** (`Arc<RwLock<...>>` in `src/state.rs`) diverge across replicas; periodic catalog refresh added (`[server] catalog_refresh_secs`, reload layers/styles/groups from the metadata store) plus event-triggered refresh on REST layer writes (`AppState::refresh_catalog`) — multi-replica divergence is bounded, but refresh remains best-effort (no external event bus).
-- **WFS feature locks are in-memory only** (`src/utils/wfs_lock.rs`, per-replica): locks guard concurrent consumers within one process and are lost on restart — acceptable while WFS-T writes are not implemented, but multi-replica lock coordination (e.g. Redis) is not implemented.
-- **Tile cache backend**: local disk default (`./data/gwc`, `src/store/cache/tile.rs`); layer-level Redis cache data sources added (`Layer.cache_store` → `DataSourceType::Redis`, shared across replicas).
-- **Uploads on local disk** (`./data`) — no shared volume / object storage.
+- **JWT secret hardcoded default** in `service/src/auth.rs` (`terrane-jwt-secret-2026`) — must be injected via `GEOSERVER__SECURITY__JWT_SECRET` in production.
+- **In-memory caches** (`Arc<RwLock<...>>` in `service/src/state.rs`) diverge across replicas; periodic catalog refresh added (`[server] catalog_refresh_secs`, reload layers/styles/groups from the metadata store) plus event-triggered refresh on REST layer writes (`AppState::refresh_catalog`) — multi-replica divergence is bounded, but refresh remains best-effort (no external event bus).
+- **WFS feature locks are in-memory only** (`service/src/utils/wfs_lock.rs`, per-replica): locks guard concurrent consumers within one process and are lost on restart — acceptable while WFS-T writes are not implemented, but multi-replica lock coordination (e.g. Redis) is not implemented.
+- **Tile cache backend**: local disk default (`service/data/gwc`, `service/src/store/cache/tile.rs`); layer-level Redis cache data sources added (`Layer.cache_store` → `DataSourceType::Redis`, shared across replicas).
+- **Uploads on local disk** (`service/data`) — no shared volume / object storage.
 - **Sessions persisted in the metadata DB** (SQLite / PostgreSQL) with a local in-memory `SessionCache` fast-path — Redis session backend intentionally not implemented (simple JWT only).
 - **CI pipeline** (`.github/workflows/ci.yml` — fmt + clippy + test + frontend build + GHCR push + Trivy scan; `.github/dependabot.yml` for cargo/npm/actions) — created but not yet exercised against a real repository.
 - **Human-readable stdout logs by default** — structured JSON available via `[logging] format = "json"` with request `trace_id`; OpenTelemetry still pending.
-- **Resilience**: rate limiting + request timeout (`src/middleware.rs`, HTTP 429/504) and cascaded WMS retry/backoff + circuit breaking (`src/utils/cascaded.rs`) all done; no global circuit breaking for other upstream types yet.
+- **Resilience**: rate limiting + request timeout (`service/src/middleware.rs`, HTTP 429/504) and cascaded WMS retry/backoff + circuit breaking (`service/src/utils/cascaded.rs`) all done; no global circuit breaking for other upstream types yet.
 - **Test suite** — unit (`#[cfg(test)]`) and protocol-split integration tests exist (see [DEVELOPMENT.md](DEVELOPMENT.md) §7); still missing a **performance test suite** (micro-benchmarks + HTTP load harness, planned for v1.1) and frontend tests (`ng test` untested).
 - **`geoserver` naming residue** — the codebase still uses `geoserver` in type names (`GeoServerConfig` / `GeoServerError` / `GeoServerBackup`), the `GEOSERVER__` env prefix, the default `/geoserver` API context, defaults (admin password, DB name, namespace, `geoserver.sqlite`), frontend files (`geoserver.service.ts` / `geoserver.models.ts`), tests, docs and Docker/CI env vars. Planned as a breaking-change migration in v1.2 (keep `GEOSERVER__` as a deprecated alias).
 - **Layer preview format gap** — the frontend preview only offers OpenLayers / PNG / JPEG while the backend WMS already emits SVG / KML / GeoJSON / GeoRSS / PDF / GIF / WebP; GeoServer parity (TIFF / Atom / UTFGrid / GML / MVT) is planned in v1.2.
-- **No built-in sample data** — only `data/geojson/uploaded_layer.geojson` exists; integration tests generate fixtures at runtime and the built-in `world` layer is empty in SQLite metadata mode. A curated `data/samples/` set + first-startup seeding is planned in v1.2.
-- **Database data sources are single-host only** — PostGIS / MySQL / MongoDB pools (`src/state.rs`) and the frontend dialog support one `host`/`port`; no cluster / replica-set / read-write separation. Planned in v1.2.
+- **No built-in sample data** — only `service/data/geojson/uploaded_layer.geojson` exists; integration tests generate fixtures at runtime and the built-in `world` layer is empty in SQLite metadata mode. A curated `service/data/samples/` set + first-startup seeding is planned in v1.2.
+- **Database data sources are single-host only** — PostGIS / MySQL / MongoDB pools (`service/src/state.rs`) and the frontend dialog support one `host`/`port`; no cluster / replica-set / read-write separation. Planned in v1.2.
 - **Security-sensitive defaults**: CORS `["*"]` and hardcoded JWT secret — revisit before production.
 - **Broken doc link**: README referenced `BUILD_INTEGRATION.md`, which did not exist (fixed in this docs pass).
 

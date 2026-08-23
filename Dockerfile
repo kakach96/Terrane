@@ -72,7 +72,7 @@ RUN printf '[source.crates-io]\nreplace-with = "mirror"\n[source.mirror]\nregist
 #      changes only recompile the crate itself
 #   2. BuildKit cache mount on the cargo registry dir, so crate downloads are
 #      reused even when the layer above is invalidated
-COPY Cargo.toml Cargo.lock* ./
+COPY service/Cargo.toml service/Cargo.lock* ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     mkdir -p src \
     && echo 'fn main() {}' > src/main.rs \
@@ -80,7 +80,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && rm -rf src
 
 # Copy the real sources and build incrementally
-COPY src/ src/
+COPY service/src/ src/
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release
 

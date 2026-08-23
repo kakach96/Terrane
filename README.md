@@ -32,14 +32,14 @@
 
 **Current status
 
-- ✅ Configuration supports environment variable overrides (`GEOSERVER__<section>__<key>`, double-underscore separator, see `src/config.rs`)
+- ✅ Configuration supports environment variable overrides (`GEOSERVER__<section>__<key>`, double-underscore separator, see `service/src/config.rs`)
 - ✅ Multi-stage container image: `Dockerfile` + `.dockerignore` + `build/docker-compose.yml` (dev deps: PostGIS + Redis + MinIO; app via `--profile terrane`)
 - ✅ Built-in image `HEALTHCHECK` + split probes: `/health/live` (liveness) & `/health/ready` (readiness)
 - ✅ Prometheus `/metrics` endpoint (requests/errors, tile cache hit rate, PG pool watermarks, system resources)
 - ✅ Graceful shutdown on SIGTERM/SIGINT with `shutdown_timeout_secs` in-flight drain
-- ⚠️ TODO: JWT secret default is hardcoded in `src/auth.rs`; use `GEOSERVER__SECURITY__JWT_SECRET` env injection in prod
-- ✅ Storage: config keeps only `[metadata]` (workspaces / data sources / layers / styles, default SQLite / PostgreSQL); vector/raster file data sources registered per data source (`file_storage_type`: local / s3 / oss); **S3/MinIO uploads** (`/data/upload/geotiff?storage=s3`) share uploaded rasters across replicas; **credentials via env** (`${ENV_VAR}` interpolation, K8s Secrets style, never logged); tile + session cache stay built-in local, see `src/config.rs`
-- ⚠️ TODO: in-memory caches (`src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL / object storage
+- ⚠️ TODO: JWT secret default is hardcoded in `service/src/auth.rs`; use `GEOSERVER__SECURITY__JWT_SECRET` env injection in prod
+- ✅ Storage: config keeps only `[metadata]` (workspaces / data sources / layers / styles, default SQLite / PostgreSQL); vector/raster file data sources registered per data source (`file_storage_type`: local / s3 / oss); **S3/MinIO uploads** (`/data/upload/geotiff?storage=s3`) share uploaded rasters across replicas; **credentials via env** (`${ENV_VAR}` interpolation, K8s Secrets style, never logged); tile + session cache stay built-in local, see `service/src/config.rs`
+- ⚠️ TODO: in-memory caches (`service/src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL / object storage
 - ⚠️ TODO: tile cache on local disk, needs PVC or object storage
 - ✅ CI pipeline: `.github/workflows/ci.yml` (fmt + clippy + test + frontend build + GHCR image push on main) + Trivy image scan + Dependabot — created, not yet exercised against a real repository
 - ✅ Security: CORS whitelist, JWT auth + users/roles (+ users PUT), layer-level permissions, **LDAP enterprise identity** (`[security.ldap]`, login fallback + auto-provision), **GeoFence fine-grained ACL** (`[security] geofence_enabled`, per-request layer rules on WMS/WFS/WCS)
@@ -58,7 +58,7 @@
 
 ```bash
 # Automatically builds the frontend and starts the server
-cargo run
+cd service && cargo run
 
 # Visit http://127.0.0.1:8080
 ```
@@ -67,6 +67,7 @@ cargo run
 
 ```bash
 # Terminal 1 - start the backend (skips frontend build, faster)
+cd service
 $env:SKIP_FRONTEND=1
 cargo run
 
@@ -82,10 +83,10 @@ npm start
 
 ```bash
 # cargo build automatically builds the frontend
-cargo build
+cd service && cargo build
 
 # Run
-cargo run
+cd service && cargo run
 ```
 
 ### Option 4: Docker (containerized)
@@ -138,29 +139,33 @@ START.bat
 
 ```
 terrane/
-├── src/                    # Rust backend source code
-│   ├── handlers/          # HTTP request handlers
-│   ├── services/          # OGC service implementations
-│   ├── models/            # Data models
-│   ├── utils/             # Utility functions
-│   └── main.rs            # Application entry point
-├── frontend/              # Angular frontend
+├── service/                # Rust backend service
+│   ├── src/                # Rust backend source code
+│   │   ├── handlers/       # HTTP request handlers
+│   │   ├── services/       # OGC service implementations
+│   │   ├── models/         # Data models
+│   │   ├── utils/          # Utility functions
+│   │   └── main.rs         # Application entry point
+│   ├── static/             # Built frontend served by the backend
+│   ├── tests/              # Backend integration tests
+│   ├── benches/            # Micro-benchmarks (criterion)
+│   └── Cargo.toml          # Rust dependencies
+├── frontend/               # Angular frontend
 │   ├── src/
 │   │   └── app/
 │   │       ├── components/ # Page components
-│   │       ├── services/  # API services
-│   │       └── models/    # Data models
+│   │       ├── services/   # API services
+│   │       └── models/     # Data models
 │   └── ...
-├── static/                 # Backend static files (fallback)
 ├── docs/                   # Architecture / Roadmap / Development guides
-└── Cargo.toml             # Rust dependencies
+└── build/                  # Build scripts (build.bat / build.sh)
 ```
 
 ## 🌐 API Endpoints
 
 ### REST API
 
-All REST endpoints live under the configurable context path (default `/geoserver`, see `[server] api_context` in `terrane.toml`):
+All REST endpoints live under the configurable context path (default `/geoserver`, see `[server] api_context` in `service/terrane.toml`):
 
 | Method | Endpoint | Description |
 |------|------|------|
@@ -258,7 +263,7 @@ All REST endpoints live under the configurable context path (default `/geoserver
 
 ## 🔧 Configuration
 
-Configuration file: `terrane.toml`
+Configuration file: `service/terrane.toml`
 
 ```toml
 [server]

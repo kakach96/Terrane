@@ -19,9 +19,8 @@ Material** frontend.
 
 | Path        | Description                                                                  |
 | ----------- | ---------------------------------------------------------------------------- |
-| `src/`      | Rust backend — `handlers/` (REST + OGC WMS/WFS/WCS/WMTS), `models/`, `store/` (SQLite/PostgreSQL, vector/raster/cache), `routes.rs` |
+| `service/`  | Rust backend — `service/src/handlers/` (REST + OGC WMS/WFS/WCS/WMTS), `models/`, `store/` (SQLite/PostgreSQL, vector/raster/cache), `routes.rs`; `static/` (built frontend), `tests/`, `benches/`, `Cargo.toml` |
 | `frontend/` | Angular 17 + Material — `src/app/components/`, `services/`, `models/`        |
-| `tests/`    | Backend integration tests (REST, WMS, WFS, WCS, WMTS)                        |
 | `docs/`     | Architecture, protocols, roadmap, development guides                         |
 
 ## Key conventions
@@ -31,7 +30,7 @@ Material** frontend.
 - Commit message format: `type: changes content` — `type` is `feat`, `fix`,
   `refactor`, `chore`, etc.
 - Backend is Windows-native (`build/build.bat`); API base path is `/geoserver`
-  (`terrane.toml: api_context`).
+  (`service/terrane.toml: api_context`).
 - Storage is split: metadata store (SQLite/PostgreSQL) vs vector store vs
   raster store vs cache — see `AGENTS.md` "Storage split".
 - **Run the CI checks before every commit** (fmt + clippy + test + frontend
@@ -41,6 +40,6 @@ Material** frontend.
 
 ## Tooling (installed)
 
-- Rust formatting: `.rustfmt.toml` (run `cargo fmt`)
+- Rust formatting: `service/.rustfmt.toml` (run `cargo fmt` from `service/`)
 - Frontend lint: `npm run lint` (ESLint flat config, `eslint.config.js`)
 - Frontend format: `npm run format` / `npm run format:check` (Prettier, `.prettierrc`)

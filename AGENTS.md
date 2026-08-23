@@ -15,23 +15,29 @@
 ## Project structure
 
 ```
-src/              — Rust backend (Actix-web)
-  handlers/       — REST + OGC (WMS/WFS/WCS) handlers
-  models/         — Shared data structs (Layer, Feature, DataSource, etc.)
-  store/          — SQLite store (sqlite_store.rs) with PostGIS extension
-    file_store.rs — File store abstraction (LocalFileStore + S3FileStore via rust-s3)
-    cache/        — Cache abstraction (TileCacheBackend + SessionCache; local disk/in-memory)
-  utils/          — Rendering + format readers
-    bitmap_font.rs — built-in 5×7 bitmap font for SLD label (TextSymbolizer) rendering (zero deps)
-    gml.rs        — shared GML serialization helpers (escape_xml, GeoJSON→GML, GML 3.2 feature) used by WFS GetFeature/GetGmlObject and WMS GetFeatureInfo
-    geofence.rs   — GeoFence fine-grained ACL: per-request workspace/store/layer rules over the /permissions model, enforced on WMS/WFS/WCS when [security] geofence_enabled
-    ldap.rs       — LDAP enterprise identity: [security.ldap] config, login fallback + auto-provision, group-based role mapping
-    mosaic.rs     — ImageMosaic data source: raster-directory granule scan + bounds + composite
-    pyramid.rs    — ImagePyramid data source: numeric level subdirs + resolution-based level selection
-    secrets.rs    — credential management: ${ENV_VAR} interpolation for data-source secrets (K8s Secrets style) + redaction
-    tile_seed.rs  — GWC-style tile seeding engine: background seed jobs over a zoom range, progress + cooperative cancel (see /tiles/seed)
-    wfs_lock.rs   — WFS feature-lock registry (LockFeature / GetFeatureWithLock): in-memory, TTL expiry, lockAction ALL/SOME
-  routes.rs       — All route registrations in one file
+service/          — Rust backend service (Actix-web)
+  src/            — Rust backend source
+    handlers/     — REST + OGC (WMS/WFS/WCS) handlers
+    models/       — Shared data structs (Layer, Feature, DataSource, etc.)
+    store/        — SQLite store (sqlite_store.rs) with PostGIS extension
+      file_store.rs — File store abstraction (LocalFileStore + S3FileStore via rust-s3)
+      cache/      — Cache abstraction (TileCacheBackend + SessionCache; local disk/in-memory)
+    utils/        — Rendering + format readers
+      bitmap_font.rs — built-in 5×7 bitmap font for SLD label (TextSymbolizer) rendering (zero deps)
+      gml.rs      — shared GML serialization helpers (escape_xml, GeoJSON→GML, GML 3.2 feature) used by WFS GetFeature/GetGmlObject and WMS GetFeatureInfo
+      geofence.rs — GeoFence fine-grained ACL: per-request workspace/store/layer rules over the /permissions model, enforced on WMS/WFS/WCS when [security] geofence_enabled
+      ldap.rs     — LDAP enterprise identity: [security.ldap] config, login fallback + auto-provision, group-based role mapping
+      mosaic.rs   — ImageMosaic data source: raster-directory granule scan + bounds + composite
+      pyramid.rs  — ImagePyramid data source: numeric level subdirs + resolution-based level selection
+      secrets.rs  — credential management: ${ENV_VAR} interpolation for data-source secrets (K8s Secrets style) + redaction
+      tile_seed.rs — GWC-style tile seeding engine: background seed jobs over a zoom range, progress + cooperative cancel (see /tiles/seed)
+      wfs_lock.rs — WFS feature-lock registry (LockFeature / GetFeatureWithLock): in-memory, TTL expiry, lockAction ALL/SOME
+    routes.rs     — All route registrations in one file
+  static/         — Built frontend served by the backend
+  tests/          — Backend integration tests (REST, WMS, WFS, WCS, WMTS, ...)
+  benches/        — Micro-benchmarks (criterion)
+  Cargo.toml      — Rust crate manifest
+  terrane.toml.example — config template
 frontend/         — Angular 17 + Material
   src/app/
     models/       — TypeScript interfaces (geoserver.models.ts)
@@ -39,7 +45,7 @@ frontend/         — Angular 17 + Material
     components/   — One dir per page (dashboard, layers, layer-detail, ...)
 # Cloud-native files (created; see docs/IMPLEMENTATION_PLAN.md §6):
 #   Dockerfile          — multi-stage image build
-#   .dockerignore       — exclude target/, node_modules/, static/
+#   .dockerignore       — exclude service/target/, node_modules/, service/static/
 #   build/docker-compose.yml  — local dev deps (postgres + redis + minio [+ app])
 #   .github/workflows/ci.yml  — CI pipeline (fmt + clippy + test + frontend build + GHCR push + Trivy scan)
 #   .github/dependabot.yml    — dependency auto-updates (cargo / npm / GitHub Actions)
@@ -58,6 +64,7 @@ cd frontend
 npm run build
 
 # Backend Only
+cd service
 cargo build
 ```
 
@@ -71,24 +78,24 @@ cargo build
 cd frontend && npm run build
 
 # Backend Only
-cargo build
+cd service && cargo build
 ```
 
 ## Important quirks
 
-- **API base path**: `/geoserver` (configurable in `terrane.toml: api_context`)
+- **API base path**: `/geoserver` (configurable in `service/terrane.toml: api_context`)
 - **Frontend build**: `optimization.fonts = false` (offline env), Google Fonts loaded at runtime
-- **Storage**: config keeps only `[metadata]` (SQLite / PostgreSQL; legacy `[database]` accepted as a `[metadata]` alias). Vector / raster file data sources are registered **per data source** (persisted in the metadata store) with `file_path` + `file_storage_type` (`local` / `s3` / `oss`). `local` stores the absolute path on the server; `s3` stores an object key and requires `s3_endpoint`/`s3_region`/`s3_bucket`/`s3_access_key`/`s3_secret_key` (`s3_*` persisted in `data_sources`). S3 reads are wired into GeoJSON / Shapefile / GeoPackage / GeoTIFF (WCS) / WorldImage / ArcGrid / **ImageMosaic / ImagePyramid** via `src/store/file_resolver.rs` (downloads to a temp file when readers need a path). **ImageMosaic** (`DataSourceType::ImageMosaic`, `src/utils/mosaic.rs`): `file_path` = a directory of raster granules (GeoTIFF/WorldImage/ArcGrid/PNG/JPEG) served as one coverage — WCS GetCoverage + WMS GetMap + tile pipelines composite the intersecting granules. **ImagePyramid** (`DataSourceType::ImagePyramid`, `src/utils/pyramid.rs`): `file_path` = a directory of numeric level subdirs `0/1/2/…`; the level whose ground resolution best matches the request is selected and its granules composited (same WCS/WMS/tile surfaces). Browse endpoints: `GET /data-sources/browse` (server directory) + `POST /data-sources/s3/browse` (bucket listing) power the frontend directory picker. PostGIS data sources use `deadpool_postgres` pools cached in `AppState.pg_pools`; **MySQL** data sources (`DataSourceType::Mysql`) use `mysql_async` pools cached in `AppState.mysql_pools`, with MBRIntersects spatial filtering + ST_AsGeoJSON geometry output (same feature/WMS query paths as PostGIS, `is_database()` includes both); **MongoDB** data sources (`DataSourceType::Mongo`) use `mongodb` clients cached in `AppState.mongo_clients`, reading GeoJSON documents from a collection (`geometry`/`geom` field) with `$geoWithin` bbox filtering and a `ping` connection test. Tile + session cache stay local by default (`AppState.tile_cache` + `AppState.session_cache`). **Redis cache data source**: `DataSourceType::Redis` persisted in `data_sources` (host/port/database/username/password → `redis://` URL via `src/store/cache/redis.rs::redis_url_from_connection`); a tile layer opts into it via `Layer.cache_store` (REST create/update + `layers.cache_store` column), and `AppState::tile_cache_for` lazily builds a `RedisTileCacheBackend`-backed `TileCache` per data source (shared across replicas); tile render paths (`render_tile_bytes` / `get_tile`) resolve per-layer. Session management stays simple JWT (no Redis session cache). **Terrane is a data publishing platform**: business data lives in external stores
+- **Storage**: config keeps only `[metadata]` (SQLite / PostgreSQL; legacy `[database]` accepted as a `[metadata]` alias). Vector / raster file data sources are registered **per data source** (persisted in the metadata store) with `file_path` + `file_storage_type` (`local` / `s3` / `oss`). `local` stores the absolute path on the server; `s3` stores an object key and requires `s3_endpoint`/`s3_region`/`s3_bucket`/`s3_access_key`/`s3_secret_key` (`s3_*` persisted in `data_sources`). S3 reads are wired into GeoJSON / Shapefile / GeoPackage / GeoTIFF (WCS) / WorldImage / ArcGrid / **ImageMosaic / ImagePyramid** via `service/src/store/file_resolver.rs` (downloads to a temp file when readers need a path). **ImageMosaic** (`DataSourceType::ImageMosaic`, `service/src/utils/mosaic.rs`): `file_path` = a directory of raster granules (GeoTIFF/WorldImage/ArcGrid/PNG/JPEG) served as one coverage — WCS GetCoverage + WMS GetMap + tile pipelines composite the intersecting granules. **ImagePyramid** (`DataSourceType::ImagePyramid`, `service/src/utils/pyramid.rs`): `file_path` = a directory of numeric level subdirs `0/1/2/…`; the level whose ground resolution best matches the request is selected and its granules composited (same WCS/WMS/tile surfaces). Browse endpoints: `GET /data-sources/browse` (server directory) + `POST /data-sources/s3/browse` (bucket listing) power the frontend directory picker. PostGIS data sources use `deadpool_postgres` pools cached in `AppState.pg_pools`; **MySQL** data sources (`DataSourceType::Mysql`) use `mysql_async` pools cached in `AppState.mysql_pools`, with MBRIntersects spatial filtering + ST_AsGeoJSON geometry output (same feature/WMS query paths as PostGIS, `is_database()` includes both); **MongoDB** data sources (`DataSourceType::Mongo`) use `mongodb` clients cached in `AppState.mongo_clients`, reading GeoJSON documents from a collection (`geometry`/`geom` field) with `$geoWithin` bbox filtering and a `ping` connection test. Tile + session cache stay local by default (`AppState.tile_cache` + `AppState.session_cache`). **Redis cache data source**: `DataSourceType::Redis` persisted in `data_sources` (host/port/database/username/password → `redis://` URL via `service/src/store/cache/redis.rs::redis_url_from_connection`); a tile layer opts into it via `Layer.cache_store` (REST create/update + `layers.cache_store` column), and `AppState::tile_cache_for` lazily builds a `RedisTileCacheBackend`-backed `TileCache` per data source (shared across replicas); tile render paths (`render_tile_bytes` / `get_tile`) resolve per-layer. Session management stays simple JWT (no Redis session cache). **Terrane is a data publishing platform**: business data lives in external stores
 (PostGIS tables / data files) registered per data source, and Terrane focuses on
 publishing & OGC protocol adaptation. WFS-T / WCS-T writes are not implemented yet
 (WFS-T planned for a later milestone; WCS-T deferred)
 - **Built-in `metadata` data source** is treated as an ordinary data source (no special-casing in feature queries): besides storing catalog metadata it also publishes business data. In `postgres` metadata mode it reuses the same PG with PostGIS semantics (`layer.store = "metadata"`, `layer.native_name` = table name); in `sqlite` mode it carries no business tables (feature queries return empty)
 - **Layer <-> DB mapping**: `layer.store` = data source name, `layer.native_name` = DB table name
-- **Coordinates / preview**: WMS `BBOX` is always in the request SRS. Backend reprojection is generic: PostGIS `ST_Transform` for raster/feature output (any EPSG), and `src/utils/geometry.rs::transform_coordinates` uses `proj4rs` for file layers / in-process math (fallback: built-in WGS84/Mercator). Frontend converts native bounds to the selected CRS (`frontend/src/app/utils/coords.ts`) so previews stay in range after switching CRS
+- **Coordinates / preview**: WMS `BBOX` is always in the request SRS. Backend reprojection is generic: PostGIS `ST_Transform` for raster/feature output (any EPSG), and `service/src/utils/geometry.rs::transform_coordinates` uses `proj4rs` for file layers / in-process math (fallback: built-in WGS84/Mercator). Frontend converts native bounds to the selected CRS (`frontend/src/app/utils/coords.ts`) so previews stay in range after switching CRS
 - **Boundary representation**: GET `/layers/{name}` returns `native_bounds.bounds.{minx,miny,maxx,maxy}`; the list endpoint returns `bounds` at top level
 - **No test suite** configured (no test dependencies in Cargo.toml, Angular `ng test` untested)
-- **Windows-native** (build/build.bat, PowerShell). `cargo run` expects `./static/` with built frontend
-- **Config**: `terrane.toml` optional; defaults work without it. Environment variables: `RUST_LOG`, `GEOSERVER__SERVER__HOST` etc. (double-underscore separator). `load_from_file()` already mounts the `GEOSERVER__` env source, so env overrides also work with `--config`.
+- **Windows-native** (build/build.bat, PowerShell). Run the backend from `service/` (`cd service && cargo run`); it expects `./static/` with built frontend
+- **Config**: `service/terrane.toml` optional; defaults work without it. Environment variables: `RUST_LOG`, `GEOSERVER__SERVER__HOST` etc. (double-underscore separator). `load_from_file()` already mounts the `GEOSERVER__` env source, so env overrides also work with `--config`.
 - **Frontend proxy**: `proxy.conf.json` routes `/api`, `/wms`, `/wfs`, `/wcs` to `http://localhost:8080`
 - **AGENTS.md** is the single instruction file (no .cursorrules). `.github/copilot-instructions.md` is a thin entry point that points back to AGENTS.md, so GitHub Copilot contexts (e.g. GitHub.com / PRs) pick up the same guidance.
 
@@ -100,9 +107,9 @@ publishing & OGC protocol adaptation. WFS-T / WCS-T writes are not implemented y
   docker compose -f build/docker-compose.yml up -d                        # dev deps: postgres + redis + minio
   docker compose -f build/docker-compose.yml --profile terrane up -d      # dev deps + terrane app
   ```
-- **JWT secret has a hardcoded default** in `src/auth.rs` (`terrane-jwt-secret-2026`); inject via env `GEOSERVER__SECURITY__JWT_SECRET` in multi-replica prod (docker-compose passes `GEOSERVER_JWT_SECRET`)
+- **JWT secret has a hardcoded default** in `service/src/auth.rs` (`terrane-jwt-secret-2026`); inject via env `GEOSERVER__SECURITY__JWT_SECRET` in multi-replica prod (docker-compose passes `GEOSERVER_JWT_SECRET`)
 - **Runtime host**: default `127.0.0.1`; Docker image sets `GEOSERVER__SERVER__HOST=0.0.0.0`
-- **State**: metadata in SQLite (`geoserver.sqlite`) + vector data (default local dir `<data_dir>/business`, or PostgreSQL) + raster files (default `<data_dir>/rasters`) + in-memory caches (`Arc<RwLock<...>>` in `src/state.rs`) + session cache (in-memory) + local disk tile cache (`./data/gwc`) + uploads (`./data`) → multi-replica needs shared storage or PostgreSQL / object-storage backends
+- **State**: metadata in SQLite (`service/geoserver.sqlite`) + vector data (default local dir `<data_dir>/business`, or PostgreSQL) + raster files (default `<data_dir>/rasters`) + in-memory caches (`Arc<RwLock<...>>` in `service/src/state.rs`) + session cache (in-memory) + local disk tile cache (`service/data/gwc`) + uploads (`service/data`) → multi-replica needs shared storage or PostgreSQL / object-storage backends
 - **Observability**: stdout logs (human-readable by default, structured JSON via `[logging] format = "json"`; request-level `trace_id` attached via `X-Trace-Id` / `X-Request-Id`); split probes `/health/live` + `/health/ready` (registered on root path, decoupled from `api_context`); Prometheus `/metrics` (root path; requests/errors, tile cache hit rate, PG pool watermarks, system). Legacy `/health` & `/monitor/*` retained
 - **Lifecycle**: SIGTERM/SIGINT graceful shutdown + `shutdown_timeout_secs` (default 30s, `[server].shutdown_timeout_secs`)
 
@@ -121,6 +128,7 @@ publishing & OGC protocol adaptation. WFS-T / WCS-T writes are not implemented y
 
   ```powershell
   # Backend
+  cd service
   cargo fmt --all -- --check
   cargo clippy --all-targets -- -D warnings
   cargo test --all
@@ -133,7 +141,7 @@ publishing & OGC protocol adaptation. WFS-T / WCS-T writes are not implemented y
 
 - If any check fails, fix the reported issue and re-run until all pass **before**
   committing. Do not commit with failing checks.
-- Note: a running dev server locks `target/debug/terrane.exe`; stop it first
+- Note: a running dev server locks `service/target/debug/terrane.exe`; stop it first
   (`Stop-Process -Name terrane`) so `cargo clippy` / `cargo test` can rebuild.
 
 ## Commit Messages Stype

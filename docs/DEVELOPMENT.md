@@ -12,16 +12,20 @@
 ## 2. Repository Layout
 
 ```
-src/               Rust backend (Actix-web)
-  handlers/        REST + OGC handlers
-  models/          Shared data structs
-  services/        OGC service implementations (wms/wfs/wcs/wmts)
-  store/           Store (metadata) + Vector/Raster/Cache store abstractions
-  utils/           Rendering, tile cache, format parsers, projection
-  routes.rs        Single-file route registration
+service/           Rust backend service (Actix-web)
+  src/             Rust backend source
+    handlers/      REST + OGC handlers
+    models/        Shared data structs
+    services/      OGC service implementations (wms/wfs/wcs/wmts)
+    store/         Store (metadata) + Vector/Raster/Cache store abstractions
+    utils/         Rendering, tile cache, format parsers, projection
+    routes.rs      Single-file route registration
+  static/          Built frontend served by the backend
+  tests/           Backend integration tests
+  benches/         Micro-benchmarks (criterion)
+  Cargo.toml       Rust crate manifest
 frontend/          Angular 17 + Material admin UI
 docs/              Architecture / Roadmap / Development guides
-static/            Built frontend served by the backend
 ```
 
 ## 3. Local Startup
@@ -29,7 +33,7 @@ static/            Built frontend served by the backend
 ### Option A — One-click (recommended)
 
 ```bash
-cargo run
+cd service && cargo run
 # builds the frontend automatically, then serves on http://127.0.0.1:8080
 ```
 
@@ -39,13 +43,14 @@ Terminal 1 — backend (skips frontend build):
 
 ```powershell
 # Windows PowerShell
+cd service
 $env:SKIP_FRONTEND=1
 cargo run
 ```
 
 ```bash
 # Unix-like
-SKIP_FRONTEND=1 cargo run
+cd service && SKIP_FRONTEND=1 cargo run
 ```
 
 Terminal 2 — frontend dev server:
@@ -65,7 +70,7 @@ npm start        # http://localhost:4200 (proxies /api, /wms, /wfs, /wcs to :808
 ./build/build.sh
 
 # Backend only
-cargo build
+cd service && cargo build
 # Frontend only
 cd frontend && npm run build
 ```
@@ -82,7 +87,7 @@ docker compose -f build/docker-compose.yml --profile terrane up -d      # dev de
 ## 4. Environment Variables
 
 `GEOSERVER__<SECTION>__<FIELD>` (double underscore). Precedence:
-**CLI flags > env vars > terrane.toml > built-in defaults**.
+**CLI flags > env vars > service/terrane.toml > built-in defaults**.
 
 | Variable                                  | Maps to                                      | Default                    |
 |-------------------------------------------|----------------------------------------------|----------------------------|
@@ -184,18 +189,18 @@ chore: bump actix-web to 4.x
   (+ **5 `#[ignore]` live tests** that require running services, run with
   `cargo test -- --ignored`: 3× PostGIS via `GEOSERVER_TEST_PG_*` env, 2×
   CascadedWms against the reference GeoServer at :18080).
-- Integration tests are split by protocol into separate crates under `tests/`
+- Integration tests are split by protocol into separate crates under `service/tests/`
   (`wms_test.rs`, `wfs_test.rs`, `wcs_test.rs`, `wmts_test.rs`, `tms_test.rs`,
-  `wps_test.rs`, `csw_test.rs`, `ogc_api_test.rs`, `ogc_tiles_test.rs`, `rest_test.rs`), sharing `tests/common/mod.rs` helpers
+  `wps_test.rs`, `csw_test.rs`, `ogc_api_test.rs`, `ogc_tiles_test.rs`, `rest_test.rs`), sharing `service/tests/common/mod.rs` helpers
   (`create_test_config` + `build_test_app!`).
   The test config uses in-memory SQLite and disables the tile cache, so tests
-  write nothing to `./data`. Full coverage matrix: see [PROTOCOLS.md](PROTOCOLS.md) §11.
+  write nothing to `service/data`. Full coverage matrix: see [PROTOCOLS.md](PROTOCOLS.md) §11.
 
 ### Performance test suite
 
 Two complementary layers (planned in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) §5.3):
 
-1. **Micro-benchmarks** (`benches/core_paths.rs`, criterion) — in-process hot paths:
+1. **Micro-benchmarks** (`service/benches/core_paths.rs`, criterion) — in-process hot paths:
    CQL parsing/filtering, GML serialization, coordinate transforms, bitmap-font
    label rendering, vector map rendering (PNG), MVT encoding, WKB round-trip.
 
@@ -204,10 +209,10 @@ Two complementary layers (planned in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLA
    cargo bench --bench core_paths -- cql         # one group (name substring)
    ```
 
-   Results land under `target/criterion/`; re-runs compare against the previous
+   Results land under `service/target/criterion/`; re-runs compare against the previous
    baseline and flag regressions.
 
-2. **HTTP load harness** (`tests/perf_test.rs`, `#[ignore]`) — end-to-end: boots a real
+2. **HTTP load harness** (`service/tests/perf_test.rs`, `#[ignore]`) — end-to-end: boots a real
    server seeded with a 400-point layer, drives concurrent load over REST / WMS
    GetCapabilities / WMS GetMap / WFS GetFeature / tiles and prints throughput +
    p50/p95/p99 latency per scenario.
@@ -226,7 +231,7 @@ Two complementary layers (planned in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLA
 
 ## 8. Troubleshooting
 
-- **Backend can't find the UI** → ensure `./static/` contains a built frontend, or run `SKIP_FRONTEND=1 cargo run` together with `npm start` on :4200.
+- **Backend can't find the UI** → ensure `service/static/` contains a built frontend, or run `SKIP_FRONTEND=1 cargo run` together with `npm start` on :4200.
 - **Config error falls back silently** → a `[config] WARNING` is printed to stderr; keep required keys complete (`[server] host/port/api_context`, `[[workspaces]]`, `[cache] cache_dir/meta_dir` when present).
 - **Port 5432 conflict** → docker-compose maps PostgreSQL to host port `5433`.
 - **Frontend proxy not working** → verify `proxy.conf.json` routes and that the backend runs on `:8080`.

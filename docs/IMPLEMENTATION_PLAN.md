@@ -50,14 +50,14 @@ Overall progress ████████████████░░  87%
 >   **Disk Quota + conditional refresh (304) ✅** (plus: custom Gridset registration ✅).
 > - **Security 7 items** (auditable, see §P3): CORS/CSRF ✅, user/group/role ✅,
 >   REST API auth ✅, layer-level permissions ✅, frontend login ✅ —
->   **LDAP enterprise identity ✅** (`src/utils/ldap.rs`, `[security.ldap]`,
+>   **LDAP enterprise identity ✅** (`service/src/utils/ldap.rs`, `[security.ldap]`,
 >   login fallback + auto-provision), **GeoFence fine-grained ACL ✅**
->   (`src/utils/geofence.rs`, `[security] geofence_enabled`, per-request
+>   (`service/src/utils/geofence.rs`, `[security] geofence_enabled`, per-request
 >   workspace/store/layer rules enforced on WMS/WFS/WCS) → 7/7 (100%).
 > - **Cloud-Native 7 items** (auditable, see §6.1): containerization ✅,
 >   12-Factor config ✅, observability ✅, lifecycle ✅, CI/CD ✅, resilience ✅ —
 >   **statelessness/scalability ✅** (env-injectable credentials via
->   `src/utils/secrets.rs` — K8s Secrets style, never persisted/logged; S3/MinIO
+>   `service/src/utils/secrets.rs` — K8s Secrets style, never persisted/logged; S3/MinIO
 >   object-storage uploads for shared multi-replica data) → 7/7 (100%).
 
 ---
@@ -259,8 +259,8 @@ Overall progress ████████████████░░  87%
 - ✅ **REST API authentication** — Bearer token + `require_auth()` middleware
 - ✅ **Layer-level permissions** — Permission model + CRUD + matching rule engine
 - ✅ **Frontend security** — login page (LoginComponent) + AuthInterceptor + default admin `admin / geoserver`
-- ✅ **Enterprise identity (LDAP)** — `src/utils/ldap.rs`: `[security.ldap]` (url/base_dn/bind/user_filter/admin_group/default_role); login falls back to an LDAP bind when the local user is missing or the password is rejected, auto-provisioning the local user with the group-mapped role; RFC 4514 DN escaping; live test `#[ignore]`
-- ✅ **Fine-grained GeoFence ACL** — `src/utils/geofence.rs`: per-request `workspace / store / layer` rules over the `/permissions` model (most-specific rule wins, deny overrides ties, mode hierarchy admin ⊇ write ⊇ read, open default); opt-in via `[security] geofence_enabled`, enforced on WMS GetMap/GetFeatureInfo, WFS GetFeature/GetFeatureWithLock/LockFeature/GetPropertyValue/GetGmlObject, WCS GetCoverage and OGC API Maps; admin bypass; 403 on deny
+- ✅ **Enterprise identity (LDAP)** — `service/src/utils/ldap.rs`: `[security.ldap]` (url/base_dn/bind/user_filter/admin_group/default_role); login falls back to an LDAP bind when the local user is missing or the password is rejected, auto-provisioning the local user with the group-mapped role; RFC 4514 DN escaping; live test `#[ignore]`
+- ✅ **Fine-grained GeoFence ACL** — `service/src/utils/geofence.rs`: per-request `workspace / store / layer` rules over the `/permissions` model (most-specific rule wins, deny overrides ties, mode hierarchy admin ⊇ write ⊇ read, open default); opt-in via `[security] geofence_enabled`, enforced on WMS GetMap/GetFeatureInfo, WFS GetFeature/GetFeatureWithLock/LockFeature/GetPropertyValue/GetGmlObject, WCS GetCoverage and OGC API Maps; admin bypass; 403 on deny
 
 ### P4 — Extensions
 
@@ -371,21 +371,21 @@ Overall progress ████████████████░░  87%
 ### 5.3 Testing Strategy
 
 - Unit + integration suites are in place (native Rust `#[cfg(test)]` unit tests;
-  `actix-rt` HTTP integration tests split by protocol under `tests/` — see
+  `actix-rt` HTTP integration tests split by protocol under `service/tests/` — see
   [DEVELOPMENT.md](DEVELOPMENT.md) §7). Remaining plans:
   - **OGC CITE tests**: reference the GeoServer CITE test suite to verify standards compliance
   - **Performance test suite ✅ (v1.1)**:
-    - *Micro-benchmarks* (`cargo bench`, `benches/core_paths.rs` — criterion) over
-      hot paths: GML serialization (`src/utils/gml.rs`), CQL/ECQL filter parsing,
-      coordinate transforms (`src/utils/geometry.rs`), label rendering
-      (`src/utils/bitmap_font.rs`), map rendering (`render_map`) and MVT encoding
-    - *HTTP load harness* ✅: `#[ignore]` perf test `tests/perf_test.rs`
+    - *Micro-benchmarks* (`cargo bench`, `service/benches/core_paths.rs` — criterion) over
+      hot paths: GML serialization (`service/src/utils/gml.rs`), CQL/ECQL filter parsing,
+      coordinate transforms (`service/src/utils/geometry.rs`), label rendering
+      (`service/src/utils/bitmap_font.rs`), map rendering (`render_map`) and MVT encoding
+    - *HTTP load harness* ✅: `#[ignore]` perf test `service/tests/perf_test.rs`
       (invoked like the live PostGIS/CascadedWMS tests) driving REST / WMS
       GetMap / WFS GetFeature / WMTS tiles against a real embedded server,
       reporting throughput + p50/p95/p99 latency; tunable via `PERF_REQUESTS` /
       `PERF_CONCURRENCY` / `PERF_WARMUP`
     - *Regression tracking*: criterion compares each re-run against the previous
-      baseline (`target/criterion/`) so performance regressions surface during review
+      baseline (`service/target/criterion/`) so performance regressions surface during review
 
 ### 5.4 Documentation Plan
 
@@ -413,19 +413,19 @@ Overall progress ████████████████░░  87%
 | Dimension | Current State | Gap | Priority |
 |------|------|------|:-----:|
 | **Containerization** | Multi-stage `Dockerfile` + `.dockerignore` + `build/docker-compose.yml` (dev deps: PostGIS + Redis + MinIO; app via `--profile terrane`); image `HEALTHCHECK` based on `/health/ready` | CI image build/push/scan not wired into a real repo yet | **P0 ✅** |
-| **12-Factor config** | `terrane.toml` + `GEOSERVER__` env var prefix; `load_from_file()` mounts `config::Environment` | Default `host=127.0.0.1` (Dockerfile env sets 0.0.0.0); JWT secret default hardcoded in `src/auth.rs` | **P0 ✅** |
-| **Statelessness / scalability** | Config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster data sources registered per data source (persisted in metadata store, `file_path` + `file_storage_type`); cache local (`src/store/cache/`); layers/styles cached in memory `Arc<RwLock<...>>` (`src/state.rs`); **env-injectable credentials** (`src/utils/secrets.rs`: `${ENV_VAR}` interpolation at connection build — K8s Secrets style, never persisted/logged); **S3/MinIO uploads** (`/data/upload/geotiff?storage=s3` → `file_storage_type=s3`, shared across replicas) | In-memory state still diverges across replicas (bounded by periodic + event-driven catalog refresh); SQLite remains single-writer for standalone mode — production HA uses PostgreSQL metadata + Redis cache + shared object storage | **P1 ✅** |
+| **12-Factor config** | `service/terrane.toml` + `GEOSERVER__` env var prefix; `load_from_file()` mounts `config::Environment` | Default `host=127.0.0.1` (Dockerfile env sets 0.0.0.0); JWT secret default hardcoded in `service/src/auth.rs` | **P0 ✅** |
+| **Statelessness / scalability** | Config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster data sources registered per data source (persisted in metadata store, `file_path` + `file_storage_type`); cache local (`service/src/store/cache/`); layers/styles cached in memory `Arc<RwLock<...>>` (`service/src/state.rs`); **env-injectable credentials** (`service/src/utils/secrets.rs`: `${ENV_VAR}` interpolation at connection build — K8s Secrets style, never persisted/logged); **S3/MinIO uploads** (`/data/upload/geotiff?storage=s3` → `file_storage_type=s3`, shared across replicas) | In-memory state still diverges across replicas (bounded by periodic + event-driven catalog refresh); SQLite remains single-writer for standalone mode — production HA uses PostgreSQL metadata + Redis cache + shared object storage | **P1 ✅** |
 | **Observability** | stdout logs (tracing); split probes `/health/live` & `/health/ready`; Prometheus `/metrics` (requests/errors, method/status/endpoint, tile cache hit rate, PG pool watermarks, system); **structured JSON logs (`[logging] format = "json"`) + request-level `trace_id` done** | OpenTelemetry tracing pending | **P1 ✅** |
 | **Lifecycle** | SIGTERM/SIGINT graceful shutdown + `shutdown_timeout_secs` draining in-flight requests (`main.rs`) | — | **P1 ✅** |
 | **CI/CD & security** | GitHub Actions CI created (`.github/workflows/ci.yml`: fmt + clippy + test + frontend build + GHCR push); **Trivy image scan + Dependabot auto-update added** | Not yet verified against a real repository; GitLab CI optional | **P2 ✅** |
-| **Resilience** | CORS defaults to `["*"]`; rate limiting / request-timeout middleware **done** (`src/middleware.rs`, `[server]` config, HTTP 429/504); **cascaded WMS retry/backoff + circuit breaking done** (`src/utils/cascaded.rs`, `[server]` config `cascaded_max_retries` / `cascaded_retry_base_ms` / `cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, per-upstream circuit breakers) | — | **P2 ✅** |
+| **Resilience** | CORS defaults to `["*"]`; rate limiting / request-timeout middleware **done** (`service/src/middleware.rs`, `[server]` config, HTTP 429/504); **cascaded WMS retry/backoff + circuit breaking done** (`service/src/utils/cascaded.rs`, `[server]` config `cascaded_max_retries` / `cascaded_retry_base_ms` / `cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, per-upstream circuit breakers) | — | **P2 ✅** |
 
 ### 6.2 Phased Roadmap
 
 #### Phase 0: Containerization Foundations (~1 week) ✅
 
-- ✅ Multi-stage `Dockerfile`: `node` stage builds the frontend → `rust` stage `cargo build --release` → debian-slim runtime image (binary + `static/` only, non-root)
-- ✅ `.dockerignore` (excludes `target/`, `frontend/node_modules/`, `static/`, `data/`, etc.)
+- ✅ Multi-stage `Dockerfile`: `node` stage builds the frontend → `rust` stage `cargo build --release` → debian-slim runtime image (binary + `service/static/` only, non-root)
+- ✅ `.dockerignore` (excludes `service/target/`, `frontend/node_modules/`, `service/static/`, `service/data/`, etc.)
 - ✅ Built-in image `HEALTHCHECK` (based on `/health/ready`)
 - ✅ `build/docker-compose.yml`: one command brings up dev deps (PostGIS + Redis + MinIO); app optional via `--profile terrane`
 - ✅ Runtime default `host=0.0.0.0`; `static_dir` / `data_dir` / `sqlite_path` / `gwc` overridable via env (Dockerfile `ENV`)
@@ -433,7 +433,7 @@ Overall progress ████████████████░░  87%
 #### Phase 1: 12-Factor Configuration & Observability ✅
 
 - ✅ Unified config loading: `load_from_file()` mounts `config::Environment` (`GEOSERVER__` prefix); env overrides file config
-- ⚠️ JWT secret: `GEOSERVER__SECURITY__JWT_SECRET` injection supported; default still hardcoded in `src/auth.rs` — production must inject explicitly
+- ⚠️ JWT secret: `GEOSERVER__SECURITY__JWT_SECRET` injection supported; default still hardcoded in `service/src/auth.rs` — production must inject explicitly
 - ✅ Split health probes: `/health/live` (liveness) + `/health/ready` (metadata/business stores ready, 200/503)
 - ✅ Structured JSON logs (tracing JSON layer, `[logging] format = "json"`) with request-level `trace_id` (middleware generates/pass-throughs `X-Trace-Id`/`X-Request-Id`, echoed in response headers; default `text` stays human-readable)
 - ✅ Prometheus `/metrics`: request/error counts, method/status/endpoint distribution, tile cache hit rate, PG pool watermarks, system resources (hand-written pure-Rust text format, zero external deps)
@@ -443,11 +443,11 @@ Overall progress ████████████████░░  87%
 
 #### Phase 2: State Convergence & Scalability
 
-- ✅ Storage: config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster file data sources registered per data source (persisted in metadata store) with `file_path` + `file_storage_type` (local / s3 / oss); cache stays built-in local (`TileCacheBackend` + `SessionCache` traits in `src/store/cache/`) — local backends in place
-- ✅ **Redis cache data source** (redesigned): Redis as a data source (`DataSourceType::Redis`, persisted in metadata `data_sources`, host/port/database/username/password); tile layers select a cache backend via `Layer.cache_store` (default in-memory/local, or a named Redis data source); `src/store/cache/redis.rs` provides `RedisConn` + `redis_url_from_connection`; `RedisTileCacheBackend` (`src/store/cache/tile.rs`) keyed by data-source URL; tile render paths (`render_tile_bytes` / `get_tile`) resolve per layer; connection test supports Redis PING
+- ✅ Storage: config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster file data sources registered per data source (persisted in metadata store) with `file_path` + `file_storage_type` (local / s3 / oss); cache stays built-in local (`TileCacheBackend` + `SessionCache` traits in `service/src/store/cache/`) — local backends in place
+- ✅ **Redis cache data source** (redesigned): Redis as a data source (`DataSourceType::Redis`, persisted in metadata `data_sources`, host/port/database/username/password); tile layers select a cache backend via `Layer.cache_store` (default in-memory/local, or a named Redis data source); `service/src/store/cache/redis.rs` provides `RedisConn` + `redis_url_from_connection`; `RedisTileCacheBackend` (`service/src/store/cache/tile.rs`) keyed by data-source URL; tile render paths (`render_tile_bytes` / `get_tile`) resolve per layer; connection test supports Redis PING
 - ✅ **In-memory catalog refresh mechanism**: periodically reloads layers/styles/layer-groups from the metadata store into the in-memory cache to converge replicas (`[server] catalog_refresh_secs`, 0 = disabled; `state.rs::refresh_catalog_from_store`, background tokio task, update/add by name without delete); **event-driven refresh**: REST layer update/delete immediately reloads the in-memory catalog via `AppState::refresh_catalog`, eliminating the write-after-read-stale window for WMS/WMTS/tile paths
 - ✅ **Object-storage uploads (s3 / minio)**: `/data/upload/geotiff?storage=s3&bucket=…` writes the object through `S3FileStore` and registers the data source with `file_storage_type = "s3"`, so uploaded rasters are shared across replicas (**no S3 tile-cache backend** — cache backends remain local + Redis data source only)
-- ✅ **Credential management (K8s Secrets style)**: `src/utils/secrets.rs` resolves `${ENV_VAR}` references in data-source passwords / S3 keys at connection-build time (postgres/mysql/mongo/redis/S3) — secrets are injected via env (K8s Secrets) and are never persisted in plaintext nor logged (`redact` masks them)
+- ✅ **Credential management (K8s Secrets style)**: `service/src/utils/secrets.rs` resolves `${ENV_VAR}` references in data-source passwords / S3 keys at connection-build time (postgres/mysql/mongo/redis/S3) — secrets are injected via env (K8s Secrets) and are never persisted in plaintext nor logged (`redact` masks them)
 - ⏳ Session management: **no Redis session cache** by design — simple JWT + metadata-store sessions (`SessionCache` is only a local fast-path)
 - ⏳ `data_dir` / upload file storage abstraction: shared PVC / object storage for arbitrary uploads (pending; GeoTIFF S3 upload covers the raster path)
 
@@ -455,9 +455,9 @@ Overall progress ████████████████░░  87%
 
 - ⚠️ CI (GitHub Actions) created (`.github/workflows/ci.yml`): `cargo fmt + clippy + test` + frontend build + docker build/push (ghcr, tagged by git sha); not yet verified against a real repository
 - ✅ Images tagged by git sha; Trivy image scanning + Dependabot dependency updates added
-- ✅ **Credential management**: data source passwords / S3 keys injectable via `${ENV_VAR}` env references (K8s Secrets), resolved at connection build, never logged (`src/utils/secrets.rs`); direct K8s Secret volume-mount integration is deployment-side
-- ✅ Resilience middleware: request timeout (504) + sliding-window rate limiting (429, per client IP / X-Forwarded-For) — `src/middleware.rs`, enabled via `[server]` config (`request_timeout_secs` / `rate_limit_max_requests` / `rate_limit_window_secs`)
-- ✅ Cascaded WMS resilience: exponential-backoff retry on transient failures (timeout/conn-fail/429/5xx) (`cascaded_max_retries` / `cascaded_retry_base_ms`) + per-upstream circuit breaker (`cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, open → half-open probe → closed/reopen) — `src/utils/cascaded.rs`, `AppState.cascaded_circuits`
+- ✅ **Credential management**: data source passwords / S3 keys injectable via `${ENV_VAR}` env references (K8s Secrets), resolved at connection build, never logged (`service/src/utils/secrets.rs`); direct K8s Secret volume-mount integration is deployment-side
+- ✅ Resilience middleware: request timeout (504) + sliding-window rate limiting (429, per client IP / X-Forwarded-For) — `service/src/middleware.rs`, enabled via `[server]` config (`request_timeout_secs` / `rate_limit_max_requests` / `rate_limit_window_secs`)
+- ✅ Cascaded WMS resilience: exponential-backoff retry on transient failures (timeout/conn-fail/429/5xx) (`cascaded_max_retries` / `cascaded_retry_base_ms`) + per-upstream circuit breaker (`cascaded_circuit_threshold` / `cascaded_circuit_reset_secs`, open → half-open probe → closed/reopen) — `service/src/utils/cascaded.rs`, `AppState.cascaded_circuits`
 - ✅ Dependency & image security: CI docker job runs Trivy image vulnerability scan (CRITICAL/HIGH, SARIF uploaded to GitHub Security tab); `.github/dependabot.yml` auto-updates cargo / npm / GitHub Actions deps
 
 ### 6.3 Target Deployment Architecture

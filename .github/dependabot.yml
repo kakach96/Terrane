@@ -2,7 +2,7 @@ version: 2
 updates:
   # Rust 后端依赖
   - package-ecosystem: cargo
-    directory: "/"
+    directory: "/service"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10

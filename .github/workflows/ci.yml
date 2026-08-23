@@ -18,6 +18,9 @@ jobs:
   backend:
     name: Backend (fmt + clippy + test)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: service
     steps:
       - name: Checkout
         uses: actions/checkout@v7

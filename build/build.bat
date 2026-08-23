@@ -66,10 +66,10 @@ echo Frontend build OK
 echo.
 
 echo [Step 3/4] Copying frontend to static...
-if exist "static" (
-    rmdir /s /q static
+if exist "service\static" (
+    rmdir /s /q service\static
 )
-xcopy /s /e /i "frontend\dist\terrane-ui\browser" "static" >nul
+xcopy /s /e /i "frontend\dist\terrane-ui\browser" "service\static" >nul
 if errorlevel 1 (
     echo ERROR: Copy to static failed
     exit /b 1
@@ -81,7 +81,7 @@ goto build_rust_section
 
 :skip_frontend_section
 echo [Step 1/3] Skipping frontend build
-if not exist "static" (
+if not exist "service\static" (
     echo ERROR: static directory not found
     exit /b 1
 )
@@ -91,9 +91,9 @@ echo.
 :build_rust_section
 echo [Step 3/4] Building Rust backend (%BUILD_MODE%)...
 if %BUILD_MODE%==release (
-    cargo build --release
+    cargo build --release --manifest-path service\Cargo.toml
 ) else (
-    cargo build
+    cargo build --manifest-path service\Cargo.toml
 )
 if errorlevel 1 (
     echo ERROR: Rust build failed
@@ -104,23 +104,23 @@ echo.
 
 echo [Step 4/4] Copying config file to artifact directory...
 if %BUILD_MODE%==release (
-    set ARTIFACT_DIR=target\release
+    set ARTIFACT_DIR=service\target\release
 ) else (
-    set ARTIFACT_DIR=target\debug
+    set ARTIFACT_DIR=service\target\debug
 )
 if not exist "!ARTIFACT_DIR!" (
     mkdir "!ARTIFACT_DIR!"
 )
-rem Keep an existing config next to the artifact (users maintain target\<mode>\terrane.toml);
-rem only seed it from the repo root or the example template when it does not exist yet.
+rem Keep an existing config next to the artifact (users maintain service\target\<mode>\terrane.toml);
+rem only seed it from the service dir or the example template when it does not exist yet.
 if exist "!ARTIFACT_DIR!\terrane.toml" (
     echo Config kept: !ARTIFACT_DIR!\terrane.toml
 ) else (
-    if exist "terrane.toml" (
-        copy /y "terrane.toml" "!ARTIFACT_DIR!\terrane.toml" >nul
+    if exist "service\terrane.toml" (
+        copy /y "service\terrane.toml" "!ARTIFACT_DIR!\terrane.toml" >nul
         echo Config copied: !ARTIFACT_DIR!\terrane.toml
     ) else (
-        copy /y "terrane.toml.example" "!ARTIFACT_DIR!\terrane.toml" >nul
+        copy /y "service\terrane.toml.example" "!ARTIFACT_DIR!\terrane.toml" >nul
         echo Config template copied as: !ARTIFACT_DIR!\terrane.toml
     )
 )
@@ -129,29 +129,29 @@ echo.
 if %BUILD_MODE%==release (
     echo [Step 5/5] Preparing release package...
     
-    set RELEASE_DIR=target\release\release-package
+    set RELEASE_DIR=service\target\release\release-package
     if exist "!RELEASE_DIR!" (
         rmdir /s /q "!RELEASE_DIR!"
     )
     mkdir "!RELEASE_DIR!"
     
     echo Copying executable...
-    copy "target\release\terrane.exe" "!RELEASE_DIR!\" >nul
+    copy "service\target\release\terrane.exe" "!RELEASE_DIR!\" >nul
     
     echo Copying static files...
-    xcopy /s /e /i "static" "!RELEASE_DIR!\static" >nul
+    xcopy /s /e /i "service\static" "!RELEASE_DIR!\static" >nul
     
     echo Copying config file...
-    if exist "terrane.toml" (
-        copy "terrane.toml" "!RELEASE_DIR!\" >nul
+    if exist "service\terrane.toml" (
+        copy "service\terrane.toml" "!RELEASE_DIR!\" >nul
         echo Config file copied
     ) else (
         echo No config file found, skipping
     )
 
     echo Copying config template...
-    if exist "terrane.toml.example" (
-        copy "terrane.toml.example" "!RELEASE_DIR!\" >nul
+    if exist "service\terrane.toml.example" (
+        copy "service\terrane.toml.example" "!RELEASE_DIR!\" >nul
         echo Config template copied
     )
 
@@ -176,12 +176,12 @@ if %BUILD_MODE%==release (
 echo ==================== Build Complete ====================
 echo.
 if %BUILD_MODE%==release (
-    echo Release package: target\release\release-package\
-    echo Executable: target\release\release-package\terrane.exe
+    echo Release package: service\target\release\release-package\
+    echo Executable: service\target\release\release-package\terrane.exe
 ) else (
-    echo Executable: target\debug\terrane.exe
+    echo Executable: service\target\debug\terrane.exe
 )
-echo Frontend: static\
+echo Frontend: service\static\
 echo.
 
 endlocal

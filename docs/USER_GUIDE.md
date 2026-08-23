@@ -15,7 +15,7 @@
 ```bash
 # Full build (frontend + backend), then start
 ./build/build.sh          # Windows: ./build/build.bat
-cargo run                 # serves http://127.0.0.1:8080
+cd service && cargo run   # serves http://127.0.0.1:8080
 ```
 
 Open **http://localhost:8080** — the Angular admin console is served by the
@@ -312,7 +312,7 @@ curl http://localhost:8080/geoserver/permissions/check/layer/pois -H "Authorizat
 ```
 
 Enable the fine-grained **GeoFence** engine (per-request enforcement on
-WMS/WFS/WCS) with `[security] geofence_enabled = true` in `terrane.toml`.
+WMS/WFS/WCS) with `[security] geofence_enabled = true` in `service/terrane.toml`.
 
 ---
 
@@ -331,14 +331,14 @@ Graceful shutdown drains in-flight requests (`shutdown_timeout_secs`);
 structured JSON logs + `trace_id` via `[logging] format = "json"`.
 
 Performance validation: run the bundled benchmarks and HTTP load harness
-(`cargo bench`, `cargo test --test perf_test -- --ignored --nocapture`) —
+(`cd service && cargo bench`, `cd service && cargo test --test perf_test -- --ignored --nocapture`) —
 see [DEVELOPMENT.md](DEVELOPMENT.md) §7.
 
 ---
 
 ## 8. Configuration Pointers
 
-Configuration precedence: **CLI flags > environment variables > terrane.toml >
+Configuration precedence: **CLI flags > environment variables > service/terrane.toml >
 defaults**. Common knobs:
 
 | Setting              | Env var / config key                              |
@@ -358,7 +358,7 @@ The full variable table, Docker guidance and troubleshooting live in
 
 | Symptom                            | Fix                                                                  |
 |------------------------------------|----------------------------------------------------------------------|
-| UI blank / assets 404              | Ensure `./static/` contains a frontend build (or dev-mode via `npm start`) |
+| UI blank / assets 404              | Ensure `service/static/` contains a frontend build (or dev-mode via `npm start`) |
 | Preview shows empty map            | Check layer bounds vs data extent; verify CRS matches request SRS     |
 | WMS returns ServiceException XML   | Read the exception text — usually bad BBOX order or unknown layer    |
 | Login rejected after restart       | Sessions persist in the metadata DB; check SQLite/PostgreSQL path     |
