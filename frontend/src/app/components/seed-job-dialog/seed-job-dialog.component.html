@@ -1,0 +1,62 @@
+<h2 mat-dialog-title>{{ 'tileLayers.seedDialogTitle' | translate }}</h2>
+<mat-dialog-content>
+  <form [formGroup]="form" class="seed-form">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'tileLayers.selectLayer' | translate }}</mat-label>
+      <mat-select formControlName="layer">
+        <mat-option
+          *ngFor="let layer of data.layers; trackBy: trackByIndex"
+          [value]="layer"
+          >{{ layer }}</mat-option
+        >
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'tileLayers.operation' | translate }}</mat-label>
+      <mat-select formControlName="operation">
+        <mat-option value="seed">{{ 'tileLayers.opSeed' | translate }}</mat-option>
+        <mat-option value="truncate">{{ 'tileLayers.opTruncate' | translate }}</mat-option>
+        <mat-option value="reseed">{{ 'tileLayers.opReseed' | translate }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'tileLayers.gridset' | translate }}</mat-label>
+      <mat-select formControlName="gridset">
+        <mat-option value="EPSG:4326">EPSG:4326</mat-option>
+        <mat-option value="EPSG:3857">EPSG:3857</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <div class="zoom-range">
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'tileLayers.zMin' | translate }}</mat-label>
+        <input matInput type="number" formControlName="z_min" min="0" max="22" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'tileLayers.zMax' | translate }}</mat-label>
+        <input matInput type="number" formControlName="z_max" min="0" max="22" />
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'tileLayers.format' | translate }}</mat-label>
+      <mat-select formControlName="format">
+        <mat-option value="png">PNG</mat-option>
+        <mat-option value="jpeg">JPEG</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-error *ngIf="form.errors?.['range']" class="range-error">
+      {{ 'tileLayers.zoomRangeError' | translate }}
+    </mat-error>
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()">{{ 'confirmDialog.cancel' | translate }}</button>
+  <button mat-raised-button color="primary" [disabled]="form.invalid" (click)="onSubmit()">
+    <mat-icon>play_arrow</mat-icon>
+    {{ 'tileLayers.startJob' | translate }}
+  </button>
+</mat-dialog-actions>

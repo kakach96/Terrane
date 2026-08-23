@@ -381,3 +381,51 @@ export interface TileCacheResult {
   cleared?: number;
   message?: string;
 }
+
+/** 瓦片种子任务状态 (GWC 风格) */
+export type SeedStatus = 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Cancelled';
+
+/** 瓦片种子任务 (GWC 风格 seed / truncate) */
+export interface SeedJob {
+  id: string;
+  layer: string;
+  gridset: string;
+  z_min: number;
+  z_max: number;
+  format: string;
+  status: SeedStatus;
+  total: number;
+  done: number;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 创建种子任务请求 (POST /tiles/seed) */
+export interface SeedRequest {
+  layer: string;
+  gridset?: string;
+  z_min: number;
+  z_max: number;
+  format?: string;
+}
+
+/** 截断瓦片缓存请求 (POST /tiles/seed/truncate) */
+export interface TruncateRequest {
+  layer: string;
+  gridset?: string;
+}
+
+/** 种子任务创建结果 */
+export interface SeedJobResult {
+  job: SeedJob;
+  message: string;
+}
+
+/** 截断瓦片缓存结果 */
+export interface TruncateResult {
+  layer: string;
+  gridset?: string;
+  removed: number;
+  message: string;
+}

@@ -44,6 +44,7 @@ import { DataSourcesComponent } from './components/data-sources/data-sources.com
 import { DataSourceDialogComponent } from './components/data-sources/data-source-dialog/data-source-dialog.component';
 import { DirectoryBrowserComponent } from './components/shared/directory-browser/directory-browser.component';
 import { TileLayersComponent } from './components/tile-layers/tile-layers.component';
+import { SeedJobDialogComponent } from './components/seed-job-dialog/seed-job-dialog.component';
 import { StylesComponent } from './components/styles/styles.component';
 import { StyleEditorDialogComponent } from './components/styles/style-editor-dialog.component';
 import { LayerGroupsComponent } from './components/layer-groups/layer-groups.component';
@@ -86,6 +87,7 @@ const routes: Routes = [
     DataSourceDialogComponent,
     DirectoryBrowserComponent,
     TileLayersComponent,
+    SeedJobDialogComponent,
     StylesComponent,
     StyleEditorDialogComponent,
     LayerGroupsComponent,

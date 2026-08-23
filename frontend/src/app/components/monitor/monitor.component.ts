@@ -11,13 +11,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { LanguageService } from '../../services/language.service';
-import { MonitorStats, RequestRecord, AuditLogEntry } from '../../models/geoserver.models';
+import { MonitorStats, RequestRecord, AuditLogEntry, TileCacheStats } from '../../models/geoserver.models';
 import { switchMap, map, startWith, catchError, of, combineLatest, interval } from 'rxjs';
 
 interface MonitorData {
   stats: MonitorStats | null;
   requests: RequestRecord[];
   audit: AuditLogEntry[];
+  tileCache: TileCacheStats | null;
 }
 
 @Component({
@@ -50,20 +51,26 @@ export class MonitorComponent {
         ),
         this.geoserver.getRecentRequests(50).pipe(catchError(() => of([] as RequestRecord[]))),
         this.geoserver.getAuditLogs(50, 0).pipe(catchError(() => of([] as AuditLogEntry[]))),
+        this.geoserver
+          .getTileCacheStats()
+          .pipe(catchError(() => of(null as TileCacheStats | null))),
       ]).pipe(
-        map(([stats, requests, audit]) => ({ stats, requests, audit } as MonitorData)),
+        map(([stats, requests, audit, tileCache]) =>
+          ({ stats, requests, audit, tileCache } as MonitorData),
+        ),
       ),
     ),
   );
 
   private data = toSignal(this.monitorData$, {
-    initialValue: { stats: null, requests: [], audit: [] } as MonitorData,
+    initialValue: { stats: null, requests: [], audit: [], tileCache: null } as MonitorData,
   });
 
   // Derived signals
   stats = computed(() => this.data().stats);
   recentRequests = computed(() => this.data().requests);
   auditLogs = computed(() => this.data().audit);
+  tileCacheStats = computed(() => this.data().tileCache);
   loading = computed(() => this.data().stats === null && !this.error);
 
   // ── Computed chart data ───────────────────────────────────────────

@@ -1,139 +1,212 @@
-<div class="page-header">
-  <div>
-    <h1>{{ 'tileLayers.title' | translate }}</h1>
-    <p class="subtitle">{{ 'tileLayers.subtitle' | translate }}</p>
+<div class="tile-layers-page fade-in">
+  <div class="page-header">
+    <div>
+      <h1>{{ 'tileLayers.title' | translate }}</h1>
+      <p class="subtitle">{{ 'tileLayers.subtitle' | translate }}</p>
+    </div>
   </div>
-  <button mat-raised-button color="warn" (click)="clearAllCache()" [disabled]="loading()">
-    <mat-icon>delete_sweep</mat-icon>
-    {{ 'tileLayers.clearAll' | translate }}
-  </button>
-</div>
 
-<!-- 缓存统计卡片 -->
-<div class="stats-grid" *ngIf="cacheStats()">
-  <mat-card class="stat-card">
+  <!-- 切片图层 (对标 GeoServer CachedLayersPage) -->
+  <mat-card class="layers-card">
+    <mat-card-header class="layers-card-header">
+      <mat-card-title>{{ 'tileLayers.cachedLayersTitle' | translate }}</mat-card-title>
+      <mat-card-subtitle>{{ 'tileLayers.cachedLayersSubtitle' | translate }}</mat-card-subtitle>
+    </mat-card-header>
     <mat-card-content>
-      <div class="stat-value">{{ cacheStats()!.hits }}</div>
-      <div class="stat-label">{{ 'tileLayers.statHits' | translate }}</div>
-    </mat-card-content>
-  </mat-card>
-  <mat-card class="stat-card">
-    <mat-card-content>
-      <div class="stat-value">{{ cacheStats()!.misses }}</div>
-      <div class="stat-label">{{ 'tileLayers.statMisses' | translate }}</div>
-    </mat-card-content>
-  </mat-card>
-  <mat-card class="stat-card">
-    <mat-card-content>
-      <div class="stat-value">{{ (cacheStats()!.hitRate * 100).toFixed(1) }}%</div>
-      <div class="stat-label">{{ 'tileLayers.statHitRate' | translate }}</div>
-    </mat-card-content>
-  </mat-card>
-  <mat-card class="stat-card">
-    <mat-card-content>
-      <div class="stat-value">{{ cacheStats()!.totalTiles }}</div>
-      <div class="stat-label">{{ 'tileLayers.statTotalTiles' | translate }}</div>
-    </mat-card-content>
-  </mat-card>
-  <mat-card class="stat-card">
-    <mat-card-content>
-      <div class="stat-value">{{ cacheStats()!.cacheSizeMb || '0 MB' }}</div>
-      <div class="stat-label">{{ 'tileLayers.statCacheSize' | translate }}</div>
-    </mat-card-content>
-  </mat-card>
-  <mat-card class="stat-card">
-    <mat-card-content>
-      <div class="stat-value">
-        <mat-icon [style.color]="cacheStats()!.enabled ? '#4caf50' : '#f44336'">
-          {{ cacheStats()!.enabled ? 'check_circle' : 'cancel' }}
-        </mat-icon>
+      <div class="table-toolbar">
+        <mat-form-field
+          appearance="outline"
+          class="search-field"
+          subscriptSizing="dynamic"
+        >
+          <mat-label>{{ 'tileLayers.searchLabel' | translate }}</mat-label>
+          <mat-icon matPrefix>search</mat-icon>
+          <input
+            matInput
+            [ngModel]="searchQuery()"
+            (ngModelChange)="searchQuery.set($event)"
+            placeholder="{{ 'tileLayers.searchPlaceholder' | translate }}"
+          />
+        </mat-form-field>
+        <button
+          mat-icon-button
+          (click)="refresh()"
+          matTooltip="{{ 'tileLayers.refreshStats' | translate }}"
+        >
+          <mat-icon>refresh</mat-icon>
+        </button>
+        <div class="toolbar-spacer"></div>
+        <button mat-raised-button color="primary" (click)="openSeedDialog()">
+          <mat-icon>play_arrow</mat-icon>
+          {{ 'tileLayers.newSeedJob' | translate }}
+        </button>
+        <button mat-raised-button color="warn" (click)="clearAllCache()" [disabled]="loading()">
+          <mat-icon>delete_sweep</mat-icon>
+          {{ 'tileLayers.clearAll' | translate }}
+        </button>
       </div>
-      <div class="stat-label">
-        {{
-          cacheStats()!.enabled
-            ? ('tileLayers.cacheEnabled' | translate)
-            : ('tileLayers.cacheDisabled' | translate)
-        }}
+
+      <div *ngIf="loading()" class="loading-container">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
+
+      <div *ngIf="!loading() && filteredLayers().length === 0" class="empty-state">
+        <mat-icon class="empty-icon">grid_off</mat-icon>
+        <p>{{ 'tileLayers.emptyLayers' | translate }}</p>
+      </div>
+
+      <div class="table-container" *ngIf="!loading() && filteredLayers().length > 0">
+        <table mat-table [dataSource]="filteredLayers()" class="layers-table">
+          <ng-container matColumnDef="layer">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colLayer' | translate }}</th>
+            <td mat-cell *matCellDef="let layer">
+              <div class="layer-cell">
+                <mat-icon class="layer-icon">layers</mat-icon>
+                <div>
+                  <div class="layer-name">{{ layer.name }}</div>
+                  <div class="layer-meta">{{ layer.workspace }} · {{ layer.srs }}</div>
+                </div>
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="cache">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colCache' | translate }}</th>
+            <td mat-cell *matCellDef="let layer">
+              <mat-chip [class.redis]="!!layer.cache_store">
+                <mat-icon>{{ layer.cache_store ? 'storage' : 'memory' }}</mat-icon>
+                {{ layer.cache_store || ('tileLayers.defaultCache' | translate) }}
+              </mat-chip>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="gridsets">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colGridsets' | translate }}</th>
+            <td mat-cell *matCellDef="let layer">
+              <span class="gridset-chip">EPSG:4326</span>
+              <span class="gridset-chip">EPSG:3857</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="enabled">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colEnabled' | translate }}</th>
+            <td mat-cell *matCellDef="let layer">
+              <mat-icon [style.color]="layer.enabled ? '#4caf50' : '#f44336'">
+                {{ layer.enabled ? 'check_circle' : 'cancel' }}
+              </mat-icon>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colActions' | translate }}</th>
+            <td mat-cell *matCellDef="let layer">
+              <button
+                mat-icon-button
+                matTooltip="{{ 'tileLayers.seed' | translate }}"
+                (click)="openSeedDialog(layer)"
+              >
+                <mat-icon>play_arrow</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                matTooltip="{{ 'tileLayers.truncate' | translate }}"
+                (click)="truncateLayer(layer)"
+              >
+                <mat-icon>delete_outline</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                matTooltip="{{ 'tileLayers.clearCache' | translate }}"
+                (click)="clearLayerCache(layer)"
+              >
+                <mat-icon>cleaning_services</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- 种子任务 (GWC 风格 seed / truncate) -->
+  <mat-card class="jobs-card">
+    <mat-card-header>
+      <mat-card-title>{{ 'tileLayers.seedJobsTitle' | translate }}</mat-card-title>
+      <mat-card-subtitle>{{ 'tileLayers.seedJobsSubtitle' | translate }}</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div *ngIf="seedJobs().length === 0" class="empty-state">
+        <mat-icon class="empty-icon">history</mat-icon>
+        <p>{{ 'tileLayers.emptyJobs' | translate }}</p>
+      </div>
+
+      <div class="table-container" *ngIf="seedJobs().length > 0">
+        <table mat-table [dataSource]="seedJobs()" class="jobs-table">
+          <ng-container matColumnDef="layer">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colLayer' | translate }}</th>
+            <td mat-cell *matCellDef="let job">{{ job.layer }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="gridset">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colGridset' | translate }}</th>
+            <td mat-cell *matCellDef="let job">{{ job.gridset }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="zoom">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colZoom' | translate }}</th>
+            <td mat-cell *matCellDef="let job">z{{ job.z_min }} – z{{ job.z_max }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="format">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colFormat' | translate }}</th>
+            <td mat-cell *matCellDef="let job">{{ job.format | uppercase }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colStatus' | translate }}</th>
+            <td mat-cell *matCellDef="let job">
+              <mat-chip [class]="'status-chip status-' + job.status.toLowerCase()">
+                {{ 'tileLayers.status.' + job.status | translate }}
+              </mat-chip>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="progress">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colProgress' | translate }}</th>
+            <td mat-cell *matCellDef="let job">
+              <div class="progress-cell">
+                <mat-progress-bar
+                  mode="determinate"
+                  [value]="jobProgress(job)"
+                  [color]="job.status === 'Failed' ? 'warn' : 'primary'"
+                ></mat-progress-bar>
+                <span class="progress-text">{{ job.done }} / {{ job.total }}</span>
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>{{ 'tileLayers.colActions' | translate }}</th>
+            <td mat-cell *matCellDef="let job">
+              <button
+                mat-icon-button
+                color="warn"
+                matTooltip="{{ 'tileLayers.cancelJob' | translate }}"
+                [disabled]="job.status !== 'Pending' && job.status !== 'Running'"
+                (click)="cancelSeedJob(job)"
+              >
+                <mat-icon>stop_circle</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="jobColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: jobColumns"></tr>
+        </table>
       </div>
     </mat-card-content>
   </mat-card>
 </div>
-
-<!-- 缓存管理 -->
-<mat-card class="manage-card">
-  <mat-card-header>
-    <mat-card-title>{{ 'tileLayers.manageTitle' | translate }}</mat-card-title>
-  </mat-card-header>
-  <mat-card-content>
-    <div class="cache-controls">
-      <mat-form-field appearance="outline" class="layer-select">
-        <mat-label>{{ 'tileLayers.selectLayer' | translate }}</mat-label>
-        <mat-select [(ngModel)]="selectedLayer">
-          <mat-option *ngFor="let layer of availableLayers(); trackBy: trackByIndex" [value]="layer">
-            {{ layer }}
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
-
-      <button
-        mat-raised-button
-        color="primary"
-        (click)="clearLayerCache()"
-        [disabled]="!selectedLayer || loading()"
-      >
-        <mat-icon>cleaning_services</mat-icon>
-        {{ 'tileLayers.clearLayer' | translate }}
-      </button>
-
-      <button mat-raised-button (click)="refreshStats()" [disabled]="loading()">
-        <mat-icon>refresh</mat-icon>
-        {{ 'tileLayers.refreshStats' | translate }}
-      </button>
-    </div>
-  </mat-card-content>
-</mat-card>
-
-<!-- 瓦片图层服务 -->
-<mat-card class="layers-card">
-  <mat-card-header>
-    <mat-card-title>{{ 'tileLayers.tileServiceTitle' | translate }}</mat-card-title>
-    <mat-card-subtitle>{{ 'tileLayers.tileServiceSubtitle' | translate }}</mat-card-subtitle>
-  </mat-card-header>
-  <mat-card-content>
-    <div class="endpoint-info">
-      <h3>{{ 'tileLayers.urlFormat' | translate }}</h3>
-      <code
-        >/tiles/&#123;layer&#125;/&#123;z&#125;/&#123;x&#125;/&#123;y&#125;?gridset=EPSG:4326</code
-      >
-      <h3>{{ 'tileLayers.gridsets' | translate }}</h3>
-      <ul>
-        <li><code>EPSG:4326</code> — {{ 'tileLayers.grid4326' | translate }}</li>
-        <li><code>EPSG:3857</code> — {{ 'tileLayers.grid3857' | translate }}</li>
-      </ul>
-      <h3>{{ 'tileLayers.wmtsService' | translate }}</h3>
-      <p>{{ 'tileLayers.wmtsDesc' | translate }}</p>
-      <ul>
-        <li>
-          <strong>GetCapabilities</strong> —
-          <code>/wmts?SERVICE=WMTS&amp;REQUEST=GetCapabilities</code>
-        </li>
-        <li>
-          <strong>GetTile</strong> —
-          <code
-            >/wmts?SERVICE=WMTS&amp;REQUEST=GetTile&amp;LAYER=...&amp;TILEMATRIXSET=...&amp;TILEMATRIX=...&amp;TILEROW=...&amp;TILECOL=...</code
-          >
-        </li>
-        <li>
-          <strong>RESTful</strong> —
-          <code
-            >/wmts/&#123;layer&#125;/&#123;tileMatrixSet&#125;/&#123;tileMatrix&#125;/&#123;tileCol&#125;/&#123;tileRow&#125;</code
-          >
-        </li>
-        <li>
-          <strong>GetFeatureInfo</strong> —
-          <code>/wmts?SERVICE=WMTS&amp;REQUEST=GetFeatureInfo&amp;...</code>
-        </li>
-      </ul>
-    </div>
-  </mat-card-content>
-</mat-card>

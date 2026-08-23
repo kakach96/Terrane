@@ -73,6 +73,69 @@
       </mat-card>
     </div>
 
+    <!-- 瓦片缓存 (GeoWebCache) -->
+    <mat-card class="section-card" *ngIf="tileCacheStats()">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>grid_view</mat-icon>
+        <mat-card-title>{{ 'monitor.tileCache' | translate }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="stats-grid">
+          <mat-card class="stat-card">
+            <mat-card-content>
+              <div class="stat-icon"><mat-icon>touch_app</mat-icon></div>
+              <div class="stat-value">{{ tileCacheStats()!.hits }}</div>
+              <div class="stat-label">{{ 'monitor.tileHits' | translate }}</div>
+            </mat-card-content>
+          </mat-card>
+          <mat-card class="stat-card">
+            <mat-card-content>
+              <div class="stat-icon"><mat-icon>block</mat-icon></div>
+              <div class="stat-value">{{ tileCacheStats()!.misses }}</div>
+              <div class="stat-label">{{ 'monitor.tileMisses' | translate }}</div>
+            </mat-card-content>
+          </mat-card>
+          <mat-card class="stat-card">
+            <mat-card-content>
+              <div class="stat-icon"><mat-icon>percent</mat-icon></div>
+              <div class="stat-value">{{ (tileCacheStats()!.hitRate * 100).toFixed(1) }}%</div>
+              <div class="stat-label">{{ 'monitor.tileHitRate' | translate }}</div>
+            </mat-card-content>
+          </mat-card>
+          <mat-card class="stat-card">
+            <mat-card-content>
+              <div class="stat-icon"><mat-icon>grid_on</mat-icon></div>
+              <div class="stat-value">{{ tileCacheStats()!.totalTiles }}</div>
+              <div class="stat-label">{{ 'monitor.tileTotalTiles' | translate }}</div>
+            </mat-card-content>
+          </mat-card>
+          <mat-card class="stat-card">
+            <mat-card-content>
+              <div class="stat-icon"><mat-icon>storage</mat-icon></div>
+              <div class="stat-value">{{ tileCacheStats()!.cacheSizeMb || '0 MB' }}</div>
+              <div class="stat-label">{{ 'monitor.tileCacheSize' | translate }}</div>
+            </mat-card-content>
+          </mat-card>
+          <mat-card class="stat-card">
+            <mat-card-content>
+              <div class="stat-icon"><mat-icon>power_settings_new</mat-icon></div>
+              <div
+                class="stat-value"
+                [style.color]="tileCacheStats()!.enabled ? '#4caf50' : '#f44336'"
+              >
+                {{
+                  tileCacheStats()!.enabled
+                    ? ('monitor.tileEnabled' | translate)
+                    : ('monitor.tileDisabled' | translate)
+                }}
+              </div>
+              <div class="stat-label">{{ 'monitor.tileStatus' | translate }}</div>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
     <!-- 系统信息 -->
     <mat-card class="section-card">
       <mat-card-header>

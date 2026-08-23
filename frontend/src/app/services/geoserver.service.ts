@@ -35,6 +35,10 @@ import {
   SqlViewParameter,
   TileCacheStats,
   TileCacheResult,
+  SeedJob,
+  SeedRequest,
+  SeedJobResult,
+  TruncateResult,
   User,
 } from '../models/geoserver.models';
 import { transformBounds } from '../utils/coords';
@@ -236,6 +240,39 @@ export class GeoserverService {
     return this.http
       .delete<ApiResponse<TileCacheResult>>(`${this.apiUrl}/tiles/cache/clear/${layerName}`)
       .pipe(map((response) => response.data as TileCacheResult));
+  }
+
+  // ---- 瓦片种子任务 (GWC 风格 seed / truncate) ----
+
+  /** 创建并启动种子任务 (seed / reseed 走 POST /tiles/seed) */
+  createSeedJob(request: SeedRequest): Observable<SeedJobResult> {
+    return this.http
+      .post<ApiResponse<SeedJobResult>>(`${this.apiUrl}/tiles/seed`, request)
+      .pipe(map((response) => response.data as SeedJobResult));
+  }
+
+  /** 列出所有种子任务 */
+  getSeedJobs(): Observable<SeedJob[]> {
+    return this.http
+      .get<ApiResponse<SeedJob[]>>(`${this.apiUrl}/tiles/seed`)
+      .pipe(map((response) => response.data || []));
+  }
+
+  /** 取消运行中的种子任务 (协作式) */
+  cancelSeedJob(id: string): Observable<{ job: string; message: string }> {
+    return this.http
+      .delete<ApiResponse<{ job: string; message: string }>>(`${this.apiUrl}/tiles/seed/${id}`)
+      .pipe(map((response) => response.data as { job: string; message: string }));
+  }
+
+  /** 截断 (清除) 图层的缓存瓦片, 可按 gridset */
+  truncateTileCache(layer: string, gridset?: string): Observable<TruncateResult> {
+    return this.http
+      .post<ApiResponse<TruncateResult>>(`${this.apiUrl}/tiles/seed/truncate`, {
+        layer,
+        gridset,
+      })
+      .pipe(map((response) => response.data as TruncateResult));
   }
 
   // ---- SQL 视图 ----
