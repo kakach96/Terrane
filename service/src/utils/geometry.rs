@@ -1,5 +1,5 @@
 use crate::models::{Bounds, GeoJsonGeometry};
-use geo::{Area, BoundingRect, Contains, Coord, GeodesicDistance, HaversineLength, Intersects};
+use geo::{Area, BoundingRect, Contains, Coord, Distance, Geodesic, Haversine, Intersects, Length};
 use geo_types::{Geometry, Rect};
 use proj4rs::proj::Proj;
 
@@ -166,7 +166,7 @@ pub fn calculate_distance(geom1: &GeoJsonGeometry, geom2: &GeoJsonGeometry) -> O
     let geo2 = geom2.to_geo();
 
     match (&geo1, &geo2) {
-        (Geometry::Point(p1), Geometry::Point(p2)) => Some(p1.geodesic_distance(p2)),
+        (Geometry::Point(p1), Geometry::Point(p2)) => Some(Geodesic.distance(*p1, *p2)),
         _ => None,
     }
 }
@@ -179,8 +179,8 @@ pub fn calculate_area(geometry: &GeoJsonGeometry) -> f64 {
 pub fn calculate_length(geometry: &GeoJsonGeometry) -> f64 {
     let geo = geometry.to_geo();
     match &geo {
-        Geometry::LineString(ls) => ls.haversine_length(),
-        Geometry::Polygon(p) => p.exterior().haversine_length(),
+        Geometry::LineString(ls) => Haversine.length(ls),
+        Geometry::Polygon(p) => Haversine.length(p.exterior()),
         _ => 0.0,
     }
 }
