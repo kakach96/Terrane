@@ -219,7 +219,15 @@ impl AppState {
         }
 
         let features_layers = if all_layers.is_empty() {
-            // 开箱即用: 自动创建内置 world 图层 (store = metadata)。
+            // 开箱即用: 首次启动自动注册内置示例数据 (opt-in via [samples] enabled),
+            // 再创建内置 world 图层 (store = metadata)。
+            let mut seeded: Vec<Layer> = Vec::new();
+            if config.samples.enabled {
+                if let Some(ref store) = store {
+                    seeded = crate::utils::samples::seed_samples(&config, store).await;
+                }
+            }
+
             // metadata 数据源为内置选项, 被当作普通数据源看待: postgres 元数据模式
             // 复用同一 PG 发布业务表 / sqlite 元数据模式不承载业务表。
             let world_layer = Layer::new(
@@ -251,7 +259,8 @@ impl AppState {
                     })
                     .await;
             }
-            vec![world_layer]
+            seeded.push(world_layer);
+            seeded
         } else {
             all_layers.clone()
         };

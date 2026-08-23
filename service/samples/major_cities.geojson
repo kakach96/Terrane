@@ -1,0 +1,31 @@
+{
+  "type": "FeatureCollection",
+  "name": "major_cities",
+  "features": [
+    { "type": "Feature", "id": "cities-1",  "geometry": { "type": "Point", "coordinates": [116.40, 39.90] }, "properties": { "name": "Beijing", "country": "China", "population": 21.5, "capital": true } },
+    { "type": "Feature", "id": "cities-2",  "geometry": { "type": "Point", "coordinates": [121.47, 31.23] }, "properties": { "name": "Shanghai", "country": "China", "population": 24.9, "capital": false } },
+    { "type": "Feature", "id": "cities-3",  "geometry": { "type": "Point", "coordinates": [139.69, 35.69] }, "properties": { "name": "Tokyo", "country": "Japan", "population": 37.4, "capital": true } },
+    { "type": "Feature", "id": "cities-4",  "geometry": { "type": "Point", "coordinates": [126.98, 37.57] }, "properties": { "name": "Seoul", "country": "South Korea", "population": 9.9, "capital": true } },
+    { "type": "Feature", "id": "cities-5",  "geometry": { "type": "Point", "coordinates": [103.82, 1.35] }, "properties": { "name": "Singapore", "country": "Singapore", "population": 5.7, "capital": true } },
+    { "type": "Feature", "id": "cities-6",  "geometry": { "type": "Point", "coordinates": [72.88, 19.08] }, "properties": { "name": "Mumbai", "country": "India", "population": 20.7, "capital": false } },
+    { "type": "Feature", "id": "cities-7",  "geometry": { "type": "Point", "coordinates": [77.10, 28.61] }, "properties": { "name": "New Delhi", "country": "India", "population": 32.9, "capital": true } },
+    { "type": "Feature", "id": "cities-8",  "geometry": { "type": "Point", "coordinates": [55.27, 25.20] }, "properties": { "name": "Dubai", "country": "UAE", "population": 3.5, "capital": false } },
+    { "type": "Feature", "id": "cities-9",  "geometry": { "type": "Point", "coordinates": [37.62, 55.76] }, "properties": { "name": "Moscow", "country": "Russia", "population": 12.5, "capital": true } },
+    { "type": "Feature", "id": "cities-10", "geometry": { "type": "Point", "coordinates": [-0.13, 51.51] }, "properties": { "name": "London", "country": "United Kingdom", "population": 9.5, "capital": true } },
+    { "type": "Feature", "id": "cities-11", "geometry": { "type": "Point", "coordinates": [2.35, 48.86] }, "properties": { "name": "Paris", "country": "France", "population": 11.1, "capital": true } },
+    { "type": "Feature", "id": "cities-12", "geometry": { "type": "Point", "coordinates": [13.40, 52.52] }, "properties": { "name": "Berlin", "country": "Germany", "population": 3.6, "capital": true } },
+    { "type": "Feature", "id": "cities-13", "geometry": { "type": "Point", "coordinates": [-74.01, 40.71] }, "properties": { "name": "New York", "country": "United States", "population": 18.8, "capital": false } },
+    { "type": "Feature", "id": "cities-14", "geometry": { "type": "Point", "coordinates": [-118.24, 34.05] }, "properties": { "name": "Los Angeles", "country": "United States", "population": 12.5, "capital": false } },
+    { "type": "Feature", "id": "cities-15", "geometry": { "type": "Point", "coordinates": [-87.63, 41.88] }, "properties": { "name": "Chicago", "country": "United States", "population": 8.9, "capital": false } },
+    { "type": "Feature", "id": "cities-16", "geometry": { "type": "Point", "coordinates": [-79.38, 43.65] }, "properties": { "name": "Toronto", "country": "Canada", "population": 6.2, "capital": false } },
+    { "type": "Feature", "id": "cities-17", "geometry": { "type": "Point", "coordinates": [-99.13, 19.43] }, "properties": { "name": "Mexico City", "country": "Mexico", "population": 21.8, "capital": true } },
+    { "type": "Feature", "id": "cities-18", "geometry": { "type": "Point", "coordinates": [-46.63, -23.55] }, "properties": { "name": "Sao Paulo", "country": "Brazil", "population": 22.4, "capital": false } },
+    { "type": "Feature", "id": "cities-19", "geometry": { "type": "Point", "coordinates": [-58.38, -34.60] }, "properties": { "name": "Buenos Aires", "country": "Argentina", "population": 15.2, "capital": true } },
+    { "type": "Feature", "id": "cities-20", "geometry": { "type": "Point", "coordinates": [31.24, 30.04] }, "properties": { "name": "Cairo", "country": "Egypt", "population": 21.3, "capital": true } },
+    { "type": "Feature", "id": "cities-21", "geometry": { "type": "Point", "coordinates": [3.38, 6.52] }, "properties": { "name": "Lagos", "country": "Nigeria", "population": 15.4, "capital": false } },
+    { "type": "Feature", "id": "cities-22", "geometry": { "type": "Point", "coordinates": [36.82, -1.29] }, "properties": { "name": "Nairobi", "country": "Kenya", "population": 4.7, "capital": true } },
+    { "type": "Feature", "id": "cities-23", "geometry": { "type": "Point", "coordinates": [151.21, -33.87] }, "properties": { "name": "Sydney", "country": "Australia", "population": 5.3, "capital": false } },
+    { "type": "Feature", "id": "cities-24", "geometry": { "type": "Point", "coordinates": [106.85, -6.21] }, "properties": { "name": "Jakarta", "country": "Indonesia", "population": 10.9, "capital": true } },
+    { "type": "Feature", "id": "cities-25", "geometry": { "type": "Point", "coordinates": [100.50, 13.76] }, "properties": { "name": "Bangkok", "country": "Thailand", "population": 10.7, "capital": true } }
+  ]
+}

@@ -32,6 +32,9 @@ pub struct GeoServerConfig {
     /// WFS 服务配置 (要素锁等)
     #[serde(default)]
     pub wfs: WfsConfig,
+    /// 内置示例数据配置 (首次启动自动注册示例数据源 + 图层)
+    #[serde(default)]
+    pub samples: SamplesConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -130,6 +133,35 @@ pub struct WfsConfig {
     /// LockFeature / GetFeatureWithLock 未显式传 EXPIRY 时使用。
     #[serde(default = "default_wfs_lock_timeout")]
     pub lock_timeout_secs: u64,
+}
+
+/// 内置示例数据配置 — 首次启动 (目录为空) 时自动注册示例数据源 + 图层,
+/// 让产品开箱即用。示例文件从 `source_dir` 复制到 `<data_dir>/samples/`。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SamplesConfig {
+    /// 是否在首次启动时自动注册内置示例数据 (默认: true)
+    #[serde(default = "default_samples_enabled")]
+    pub enabled: bool,
+    /// 内置示例文件所在目录 (默认: "./samples")
+    #[serde(default = "default_samples_source_dir")]
+    pub source_dir: PathBuf,
+}
+
+fn default_samples_enabled() -> bool {
+    true
+}
+
+fn default_samples_source_dir() -> PathBuf {
+    PathBuf::from("./samples")
+}
+
+impl Default for SamplesConfig {
+    fn default() -> Self {
+        SamplesConfig {
+            enabled: default_samples_enabled(),
+            source_dir: default_samples_source_dir(),
+        }
+    }
 }
 
 /// PostgreSQL 连接配置 (仅 kind = "postgres" 时生效)
@@ -586,6 +618,7 @@ impl Default for GeoServerConfig {
             workspaces: vec![],
             cors: CorsConfig::default(),
             wfs: WfsConfig::default(),
+            samples: SamplesConfig::default(),
         }
     }
 }

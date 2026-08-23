@@ -50,6 +50,9 @@ fn perf_config() -> terrane::config::GeoServerConfig {
     config.server.port = 0;
     config.metadata.sqlite_path = ":memory:".into();
 
+    // Keep the benchmark catalog controlled: no built-in sample seeding.
+    config.samples.enabled = false;
+
     // Keep all file writes inside a per-run temp directory.
     let tmp = std::env::temp_dir().join(format!("terrane-perf-{}", std::process::id()));
     config.data_dir = tmp.clone();

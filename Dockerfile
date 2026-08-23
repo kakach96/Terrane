@@ -115,6 +115,8 @@ WORKDIR /app
 
 COPY --from=builder   /build/target/release/terrane /app/terrane
 COPY --from=frontend  /app/dist/terrane-ui          /app/static
+# Built-in sample data (seeded into /data/samples on first startup)
+COPY service/samples/ /app/samples/
 
 # Data dir: metadata sqlite + business data + tile cache + uploads (mountable volume)
 RUN mkdir -p /data \

@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "name": "sample_routes",
+  "features": [
+    { "type": "Feature", "id": "routes-1",  "geometry": { "type": "LineString", "coordinates": [[116.40, 39.90], [121.47, 31.23]] }, "properties": { "route": "Beijing-Shanghai", "from": "Beijing", "to": "Shanghai", "distance_km": 1080 } },
+    { "type": "Feature", "id": "routes-2",  "geometry": { "type": "LineString", "coordinates": [[116.40, 39.90], [139.69, 35.69]] }, "properties": { "route": "Beijing-Tokyo", "from": "Beijing", "to": "Tokyo", "distance_km": 2100 } },
+    { "type": "Feature", "id": "routes-3",  "geometry": { "type": "LineString", "coordinates": [[116.40, 39.90], [-0.13, 51.51]] }, "properties": { "route": "Beijing-London", "from": "Beijing", "to": "London", "distance_km": 8160 } },
+    { "type": "Feature", "id": "routes-4",  "geometry": { "type": "LineString", "coordinates": [[121.47, 31.23], [103.82, 1.35]] }, "properties": { "route": "Shanghai-Singapore", "from": "Shanghai", "to": "Singapore", "distance_km": 3800 } },
+    { "type": "Feature", "id": "routes-5",  "geometry": { "type": "LineString", "coordinates": [[139.69, 35.69], [126.98, 37.57]] }, "properties": { "route": "Tokyo-Seoul", "from": "Tokyo", "to": "Seoul", "distance_km": 1160 } },
+    { "type": "Feature", "id": "routes-6",  "geometry": { "type": "LineString", "coordinates": [[-0.13, 51.51], [2.35, 48.86]] }, "properties": { "route": "London-Paris", "from": "London", "to": "Paris", "distance_km": 344 } },
+    { "type": "Feature", "id": "routes-7",  "geometry": { "type": "LineString", "coordinates": [[-0.13, 51.51], [-74.01, 40.71]] }, "properties": { "route": "London-New York", "from": "London", "to": "New York", "distance_km": 5570 } },
+    { "type": "Feature", "id": "routes-8",  "geometry": { "type": "LineString", "coordinates": [[-74.01, 40.71], [-118.24, 34.05]] }, "properties": { "route": "New York-Los Angeles", "from": "New York", "to": "Los Angeles", "distance_km": 3940 } },
+    { "type": "Feature", "id": "routes-9",  "geometry": { "type": "LineString", "coordinates": [[-118.24, 34.05], [151.21, -33.87]] }, "properties": { "route": "Los Angeles-Sydney", "from": "Los Angeles", "to": "Sydney", "distance_km": 12070 } },
+    { "type": "Feature", "id": "routes-10", "geometry": { "type": "LineString", "coordinates": [[55.27, 25.20], [72.88, 19.08]] }, "properties": { "route": "Dubai-Mumbai", "from": "Dubai", "to": "Mumbai", "distance_km": 1930 } },
+    { "type": "Feature", "id": "routes-11", "geometry": { "type": "LineString", "coordinates": [[37.62, 55.76], [116.40, 39.90]] }, "properties": { "route": "Moscow-Beijing", "from": "Moscow", "to": "Beijing", "distance_km": 5840 } },
+    { "type": "Feature", "id": "routes-12", "geometry": { "type": "LineString", "coordinates": [[31.24, 30.04], [36.82, -1.29]] }, "properties": { "route": "Cairo-Nairobi", "from": "Cairo", "to": "Nairobi", "distance_km": 3500 } },
+    { "type": "Feature", "id": "routes-13", "geometry": { "type": "LineString", "coordinates": [[-46.63, -23.55], [-58.38, -34.60]] }, "properties": { "route": "Sao Paulo-Buenos Aires", "from": "Sao Paulo", "to": "Buenos Aires", "distance_km": 1720 } },
+    { "type": "Feature", "id": "routes-14", "geometry": { "type": "LineString", "coordinates": [[151.21, -33.87], [106.85, -6.21]] }, "properties": { "route": "Sydney-Jakarta", "from": "Sydney", "to": "Jakarta", "distance_km": 5500 } }
+  ]
+}

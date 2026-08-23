@@ -185,3 +185,18 @@ minx = -180.0
 miny = -90.0
 maxx = 180.0
 maxy = 90.0
+
+# ---------------------------------------------------------------------------
+# Built-in sample data (optional)
+# On first startup (empty catalog) the backend copies the curated sample files
+# from source_dir into <data_dir>/samples/ and auto-registers a "demo"
+# workspace with one GeoJSON data source + layer per dataset, so the product
+# demos out-of-the-box. Existing installs are never modified.
+# ---------------------------------------------------------------------------
+[samples]
+# Auto-register built-in sample data on first startup (default: true)
+# Env: GEOSERVER__SAMPLES__ENABLED
+enabled = true
+# Directory that holds the curated sample files (default: "./samples")
+# Env: GEOSERVER__SAMPLES__SOURCE_DIR
+source_dir = "./samples"

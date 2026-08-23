@@ -72,13 +72,11 @@ state lives in external stores, so replicas stay stateless and interchangeable.
     `/mvt/{layer}/{z}/{x}/{y}` endpoints
   - Relax the `getMapImageUrl` format type constraint (`'image/png' | 'image/jpeg'` → all
     supported formats) and add i18n labels for every new format
-- **Built-in sample data** — only `data/geojson/uploaded_layer.geojson` exists today;
-  integration tests generate fixtures at runtime (GeoTIFF / ArcGrid) and the built-in
-  `world` layer carries no business data in SQLite metadata mode. Plan:
-  - Add a curated `data/samples/` set (GeoJSON point/line/polygon, Shapefile, GeoTIFF,
-    world-map data) mirroring GeoServer's sample data
-  - Seed/init mechanism: auto-register sample data sources + layers on first startup
-    (opt-in via config), so the product demos out-of-the-box
+- **Built-in sample data** — ✅ **done (GeoJSON set)**: a curated `service/samples/`
+  set (GeoJSON point/line/polygon + simplified world-map data) is now shipped and
+  auto-registered on first startup (opt-in via `[samples] enabled`, default true) into a
+  `demo` workspace, so the product demos out-of-the-box. Remaining (deferred):
+  - Shapefile / GeoTIFF sample files (binary formats — not yet curated)
   - Reuse the samples in integration tests, replacing runtime-generated fixtures
 - **Database cluster connections** — `DataSourceConnection` and the PostGIS / MySQL /
   MongoDB pool builders (`service/src/state.rs`) only support a single `host`/`port`; the
@@ -147,7 +145,10 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - **Test suite** — unit (`#[cfg(test)]`) and protocol-split integration tests exist (see [DEVELOPMENT.md](DEVELOPMENT.md) §7); still missing a **performance test suite** (micro-benchmarks + HTTP load harness, planned for v1.1) and frontend tests (`ng test` untested).
 - **`geoserver` naming residue** — the codebase still uses `geoserver` in type names (`GeoServerConfig` / `GeoServerError` / `GeoServerBackup`), the `GEOSERVER__` env prefix, the default `/geoserver` API context, defaults (admin password, DB name, namespace, `geoserver.sqlite`), frontend files (`geoserver.service.ts` / `geoserver.models.ts`), tests, docs and Docker/CI env vars. Planned as a breaking-change migration in v1.2 (keep `GEOSERVER__` as a deprecated alias).
 - **Layer preview format gap** — the frontend preview only offers OpenLayers / PNG / JPEG while the backend WMS already emits SVG / KML / GeoJSON / GeoRSS / PDF / GIF / WebP; GeoServer parity (TIFF / Atom / UTFGrid / GML / MVT) is planned in v1.2.
-- **No built-in sample data** — only `service/data/geojson/uploaded_layer.geojson` exists; integration tests generate fixtures at runtime and the built-in `world` layer is empty in SQLite metadata mode. A curated `service/data/samples/` set + first-startup seeding is planned in v1.2.
+- **Sample data is GeoJSON-only** — a curated `service/samples/` set (points / lines /
+  simplified polygons) is shipped and auto-seeded on first startup (see v1.2 above);
+  Shapefile / GeoTIFF sample files and reusing the samples in integration tests are
+  still deferred.
 - **Database data sources are single-host only** — PostGIS / MySQL / MongoDB pools (`service/src/state.rs`) and the frontend dialog support one `host`/`port`; no cluster / replica-set / read-write separation. Planned in v1.2.
 - **Security-sensitive defaults**: CORS `["*"]` and hardcoded JWT secret — revisit before production.
 - **Broken doc link**: README referenced `BUILD_INTEGRATION.md`, which did not exist (fixed in this docs pass).

@@ -5,6 +5,7 @@ use crate::models::{
     UpdateDataSourceRequest, METADATA_DATA_SOURCE,
 };
 use crate::state::AppState;
+use crate::store::FileStore;
 use actix_web::{web, HttpRequest, HttpResponse};
 use std::time::Instant;
 
@@ -364,7 +365,76 @@ async fn test_datasource_connection(ds: &DataSource) -> serde_json::Value {
         DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => test_mosaic_connection(ds),
         DataSourceType::Mysql => test_mysql_connection(ds).await,
         DataSourceType::Mongo => test_mongo_connection(ds).await,
+        // 文件型数据源 (GeoJSON / Shapefile / GeoTIFF / GeoPackage / WorldImage /
+        // ArcGrid): 校验文件/对象是否存在, 而不是走 PostGIS 连接语义。
+        DataSourceType::GeoJson
+        | DataSourceType::Shapefile
+        | DataSourceType::Geotiff
+        | DataSourceType::Geopackage
+        | DataSourceType::WorldImage
+        | DataSourceType::ArcGrid => test_file_connection(ds).await,
         _ => test_postgis_connection(ds).await,
+    }
+}
+
+/// 文件型数据源连接测试: local → 校验文件存在; s3 → 校验对象可读。
+async fn test_file_connection(ds: &DataSource) -> serde_json::Value {
+    let conn = match &ds.connection {
+        Some(c) => c,
+        None => {
+            return serde_json::json!({
+                "success": false,
+                "message": "No connection configuration",
+            })
+        },
+    };
+    let file_path = match conn.file_path.as_deref().filter(|p| !p.trim().is_empty()) {
+        Some(p) => p,
+        None => {
+            return serde_json::json!({
+                "success": false,
+                "message": "No file path configured",
+            })
+        },
+    };
+    match crate::store::storage_type(conn) {
+        "local" => {
+            if std::path::Path::new(file_path).exists() {
+                serde_json::json!({
+                    "success": true,
+                    "message": format!("File exists: {}", file_path),
+                })
+            } else {
+                serde_json::json!({
+                    "success": false,
+                    "message": format!("File not found: {}", file_path),
+                })
+            }
+        },
+        "s3" => match crate::store::S3FileStore::from_connection(conn) {
+            Ok(store) => match store.get(file_path).await {
+                Ok(Some(_)) => serde_json::json!({
+                    "success": true,
+                    "message": format!("Object exists: {}", file_path),
+                }),
+                Ok(None) => serde_json::json!({
+                    "success": false,
+                    "message": format!("Object not found: {}", file_path),
+                }),
+                Err(e) => serde_json::json!({
+                    "success": false,
+                    "message": format!("S3 read failed: {}", e),
+                }),
+            },
+            Err(e) => serde_json::json!({
+                "success": false,
+                "message": format!("S3 config invalid: {}", e),
+            }),
+        },
+        other => serde_json::json!({
+            "success": false,
+            "message": format!("Unsupported file storage type: {}", other),
+        }),
     }
 }
 

@@ -16,6 +16,7 @@ pub mod mvt;
 pub mod projection;
 pub mod pyramid;
 pub mod rendering;
+pub mod samples;
 pub mod secrets;
 pub mod shapefile;
 pub mod shapefile_export;
