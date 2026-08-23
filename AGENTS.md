@@ -121,28 +121,28 @@ publishing & OGC protocol adaptation. WFS-T / WCS-T writes are not implemented y
 
 ## Pre-commit CI checks
 
-- **Always run the CI checks locally before every commit** and fix any reported
-  issues, so the CI pipeline does not fail after push. The checks mirror
-  `.github/workflows/ci.yml` (backend: fmt + clippy + test; frontend: build).
-  Frontend lint is an additional project quality gate (not in CI, but required).
+- **Run one full build locally before every commit** and fix any reported
+  issues, so the CI pipeline does not fail after push. The full build
+  (`./build/build.bat` on Windows / `./build/build.sh` on Unix) compiles the
+  frontend, copies it to `service/static/`, and builds the Rust backend — a
+  single pass that catches compile errors on both sides.
 
   ```powershell
-  # Backend
-  cd service
-  cargo fmt --all -- --check
-  cargo clippy --all-targets -- -D warnings
-  cargo test --all
+  # Windows
+  .\build\build.bat
 
-  # Frontend
-  cd frontend
-  npm run lint
-  npm run build
+  # Unix-like
+  ./build/build.sh
   ```
 
-- If any check fails, fix the reported issue and re-run until all pass **before**
-  committing. Do not commit with failing checks.
+- The full CI pipeline (fmt + clippy + test + frontend build) still runs on
+  push via `.github/workflows/ci.yml`; run the individual checks
+  (`cargo fmt` / `cargo clippy` / `cargo test` / `npm run lint`) only when you
+  are working on those specific areas.
+- If the build fails, fix the reported issue and re-run until it passes
+  **before** committing. Do not commit with a failing build.
 - Note: a running dev server locks `service/target/debug/terrane.exe`; stop it first
-  (`Stop-Process -Name terrane`) so `cargo clippy` / `cargo test` can rebuild.
+  (`Stop-Process -Name terrane`) so the backend build can relink.
 
 ## Commit Messages Stype
 
