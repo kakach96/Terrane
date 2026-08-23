@@ -49,7 +49,7 @@ actix-cors = "0.7"
 # 密码哈希 & JWT (安全性)
 sha2 = "0.11"
 hex = "0.4"
-jsonwebtoken = "9"
+jsonwebtoken = "11"
 rand = "0.10"
 serde_yaml = "0.9"
 # 异步 trait (Store 抽象层)
