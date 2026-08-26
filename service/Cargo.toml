@@ -8,11 +8,11 @@ description = "Terrane - Cloud-native, high-performance spatial data server, pow
 [dependencies]
 actix-web = "4"
 actix-rt = "2"
-actix-files = "0.6"
+actix-files = "0.7"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1"
-image = "0.24"
+image = "0.25"
 geo = "0.33"
 geo-types = "0.7"
 tracing = "0.1"
@@ -24,8 +24,8 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 quick-xml = { version = "0.41", features = ["serialize"] }
-sysinfo = "0.30"
-rusqlite = { version = "0.29", features = ["chrono", "bundled"] }
+sysinfo = "0.39"
+rusqlite = { version = "0.40", features = ["chrono", "bundled"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
 deadpool-postgres = "0.14"
 futures-util = "0.3.34"
@@ -43,13 +43,14 @@ zip = "8"
 # 临时文件
 tempfile = "3"
 # HTTP 客户端 (级联服务)
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 # CORS 中间件
 actix-cors = "0.7"
 # 密码哈希 & JWT (安全性)
 sha2 = "0.11"
 hex = "0.4"
-jsonwebtoken = "9"
+# jsonwebtoken 11 requires an explicit crypto provider feature (rust_crypto)
+jsonwebtoken = { version = "11", features = ["rust_crypto"] }
 rand = "0.10"
 serde_yaml = "0.9"
 # 异步 trait (Store 抽象层)
@@ -59,11 +60,11 @@ flate2 = "1"
 proj4rs = { version = "0.1.10", features = ["crs-definitions"] }
 # S3 对象存储 (AWS S3 / MinIO 等 S3 兼容服务); http-credentials 启用
 # Credentials::new 以便按数据源传入 access/secret key
-rust-s3 = { version = "0.34", features = ["http-credentials"] }
+rust-s3 = { version = "0.37", features = ["http-credentials"] }
 # Redis 缓存后端 (会话缓存 + 瓦片缓存; 多副本共享)
 redis = { version = "1", features = ["tokio-comp", "connection-manager"] }
-mysql_async = "0.34"
-mongodb = "2.8"
+mysql_async = "0.37"
+mongodb = "3.8"
 ldap3 = "0.12.1"
 
 [dev-dependencies]
@@ -75,9 +76,3 @@ criterion = { version = "0.8", default-features = false, features = ["cargo_benc
 [[bench]]
 name = "core_paths"
 harness = false
-
-[patch.crates-io]
-# proc-macro-error2 2.0.1 triggers the E0365 future-incompat lint
-# ("extern crate proc_macro is private and cannot be re-exported", rust#127909).
-# Vendored copy applies the compiler-suggested one-line fix (pub extern crate).
-proc-macro-error2 = { path = "vendor/proc-macro-error2" }

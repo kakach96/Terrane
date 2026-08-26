@@ -75,7 +75,7 @@ impl S3FileStore {
             .map_err(|e| StoreError::Other(format!("S3 bucket init error: {}", e)))?
             .with_path_style();
 
-        Ok(Self { bucket })
+        Ok(Self { bucket: *bucket })
     }
 
     /// List the bucket entries under a prefix (folders + objects), mirroring a

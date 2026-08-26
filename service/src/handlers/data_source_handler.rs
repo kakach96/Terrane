@@ -479,7 +479,7 @@ async fn test_mongo_connection(ds: &DataSource) -> serde_json::Value {
     };
     match client
         .database(database)
-        .run_command(mongodb::bson::doc! { "ping": 1 }, None)
+        .run_command(mongodb::bson::doc! { "ping": 1 })
         .await
     {
         Ok(_) => serde_json::json!({

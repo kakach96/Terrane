@@ -597,7 +597,7 @@ pub fn format_wms_exception(
                     img.as_raw(),
                     width.max(1),
                     height.max(1),
-                    image::ColorType::Rgba8,
+                    image::ColorType::Rgba8.into(),
                 )
                 .ok();
             (buf, "image/png")
@@ -612,7 +612,7 @@ pub fn format_wms_exception(
                     img.as_raw(),
                     width.max(1),
                     height.max(1),
-                    image::ColorType::Rgba8,
+                    image::ColorType::Rgba8.into(),
                 )
                 .ok();
             (buf, "image/png")

@@ -110,7 +110,7 @@ pub fn read_geotiff_metadata<P: AsRef<Path>>(path: P) -> Result<GeoTiffMetadata,
     let path = path.as_ref();
 
     // 使用 image crate 获取基本信息
-    let reader = image::io::Reader::open(path)
+    let reader = image::ImageReader::open(path)
         .map_err(|e| format!("无法打开 GeoTIFF '{:?}': {}", path, e))?
         .with_guessed_format()
         .map_err(|e| format!("格式检测失败: {}", e))?;

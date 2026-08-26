@@ -1112,7 +1112,7 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
         let img = RgbaImage::new(img_width, img_height);
         let mut buf = Vec::new();
         PngEncoder::new(&mut buf)
-            .write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8)
+            .write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8.into())
             .unwrap();
         return buf;
     }
@@ -1196,7 +1196,7 @@ pub fn render_map(features: &[Feature], img_width: u32, img_height: u32) -> Vec<
 
     let mut buf = Vec::new();
     PngEncoder::new(&mut buf)
-        .write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8)
+        .write_image(img.as_raw(), img_width, img_height, ColorType::Rgba8.into())
         .unwrap();
     buf
 }

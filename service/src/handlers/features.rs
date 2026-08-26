@@ -577,11 +577,9 @@ async fn query_mongo_features(
     };
 
     let limit_val = limit.unwrap_or(10000) as i64;
-    let opts = mongodb::options::FindOptions::builder()
-        .limit(Some(limit_val))
-        .build();
     let mut cursor = coll
-        .find(filter, Some(opts))
+        .find(filter)
+        .limit(limit_val)
         .await
         .map_err(|e| GeoServerError::InternalError(format!("MongoDB query error: {}", e)))?;
 
