@@ -1,6 +1,6 @@
 # Terrane Frontend — Project Summary
 
-> The frontend is built on **Angular 17 + Angular Material**. This document
+> The frontend is built on **Angular 22 + Angular Material**. This document
 > originally recorded the state of the initial rework and is updated as the
 > project evolves (last update: 2026-08).
 > See [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md),
@@ -10,12 +10,12 @@
 
 ## ✅ Completed Work
 
-### 1. Full Angular 17 Project Scaffold
+### 1. Full Angular 22 Project Scaffold
 
 A production-grade Angular application, including:
 
 #### Project configuration files
-- ✅ `package.json` — dependency configuration (Angular 17, Material 17, TypeScript 5.2)
+- ✅ `package.json` — dependency configuration (Angular 22, Material 22, TypeScript 6.0)
 - ✅ `angular.json` — Angular CLI configuration
 - ✅ `tsconfig.json` — TypeScript compilation configuration
 - ✅ `proxy.conf.json` — dev-server proxy configuration
@@ -256,7 +256,7 @@ backend/
 
 What you can learn from this project:
 
-1. **Angular 17 core concepts**
+1. **Angular 22 core concepts**
    - Modular architecture
    - Component communication
    - Dependency injection
@@ -302,9 +302,9 @@ What you can learn from this project:
 ## 📚 Tech Stack Summary
 
 ### Frontend
-- Angular 17
-- Angular Material 17
-- TypeScript 5.2
+- Angular 22
+- Angular Material 22
+- TypeScript 6.0
 - SCSS
 - RxJS 7.8
 
@@ -337,7 +337,7 @@ What you can learn from this project:
 
 ## 🎉 Project Highlights
 
-1. **Modern architecture** — uses the latest Angular 17 features
+1. **Modern architecture** — uses the latest Angular 22 features
 2. **Professional UI** — Material Design 3 design
 3. **Type safety** — full TypeScript support
 4. **Responsive design** — adapts to any screen

@@ -220,7 +220,7 @@ All REST endpoints live under the configurable context path (default `/geoserver
 - **Serde** - Serialization
 
 ### Frontend
-- **Angular 17** - Frontend framework
+- **Angular 22** - Frontend framework
 - **Angular Material** - UI component library
 - **TypeScript** - Type safety
 - **RxJS** - Reactive programming

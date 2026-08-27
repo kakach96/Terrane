@@ -7,7 +7,7 @@
 ## Project overview
 
 Terrane is a cloud-native spatial data server (a modern re-implementation of
-GeoServer) powered by a **Rust (Actix-web)** backend and an **Angular 17 +
+GeoServer) powered by a **Rust (Actix-web)** backend and an **Angular 22 +
 Material** frontend.
 
 - Architecture & API contracts: `docs/ARCHITECTURE.md`
@@ -20,7 +20,7 @@ Material** frontend.
 | Path        | Description                                                                  |
 | ----------- | ---------------------------------------------------------------------------- |
 | `service/`  | Rust backend — `service/src/handlers/` (REST + OGC WMS/WFS/WCS/WMTS), `models/`, `store/` (SQLite/PostgreSQL, vector/raster/cache), `routes.rs`; `static/` (built frontend), `tests/`, `benches/`, `Cargo.toml` |
-| `frontend/` | Angular 17 + Material — `src/app/components/`, `services/`, `models/`        |
+| `frontend/` | Angular 22 + Material — `src/app/components/`, `services/`, `models/`        |
 | `docs/`     | Architecture, protocols, roadmap, development guides                         |
 
 ## Key conventions

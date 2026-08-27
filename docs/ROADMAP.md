@@ -33,7 +33,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - REST API: workspaces / namespaces / layers / stores / data sources / styles / layer groups / sql views / permissions
 - Data sources: PostGIS, MySQL, MongoDB, Shapefile, GeoTIFF, GeoPackage, GeoJSON, WorldImage, CascadedWms, ArcGrid, ImageMosaic, ImagePyramid, Redis (cache backend)
 - Security: JWT auth, users/roles, layer-level permissions
-- Angular 17 + Material admin console
+- Angular 22 + Material admin console
 - Cloud-native foundation: multi-stage Docker image, `build/docker-compose.yml`, split health probes, Prometheus `/metrics`, graceful shutdown
 - WMS rendering engine: multi-geometry + opacity compositing + polygon holes + z-order + label (TextSymbolizer) rendering with collision avoidance; raster layers (GeoTIFF/WorldImage/ArcGrid/ImageMosaic) render in WMS GetMap and tiles
 - OGC core services 7/7: WMS / WFS (incl. LockFeature + GetFeatureWithLock + GetPropertyValue + GetGmlObject) / WCS (incl. range band subset + INTERPOLATION) / WMTS / WPS / CSW / OGC API series; WMS GetFeatureInfo GML output

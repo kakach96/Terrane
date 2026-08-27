@@ -24,7 +24,7 @@ service/           Rust backend service (Actix-web)
   tests/           Backend integration tests
   benches/         Micro-benchmarks (criterion)
   Cargo.toml       Rust crate manifest
-frontend/          Angular 17 + Material admin UI
+frontend/          Angular 22 + Material admin UI
 docs/              Architecture / Roadmap / Development guides
 ```
 

@@ -1,6 +1,6 @@
 # Terrane Frontend
 
-A modern Terrane admin interface built with Angular 17 and Angular Material.
+A modern Terrane admin interface built with Angular 22 and Angular Material.
 
 ## 🚀 Quick Start
 

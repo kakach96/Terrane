@@ -38,7 +38,7 @@ service/          — Rust backend service (Actix-web)
   benches/        — Micro-benchmarks (criterion)
   Cargo.toml      — Rust crate manifest
   terrane.toml.example — config template
-frontend/         — Angular 17 + Material
+frontend/         — Angular 22 + Material
   src/app/
     models/       — TypeScript interfaces (geoserver.models.ts)
     services/     — geoserver.service.ts (API client)
@@ -119,6 +119,11 @@ publishing & OGC protocol adaptation. WFS-T / WCS-T writes are not implemented y
 - **Comments & descriptions in English**: all comments, docstrings, file headers
   and descriptions in newly added files MUST be written in English (applies to
   Docker files, config templates, scripts, and code comments alike)
+- **Frontend UI style**: when building or modifying Angular frontend UI
+  (components, pages, dialogs, forms, tables, styles), follow the
+  `.github/skills/terrane-ui-style/SKILL.md` constraints — official Angular
+  Material components, design tokens from `frontend/src/styles.scss`, generous
+  whitespace, rounded corners, layered shadows, WCAG AA contrast
 
 ## Pre-commit CI checks
 

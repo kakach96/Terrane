@@ -23,7 +23,7 @@
 | Geometry        | geo / geo-types           | Pure-Rust geometry model and spatial predicates                                                   |
 | Raster rendering| image                     | Pure-Rust image encode/decode (PNG/JPEG map output, GeoTIFF read)                                 |
 | DB pools        | deadpool-postgres         | Async connection pooling; pools cached per data source in `AppState.pg_pools`                     |
-| Frontend        | Angular 17 + Material     | Componentized SPA, RxJS reactive data flow, Material design consistency                            |
+| Frontend        | Angular 22 + Material     | Componentized SPA, RxJS reactive data flow, Material design consistency                            |
 | Serialization   | serde / serde_json / quick-xml | Fast JSON + XML (OGC capabilities documents)                                                  |
 | Auth            | jsonwebtoken + sha2       | Stateless JWT auth; SHA-256 + salt password hashing                                               |
 

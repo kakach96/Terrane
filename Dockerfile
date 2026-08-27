@@ -39,7 +39,7 @@ ARG RUST_IMAGE=rust:1.95-bookworm
 ARG RUNTIME_IMAGE=debian:bookworm-slim
 
 # ---------------------------------------------------------------------------
-# Stage 1: Frontend (Angular 17)
+# Stage 1: Frontend (Angular 22)
 # ---------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS frontend
 WORKDIR /app
