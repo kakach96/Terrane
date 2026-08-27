@@ -34,7 +34,7 @@ export class AppComponent {
     '/permissions': 'nav.permissions',
   };
 
-  // 导航分组展开状态（对标 GeoServer 菜单分组）
+  // Navigation group expansion state (mirrors GeoServer menu grouping)
   private navGroups: { [key: string]: boolean } = {
     services: true,
     data: true,

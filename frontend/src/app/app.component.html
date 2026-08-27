@@ -10,7 +10,7 @@
 
       <mat-nav-list class="nav-menu">
         <ng-container *ngIf="auth.isLoggedIn()">
-          <!-- 服务（已实现服务总览，默认首页） -->
+          <!-- Services (overview implemented, default home page) -->
           <div class="nav-group" [class.open]="isGroupOpen('services')">
             <div
               class="nav-group-header"
@@ -34,7 +34,7 @@
             </div>
           </div>
 
-          <!-- 数据（对标 GeoServer「数据」菜单） -->
+          <!-- Data (mirrors GeoServer "Data" menu) -->
           <div class="nav-group" [class.open]="isGroupOpen('data')">
             <div
               class="nav-group-header"
@@ -83,7 +83,7 @@
             </div>
           </div>
 
-          <!-- 瓦片（对标 GeoServer「瓦片」菜单） -->
+          <!-- Tiles (mirrors GeoServer "Tiles" menu) -->
           <div class="nav-group" [class.open]="isGroupOpen('tiles')">
             <div
               class="nav-group-header"
@@ -107,7 +107,7 @@
             </div>
           </div>
 
-          <!-- 服务器（对标 GeoServer「服务器」菜单） -->
+          <!-- Server (mirrors GeoServer "Server" menu) -->
           <div class="nav-group" [class.open]="isGroupOpen('server')">
             <div
               class="nav-group-header"
@@ -131,7 +131,7 @@
             </div>
           </div>
 
-          <!-- 安全（对标 GeoServer「安全」菜单） -->
+          <!-- Security (mirrors GeoServer "Security" menu) -->
           <div class="nav-group" [class.open]="isGroupOpen('security')">
             <div
               class="nav-group-header"
