@@ -45,7 +45,7 @@ export class AuthService {
   }
 
   logout(): void {
-    // 调用后端吊销会话 (携带 token)
+    // Revoke the session on the backend (carrying the token)
     const token = this.getToken();
     if (token) {
       this.http.post(`${this.apiUrl}/logout`, {}).subscribe({

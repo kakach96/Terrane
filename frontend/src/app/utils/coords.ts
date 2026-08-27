@@ -1,30 +1,32 @@
 import { LayerBounds } from '../models/geoserver.models';
 
 /**
- * 前端坐标系转换工具 (无第三方依赖)。
+ * Frontend coordinate transformation utilities (no third-party dependencies).
  *
- * 当前内置 WGS84 (EPSG:4326) 与 Web Mercator (EPSG:3857 / EPSG:900913) 之间的
- * 数学变换, 与后端 `src/utils/geometry.rs` 的兜底实现保持一致。后续需要支持
- * 其他坐标系时, 在此追加转换分支即可 (后端已通过 proj4rs 支持任意 EPSG)。
+ * Provides the math transforms between WGS84 (EPSG:4326) and Web Mercator
+ * (EPSG:3857 / EPSG:900913), kept in sync with the fallback implementation in
+ * the backend `src/utils/geometry.rs`. To support additional CRSs later, add
+ * another transform branch here (the backend already supports arbitrary EPSG
+ * via proj4rs).
  */
 
 const MERCATOR_EXTENT = 20037508.34;
-/** Web Mercator 有效纬度上限 (±85.051129°), 避免 ±90° 时对数发散为 Infinity。 */
+/** Web Mercator valid latitude limit (±85.051129°), avoids log divergence to Infinity at ±90°. */
 const MAX_LAT = 85.05112877980659;
 
-/** 归一化坐标系标识 (EPSG:900913 -> EPSG:3857)。 */
+/** Normalize a CRS identifier (EPSG:900913 -> EPSG:3857). */
 export function normalizeCrs(crs: string): string {
   const c = crs.trim().toUpperCase();
   if (c === 'EPSG:900913' || c === '900913') return 'EPSG:3857';
   return c;
 }
 
-/** 判断是否为 Web Mercator (EPSG:3857 / 900913)。 */
+/** Whether the CRS is Web Mercator (EPSG:3857 / 900913). */
 function isMercator(crs: string): boolean {
   return normalizeCrs(crs) === 'EPSG:3857';
 }
 
-/** 经纬度 (EPSG:4326, 度) -> Web Mercator (米)。 */
+/** Lon/lat (EPSG:4326, degrees) -> Web Mercator (meters). */
 function lonLatToMercator(lon: number, lat: number): [number, number] {
   const clampedLat = Math.max(-MAX_LAT, Math.min(MAX_LAT, lat));
   const x = (lon * MERCATOR_EXTENT) / 180;
@@ -33,7 +35,7 @@ function lonLatToMercator(lon: number, lat: number): [number, number] {
   return [x, y];
 }
 
-/** Web Mercator (米) -> 经纬度 (EPSG:4326, 度)。 */
+/** Web Mercator (meters) -> lon/lat (EPSG:4326, degrees). */
 function mercatorToLonLat(x: number, y: number): [number, number] {
   const lon = (x / MERCATOR_EXTENT) * 180;
   let lat = (y / MERCATOR_EXTENT) * 180;
@@ -42,17 +44,18 @@ function mercatorToLonLat(x: number, y: number): [number, number] {
 }
 
 /**
- * 将边界从 `fromCrs` 转换到 `toCrs`。
+ * Transform bounds from `fromCrs` to `toCrs`.
  *
- * WMS 的 BBOX 参数始终处于请求 SRS 下, 因此切换预览坐标系时需要用本函数
- * 把图层的原生边界 (通常为 EPSG:4326) 转换到目标坐标系后再传给 WMS。
+ * The WMS BBOX parameter is always in the request SRS, so when switching the
+ * preview CRS this function converts the layer's native bounds (usually
+ * EPSG:4326) to the target CRS before passing it to WMS.
  */
 export function transformBounds(bounds: LayerBounds, fromCrs: string, toCrs: string): LayerBounds {
   const from = normalizeCrs(fromCrs);
   const to = normalizeCrs(toCrs);
   if (from === to) return bounds;
 
-  // 统一经 EPSG:4326 中转
+  // Route everything through EPSG:4326
   const to4326 = (x: number, y: number): [number, number] =>
     isMercator(from) ? mercatorToLonLat(x, y) : [x, y];
   const from4326 = (lon: number, lat: number): [number, number] =>

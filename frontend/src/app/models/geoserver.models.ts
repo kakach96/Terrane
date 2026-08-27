@@ -10,7 +10,7 @@ export interface Layer {
   enabled: boolean;
   abstract?: string;
   styles?: StyleRef[];
-  /** 瓦片缓存后端数据源名称 (type = "redis"); 缺省 = 默认内存/本地缓存 */
+  /** Tile cache backend data source name (type = "redis"); default = in-memory/local cache */
   cache_store?: string | null;
 }
 
@@ -76,7 +76,7 @@ export interface CreateLayerRequest {
   maxx?: number;
   maxy?: number;
   abstract?: string;
-  /** 瓦片缓存后端数据源名称 (type = "redis"); 缺省 = 默认内存/本地缓存 */
+  /** Tile cache backend data source name (type = "redis"); default = in-memory/local cache */
   cache_store?: string | null;
 }
 
@@ -85,7 +85,7 @@ export interface UpdateLayerRequest {
   abstract?: string;
   native_name?: string;
   enabled?: boolean;
-  /** 瓦片缓存后端: 数据源名称, null = 默认内存/本地缓存, 缺省 = 不修改 */
+  /** Tile cache backend: data source name, null = default in-memory/local cache, omitted = no change */
   cache_store?: string | null;
 }
 
@@ -128,7 +128,7 @@ export interface DataSource {
   type: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage' | 'metadata' | string;
   workspace?: string;
   enabled: boolean;
-  /** 是否为内置数据源 (如复用元数据存储的 metadata), 不可编辑/删除 */
+  /** Whether this is a built-in data source (e.g. metadata reusing the metadata store); not editable/deletable */
   builtin?: boolean;
   connection?: DataSourceConnection;
   created?: string;
@@ -136,17 +136,17 @@ export interface DataSource {
 }
 
 export interface DataSourceConnection {
-  // PostGIS 字段
+  // PostGIS fields
   host?: string;
   port?: number;
   database?: string;
   schema?: string;
   username?: string;
   password?: string;
-  // 文件型字段
+  // File-based fields
   file_path?: string;
   file_storage_type?: string;
-  // S3 对象存储字段 (file_storage_type = 's3' 时生效)
+  // S3 object storage fields (active when file_storage_type = 's3')
   s3_endpoint?: string;
   s3_region?: string;
   s3_bucket?: string;
@@ -154,7 +154,7 @@ export interface DataSourceConnection {
   s3_secret_key?: string;
 }
 
-/** 目录浏览返回的条目 (本地目录 / S3 对象) */
+/** Directory browse entry (local directory / S3 object) */
 export interface FileEntry {
   name: string;
   path: string;
@@ -162,13 +162,13 @@ export interface FileEntry {
   size: number;
 }
 
-/** 目录浏览响应 (本地与 S3 共用) */
+/** Directory browse response (shared by local and S3) */
 export interface BrowseResponse {
   path: string;
   entries: FileEntry[];
 }
 
-/** S3 目录浏览请求体 (携带连接配置与要列出的前缀) */
+/** S3 directory browse request (connection config + prefix to list) */
 export interface S3BrowseRequest {
   s3_endpoint?: string;
   s3_region?: string;
@@ -224,7 +224,7 @@ export interface ConnectionTestResult {
   message?: string;
 }
 
-/** 图层组 */
+/** Layer group */
 export interface LayerGroup {
   name: string;
   title: string;
@@ -232,7 +232,7 @@ export interface LayerGroup {
   styles?: (string | null)[];
 }
 
-/** SQL 视图 */
+/** SQL view */
 export interface SqlView {
   name: string;
   sql: string;
@@ -274,7 +274,7 @@ export interface UpdateSqlViewRequest {
   description?: string;
 }
 
-/** 权限 */
+/** Permission */
 export interface Permission {
   id?: number;
   username: string;
@@ -296,7 +296,7 @@ export interface CreatePermissionRequest {
   priority?: number;
 }
 
-/** 上传结果 */
+/** Upload result */
 export interface UploadResult {
   name: string;
   type: string;
@@ -304,7 +304,7 @@ export interface UploadResult {
   message: string;
 }
 
-// ===== 监控 =====
+// ===== Monitoring =====
 
 export interface MonitorStats {
   uptime_seconds: number;
@@ -354,9 +354,9 @@ export interface AuditLogEntry {
   detail?: string;
 }
 
-// ===== 用户 / 存储 / 瓦片缓存 =====
+// ===== Users / storage / tile cache =====
 
-/** 用户 */
+/** User */
 export interface User {
   username: string;
   role: string;
@@ -365,7 +365,7 @@ export interface User {
   modified?: string;
 }
 
-/** 瓦片缓存统计 */
+/** Tile cache stats */
 export interface TileCacheStats {
   enabled: boolean;
   hits: number;
@@ -376,16 +376,16 @@ export interface TileCacheStats {
   cacheSizeMb?: string;
 }
 
-/** 清除瓦片缓存结果 */
+/** Clear tile cache result */
 export interface TileCacheResult {
   cleared?: number;
   message?: string;
 }
 
-/** 瓦片种子任务状态 (GWC 风格) */
+/** Tile seed job status (GWC style) */
 export type SeedStatus = 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Cancelled';
 
-/** 瓦片种子任务 (GWC 风格 seed / truncate) */
+/** Tile seed job (GWC-style seed / truncate) */
 export interface SeedJob {
   id: string;
   layer: string;
@@ -401,7 +401,7 @@ export interface SeedJob {
   updated_at: string;
 }
 
-/** 创建种子任务请求 (POST /tiles/seed) */
+/** Create seed job request (POST /tiles/seed) */
 export interface SeedRequest {
   layer: string;
   gridset?: string;
@@ -410,19 +410,19 @@ export interface SeedRequest {
   format?: string;
 }
 
-/** 截断瓦片缓存请求 (POST /tiles/seed/truncate) */
+/** Truncate tile cache request (POST /tiles/seed/truncate) */
 export interface TruncateRequest {
   layer: string;
   gridset?: string;
 }
 
-/** 种子任务创建结果 */
+/** Seed job creation result */
 export interface SeedJobResult {
   job: SeedJob;
   message: string;
 }
 
-/** 截断瓦片缓存结果 */
+/** Truncate tile cache result */
 export interface TruncateResult {
   layer: string;
   gridset?: string;

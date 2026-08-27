@@ -118,9 +118,9 @@ export class GeoserverService {
     if (!bounds) return '';
     const nativeCrs = layer.native_bounds?.crs || layer.srs || 'EPSG:4326';
     const srs = options?.crs || nativeCrs;
-    // WMS 约定 BBOX 处于请求 SRS 下: 目标 SRS 与图层原生 SRS 不一致时转换 bbox
+    // WMS convention: BBOX is in the request SRS; transform bbox when the target SRS differs from the layer's native SRS
     const bbox = transformBounds(bounds, nativeCrs, srs);
-    // 使用 WMS 1.1.1 避免 EPSG:4326 轴序问题
+    // Use WMS 1.1.1 to avoid EPSG:4326 axis-order issues
     const params = new URLSearchParams({
       service: 'WMS',
       version: '1.1.1',
@@ -151,8 +151,9 @@ export class GeoserverService {
     const nativeCrs = layer.native_bounds?.crs || layer.srs || 'EPSG:4326';
     const crs = options?.crs || nativeCrs;
 
-    // 优先使用显式传入的 bbox; 否则从图层原生边界读取, 并在请求 SRS 与
-    // 图层原生 SRS 不一致时转换 (WMS 约定 BBOX 处于请求 SRS 下)
+    // Prefer an explicitly passed bbox; otherwise read from the layer's native
+    // bounds and convert when the request SRS differs from the native SRS
+    // (WMS convention: BBOX is in the request SRS)
     let bbox = options?.bbox;
     if (!bbox) {
       const bounds: LayerBounds = layer.native_bounds?.bounds || layer.bounds;
@@ -228,7 +229,7 @@ export class GeoserverService {
       .pipe(map(() => void 0));
   }
 
-  // ---- 瓦片缓存 (GeoWebCache) ----
+  // ---- Tile cache (GeoWebCache) ----
 
   getTileCacheStats(): Observable<TileCacheStats> {
     return this.http
@@ -242,30 +243,30 @@ export class GeoserverService {
       .pipe(map((response) => response.data as TileCacheResult));
   }
 
-  // ---- 瓦片种子任务 (GWC 风格 seed / truncate) ----
+  // ---- Tile seed jobs (GWC-style seed / truncate) ----
 
-  /** 创建并启动种子任务 (seed / reseed 走 POST /tiles/seed) */
+  /** Create and start a seed job (seed / reseed via POST /tiles/seed) */
   createSeedJob(request: SeedRequest): Observable<SeedJobResult> {
     return this.http
       .post<ApiResponse<SeedJobResult>>(`${this.apiUrl}/tiles/seed`, request)
       .pipe(map((response) => response.data as SeedJobResult));
   }
 
-  /** 列出所有种子任务 */
+  /** List all seed jobs */
   getSeedJobs(): Observable<SeedJob[]> {
     return this.http
       .get<ApiResponse<SeedJob[]>>(`${this.apiUrl}/tiles/seed`)
       .pipe(map((response) => response.data || []));
   }
 
-  /** 取消运行中的种子任务 (协作式) */
+  /** Cancel a running seed job (cooperative) */
   cancelSeedJob(id: string): Observable<{ job: string; message: string }> {
     return this.http
       .delete<ApiResponse<{ job: string; message: string }>>(`${this.apiUrl}/tiles/seed/${id}`)
       .pipe(map((response) => response.data as { job: string; message: string }));
   }
 
-  /** 截断 (清除) 图层的缓存瓦片, 可按 gridset */
+  /** Truncate (clear) a layer's cached tiles, optionally per gridset */
   truncateTileCache(layer: string, gridset?: string): Observable<TruncateResult> {
     return this.http
       .post<ApiResponse<TruncateResult>>(`${this.apiUrl}/tiles/seed/truncate`, {
@@ -275,7 +276,7 @@ export class GeoserverService {
       .pipe(map((response) => response.data as TruncateResult));
   }
 
-  // ---- SQL 视图 ----
+  // ---- SQL views ----
 
   getSqlViews(): Observable<SqlView[]> {
     return this.http
@@ -318,7 +319,7 @@ export class GeoserverService {
       .pipe(map((response) => response.data || []));
   }
 
-  // ---- 权限 ----
+  // ---- Permissions ----
 
   getPermissions(): Observable<Permission[]> {
     return this.http
@@ -391,7 +392,7 @@ export class GeoserverService {
       .pipe(map((response) => response.data || []));
   }
 
-  /** 浏览服务器本地目录 (目录 + 文件) */
+  /** Browse the server's local directory (directories + files) */
   browseLocalDirectory(path?: string): Observable<FileEntry[]> {
     const params = new HttpParams().set('path', path || '');
     return this.http
@@ -402,7 +403,7 @@ export class GeoserverService {
       .pipe(map((response) => response.data?.entries || []));
   }
 
-  /** 浏览 S3 bucket 目录 (携带连接配置) */
+  /** Browse an S3 bucket directory (carrying connection config) */
   browseS3Directory(request: S3BrowseRequest): Observable<FileEntry[]> {
     return this.http
       .post<ApiResponse<{ path: string; entries: FileEntry[] }>>(
@@ -468,9 +469,9 @@ export class GeoserverService {
       .pipe(map((response) => response.data || []));
   }
 
-  // ---- 文件上传 ----
+  // ---- File uploads ----
 
-  /** 上传 Shapefile (.zip) */
+  /** Upload a Shapefile (.zip) */
   uploadShapefile(file: File, name?: string): Observable<ApiResponse<UploadResult>> {
     const formData = new FormData();
     formData.append('file', file);
@@ -481,7 +482,7 @@ export class GeoserverService {
     );
   }
 
-  /** 上传 GeoTIFF (.tif/.tiff) */
+  /** Upload a GeoTIFF (.tif/.tiff) */
   uploadGeoTiff(file: File, name?: string): Observable<ApiResponse<UploadResult>> {
     const formData = new FormData();
     formData.append('file', file);
@@ -492,12 +493,12 @@ export class GeoserverService {
     );
   }
 
-  /** 上传 GeoJSON (JSON body) */
+  /** Upload GeoJSON (JSON body) */
   uploadGeoJson(geojson: unknown): Observable<ApiResponse<UploadResult>> {
     return this.http.post<ApiResponse<UploadResult>>(`${this.apiUrl}/data/upload`, geojson);
   }
 
-  // ---- 图层组 ----
+  // ---- Layer groups ----
 
   getLayerGroups(): Observable<LayerGroup[]> {
     return this.http
@@ -523,7 +524,7 @@ export class GeoserverService {
       .pipe(map(() => void 0));
   }
 
-  /** 导出图层要素为 GeoJSON */
+  /** Export layer features as GeoJSON */
   exportFeaturesGeoJson(layerName: string): Observable<Blob> {
     return this.http.get(`${this.apiUrl}/layers/${layerName}/features`, {
       params: { format: 'application/json' },
@@ -531,7 +532,7 @@ export class GeoserverService {
     });
   }
 
-  /** 导出图层要素为 CSV */
+  /** Export layer features as CSV */
   exportFeaturesCsv(layerName: string): Observable<Blob> {
     return this.http.get(`${this.apiUrl}/layers/${layerName}/features`, {
       params: { format: 'text/csv' },
@@ -539,56 +540,56 @@ export class GeoserverService {
     });
   }
 
-  // ===== 监控 =====
+  // ===== Monitoring =====
 
-  /** 获取监控统计 */
+  /** Get monitoring stats */
   getMonitorStats(): Observable<MonitorStats> {
     return this.http.get<MonitorStats>(`${this.apiUrl}/monitor/stats`);
   }
 
-  /** 获取最近请求记录 */
+  /** Get recent request records */
   getRecentRequests(limit: number = 100): Observable<RequestRecord[]> {
     return this.http.get<RequestRecord[]>(`${this.apiUrl}/monitor/requests`, {
       params: { limit: limit.toString() },
     });
   }
 
-  /** 获取审计日志 */
+  /** Get audit logs */
   getAuditLogs(limit: number = 100, offset: number = 0): Observable<AuditLogEntry[]> {
     return this.http.get<AuditLogEntry[]>(`${this.apiUrl}/monitor/logs`, {
       params: { limit: limit.toString(), offset: offset.toString() },
     });
   }
 
-  /** 重置监控统计 */
+  /** Reset monitoring stats */
   resetMonitorStats(): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}/monitor/reset`);
   }
 
-  // ===== 用户管理 =====
+  // ===== User management =====
 
-  /** 列出所有用户 */
+  /** List all users */
   listUsers(): Observable<User[]> {
     return this.http
       .get<ApiResponse<User[]>>(`${this.apiUrl}/auth/users`)
       .pipe(map((r) => r.data || []));
   }
 
-  /** 创建用户 */
+  /** Create a user */
   createUser(username: string, password: string, role: string): Observable<void> {
     return this.http
       .post<ApiResponse<void>>(`${this.apiUrl}/auth/users`, { username, password, role })
       .pipe(map(() => void 0));
   }
 
-  /** 删除用户 */
+  /** Delete a user */
   deleteUser(username: string): Observable<void> {
     return this.http
       .delete<ApiResponse<void>>(`${this.apiUrl}/auth/users/${username}`)
       .pipe(map(() => void 0));
   }
 
-  /** 修改密码 */
+  /** Change the current user's password */
   changePassword(oldPassword: string, newPassword: string): Observable<void> {
     return this.http
       .post<ApiResponse<void>>(`${this.apiUrl}/auth/change-password`, {
