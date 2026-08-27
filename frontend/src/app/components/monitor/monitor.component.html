@@ -11,317 +11,317 @@
     </div>
   </div>
 
-  <!-- 标签导航 -->
-  <div class="tab-nav">
-    <button mat-button [class.active]="activeTab === 'overview'" (click)="switchTab('overview')">
-      <mat-icon>dashboard</mat-icon> {{ 'monitor.tabOverview' | translate }}
-    </button>
-    <button mat-button [class.active]="activeTab === 'requests'" (click)="switchTab('requests')">
-      <mat-icon>list</mat-icon> {{ 'monitor.tabRequests' | translate }}
-    </button>
-    <button mat-button [class.active]="activeTab === 'audit'" (click)="switchTab('audit')">
-      <mat-icon>audit</mat-icon> {{ 'monitor.tabAudit' | translate }}
-    </button>
-  </div>
-
-  <!-- 加载中 -->
+  <!-- Loading -->
   <div *ngIf="loading()" class="loading-spinner">
     <mat-spinner diameter="40"></mat-spinner>
     <p>{{ 'monitor.loading' | translate }}</p>
   </div>
 
-  <!-- 错误提示 -->
+  <!-- Error message -->
   <mat-card *ngIf="error" class="error-card">
     <mat-card-content> <mat-icon color="warn">error</mat-icon> {{ error }} </mat-card-content>
   </mat-card>
 
-  <!-- ======== 概览 Tab ======== -->
-  <div *ngIf="activeTab === 'overview' && stats() && !loading()">
-    <!-- 关键指标卡片 -->
-    <div class="stats-grid">
-      <mat-card class="stat-card">
-        <mat-card-content>
-          <div class="stat-icon"><mat-icon>timer</mat-icon></div>
-          <div class="stat-value">{{ uptimeFormatted() }}</div>
-          <div class="stat-label">{{ 'monitor.statUptime' | translate }}</div>
-        </mat-card-content>
-      </mat-card>
-      <mat-card class="stat-card">
-        <mat-card-content>
-          <div class="stat-icon"><mat-icon>http</mat-icon></div>
-          <div class="stat-value">{{ stats()!.total_requests | number }}</div>
-          <div class="stat-label">{{ 'monitor.statRequests' | translate }}</div>
-        </mat-card-content>
-      </mat-card>
-      <mat-card class="stat-card">
-        <mat-card-content>
-          <div class="stat-icon"><mat-icon>error</mat-icon></div>
-          <div class="stat-value" [class.text-danger]="stats()!.error_rate > 5">
-            {{ stats()!.total_errors | number }}
-          </div>
-          <div class="stat-label">
-            {{ 'monitor.statErrors' | translate: { rate: errorRateFormatted() } }}
-          </div>
-        </mat-card-content>
-      </mat-card>
-      <mat-card class="stat-card">
-        <mat-card-content>
-          <div class="stat-icon"><mat-icon>speed</mat-icon></div>
-          <div class="stat-value">{{ stats()!.requests_per_second | number: '1.2-2' }}</div>
-          <div class="stat-label">{{ 'monitor.statRps' | translate }}</div>
-        </mat-card-content>
-      </mat-card>
-    </div>
-
-    <!-- 瓦片缓存 (GeoWebCache) -->
-    <mat-card class="section-card" *ngIf="tileCacheStats()">
-      <mat-card-header>
-        <mat-icon mat-card-avatar>grid_view</mat-icon>
-        <mat-card-title>{{ 'monitor.tileCache' | translate }}</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
+  <mat-tab-group
+    class="monitor-tabs"
+    (selectedTabChange)="onTabChange($event)"
+    animationDuration="0ms"
+  >
+    <!-- ======== Overview tab ======== -->
+    <mat-tab label="{{ 'monitor.tabOverview' | translate }}">
+      <div *ngIf="stats() && !loading()">
+        <!-- Key metric cards -->
         <div class="stats-grid">
           <mat-card class="stat-card">
             <mat-card-content>
-              <div class="stat-icon"><mat-icon>touch_app</mat-icon></div>
-              <div class="stat-value">{{ tileCacheStats()!.hits }}</div>
-              <div class="stat-label">{{ 'monitor.tileHits' | translate }}</div>
+              <div class="stat-icon"><mat-icon>timer</mat-icon></div>
+              <div class="stat-value">{{ uptimeFormatted() }}</div>
+              <div class="stat-label">{{ 'monitor.statUptime' | translate }}</div>
             </mat-card-content>
           </mat-card>
           <mat-card class="stat-card">
             <mat-card-content>
-              <div class="stat-icon"><mat-icon>block</mat-icon></div>
-              <div class="stat-value">{{ tileCacheStats()!.misses }}</div>
-              <div class="stat-label">{{ 'monitor.tileMisses' | translate }}</div>
+              <div class="stat-icon"><mat-icon>http</mat-icon></div>
+              <div class="stat-value">{{ stats()!.total_requests | number }}</div>
+              <div class="stat-label">{{ 'monitor.statRequests' | translate }}</div>
             </mat-card-content>
           </mat-card>
           <mat-card class="stat-card">
             <mat-card-content>
-              <div class="stat-icon"><mat-icon>percent</mat-icon></div>
-              <div class="stat-value">{{ (tileCacheStats()!.hitRate * 100).toFixed(1) }}%</div>
-              <div class="stat-label">{{ 'monitor.tileHitRate' | translate }}</div>
-            </mat-card-content>
-          </mat-card>
-          <mat-card class="stat-card">
-            <mat-card-content>
-              <div class="stat-icon"><mat-icon>grid_on</mat-icon></div>
-              <div class="stat-value">{{ tileCacheStats()!.totalTiles }}</div>
-              <div class="stat-label">{{ 'monitor.tileTotalTiles' | translate }}</div>
-            </mat-card-content>
-          </mat-card>
-          <mat-card class="stat-card">
-            <mat-card-content>
-              <div class="stat-icon"><mat-icon>storage</mat-icon></div>
-              <div class="stat-value">{{ tileCacheStats()!.cacheSizeMb || '0 MB' }}</div>
-              <div class="stat-label">{{ 'monitor.tileCacheSize' | translate }}</div>
-            </mat-card-content>
-          </mat-card>
-          <mat-card class="stat-card">
-            <mat-card-content>
-              <div class="stat-icon"><mat-icon>power_settings_new</mat-icon></div>
-              <div
-                class="stat-value"
-                [style.color]="tileCacheStats()!.enabled ? '#4caf50' : '#f44336'"
-              >
-                {{
-                  tileCacheStats()!.enabled
-                    ? ('monitor.tileEnabled' | translate)
-                    : ('monitor.tileDisabled' | translate)
-                }}
+              <div class="stat-icon"><mat-icon>error</mat-icon></div>
+              <div class="stat-value" [class.text-danger]="stats()!.error_rate > 5">
+                {{ stats()!.total_errors | number }}
               </div>
-              <div class="stat-label">{{ 'monitor.tileStatus' | translate }}</div>
+              <div class="stat-label">
+                {{ 'monitor.statErrors' | translate: { rate: errorRateFormatted() } }}
+              </div>
+            </mat-card-content>
+          </mat-card>
+          <mat-card class="stat-card">
+            <mat-card-content>
+              <div class="stat-icon"><mat-icon>speed</mat-icon></div>
+              <div class="stat-value">{{ stats()!.requests_per_second | number: '1.2-2' }}</div>
+              <div class="stat-label">{{ 'monitor.statRps' | translate }}</div>
             </mat-card-content>
           </mat-card>
         </div>
-      </mat-card-content>
-    </mat-card>
 
-    <!-- 系统信息 -->
-    <mat-card class="section-card">
-      <mat-card-header>
-        <mat-icon mat-card-avatar>computer</mat-icon>
-        <mat-card-title>{{ 'monitor.systemInfo' | translate }}</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">{{ 'monitor.version' | translate }}</span>
-            <span class="info-value">{{ stats()!.system.version }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ 'monitor.rustVersion' | translate }}</span>
-            <span class="info-value">{{ stats()!.system.rust_version }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ 'monitor.os' | translate }}</span>
-            <span class="info-value">{{ stats()!.system.os }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ 'monitor.hostname' | translate }}</span>
-            <span class="info-value">{{ stats()!.system.hostname }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ 'monitor.cpuCores' | translate }}</span>
-            <span class="info-value">{{ stats()!.system.cpu_cores }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ 'monitor.memory' | translate }}</span>
-            <span class="info-value">{{ stats()!.system.memory_mb | number }} MB</span>
-          </div>
-        </div>
-      </mat-card-content>
-    </mat-card>
-
-    <div class="charts-row">
-      <!-- 热门端点 -->
-      <mat-card class="section-card chart-card">
-        <mat-card-header>
-          <mat-icon mat-card-avatar>route</mat-icon>
-          <mat-card-title>{{ 'monitor.topEndpoints' | translate }}</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <table class="stats-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>{{ 'monitor.endpoint' | translate }}</th>
-                <th>{{ 'monitor.requestCount' | translate }}</th>
-                <th>{{ 'monitor.avgDuration' | translate }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let ep of topEndpoints(); let i = index">
-                <td>{{ i + 1 }}</td>
-                <td class="endpoint-name">{{ ep.name }}</td>
-                <td>{{ ep.count | number }}</td>
-                <td>{{ ep.avgDuration | number: '1.1-1' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </mat-card-content>
-      </mat-card>
-
-      <!-- HTTP 方法分布 -->
-      <mat-card class="section-card chart-card">
-        <mat-card-header>
-          <mat-icon mat-card-avatar>bar_chart</mat-icon>
-          <mat-card-title>{{ 'monitor.httpMethods' | translate }}</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <div class="bar-chart">
-            <div *ngFor="let m of methodChart()" class="bar-item">
-              <div class="bar-label">{{ m.method }}</div>
-              <div class="bar-track">
-                <div
-                  class="bar-fill method-{{ m.method | lowercase }}"
-                  [style.width.%]="(m.count / getMaxMethodCount()) * 100"
-                ></div>
-              </div>
-              <div class="bar-value">{{ m.count | number }}</div>
+        <!-- Tile cache (GeoWebCache) -->
+        <mat-card class="section-card" *ngIf="tileCacheStats()">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>grid_view</mat-icon>
+            <mat-card-title>{{ 'monitor.tileCache' | translate }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="stats-grid">
+              <mat-card class="stat-card">
+                <mat-card-content>
+                  <div class="stat-icon"><mat-icon>touch_app</mat-icon></div>
+                  <div class="stat-value">{{ tileCacheStats()!.hits }}</div>
+                  <div class="stat-label">{{ 'monitor.tileHits' | translate }}</div>
+                </mat-card-content>
+              </mat-card>
+              <mat-card class="stat-card">
+                <mat-card-content>
+                  <div class="stat-icon"><mat-icon>block</mat-icon></div>
+                  <div class="stat-value">{{ tileCacheStats()!.misses }}</div>
+                  <div class="stat-label">{{ 'monitor.tileMisses' | translate }}</div>
+                </mat-card-content>
+              </mat-card>
+              <mat-card class="stat-card">
+                <mat-card-content>
+                  <div class="stat-icon"><mat-icon>percent</mat-icon></div>
+                  <div class="stat-value">{{ (tileCacheStats()!.hitRate * 100).toFixed(1) }}%</div>
+                  <div class="stat-label">{{ 'monitor.tileHitRate' | translate }}</div>
+                </mat-card-content>
+              </mat-card>
+              <mat-card class="stat-card">
+                <mat-card-content>
+                  <div class="stat-icon"><mat-icon>grid_on</mat-icon></div>
+                  <div class="stat-value">{{ tileCacheStats()!.totalTiles }}</div>
+                  <div class="stat-label">{{ 'monitor.tileTotalTiles' | translate }}</div>
+                </mat-card-content>
+              </mat-card>
+              <mat-card class="stat-card">
+                <mat-card-content>
+                  <div class="stat-icon"><mat-icon>storage</mat-icon></div>
+                  <div class="stat-value">{{ tileCacheStats()!.cacheSizeMb || '0 MB' }}</div>
+                  <div class="stat-label">{{ 'monitor.tileCacheSize' | translate }}</div>
+                </mat-card-content>
+              </mat-card>
+              <mat-card class="stat-card">
+                <mat-card-content>
+                  <div class="stat-icon"><mat-icon>power_settings_new</mat-icon></div>
+                  <div
+                    class="stat-value"
+                    [class.stat-enabled]="tileCacheStats()!.enabled"
+                    [class.stat-disabled]="!tileCacheStats()!.enabled"
+                  >
+                    {{
+                      tileCacheStats()!.enabled
+                        ? ('monitor.tileEnabled' | translate)
+                        : ('monitor.tileDisabled' | translate)
+                    }}
+                  </div>
+                  <div class="stat-label">{{ 'monitor.tileStatus' | translate }}</div>
+                </mat-card-content>
+              </mat-card>
             </div>
-          </div>
-        </mat-card-content>
-      </mat-card>
-    </div>
-  </div>
+          </mat-card-content>
+        </mat-card>
 
-  <!-- ======== 请求记录 Tab ======== -->
-  <div *ngIf="activeTab === 'requests' && !loading()">
-    <mat-card class="section-card">
-      <mat-card-header>
-        <mat-icon mat-card-avatar>list_alt</mat-icon>
-        <mat-card-title>{{ 'monitor.recentRequests' | translate }}</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="table-container">
-          <table class="stats-table" *ngIf="recentRequests().length > 0">
-            <thead>
-              <tr>
-                <th>{{ 'monitor.columnTime' | translate }}</th>
-                <th>{{ 'monitor.columnMethod' | translate }}</th>
-                <th>{{ 'monitor.columnPath' | translate }}</th>
-                <th>{{ 'monitor.columnStatus' | translate }}</th>
-                <th>{{ 'monitor.columnDuration' | translate }}</th>
-                <th>{{ 'monitor.columnClient' | translate }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let req of recentRequests()">
-                <td>{{ formatTimestamp(req.timestamp) }}</td>
-                <td>
-                  <span class="method-badge method-{{ req.method | lowercase }}">{{
-                    req.method
-                  }}</span>
-                </td>
-                <td class="path-cell">{{ req.path }}</td>
-                <td>
-                  <span
-                    class="status-badge"
-                    [class.success]="req.status < 400"
-                    [class.error]="req.status >= 400"
-                  >
-                    {{ req.status }}
-                  </span>
-                </td>
-                <td>{{ req.duration_ms | number: '1.1-1' }}</td>
-                <td class="addr-cell">{{ req.remote_addr }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div *ngIf="recentRequests().length === 0" class="empty-state">
-            <mat-icon>inbox</mat-icon>
-            <p>{{ 'monitor.emptyRequests' | translate }}</p>
-          </div>
-        </div>
-      </mat-card-content>
-    </mat-card>
-  </div>
+        <!-- System info -->
+        <mat-card class="section-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>computer</mat-icon>
+            <mat-card-title>{{ 'monitor.systemInfo' | translate }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">{{ 'monitor.version' | translate }}</span>
+                <span class="info-value">{{ stats()!.system.version }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">{{ 'monitor.rustVersion' | translate }}</span>
+                <span class="info-value">{{ stats()!.system.rust_version }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">{{ 'monitor.os' | translate }}</span>
+                <span class="info-value">{{ stats()!.system.os }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">{{ 'monitor.hostname' | translate }}</span>
+                <span class="info-value">{{ stats()!.system.hostname }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">{{ 'monitor.cpuCores' | translate }}</span>
+                <span class="info-value">{{ stats()!.system.cpu_cores }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">{{ 'monitor.memory' | translate }}</span>
+                <span class="info-value">{{ stats()!.system.memory_mb | number }} MB</span>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
 
-  <!-- ======== 审计日志 Tab ======== -->
-  <div *ngIf="activeTab === 'audit' && !loading()">
-    <mat-card class="section-card">
-      <mat-card-header>
-        <mat-icon mat-card-avatar>audit</mat-icon>
-        <mat-card-title>{{ 'monitor.auditLogs' | translate }}</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="table-container">
-          <table class="stats-table" *ngIf="auditLogs().length > 0">
-            <thead>
-              <tr>
-                <th>{{ 'monitor.columnTime' | translate }}</th>
-                <th>{{ 'monitor.columnUser' | translate }}</th>
-                <th>{{ 'monitor.columnAction' | translate }}</th>
-                <th>{{ 'monitor.columnResource' | translate }}</th>
-                <th>{{ 'monitor.columnDetail' | translate }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let log of auditLogs()">
-                <td>{{ formatTimestamp(log.timestamp) }}</td>
-                <td>{{ log.username }}</td>
-                <td>
-                  <span
-                    class="action-badge"
-                    [class.login]="log.action === 'LOGIN' || log.action === 'LOGIN_FAILED'"
-                    [class.create]="log.action.startsWith('CREATE')"
-                    [class.delete]="log.action.startsWith('DELETE')"
-                    [class.update]="log.action.startsWith('UPDATE')"
-                  >
-                    {{ log.action }}
-                  </span>
-                </td>
-                <td>{{ log.resource || '-' }}</td>
-                <td class="detail-cell">{{ log.detail || '-' }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div *ngIf="auditLogs().length === 0" class="empty-state">
-            <mat-icon>inbox</mat-icon>
-            <p>{{ 'monitor.emptyAudit' | translate }}</p>
-          </div>
+        <div class="charts-row">
+          <!-- Top endpoints -->
+          <mat-card class="section-card chart-card">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>route</mat-icon>
+              <mat-card-title>{{ 'monitor.topEndpoints' | translate }}</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <table class="stats-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>{{ 'monitor.endpoint' | translate }}</th>
+                    <th>{{ 'monitor.requestCount' | translate }}</th>
+                    <th>{{ 'monitor.avgDuration' | translate }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let ep of topEndpoints(); let i = index">
+                    <td>{{ i + 1 }}</td>
+                    <td class="endpoint-name">{{ ep.name }}</td>
+                    <td>{{ ep.count | number }}</td>
+                    <td>{{ ep.avgDuration | number: '1.1-1' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </mat-card-content>
+          </mat-card>
+
+          <!-- HTTP method distribution -->
+          <mat-card class="section-card chart-card">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>bar_chart</mat-icon>
+              <mat-card-title>{{ 'monitor.httpMethods' | translate }}</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="bar-chart">
+                <div *ngFor="let m of methodChart()" class="bar-item">
+                  <div class="bar-label">{{ m.method }}</div>
+                  <div class="bar-track">
+                    <div
+                      class="bar-fill method-{{ m.method | lowercase }}"
+                      [style.width.%]="(m.count / getMaxMethodCount()) * 100"
+                    ></div>
+                  </div>
+                  <div class="bar-value">{{ m.count | number }}</div>
+                </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
         </div>
-      </mat-card-content>
-    </mat-card>
-  </div>
+      </div>
+    </mat-tab>
+
+    <!-- ======== Requests tab ======== -->
+    <mat-tab label="{{ 'monitor.tabRequests' | translate }}">
+      <div *ngIf="!loading()">
+        <mat-card class="section-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>list_alt</mat-icon>
+            <mat-card-title>{{ 'monitor.recentRequests' | translate }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="table-container">
+              <table class="stats-table" *ngIf="recentRequests().length > 0">
+                <thead>
+                  <tr>
+                    <th>{{ 'monitor.columnTime' | translate }}</th>
+                    <th>{{ 'monitor.columnMethod' | translate }}</th>
+                    <th>{{ 'monitor.columnPath' | translate }}</th>
+                    <th>{{ 'monitor.columnStatus' | translate }}</th>
+                    <th>{{ 'monitor.columnDuration' | translate }}</th>
+                    <th>{{ 'monitor.columnClient' | translate }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let req of recentRequests()">
+                    <td>{{ formatTimestamp(req.timestamp) }}</td>
+                    <td>
+                      <span class="method-badge method-{{ req.method | lowercase }}">{{
+                        req.method
+                      }}</span>
+                    </td>
+                    <td class="path-cell">{{ req.path }}</td>
+                    <td>
+                      <span
+                        class="status-badge"
+                        [class.success]="req.status < 400"
+                        [class.error]="req.status >= 400"
+                      >
+                        {{ req.status }}
+                      </span>
+                    </td>
+                    <td>{{ req.duration_ms | number: '1.1-1' }}</td>
+                    <td class="addr-cell">{{ req.remote_addr }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div *ngIf="recentRequests().length === 0" class="empty-state">
+                <mat-icon>inbox</mat-icon>
+                <p>{{ 'monitor.emptyRequests' | translate }}</p>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+
+    <!-- ======== Audit logs tab ======== -->
+    <mat-tab label="{{ 'monitor.tabAudit' | translate }}">
+      <div *ngIf="!loading()">
+        <mat-card class="section-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>audit</mat-icon>
+            <mat-card-title>{{ 'monitor.auditLogs' | translate }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="table-container">
+              <table class="stats-table" *ngIf="auditLogs().length > 0">
+                <thead>
+                  <tr>
+                    <th>{{ 'monitor.columnTime' | translate }}</th>
+                    <th>{{ 'monitor.columnUser' | translate }}</th>
+                    <th>{{ 'monitor.columnAction' | translate }}</th>
+                    <th>{{ 'monitor.columnResource' | translate }}</th>
+                    <th>{{ 'monitor.columnDetail' | translate }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let log of auditLogs()">
+                    <td>{{ formatTimestamp(log.timestamp) }}</td>
+                    <td>{{ log.username }}</td>
+                    <td>
+                      <span
+                        class="action-badge"
+                        [class.login]="log.action === 'LOGIN' || log.action === 'LOGIN_FAILED'"
+                        [class.create]="log.action.startsWith('CREATE')"
+                        [class.delete]="log.action.startsWith('DELETE')"
+                        [class.update]="log.action.startsWith('UPDATE')"
+                      >
+                        {{ log.action }}
+                      </span>
+                    </td>
+                    <td>{{ log.resource || '-' }}</td>
+                    <td class="detail-cell">{{ log.detail || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div *ngIf="auditLogs().length === 0" class="empty-state">
+                <mat-icon>inbox</mat-icon>
+                <p>{{ 'monitor.emptyAudit' | translate }}</p>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
 </div>

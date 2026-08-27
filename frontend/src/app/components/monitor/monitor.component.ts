@@ -9,9 +9,15 @@ import {
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
+import { MatTabChangeEvent } from '@angular/material/tabs';
 import { GeoserverService } from '../../services/geoserver.service';
 import { LanguageService } from '../../services/language.service';
-import { MonitorStats, RequestRecord, AuditLogEntry, TileCacheStats } from '../../models/geoserver.models';
+import {
+  MonitorStats,
+  RequestRecord,
+  AuditLogEntry,
+  TileCacheStats,
+} from '../../models/geoserver.models';
 import { switchMap, map, startWith, catchError, of, combineLatest, interval } from 'rxjs';
 
 interface MonitorData {
@@ -55,8 +61,9 @@ export class MonitorComponent {
           .getTileCacheStats()
           .pipe(catchError(() => of(null as TileCacheStats | null))),
       ]).pipe(
-        map(([stats, requests, audit, tileCache]) =>
-          ({ stats, requests, audit, tileCache } as MonitorData),
+        map(
+          ([stats, requests, audit, tileCache]) =>
+            ({ stats, requests, audit, tileCache }) as MonitorData,
         ),
       ),
     ),
@@ -149,6 +156,12 @@ export class MonitorComponent {
 
   switchTab(tab: 'overview' | 'requests' | 'audit'): void {
     this.activeTab = tab;
+  }
+
+  /** Map a mat-tab index back to the active tab id. */
+  onTabChange(event: MatTabChangeEvent): void {
+    const tabs = ['overview', 'requests', 'audit'] as const;
+    this.activeTab = tabs[event.index] ?? tabs[0];
   }
 
   formatTimestamp(ts: string): string {
