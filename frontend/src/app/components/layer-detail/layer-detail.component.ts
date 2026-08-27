@@ -84,37 +84,33 @@ export class LayerDetailComponent {
     startWith(0),
     filter(() => !!this.layerName),
     switchMap(() =>
-      this.geoserverService.getLayerFeatures(this.layerName).pipe(
-        catchError(() => of({ type: 'FeatureCollection', features: [] } as FeatureCollection)),
-      ),
+      this.geoserverService
+        .getLayerFeatures(this.layerName)
+        .pipe(
+          catchError(() => of({ type: 'FeatureCollection', features: [] } as FeatureCollection)),
+        ),
     ),
   );
 
-  featureCount = toSignal(
-    this.featureCount$.pipe(map((c) => c.features?.length ?? 0)),
-    { initialValue: 0 },
-  );
+  featureCount = toSignal(this.featureCount$.pipe(map((c) => c.features?.length ?? 0)), {
+    initialValue: 0,
+  });
 
   private styleNames$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
     switchMap(() =>
-      this.geoserverService.getStyles().pipe(
-        catchError(() => of([] as StyleInfo[])),
-      ),
+      this.geoserverService.getStyles().pipe(catchError(() => of([] as StyleInfo[]))),
     ),
   );
 
-  styleNames = toSignal(
-    this.styleNames$.pipe(map((data) => data.map((s) => s.name))),
-    { initialValue: [] as string[] },
-  );
+  styleNames = toSignal(this.styleNames$.pipe(map((data) => data.map((s) => s.name))), {
+    initialValue: [] as string[],
+  });
 
   private redisCacheSources$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
     switchMap(() =>
-      this.geoserverService.getDataSources().pipe(
-        catchError(() => of([] as DataSource[])),
-      ),
+      this.geoserverService.getDataSources().pipe(catchError(() => of([] as DataSource[]))),
     ),
   );
 
@@ -222,9 +218,7 @@ export class LayerDetailComponent {
     this.geoserverService.updateLayer(l.name, { cache_store: value }).subscribe({
       next: () => {
         this.currentCacheStore = cacheStore;
-        this.notificationService.success(
-          this.translate.instant('layerDetail.cacheStoreSuccess'),
-        );
+        this.notificationService.success(this.translate.instant('layerDetail.cacheStoreSuccess'));
       },
       error: () =>
         this.notificationService.error(this.translate.instant('layerDetail.cacheStoreFail')),
@@ -257,7 +251,7 @@ export class LayerDetailComponent {
   }
 
   onPreviewError(): void {
-    console.warn('地图预览加载失败，可能图层暂无数据');
+    console.warn('Map preview failed to load; the layer may have no data');
   }
 
   onTransparentChange(event: { checked: boolean }): void {

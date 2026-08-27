@@ -5,7 +5,7 @@ export interface ServiceVersion {
   version: string;
   /** GetCapabilities / capability-document URL opened in a new tab. */
   url: string;
-  /** Optional doc-type note (e.g. "能力文档" for RESTful OGC API). */
+  /** Optional doc-type note (e.g. "capability document" for RESTful OGC API). */
   note?: string;
 }
 
@@ -25,7 +25,7 @@ export interface ServiceEntry {
   operations: string[];
   /** Implemented versions (clicking opens GetCapabilities in a new tab). */
   versions?: ServiceVersion[];
-  /** Clean URL used by the "打开端点" button (when endpoint has placeholders). */
+  /** Clean URL used by the "open endpoint" button (when endpoint has placeholders). */
   testUrl?: string;
 }
 

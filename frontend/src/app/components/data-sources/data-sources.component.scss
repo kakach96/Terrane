@@ -66,9 +66,9 @@
     padding: 1px 6px;
     font-size: 11px;
     line-height: 1.4;
-    border-radius: 4px;
-    color: var(--accent, #00796b);
-    background: rgba(0, 121, 107, 0.12);
+    border-radius: var(--radius-sm);
+    color: var(--accent-dark);
+    background: var(--accent-bg);
     vertical-align: middle;
   }
 
@@ -104,7 +104,7 @@
       transition: background-color 0.2s ease;
 
       &:hover {
-        background-color: rgba(0, 0, 0, 0.02);
+        background-color: var(--bg-subtle);
       }
     }
   }

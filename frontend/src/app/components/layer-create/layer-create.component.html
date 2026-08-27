@@ -20,7 +20,10 @@
                 <mat-option value="" disabled>{{
                   'layerCreate.workspacePlaceholder' | translate
                 }}</mat-option>
-                <mat-option *ngFor="let ws of workspaces(); trackBy: trackByIndex" [value]="ws.name">
+                <mat-option
+                  *ngFor="let ws of workspaces(); trackBy: trackByIndex"
+                  [value]="ws.name"
+                >
                   {{ ws.title || ws.name }}
                 </mat-option>
               </mat-select>
@@ -52,11 +55,7 @@
             </mat-form-field>
           </div>
 
-          <mat-form-field
-            appearance="outline"
-            class="full-width"
-            *ngIf="tables().length > 0"
-          >
+          <mat-form-field appearance="outline" class="full-width" *ngIf="tables().length > 0">
             <mat-label>{{ 'layerCreate.tableLabel' | translate }}</mat-label>
             <mat-select formControlName="table">
               <mat-option value="" disabled>{{

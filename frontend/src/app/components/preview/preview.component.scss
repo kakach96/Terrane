@@ -31,7 +31,7 @@
       width: 90px;
     }
 
-    // 图层/图层组切换按钮：统一高度与边框
+    // Layer/group toggle: unify height and border
     ::ng-deep .mat-button-toggle-group {
       height: 48px;
       border: 1px solid var(--border-color);
@@ -55,7 +55,7 @@
       }
     }
 
-    // 搜索框与预览格式下拉：与切换按钮同高、同边框色
+    // Search and format fields: match toggle height and border
     .search-field,
     .format-field {
       height: 48px;
@@ -121,7 +121,7 @@
         color: var(--text-secondary);
         background: var(--bg-main);
         padding: 2px 10px;
-        border-radius: 20px;
+        border-radius: var(--radius-sm);
       }
     }
 
@@ -145,7 +145,7 @@
       }
 
       &.active {
-        background: #eef2ff;
+        background: var(--info-bg);
         outline: 1px solid var(--primary-color);
 
         .item-title {
@@ -186,12 +186,12 @@
         font-size: 11px !important;
         min-height: 22px !important;
         padding: 0 8px !important;
-        background: #fbe9e7 !important;
-        color: #c62828 !important;
+        background: var(--warn-bg) !important;
+        color: var(--warn-text) !important;
 
         &.enabled {
-          background: #e8f5e9 !important;
-          color: #2e7d32 !important;
+          background: var(--success-bg) !important;
+          color: var(--success-text) !important;
         }
       }
     }
@@ -251,9 +251,9 @@
         font-size: 12px;
         font-weight: 600;
         color: var(--info-color);
-        background: #e3f2fd;
+        background: var(--info-bg);
         padding: 2px 10px;
-        border-radius: 20px;
+        border-radius: var(--radius-sm);
       }
 
       .geom-chips {
@@ -264,8 +264,8 @@
           font-size: 11px !important;
           min-height: 22px !important;
           padding: 0 8px !important;
-          background: #e8f5e9 !important;
-          color: #2e7d32 !important;
+          background: var(--success-bg) !important;
+          color: var(--success-text) !important;
         }
       }
 
@@ -306,7 +306,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #f5f5f7;
+      background: var(--bg-main);
       position: relative;
 
       .map-frame {
@@ -362,7 +362,7 @@
         width: 64px;
         height: 64px;
         margin-bottom: 16px;
-        color: var(--warn, #f44336);
+        color: var(--warn-color);
         opacity: 0.85;
       }
 

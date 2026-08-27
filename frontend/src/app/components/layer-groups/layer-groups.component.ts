@@ -45,11 +45,7 @@ export class LayerGroupsComponent {
 
   private layers$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
-    switchMap(() =>
-      this.geoserverService.getLayers().pipe(
-        catchError(() => of([] as Layer[])),
-      ),
-    ),
+    switchMap(() => this.geoserverService.getLayers().pipe(catchError(() => of([] as Layer[])))),
   );
 
   layers = toSignal(this.layers$, { initialValue: [] as Layer[] });

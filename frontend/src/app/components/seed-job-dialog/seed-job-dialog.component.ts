@@ -47,7 +47,10 @@ export class SeedJobDialogComponent {
         z_max: [5, [Validators.required, Validators.min(0), Validators.max(22)]],
         format: ['png', Validators.required],
       },
-      { validators: (group) => (group.get('z_min')!.value > group.get('z_max')!.value ? { range: true } : null) },
+      {
+        validators: (group) =>
+          group.get('z_min')!.value > group.get('z_max')!.value ? { range: true } : null,
+      },
     );
   }
 

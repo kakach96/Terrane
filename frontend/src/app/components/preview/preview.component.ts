@@ -100,7 +100,7 @@ export class PreviewComponent {
       combineLatest([
         this.geoserverService.getLayers().pipe(catchError(() => of([] as Layer[]))),
         this.geoserverService.getLayerGroups().pipe(catchError(() => of([] as LayerGroup[]))),
-      ]).pipe(map(([layers, groups]) => ({ layers, groups } as PreviewData))),
+      ]).pipe(map(([layers, groups]) => ({ layers, groups }) as PreviewData)),
     ),
     tap((data) => {
       // Apply initial selection after data loads. Use the emitted `data`
@@ -242,9 +242,9 @@ export class PreviewComponent {
     if (unique.length === 0) return;
     forkJoin(
       unique.map((store) =>
-        this.geoserverService.testDataSourceConnection(store).pipe(
-          catchError(() => of({ success: false, message: '' } as ConnectionTestResult)),
-        ),
+        this.geoserverService
+          .testDataSourceConnection(store)
+          .pipe(catchError(() => of({ success: false, message: '' } as ConnectionTestResult))),
       ),
     ).subscribe((results) => {
       const failed = results.find((r) => !r.success);
@@ -309,9 +309,9 @@ export class PreviewComponent {
         return;
       }
       const nativeCrs = this.displayCrs();
-      // WMS 约定 BBOX 处于请求 SRS 下, 切换坐标系时转换图层原生边界
+      // WMS convention: BBOX is in the request SRS; convert the layer's native bounds when switching CRS
       const converted = transformBounds(bounds, nativeCrs, this.previewOptions.crs);
-      // MVT 是单图层瓦片格式, 图层组预览回退到 PNG。
+      // MVT is a single-layer tile format; layer-group preview falls back to PNG.
       const format =
         this.previewOptions.format === 'application/vnd.mapbox-vector-tile'
           ? 'image/png'

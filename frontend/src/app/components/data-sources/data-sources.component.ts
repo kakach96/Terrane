@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
@@ -23,8 +23,17 @@ export class DataSourcesComponent {
   private translate = inject(TranslateService);
   private languageService = inject(LanguageService);
 
-  /** Current language signal – read in the template to re-render on switch. */
-  currentLang = this.languageService.currentLang;
+  /** Localized data-source type labels; re-evaluated on language switch. */
+  typeLabels = computed(() => {
+    this.languageService.currentLang();
+    return {
+      postgis: 'PostGIS',
+      metadata: this.translate.instant('dataSources.metadataLabel'),
+      shapefile: 'Shapefile',
+      geotiff: 'GeoTIFF',
+      geojson: 'GeoJSON',
+    } as Record<string, string>;
+  });
 
   displayedColumns: string[] = ['name', 'type', 'workspace', 'enabled', 'actions'];
 
@@ -147,23 +156,6 @@ export class DataSourcesComponent {
         return 'map';
       default:
         return 'storage';
-    }
-  }
-
-  getTypeLabel(type: string): string {
-    switch (type) {
-      case 'postgis':
-        return 'PostGIS';
-      case 'metadata':
-        return this.translate.instant('dataSources.metadataLabel');
-      case 'shapefile':
-        return 'Shapefile';
-      case 'geotiff':
-        return 'GeoTIFF';
-      case 'geojson':
-        return 'GeoJSON';
-      default:
-        return type;
     }
   }
 

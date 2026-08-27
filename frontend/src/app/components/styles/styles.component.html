@@ -19,7 +19,12 @@
     <p>{{ 'styles.empty' | translate }}</p>
   </div>
 
-  <table *ngIf="!loading() && styles().length > 0" mat-table [dataSource]="styles()" class="styles-table">
+  <table
+    *ngIf="!loading() && styles().length > 0"
+    mat-table
+    [dataSource]="styles()"
+    class="styles-table"
+  >
     <ng-container matColumnDef="name">
       <th mat-header-cell *matHeaderCellDef>{{ 'common.name' | translate }}</th>
       <td mat-cell *matCellDef="let s">{{ s.name }}</td>

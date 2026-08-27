@@ -36,7 +36,7 @@
     font-size: 64px;
     width: 64px;
     height: 64px;
-    color: #ddd;
+    color: var(--text-disabled);
     margin-bottom: 16px;
   }
 }
@@ -63,16 +63,16 @@
   font-size: 12px !important;
   padding: 2px 10px !important;
   min-height: 24px !important;
-  background: #e3f2fd !important;
-  color: #1565c0 !important;
+  background: var(--info-bg) !important;
+  color: var(--info-text) !important;
 }
 
 .custom {
   font-size: 12px !important;
   padding: 2px 10px !important;
   min-height: 24px !important;
-  background: #e8f5e9 !important;
-  color: #2e7d32 !important;
+  background: var(--success-bg) !important;
+  color: var(--success-text) !important;
 }
 
 .format-chip {
@@ -82,21 +82,21 @@
 }
 
 .format-sld {
-  background: #fff3e0 !important;
-  color: #e65100 !important;
+  background: var(--warning-bg) !important;
+  color: var(--warning-text) !important;
 }
 
 .format-css {
-  background: #e8f5e9 !important;
-  color: #2e7d32 !important;
+  background: var(--success-bg) !important;
+  color: var(--success-text) !important;
 }
 
 .format-ysld {
-  background: #f3e5f5 !important;
-  color: #7b1fa2 !important;
+  background: var(--purple-bg) !important;
+  color: var(--purple-text) !important;
 }
 
 .format-mbstyle {
-  background: #e0f7fa !important;
-  color: #00695c !important;
+  background: var(--teal-bg) !important;
+  color: var(--teal-text) !important;
 }

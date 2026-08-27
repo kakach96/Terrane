@@ -49,7 +49,9 @@ export class LayersComponent {
     return this.layers().filter((layer) => {
       const q = this.searchQuery.toLowerCase();
       const matchesSearch =
-        !this.searchQuery || layer.name.toLowerCase().includes(q) || layer.title.toLowerCase().includes(q);
+        !this.searchQuery ||
+        layer.name.toLowerCase().includes(q) ||
+        layer.title.toLowerCase().includes(q);
       const matchesWs = !this.selectedWorkspace || layer.workspace === this.selectedWorkspace;
       return matchesSearch && matchesWs;
     });

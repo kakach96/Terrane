@@ -6,7 +6,7 @@
     </div>
   </div>
 
-  <!-- 概览统计 -->
+  <!-- Overview stats -->
   <div class="stats-row">
     <div class="stat-card">
       <div class="stat-value">{{ totalCount }}</div>
@@ -47,7 +47,7 @@
     </div>
   </div>
 
-  <!-- 服务分组 -->
+  <!-- Service groups -->
   <section *ngFor="let group of groups" class="service-group" [attr.id]="'group-' + group.id">
     <div class="group-header">
       <mat-icon class="group-header-icon">{{ group.icon }}</mat-icon>

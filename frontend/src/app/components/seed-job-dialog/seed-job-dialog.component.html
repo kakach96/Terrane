@@ -4,11 +4,9 @@
     <mat-form-field appearance="outline">
       <mat-label>{{ 'tileLayers.selectLayer' | translate }}</mat-label>
       <mat-select formControlName="layer">
-        <mat-option
-          *ngFor="let layer of data.layers; trackBy: trackByIndex"
-          [value]="layer"
-          >{{ layer }}</mat-option
-        >
+        <mat-option *ngFor="let layer of data.layers; trackBy: trackByIndex" [value]="layer">{{
+          layer
+        }}</mat-option>
       </mat-select>
     </mat-form-field>
 

@@ -44,7 +44,9 @@
               (selectionChange)="onStyleChange($event.value)"
               class="style-select"
             >
-              <mat-option *ngFor="let s of styleNames(); trackBy: trackByIndex" [value]="s">{{ s }}</mat-option>
+              <mat-option *ngFor="let s of styleNames(); trackBy: trackByIndex" [value]="s">{{
+                s
+              }}</mat-option>
             </mat-select>
             <span *ngIf="styleNames().length === 0">{{ currentStyleName }}</span>
           </span>
@@ -57,8 +59,11 @@
               (selectionChange)="onCacheStoreChange($event.value)"
               class="style-select"
             >
-              <mat-option value="">默认 (内存/本地)</mat-option>
-              <mat-option *ngFor="let ds of redisCacheSources(); trackBy: trackByIndex" [value]="ds.name">
+              <mat-option value="">{{ 'layerDetail.defaultCacheStore' | translate }}</mat-option>
+              <mat-option
+                *ngFor="let ds of redisCacheSources(); trackBy: trackByIndex"
+                [value]="ds.name"
+              >
                 {{ ds.name }}
               </mat-option>
             </mat-select>
@@ -129,7 +134,10 @@
               [value]="previewOptions.format"
               (selectionChange)="updatePreviewParam('format', $event.value)"
             >
-              <mat-option *ngFor="let fmt of previewFormats(); trackBy: trackByIndex" [value]="fmt.value">
+              <mat-option
+                *ngFor="let fmt of previewFormats(); trackBy: trackByIndex"
+                [value]="fmt.value"
+              >
                 {{ fmt.label }}
               </mat-option>
             </mat-select>
@@ -141,7 +149,10 @@
               [value]="previewOptions.crs"
               (selectionChange)="updatePreviewParam('crs', $event.value)"
             >
-              <mat-option *ngFor="let crs of previewCrsOptions; trackBy: trackByIndex" [value]="crs">
+              <mat-option
+                *ngFor="let crs of previewCrsOptions; trackBy: trackByIndex"
+                [value]="crs"
+              >
                 {{ crs }}
               </mat-option>
             </mat-select>

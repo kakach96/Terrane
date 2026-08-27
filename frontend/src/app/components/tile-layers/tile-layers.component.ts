@@ -12,7 +12,10 @@ import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
 import { NotificationService } from '../../services/notification.service';
 import { Layer, SeedJob } from '../../models/geoserver.models';
-import { SeedJobDialogComponent, SeedJobDialogResult } from '../seed-job-dialog/seed-job-dialog.component';
+import {
+  SeedJobDialogComponent,
+  SeedJobDialogResult,
+} from '../seed-job-dialog/seed-job-dialog.component';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 import { switchMap, tap, startWith, catchError, of, interval } from 'rxjs';
 
@@ -42,9 +45,7 @@ export class TileLayersComponent implements OnDestroy {
   private layers$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
     tap(() => this.loading.set(true)),
-    switchMap(() =>
-      this.geoserverService.getLayers().pipe(catchError(() => of([] as Layer[]))),
-    ),
+    switchMap(() => this.geoserverService.getLayers().pipe(catchError(() => of([] as Layer[])))),
     tap(() => this.loading.set(false)),
   );
   layers = toSignal(this.layers$, { initialValue: [] as Layer[] });
@@ -109,7 +110,8 @@ export class TileLayersComponent implements OnDestroy {
           );
           this.refreshTrigger.update((v) => v + 1);
         },
-        error: () => this.notificationService.error(this.translate.instant('tileLayers.truncateFail')),
+        error: () =>
+          this.notificationService.error(this.translate.instant('tileLayers.truncateFail')),
       });
       return;
     }
@@ -204,9 +206,7 @@ export class TileLayersComponent implements OnDestroy {
         const clearNext = (idx: number) => {
           if (idx >= layers.length) {
             this.loading.set(false);
-            this.notificationService.success(
-              this.translate.instant('tileLayers.clearAllSuccess'),
-            );
+            this.notificationService.success(this.translate.instant('tileLayers.clearAllSuccess'));
             this.refreshTrigger.update((v) => v + 1);
             return;
           }

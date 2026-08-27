@@ -3,7 +3,7 @@
     margin-bottom: 24px;
   }
 
-  // 概览统计
+  // Overview stats
   .stats-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -47,7 +47,7 @@
     }
   }
 
-  // 服务分组
+  // Service groups
   .service-group {
     margin-bottom: 28px;
 
@@ -85,7 +85,7 @@
     }
   }
 
-  // 服务卡片
+  // Service cards
   .service-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -114,7 +114,7 @@
         width: 44px;
         height: 44px;
         border-radius: var(--radius-sm);
-        background: rgba(63, 81, 181, 0.1);
+        background: var(--primary-bg);
         color: var(--primary-color);
         display: flex;
         align-items: center;
@@ -175,10 +175,10 @@
         gap: 4px;
         font-size: 12px;
         font-weight: 600;
-        font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+        font-family: 'JetBrains Mono', monospace;
         color: var(--primary-color);
-        background: rgba(63, 81, 181, 0.08);
-        border: 1px solid rgba(63, 81, 181, 0.3);
+        background: var(--primary-bg);
+        border: 1px solid var(--primary-light);
         border-radius: 999px;
         padding: 4px 10px;
         text-decoration: none;
@@ -194,7 +194,7 @@
         }
 
         &:hover {
-          background: rgba(63, 81, 181, 0.16);
+          background: var(--primary-light);
           box-shadow: var(--shadow-sm);
         }
       }

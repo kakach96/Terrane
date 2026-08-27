@@ -1,5 +1,4 @@
 <div class="data-sources fade-in">
-  <span style="display: none">{{ currentLang() }}</span>
   <div class="page-header">
     <div>
       <h1>{{ 'dataSources.title' | translate }}</h1>
@@ -57,7 +56,9 @@
           'dataSources.typeLabel' | translate
         }}</mat-header-cell>
         <mat-cell *matCellDef="let ds">
-          <mat-chip [color]="getTypeColor(ds.type)">{{ getTypeLabel(ds.type) }}</mat-chip>
+          <mat-chip [color]="getTypeColor(ds.type)">{{
+            typeLabels()[ds.type] || ds.type
+          }}</mat-chip>
         </mat-cell>
       </ng-container>
 
@@ -86,7 +87,7 @@
             mat-icon-button
             color="primary"
             (click)="openEditDialog(ds)"
-            title="{{ 'dataSources.tooltipEdit' | translate }}"
+            matTooltip="{{ 'dataSources.tooltipEdit' | translate }}"
             [disabled]="ds.builtin"
           >
             <mat-icon>edit</mat-icon>
@@ -95,7 +96,7 @@
             mat-icon-button
             color="accent"
             (click)="testConnection(ds)"
-            title="{{ 'dataSources.tooltipTest' | translate }}"
+            matTooltip="{{ 'dataSources.tooltipTest' | translate }}"
           >
             <mat-icon>network_check</mat-icon>
           </button>
@@ -103,7 +104,7 @@
             mat-icon-button
             color="warn"
             (click)="deleteDataSource(ds.name)"
-            title="{{ 'dataSources.tooltipDelete' | translate }}"
+            matTooltip="{{ 'dataSources.tooltipDelete' | translate }}"
             [disabled]="ds.builtin"
           >
             <mat-icon>delete</mat-icon>

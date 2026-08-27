@@ -13,7 +13,7 @@
 .logo-text {
   font-size: 22px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--text-primary);
 }
 .login-content {
   padding: 24px 40px;
@@ -33,7 +33,7 @@
   display: inline-block;
 }
 .error-message {
-  color: #f44336;
+  color: var(--warn-color);
   font-size: 13px;
   margin-bottom: 12px;
   display: flex;

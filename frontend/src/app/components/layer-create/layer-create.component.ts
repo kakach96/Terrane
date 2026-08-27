@@ -24,74 +24,74 @@ export class LayerCreateComponent {
 
   layerForm!: FormGroup;
   loading = false;
-  /** metadata 内置数据源且无已有业务表时: 数据表自动用图层名 */
+  /** When the metadata built-in data source has no existing business tables: auto-use the layer name as the table */
   metadataNewTable = false;
 
   // ── Signal pipeline: workspaces ───────────────────────────────────
-  private workspaces$ = this.geoserverService.getAllWorkspaces().pipe(
-    catchError(() => of([] as Workspace[])),
-  );
+  private workspaces$ = this.geoserverService
+    .getAllWorkspaces()
+    .pipe(catchError(() => of([] as Workspace[])));
 
   workspaces = toSignal(this.workspaces$, { initialValue: [] as Workspace[] });
 
   // ── Signal pipelines: form-driven cascading data ──────────────────
-  private dataSources$ = this.layerForm?.get('workspace')?.valueChanges.pipe(
-    distinctUntilChanged(),
-    tap(() => {
-      this.layerForm.get('dataSource')?.setValue('');
-      this.layerForm.get('table')?.setValue('');
-    }),
-    switchMap((workspaceName: string) => {
-      if (!workspaceName) return of([] as DataSource[]);
-      return this.geoserverService.getDataSources().pipe(
-        map((dataSources) =>
-          dataSources.filter(
-            (ds) => ds.workspace === workspaceName || ds.name === 'metadata',
+  private dataSources$ =
+    this.layerForm?.get('workspace')?.valueChanges.pipe(
+      distinctUntilChanged(),
+      tap(() => {
+        this.layerForm.get('dataSource')?.setValue('');
+        this.layerForm.get('table')?.setValue('');
+      }),
+      switchMap((workspaceName: string) => {
+        if (!workspaceName) return of([] as DataSource[]);
+        return this.geoserverService.getDataSources().pipe(
+          map((dataSources) =>
+            dataSources.filter((ds) => ds.workspace === workspaceName || ds.name === 'metadata'),
           ),
-        ),
-        catchError(() => of([] as DataSource[])),
-      );
-    }),
-  ) ?? of([] as DataSource[]);
+          catchError(() => of([] as DataSource[])),
+        );
+      }),
+    ) ?? of([] as DataSource[]);
 
   dataSources = toSignal(this.dataSources$, { initialValue: [] as DataSource[] });
 
-  private tables$ = this.layerForm?.get('dataSource')?.valueChanges.pipe(
-    distinctUntilChanged(),
-    switchMap((dataSourceName: string) => {
-      if (!dataSourceName) {
-        this.metadataNewTable = false;
-        this.layerForm.get('table')?.setValue('');
-        return of([] as string[]);
-      }
-      const ds = this.dataSources().find((d) => d.name === dataSourceName);
-      if (!ds || ds.type !== 'postgis') {
-        this.metadataNewTable = false;
-        this.layerForm.get('table')?.setValue('');
-        return of([] as string[]);
-      }
-      return this.geoserverService.getDataSourceTables(dataSourceName).pipe(
-        tap((tables) => {
-          if (ds.name === 'metadata') {
-            if (tables.length > 0) {
-              this.metadataNewTable = false;
-              this.layerForm.get('table')?.setValue('');
-            } else {
-              this.metadataNewTable = true;
-              const layerName = this.layerForm.get('name')?.value;
-              this.layerForm.get('table')?.setValue(layerName || '');
-            }
-          } else {
-            this.layerForm.get('table')?.setValue('');
-          }
-        }),
-        catchError(() => {
+  private tables$ =
+    this.layerForm?.get('dataSource')?.valueChanges.pipe(
+      distinctUntilChanged(),
+      switchMap((dataSourceName: string) => {
+        if (!dataSourceName) {
           this.metadataNewTable = false;
+          this.layerForm.get('table')?.setValue('');
           return of([] as string[]);
-        }),
-      );
-    }),
-  ) ?? of([] as string[]);
+        }
+        const ds = this.dataSources().find((d) => d.name === dataSourceName);
+        if (!ds || ds.type !== 'postgis') {
+          this.metadataNewTable = false;
+          this.layerForm.get('table')?.setValue('');
+          return of([] as string[]);
+        }
+        return this.geoserverService.getDataSourceTables(dataSourceName).pipe(
+          tap((tables) => {
+            if (ds.name === 'metadata') {
+              if (tables.length > 0) {
+                this.metadataNewTable = false;
+                this.layerForm.get('table')?.setValue('');
+              } else {
+                this.metadataNewTable = true;
+                const layerName = this.layerForm.get('name')?.value;
+                this.layerForm.get('table')?.setValue(layerName || '');
+              }
+            } else {
+              this.layerForm.get('table')?.setValue('');
+            }
+          }),
+          catchError(() => {
+            this.metadataNewTable = false;
+            return of([] as string[]);
+          }),
+        );
+      }),
+    ) ?? of([] as string[]);
 
   tables = toSignal(this.tables$, { initialValue: [] as string[] });
 
@@ -110,7 +110,7 @@ export class LayerCreateComponent {
       maxy: [90],
     });
 
-    // metadata 内置数据源且无已有业务表时: 数据表自动用图层名
+    // When the metadata built-in data source has no existing business tables: auto-use the layer name as the table
     this.layerForm.get('name')?.valueChanges.subscribe((name: string) => {
       if (this.metadataNewTable) {
         this.layerForm.get('table')?.setValue(name || '');

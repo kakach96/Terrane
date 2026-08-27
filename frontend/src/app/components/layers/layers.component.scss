@@ -45,7 +45,7 @@
     font-size: 80px;
     width: 80px;
     height: 80px;
-    color: #ddd;
+    color: var(--text-disabled);
     margin-bottom: 24px;
   }
 
@@ -109,13 +109,13 @@
       font-size: 12px;
 
       &.enabled {
-        background: #e8f5e9;
-        color: #2e7d32;
+        background: var(--success-bg);
+        color: var(--success-text);
       }
 
       &:not(.enabled) {
-        background: #ffebee;
-        color: #c62828;
+        background: var(--warn-bg);
+        color: var(--warn-text);
       }
     }
   }
@@ -144,9 +144,9 @@
     }
 
     .bounds-info {
-      background: #f8f9fa;
+      background: var(--bg-subtle);
       padding: 12px;
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
 
       .bounds-label {
         font-size: 12px;
