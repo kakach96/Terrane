@@ -36,9 +36,6 @@ export class DataSourceDialogComponent {
   private translate = inject(TranslateService);
   private languageService = inject(LanguageService);
 
-  /** Current language signal – read in the template to re-render on switch. */
-  currentLang = this.languageService.currentLang;
-
   form: FormGroup;
   mode: 'create' | 'edit';
   dataSource?: DataSource;
@@ -81,9 +78,9 @@ export class DataSourceDialogComponent {
   selectedFile: File | null = null;
 
   // ── Signal pipeline: workspaces ───────────────────────────────────
-  private workspaces$ = this.geoserverService.getAllWorkspaces().pipe(
-    catchError(() => of([] as Workspace[])),
-  );
+  private workspaces$ = this.geoserverService
+    .getAllWorkspaces()
+    .pipe(catchError(() => of([] as Workspace[])));
 
   workspaces = toSignal(this.workspaces$, { initialValue: [] as Workspace[] });
 
@@ -135,11 +132,13 @@ export class DataSourceDialogComponent {
     }
   }
 
-  get title(): string {
+  /** Dialog title; re-evaluated on language switch. */
+  title = computed(() => {
+    this.languageService.currentLang();
     return this.mode === 'create'
       ? this.translate.instant('dataSources.dialogTitleCreate')
       : this.translate.instant('dataSources.dialogTitleEdit');
-  }
+  });
 
   get selectedType(): string {
     return this.form.get('type')?.value;
@@ -157,7 +156,7 @@ export class DataSourceDialogComponent {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
       this.selectedFile = input.files[0];
-      // 自动填充名称为文件名（不含扩展名）
+      // Auto-fill the name from the file name (without extension)
       const nameCtrl = this.form.get('name');
       if (nameCtrl && !nameCtrl.value) {
         nameCtrl.setValue(this.selectedFile.name.replace(/\.[^.]+$/, ''));
@@ -165,7 +164,7 @@ export class DataSourceDialogComponent {
     }
   }
 
-  /** 打开本地服务器目录选择器 */
+  /** Open the local server directory picker */
   browseLocal(): void {
     const dialogRef = this.dialog.open(DirectoryBrowserComponent, {
       width: '580px',
@@ -181,7 +180,7 @@ export class DataSourceDialogComponent {
     });
   }
 
-  /** 打开 S3 bucket 目录选择器 (携带已填写的连接配置) */
+  /** Open the S3 bucket directory picker (carrying the filled-in connection config) */
   browseS3(): void {
     const connection: S3BrowseRequest = {
       s3_endpoint: this.form.get('s3_endpoint')?.value || undefined,
@@ -209,15 +208,16 @@ export class DataSourceDialogComponent {
     });
   }
 
-  /** 从当前 file_path 推导初始浏览目录 (取其所在目录/前缀) */
+  /** Derive the initial browse directory from the current file_path (its parent dir/prefix) */
   private initialBrowsePath(): string {
     const raw = (this.form.get('file_path')?.value as string) || '';
     if (!raw) {
       return '';
     }
     if (this.isS3) {
-      // S3: 前缀以 '/' 结尾视为目录, 否则取其所在目录 (兼容 / 与 \ 分隔符),
-      // 并去掉 ./ 等根前缀, 避免把本地路径残留当作 S3 前缀
+      // S3: a prefix ending in '/' is a directory; otherwise take its parent
+      // (compatible with both / and \ separators), and strip root prefixes like
+      // './' so leftover local path segments are not treated as S3 prefixes
       if (raw.endsWith('/')) {
         return raw;
       }
@@ -273,7 +273,7 @@ export class DataSourceDialogComponent {
     });
   }
 
-  /** 构建 host/port/database/username/password 连接 (PostGIS 与 Redis 通用) */
+  /** Build a host/port/database/username/password connection (shared by PostGIS and Redis) */
   private buildTcpConnection(): DataSourceConnection {
     return {
       host: this.form.get('host')?.value,
@@ -358,8 +358,8 @@ export class DataSourceDialogComponent {
 
     const type = this.form.get('type')?.value;
 
-    // geojson 数据源走普通创建 (指定 file_path + file_storage_type), 不走文件上传;
-    // S3 存储同样不走本地文件上传 (直接引用已存在的对象)
+    // GeoJSON data sources go through normal creation (file_path + file_storage_type),
+    // not file upload; S3 storage also skips local file upload (references an existing object)
     if (
       this.mode === 'create' &&
       type !== 'postgis' &&
@@ -367,7 +367,7 @@ export class DataSourceDialogComponent {
       !this.isS3 &&
       this.selectedFile
     ) {
-      // 文件型数据源：通过上传接口创建
+      // File-based data source: create via the upload endpoint
       const dsName = this.form.get('name')?.value;
       const upload$ =
         type === 'shapefile'
@@ -421,5 +421,4 @@ export class DataSourceDialogComponent {
   trackByIndex(index: number): number {
     return index;
   }
-
 }

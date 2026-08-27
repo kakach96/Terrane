@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, inject } from '@angular/core';
+import { Component, Inject, OnInit, inject, computed } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../../services/geoserver.service';
@@ -7,9 +7,9 @@ import { FileEntry, S3BrowseRequest } from '../../../models/geoserver.models';
 
 export interface DirectoryBrowserData {
   mode: 'local' | 's3';
-  /** 起始路径/前缀 (local: 绝对路径; s3: 对象 key 前缀) */
+  /** Starting path/prefix (local: absolute path; s3: object key prefix) */
   initialPath?: string;
-  /** S3 模式下的连接配置 (endpoint/bucket/密钥等) */
+  /** Connection config in S3 mode (endpoint/bucket/credentials, etc.) */
   s3Connection?: S3BrowseRequest;
 }
 
@@ -36,9 +36,6 @@ export class DirectoryBrowserComponent implements OnInit {
 
   private languageService = inject(LanguageService);
 
-  /** Current language signal – read in the template to re-render on switch. */
-  currentLang = this.languageService.currentLang;
-
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: DirectoryBrowserData,
     private dialogRef: MatDialogRef<DirectoryBrowserComponent>,
@@ -53,17 +50,21 @@ export class DirectoryBrowserComponent implements OnInit {
     this.load(this.currentPath);
   }
 
-  get title(): string {
+  /** Dialog title; re-evaluated on language switch. */
+  title = computed(() => {
+    this.languageService.currentLang();
     return this.mode === 'local'
       ? this.translate.instant('directoryBrowser.titleLocal')
       : this.translate.instant('directoryBrowser.titleS3');
-  }
+  });
 
-  get rootHint(): string {
+  /** Root hint; re-evaluated on language switch. */
+  rootHint = computed(() => {
+    this.languageService.currentLang();
     return this.mode === 'local'
       ? this.translate.instant('directoryBrowser.rootHintLocal')
       : this.translate.instant('directoryBrowser.rootHintS3');
-  }
+  });
 
   load(path: string): void {
     this.loading = true;
@@ -141,7 +142,7 @@ export class DirectoryBrowserComponent implements OnInit {
         name: entry?.name,
       } as DirectoryBrowserResult);
     } else if (this.currentPath) {
-      // 未选中条目时, 选择当前目录/前缀
+      // When no entry is selected, choose the current directory/prefix
       this.dialogRef.close({
         path: this.currentPath,
         is_dir: true,

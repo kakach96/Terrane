@@ -1,6 +1,4 @@
-<h2 mat-dialog-title>
-  <span style="display: none">{{ currentLang() }}</span>{{ title }}
-</h2>
+<h2 mat-dialog-title>{{ title() }}</h2>
 <mat-dialog-content>
   <form [formGroup]="form" class="data-source-form">
     <div class="form-row">
@@ -19,7 +17,10 @@
       <mat-form-field class="form-field">
         <mat-label>{{ 'dataSources.typeLabel' | translate }}</mat-label>
         <mat-select formControlName="type">
-          <mat-option *ngFor="let type of dataSourceTypes(); trackBy: trackByIndex" [value]="type.value">
+          <mat-option
+            *ngFor="let type of dataSourceTypes(); trackBy: trackByIndex"
+            [value]="type.value"
+          >
             {{ type.label }}
           </mat-option>
         </mat-select>
@@ -127,7 +128,7 @@
       </div>
     </ng-container>
 
-    <!-- 文件型数据源配置 -->
+    <!-- File-based data source config -->
     <ng-container
       *ngIf="
         selectedType !== 'postgis' &&
@@ -140,7 +141,7 @@
 
       <h3 class="section-title">{{ 'dataSources.fileSection' | translate }}</h3>
 
-      <!-- 存储类型下拉 (放在文件配置最前) -->
+      <!-- Storage type dropdown (placed first in the file config) -->
       <mat-form-field class="form-field">
         <mat-label>{{ 'dataSources.storageType' | translate }}</mat-label>
         <mat-select formControlName="file_storage_type">
@@ -155,7 +156,7 @@
         </mat-select>
       </mat-form-field>
 
-      <!-- 嵌入 (使用服务器本地目录) -->
+      <!-- Embedded (uses the server's local directory) -->
       <ng-container *ngIf="!isS3">
         <div class="form-row browse-row">
           <mat-form-field class="form-field flex-field">
@@ -199,7 +200,7 @@
         </div>
       </ng-container>
 
-      <!-- S3 (使用对象存储目录) -->
+      <!-- S3 (uses the object storage directory) -->
       <ng-container *ngIf="isS3">
         <div class="form-row">
           <mat-form-field class="form-field">

@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, inject } from '@angular/core';
+import { Component, Inject, OnInit, inject, computed } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
@@ -10,7 +10,6 @@ import { StyleInfo } from '../../models/geoserver.models';
   standalone: false,
   template: `
     <h2 mat-dialog-title>
-      <span style="display: none">{{ currentLang() }}</span>
       {{
         data.mode === 'create'
           ? ('styles.dialogTitleCreate' | translate)
@@ -35,7 +34,7 @@ import { StyleInfo } from '../../models/geoserver.models';
             <mat-option value="SLD">{{ 'styles.formatSldXml' | translate }}</mat-option>
             <mat-option value="CSS">CSS</mat-option>
             <mat-option value="YSLD">{{ 'styles.formatYaml' | translate }}</mat-option>
-            <mat-option value="MBStyle">Mapbox Style</mat-option>
+            <mat-option value="MBStyle">{{ 'styles.formatMb' | translate }}</mat-option>
           </mat-select>
         </mat-form-field>
       </div>
@@ -112,7 +111,7 @@ import { StyleInfo } from '../../models/geoserver.models';
       </div>
 
       <mat-form-field appearance="outline" class="full-width code-editor">
-        <mat-label>{{ 'styles.contentLabel' | translate: { format: formatLabel } }}</mat-label>
+        <mat-label>{{ 'styles.contentLabel' | translate: { format: formatLabel() } }}</mat-label>
         <textarea matInput [(ngModel)]="content" rows="20" class="code-textarea"></textarea>
       </mat-form-field>
     </mat-dialog-content>
@@ -159,7 +158,7 @@ import { StyleInfo } from '../../models/geoserver.models';
         flex-wrap: wrap;
         .label {
           font-size: 13px;
-          color: var(--text-secondary, #666);
+          color: var(--text-secondary);
           white-space: nowrap;
         }
         button {
@@ -178,9 +177,6 @@ export class StyleEditorDialogComponent implements OnInit {
 
   private languageService = inject(LanguageService);
 
-  /** Current language signal – read in the template to re-render on switch. */
-  currentLang = this.languageService.currentLang;
-
   constructor(
     public dialogRef: MatDialogRef<StyleEditorDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { mode: 'create' | 'edit'; style?: StyleInfo },
@@ -189,7 +185,9 @@ export class StyleEditorDialogComponent implements OnInit {
     private translate: TranslateService,
   ) {}
 
-  get formatLabel(): string {
+  /** Format label; re-evaluated on language switch. */
+  formatLabel = computed(() => {
+    this.languageService.currentLang();
     switch (this.format) {
       case 'CSS':
         return 'CSS';
@@ -200,7 +198,7 @@ export class StyleEditorDialogComponent implements OnInit {
       default:
         return this.translate.instant('styles.formatSld');
     }
-  }
+  });
 
   ngOnInit(): void {
     if (this.data.mode === 'edit' && this.data.style) {
@@ -458,7 +456,7 @@ export class StyleEditorDialogComponent implements OnInit {
 
       // ======== CSS ========
       case 'css-default':
-        return `/* 默认样式 */
+        return `/* Default style */
 * {
   fill: #6688aa;
   fill-opacity: 0.6;
@@ -469,7 +467,7 @@ export class StyleEditorDialogComponent implements OnInit {
 }`;
 
       case 'css-point':
-        return `/* 点样式 */
+        return `/* Point style */
 * {
   mark: symbol(circle);
   mark-size: 10;
@@ -480,7 +478,7 @@ export class StyleEditorDialogComponent implements OnInit {
 }`;
 
       case 'css-line':
-        return `/* 线样式 */
+        return `/* Line style */
 * {
   stroke: #0000FF;
   stroke-width: 2;
@@ -488,7 +486,7 @@ export class StyleEditorDialogComponent implements OnInit {
 }`;
 
       case 'css-polygon':
-        return `/* 面样式 */
+        return `/* Polygon style */
 * {
   fill: #00CC00;
   fill-opacity: 0.5;
@@ -497,7 +495,7 @@ export class StyleEditorDialogComponent implements OnInit {
 }`;
 
       case 'css-scale':
-        return `/* 基于比例尺的样式 */
+        return `/* Scale-based style */
 [@scale > 100000] {
   fill: #6688aa;
   fill-opacity: 0.4;

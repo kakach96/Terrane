@@ -1,8 +1,6 @@
-<h2 mat-dialog-title>
-  <span style="display: none">{{ currentLang() }}</span>{{ title }}
-</h2>
+<h2 mat-dialog-title>{{ title() }}</h2>
 <mat-dialog-content class="browser-content">
-  <p class="browser-hint">{{ rootHint }}</p>
+  <p class="browser-hint">{{ rootHint() }}</p>
 
   <div class="browser-toolbar">
     <button
