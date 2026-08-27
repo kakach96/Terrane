@@ -73,21 +73,27 @@
   }
 
   code {
+    display: inline-block;
     background: var(--bg-subtle);
     padding: 2px 8px;
     border-radius: var(--radius-sm);
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
+    line-height: 1.4;
+    vertical-align: middle;
   }
 }
 
 .type-badge {
+  display: inline-block;
   background: var(--info-bg);
   color: var(--info-text);
   padding: 3px 10px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.4;
+  vertical-align: middle;
 }
 
 .effect-badge {
@@ -96,6 +102,8 @@
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.4;
+  vertical-align: middle;
 
   &.effect-allow {
     background: var(--success-bg);
@@ -121,11 +129,14 @@
 }
 
 .role-tag {
+  display: inline-block;
   background: var(--purple-bg);
   color: var(--purple-text);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   font-size: 12px;
+  line-height: 1.4;
+  vertical-align: middle;
 }
 
 .table-container {

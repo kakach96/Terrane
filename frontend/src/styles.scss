@@ -87,6 +87,39 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* `mat-card-avatar` is designed for images (a 40x40 circular clip). When it is
+   applied to a `mat-icon` the 24px glyph is cropped at its top-left corner.
+   Keep the 40px avatar box but center the glyph and drop the round clipping so
+   the icon renders in full. */
+mat-icon[mat-card-avatar] {
+  border-radius: var(--radius-sm);
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  font-size: 24px;
+}
+
+/* Harmonize card & table corner radii with the design tokens. Material's
+   prebuilt theme leaves `.mat-mdc-card` at a sharp 4px while the tokens define
+   `--radius-md` (12px) for cards; tables were left square (0px). Rounded cards
+   with square tables inside look inconsistent, so give cards the token radius
+   and give tables a slightly smaller matching radius.
+   (Overriding the M3 card shape tokens keeps every Material-derived card
+   style — elevated, outlined, filled — consistent with one declaration.) */
+.mat-mdc-card {
+  --mat-card-elevated-container-shape: var(--radius-md);
+  --mat-card-outlined-container-shape: var(--radius-md);
+  --mat-card-filled-container-shape: var(--radius-md);
+}
+
+.mat-mdc-table {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
 .container {
   max-width: 1400px;
   margin: 0 auto;

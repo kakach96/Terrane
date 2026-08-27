@@ -64,12 +64,18 @@
       border-radius: var(--radius-sm);
     }
 
+    /* Horizontal inset comes from the .nav-group margin below; setting side
+       margins on the anchor overflows it to the right because Material list
+       items are width:100%, clipping the rounded corner. Use only vertical
+       margin here. */
     a {
-      margin: 4px 12px;
+      margin: 4px 0;
       border-radius: var(--radius-md);
       height: 48px;
       color: var(--text-secondary);
-      transition: all 0.3s ease;
+      transition:
+        background-color 0.3s ease,
+        color 0.3s ease;
       box-sizing: border-box;
       display: flex;
       align-items: center;
@@ -80,12 +86,12 @@
       }
 
       &.active {
-        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
-        color: white;
-        box-shadow: var(--shadow-md);
+        background: var(--primary-bg);
+        color: var(--primary-dark);
+        font-weight: 600;
 
         mat-icon {
-          color: white;
+          color: var(--primary-dark);
         }
       }
 
