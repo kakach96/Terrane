@@ -20,7 +20,7 @@ export class PermissionsComponent {
 
   error = '';
 
-  // 新建权限
+  // New permission form
   showCreateForm = false;
   newPerm: CreatePermissionRequest = {
     resourceType: 'layer',
@@ -32,11 +32,22 @@ export class PermissionsComponent {
     role: '',
   };
 
-  // 预定义角色选项
+  // Predefined role options
   roleOptions = ['admin', 'manager', 'user', 'guest'];
   typeOptions = ['layer', 'workspace', 'namespace', 'layerGroup', 'store'];
   modeOptions = ['read', 'write', 'admin'];
   effectOptions = ['allow', 'deny'];
+
+  displayedColumns: string[] = [
+    'priority',
+    'resourceType',
+    'resourceName',
+    'accessMode',
+    'effect',
+    'user',
+    'role',
+    'actions',
+  ];
 
   private refreshTrigger = signal(0);
   loading = signal(false);
@@ -86,10 +97,6 @@ export class PermissionsComponent {
     });
   }
 
-  getEffectColor(effect: string): string {
-    return effect === 'allow' ? '#2e7d32' : '#c62828';
-  }
-
   private resetForm(): void {
     this.newPerm = {
       resourceType: 'layer',
@@ -104,5 +111,4 @@ export class PermissionsComponent {
   trackByIndex(index: number): number {
     return index;
   }
-
 }

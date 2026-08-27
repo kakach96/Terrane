@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { GeoserverService } from '../../services/geoserver.service';
@@ -22,18 +22,28 @@ export class UsersComponent {
   private translate = inject(TranslateService);
   private languageService = inject(LanguageService);
 
-  /** Current language signal – read in the template to re-render on switch. */
-  currentLang = this.languageService.currentLang;
+  /** Localized role labels; re-evaluated on language switch. */
+  roleLabels = computed(() => {
+    this.languageService.currentLang();
+    return {
+      admin: this.translate.instant('users.roleAdmin'),
+      manager: this.translate.instant('users.roleManager'),
+      user: this.translate.instant('users.roleUser'),
+      guest: this.translate.instant('users.roleGuest'),
+    } as Record<string, string>;
+  });
+
+  displayedColumns: string[] = ['username', 'role', 'status', 'created', 'actions'];
 
   error = '';
 
-  // 创建用户
+  // Create user form
   showCreateForm = false;
   newUsername = '';
   newPassword = '';
   newRole = 'user';
 
-  // 修改密码
+  // Change password form
   showPasswordForm = false;
   oldPassword = '';
   newPassword1 = '';
@@ -116,26 +126,5 @@ export class UsersComponent {
       default:
         return '';
     }
-  }
-
-  /** Localized role label for a user role. */
-  roleLabel(role: string): string {
-    switch (role) {
-      case 'admin':
-        return this.translate.instant('users.roleAdmin');
-      case 'manager':
-        return this.translate.instant('users.roleManager');
-      case 'guest':
-        return this.translate.instant('users.roleGuest');
-      default:
-        return this.translate.instant('users.roleUser');
-    }
-  }
-
-  /** Localized enabled/disabled label. */
-  statusLabel(enabled: boolean): string {
-    return enabled
-      ? this.translate.instant('common.enabled')
-      : this.translate.instant('common.disabled');
   }
 }

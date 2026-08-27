@@ -12,8 +12,8 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    font-size: 24px;
-    font-weight: 500;
+    font-size: 28px;
+    font-weight: 600;
   }
 
   .header-actions {
@@ -54,7 +54,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #c62828;
+  color: var(--warn-text);
   margin-bottom: 16px;
 }
 
@@ -67,32 +67,55 @@
   td {
     padding: 10px 14px;
     text-align: left;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--border-color);
   }
 
   th {
     font-weight: 600;
-    color: #666;
+    color: var(--text-secondary);
     font-size: 12px;
     text-transform: uppercase;
   }
 
   tr:hover td {
-    background: #f5f5f5;
+    background: var(--bg-subtle);
   }
 }
 
 .role-badge {
   display: inline-block;
   padding: 3px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
+
+  &.role-admin {
+    background: var(--warn-bg);
+    color: var(--warn-text);
+  }
+
+  &.role-manager {
+    background: var(--info-bg);
+    color: var(--info-text);
+  }
+
+  &.role-user {
+    background: var(--success-bg);
+    color: var(--success-text);
+  }
+}
+
+.status-enabled {
+  color: var(--success-color);
+}
+
+.status-disabled {
+  color: var(--warn-color);
 }
 
 .time-cell {
   font-size: 13px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .table-container {

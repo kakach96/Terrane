@@ -1,5 +1,4 @@
 <div class="users-container">
-  <span style="display: none">{{ currentLang() }}</span>
   <div class="page-header">
     <h1><mat-icon>people</mat-icon> {{ 'users.title' | translate }}</h1>
     <div class="header-actions">
@@ -12,7 +11,7 @@
     </div>
   </div>
 
-  <!-- 创建用户表单 -->
+  <!-- Create user form -->
   <mat-card *ngIf="showCreateForm" class="form-card">
     <mat-card-header>
       <mat-icon mat-card-avatar>person_add</mat-icon>
@@ -22,11 +21,20 @@
       <div class="form-row">
         <mat-form-field appearance="outline">
           <mat-label>{{ 'users.username' | translate }}</mat-label>
-          <input matInput [(ngModel)]="newUsername" placeholder="username" />
+          <input
+            matInput
+            [(ngModel)]="newUsername"
+            placeholder="{{ 'users.usernamePlaceholder' | translate }}"
+          />
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>{{ 'users.password' | translate }}</mat-label>
-          <input matInput type="password" [(ngModel)]="newPassword" placeholder="••••••" />
+          <input
+            matInput
+            type="password"
+            [(ngModel)]="newPassword"
+            placeholder="{{ 'users.passwordPlaceholder' | translate }}"
+          />
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>{{ 'users.role' | translate }}</mat-label>
@@ -52,7 +60,7 @@
     </mat-card-actions>
   </mat-card>
 
-  <!-- 修改密码表单 -->
+  <!-- Change password form -->
   <mat-card *ngIf="showPasswordForm" class="form-card">
     <mat-card-header>
       <mat-icon mat-card-avatar>lock</mat-icon>
@@ -89,14 +97,14 @@
     </mat-card-actions>
   </mat-card>
 
-  <!-- 加载中 -->
+  <!-- Loading -->
   <div *ngIf="loading()" class="loading-spinner">
     <mat-spinner diameter="40"></mat-spinner>
   </div>
 
   <div *ngIf="error" class="error-message"><mat-icon>error</mat-icon> {{ error }}</div>
 
-  <!-- 用户列表 -->
+  <!-- User list -->
   <mat-card>
     <mat-card-header>
       <mat-icon mat-card-avatar>list</mat-icon>
@@ -104,54 +112,60 @@
     </mat-card-header>
     <mat-card-content>
       <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>{{ 'users.columnUsername' | translate }}</th>
-              <th>{{ 'users.columnRole' | translate }}</th>
-              <th>{{ 'users.columnStatus' | translate }}</th>
-              <th>{{ 'users.columnCreated' | translate }}</th>
-              <th>{{ 'users.columnActions' | translate }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let u of users()">
-              <td>
-                <strong>{{ u.username }}</strong>
-              </td>
-              <td>
-                <span
-                  class="role-badge"
-                  [style.background]="
-                    u.role === 'admin' ? '#ffebee' : u.role === 'manager' ? '#e3f2fd' : '#e8f5e9'
-                  "
-                  [style.color]="
-                    u.role === 'admin' ? '#c62828' : u.role === 'manager' ? '#1565c0' : '#2e7d32'
-                  "
-                >
-                  {{ roleLabel(u.role) }}
-                </span>
-              </td>
-              <td>
-                <mat-icon [style.color]="u.enabled ? '#2e7d32' : '#c62828'">{{
-                  u.enabled ? 'check_circle' : 'cancel'
-                }}</mat-icon>
-                {{ statusLabel(u.enabled) }}
-              </td>
-              <td class="time-cell">{{ u.created || '-' }}</td>
-              <td>
-                <button
-                  mat-icon-button
-                  color="warn"
-                  (click)="deleteUser(u.username)"
-                  [disabled]="u.username === 'admin'"
-                  matTooltip="{{ 'users.deleteUserTooltip' | translate }}"
-                >
-                  <mat-icon>delete</mat-icon>
-                </button>
-              </td>
-            </tr>
-          </tbody>
+        <table mat-table [dataSource]="users()" class="data-table">
+          <ng-container matColumnDef="username">
+            <th mat-header-cell *matHeaderCellDef>{{ 'users.columnUsername' | translate }}</th>
+            <td mat-cell *matCellDef="let u">
+              <strong>{{ u.username }}</strong>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="role">
+            <th mat-header-cell *matHeaderCellDef>{{ 'users.columnRole' | translate }}</th>
+            <td mat-cell *matCellDef="let u">
+              <span
+                class="role-badge"
+                [class.role-admin]="u.role === 'admin'"
+                [class.role-manager]="u.role === 'manager'"
+                [class.role-user]="u.role !== 'admin' && u.role !== 'manager'"
+              >
+                {{ roleLabels()[u.role] || u.role }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>{{ 'users.columnStatus' | translate }}</th>
+            <td mat-cell *matCellDef="let u">
+              <mat-icon [class.status-enabled]="u.enabled" [class.status-disabled]="!u.enabled">{{
+                u.enabled ? 'check_circle' : 'cancel'
+              }}</mat-icon>
+              {{ u.enabled ? ('common.enabled' | translate) : ('common.disabled' | translate) }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="created">
+            <th mat-header-cell *matHeaderCellDef>{{ 'users.columnCreated' | translate }}</th>
+            <td mat-cell *matCellDef="let u" class="time-cell">{{ u.created || '-' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>{{ 'users.columnActions' | translate }}</th>
+            <td mat-cell *matCellDef="let u">
+              <button
+                mat-icon-button
+                color="warn"
+                (click)="deleteUser(u.username)"
+                [disabled]="u.username === 'admin'"
+                matTooltip="{{ 'users.deleteUserTooltip' | translate }}"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
         </table>
       </div>
     </mat-card-content>
