@@ -9,6 +9,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/ogc/features")
             .route("", web::get().to(crate::handlers::handle_ogc_landing))
+            .route("/", web::get().to(crate::handlers::handle_ogc_landing))
             .route("/conformance", web::get().to(crate::handlers::handle_ogc_conformance))
             .route("/collections", web::get().to(crate::handlers::handle_ogc_collections))
             .route("/collections/{collection}", web::get().to(crate::handlers::handle_ogc_collection))
@@ -21,6 +22,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(
         web::scope("/ogc/tiles")
             .route("", web::get().to(crate::handlers::handle_ogc_tiles_landing))
+            .route("/", web::get().to(crate::handlers::handle_ogc_tiles_landing))
             .route("/conformance", web::get().to(crate::handlers::handle_ogc_tiles_conformance))
             .route("/tileMatrixSets", web::get().to(crate::handlers::handle_ogc_tiles_tile_matrix_sets))
             .route(
@@ -40,6 +42,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(
         web::scope("/ogc/coverages")
             .route("", web::get().to(crate::handlers::handle_ogc_coverages_landing))
+            .route("/", web::get().to(crate::handlers::handle_ogc_coverages_landing))
             .route("/conformance", web::get().to(crate::handlers::handle_ogc_coverages_conformance))
             .route("/collections", web::get().to(crate::handlers::handle_ogc_coverages_collections))
             .route(
@@ -54,6 +57,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(
         web::scope("/ogc/maps")
             .route("", web::get().to(crate::handlers::handle_ogc_maps_landing))
+            .route("/", web::get().to(crate::handlers::handle_ogc_maps_landing))
             .route("/conformance", web::get().to(crate::handlers::handle_ogc_maps_conformance))
             .route("/collections", web::get().to(crate::handlers::handle_ogc_maps_collections))
             .route(
@@ -72,6 +76,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(
         web::scope("/ogc/styles")
             .route("", web::get().to(crate::handlers::handle_ogc_styles_landing))
+            .route("/", web::get().to(crate::handlers::handle_ogc_styles_landing))
             .route("/conformance", web::get().to(crate::handlers::handle_ogc_styles_conformance))
             .route("/styles", web::get().to(crate::handlers::handle_ogc_styles_list))
             .route("/styles", web::post().to(crate::handlers::handle_ogc_styles_create))
@@ -100,6 +105,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(
         web::scope("/ogc/processes")
             .route("", web::get().to(crate::handlers::handle_ogc_processes_landing))
+            .route("/", web::get().to(crate::handlers::handle_ogc_processes_landing))
             .route("/conformance", web::get().to(crate::handlers::handle_ogc_processes_conformance))
             .route("/processes", web::get().to(crate::handlers::handle_ogc_processes_processes))
             .route(

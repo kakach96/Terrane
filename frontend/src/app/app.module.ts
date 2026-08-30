@@ -59,6 +59,7 @@ import { LoginComponent } from './components/login/login.component';
 import { MonitorComponent } from './components/monitor/monitor.component';
 import { UsersComponent } from './components/users/users.component';
 import { PermissionsComponent } from './components/permissions/permissions.component';
+import { NotFoundComponent } from './components/not-found/not-found.component';
 import { AuthInterceptor } from './services/auth.interceptor';
 
 const routes: Routes = [
@@ -76,6 +77,7 @@ const routes: Routes = [
   { path: 'monitor', component: MonitorComponent },
   { path: 'users', component: UsersComponent },
   { path: 'permissions', component: PermissionsComponent },
+  { path: '**', component: NotFoundComponent },
 ];
 
 @NgModule({
@@ -102,6 +104,7 @@ const routes: Routes = [
     MonitorComponent,
     UsersComponent,
     PermissionsComponent,
+    NotFoundComponent,
   ],
   providers: [
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },

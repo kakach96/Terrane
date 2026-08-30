@@ -40,6 +40,11 @@
     "chinese": "中文",
     "english": "English"
   },
+  "notFound": {
+    "title": "Page Not Found",
+    "message": "The page you are looking for does not exist or has been moved. Please check the address.",
+    "backHome": "Back to Home"
+  },
   "nav": {
     "services": "Services",
     "servicesOverview": "Service Overview",

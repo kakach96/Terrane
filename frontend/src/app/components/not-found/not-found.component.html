@@ -1,0 +1,12 @@
+<div class="not-found-page">
+  <mat-card class="not-found-card">
+    <mat-icon class="not-found-icon">explore_off</mat-icon>
+    <div class="not-found-code">404</div>
+    <h1 class="not-found-title">{{ 'notFound.title' | translate }}</h1>
+    <p class="not-found-message">{{ 'notFound.message' | translate }}</p>
+    <button mat-flat-button color="primary" class="not-found-action" (click)="goHome()">
+      <mat-icon>home</mat-icon>
+      <span>{{ 'notFound.backHome' | translate }}</span>
+    </button>
+  </mat-card>
+</div>

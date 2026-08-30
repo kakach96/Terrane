@@ -1,0 +1,56 @@
+.not-found-page {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.not-found-card {
+  max-width: 480px;
+  width: 100%;
+  padding: 48px 40px;
+  text-align: center;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+
+  .not-found-icon {
+    font-size: 56px;
+    width: 56px;
+    height: 56px;
+    color: var(--text-disabled);
+  }
+
+  .not-found-code {
+    font-size: 72px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--primary-color);
+    letter-spacing: -2px;
+  }
+
+  .not-found-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 8px 0 0;
+  }
+
+  .not-found-message {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0 0 24px;
+  }
+
+  .not-found-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: var(--radius-md);
+  }
+}
