@@ -384,6 +384,9 @@
     "formatSvg": "SVG",
     "formatKml": "KML",
     "formatGeoJson": "GeoJSON",
+    "formatGml": "GML",
+    "formatAtom": "Atom (GeoRSS)",
+    "formatUtfGrid": "UTFGrid (JSON)",
     "formatPdf": "PDF",
     "formatMvt": "MVT vector tiles",
     "mvtHint": "MVT is a vector-tile format (.pbf binary). Use the button in the top-right to open it in a new window."
@@ -695,6 +698,9 @@
     "formatSvg": "SVG",
     "formatKml": "KML",
     "formatGeoJson": "GeoJSON",
+    "formatGml": "GML",
+    "formatAtom": "Atom (GeoRSS)",
+    "formatUtfGrid": "UTFGrid (JSON)",
     "formatPdf": "PDF",
     "formatMvt": "MVT vector tiles",
     "mvtHint": "MVT is a vector-tile format (.pbf binary). Use the button in the top-right to open it in a new window."

@@ -284,7 +284,7 @@ Overall progress ████████████████░░  87%
 
 | # | Feature | Description | Status |
 |---|------|------|:-----:|
-| 36 | **Layer preview format parity** | Frontend preview offers only OpenLayers/PNG/JPEG while backend WMS already emits SVG/KML/GeoJSON/GeoRSS/PDF/GIF/WebP; add TIFF/Atom/UTFGrid/GML to WMS GetMap and wire MVT (`.pbf`) preview for full GeoServer parity | ⏳ planned |
+| 36 | **Layer preview format parity** | Frontend preview + backend WMS GetMap now cover OpenLayers/PNG/JPEG/GIF/WebP/TIFF/SVG/KML/GeoJSON/GML/Atom/UTFGrid/PDF + MVT (`.pbf`) preview; new formats advertised in capabilities, i18n labels in both locales, covered by WMS integration tests | ✅ done |
 | 37 | **Built-in sample data** | Curated `service/samples/` set (GeoJSON point/line/polygon + simplified world map) + first-startup seeding into a `demo` workspace (`[samples] enabled`, default true); Shapefile/GeoTIFF samples and reusing samples in integration tests remain deferred | ✅ GeoJSON set done |
 | 38 | **Database cluster connections** | PostGIS multi-host + read/write replica separation, MySQL multi-host, MongoDB replica-set URI; frontend dialog cluster fields + cluster-aware connection test | ⏳ planned |
 | 39 | **`geoserver` → `terrane` naming migration** | Type names (`GeoServerConfig`/`GeoServerError`/`GeoServerBackup`), `GEOSERVER__` env prefix (keep alias), default `/geoserver` API context, defaults (admin password/DB name/namespace/`geoserver.sqlite`), frontend files, tests, docs, Docker/CI env vars | ⏳ planned (breaking) |

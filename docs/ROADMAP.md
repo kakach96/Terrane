@@ -63,15 +63,15 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 > built-in sample data, database cluster connections, and the `geoserver` → `terrane`
 > naming migration) plus smaller gaps found during a full codebase review.
 
-- **Layer preview formats aligned with GeoServer** — the backend WMS GetMap already
-  emits PNG / JPEG / GIF / WebP / SVG / KML / GeoJSON / GeoRSS / PDF, but the frontend
-  preview only offers OpenLayers / PNG / JPEG. Plan:
-  - Frontend preview: add SVG, KML, GeoJSON, PDF, GIF, WebP (backend already supports them)
-  - Backend: add TIFF / Atom / UTFGrid / GML output to WMS GetMap for full GeoServer parity
-  - Wire MVT (`.pbf`) preview through the existing `/tiles/{layer}/{z}/{x}/{y}.pbf` and
-    `/mvt/{layer}/{z}/{x}/{y}` endpoints
-  - Relax the `getMapImageUrl` format type constraint (`'image/png' | 'image/jpeg'` → all
-    supported formats) and add i18n labels for every new format
+- **Layer preview formats aligned with GeoServer** — ✅ **done**. The frontend preview
+  offers OpenLayers / PNG / JPEG / GIF / WebP / TIFF / SVG / KML / GeoJSON / GML / Atom /
+  UTFGrid / PDF / MVT (`frontend/src/app/utils/preview-formats.ts`, i18n labels in both
+  locales); the backend WMS GetMap emits all of them (`service/src/utils/rendering.rs`:
+  `render_to_atom` / `render_to_gml` / `render_to_utfgrid` in addition to the earlier
+  SVG / KML / GeoJSON / GeoRSS / PDF / TIFF raster set; UTFGrid is the MapBox grid/keys/data
+  JSON at 1/4 resolution, GML reuses the shared `gml.rs` GML 3.2 helpers, Atom carries the
+  GeoRSS geometries); MVT preview goes through `/tiles/{layer}/{z}/{x}/{y}.pbf`; the new
+  formats are advertised in WMS GetCapabilities and covered by WMS integration tests
 - **Built-in sample data** — ✅ **done (GeoJSON set)**: a curated `service/samples/`
   set (GeoJSON point/line/polygon + simplified world-map data) is now shipped and
   auto-registered on first startup (opt-in via `[samples] enabled`, default true) into a
@@ -144,7 +144,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - **Resilience**: rate limiting + request timeout (`service/src/middleware.rs`, HTTP 429/504) and cascaded WMS retry/backoff + circuit breaking (`service/src/utils/cascaded.rs`) all done; no global circuit breaking for other upstream types yet.
 - **Test suite** — unit (`#[cfg(test)]`) and protocol-split integration tests exist (see [DEVELOPMENT.md](DEVELOPMENT.md) §7); still missing a **performance test suite** (micro-benchmarks + HTTP load harness, planned for v1.1) and frontend tests (`ng test` untested).
 - **`geoserver` naming residue** — the codebase still uses `geoserver` in type names (`GeoServerConfig` / `GeoServerError` / `GeoServerBackup`), the `GEOSERVER__` env prefix, the default `/geoserver` API context, defaults (admin password, DB name, namespace, `geoserver.sqlite`), frontend files (`geoserver.service.ts` / `geoserver.models.ts`), tests, docs and Docker/CI env vars. Planned as a breaking-change migration in v1.2 (keep `GEOSERVER__` as a deprecated alias).
-- **Layer preview format gap** — the frontend preview only offers OpenLayers / PNG / JPEG while the backend WMS already emits SVG / KML / GeoJSON / GeoRSS / PDF / GIF / WebP; GeoServer parity (TIFF / Atom / UTFGrid / GML / MVT) is planned in v1.2.
+- **Layer preview format parity — done**: frontend preview and backend GetMap now cover OpenLayers / PNG / JPEG / GIF / WebP / TIFF / SVG / KML / GeoJSON / GML / Atom / UTFGrid / PDF / MVT.
 - **Sample data is GeoJSON-only** — a curated `service/samples/` set (points / lines /
   simplified polygons) is shipped and auto-seeded on first startup (see v1.2 above);
   Shapefile / GeoTIFF sample files and reusing the samples in integration tests are

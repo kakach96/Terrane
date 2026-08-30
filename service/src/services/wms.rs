@@ -295,6 +295,9 @@ impl WmsCapabilities {
                             "application/json".to_string(),
                             "application/pdf".to_string(),
                             "application/rss+xml".to_string(),
+                            "application/atom+xml".to_string(),
+                            "application/gml+xml; version=3.2".to_string(),
+                            "application/json;type=utfgrid".to_string(),
                         ],
                         dcp_type: vec![DcpType {
                             http: HttpMetadata {

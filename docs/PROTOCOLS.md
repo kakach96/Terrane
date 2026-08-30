@@ -25,7 +25,7 @@ and *which remain to be adapted*.
 | **WMS-C**           | 1.1.1                          | ✅      | GetCapabilities / GetMap with `TILED=true` under `/gwc/service/wms` |
 | **Tile cache (GWC-like)** | —                         | ⚠️      | Basic `/tiles` + local disk cache; no seeding / metastore / full GWC |
 | **SLD styling**     | 1.0.0                          | ⚠️      | Basic CRUD + rendering; no CSS / YSLD / MBStyle, limited SLD features |
-| **WMS output formats** | —                          | ✅      | PNG/JPEG/GIF/WebP/SVG/KML/GeoJSON/PDF/GeoRSS |
+| **WMS output formats** | —                          | ✅      | PNG/JPEG/GIF/WebP/TIFF/SVG/KML/GeoJSON/GML/Atom/UTFGrid/PDF/GeoRSS |
 | **WFS output formats** | —                          | ✅      | GML 2.1.2 / GML 3.1.1 / GML 3.2 / GeoJSON / CSV / KML / Shapefile (SHAPE-ZIP) |
 | **WPS**             | 1.0.0                          | ✅      | GetCapabilities / DescribeProcess / Execute (KVP + XML POST); built-in processes vec:Centroid / vec:Buffer / gs:Bounds |
 | **CSW**             | 2.0.2                          | ✅      | GetCapabilities / DescribeRecord / GetRecords / GetRecordById / GetDomain; catalog = Terrane layers as Dublin Core records (KVP + XML POST) |
@@ -43,7 +43,7 @@ Endpoint `/wms` (`service/src/services/wms.rs`, `service/src/handlers/wms_handle
 | Operation           | Status | Notes |
 |---------------------|--------|-------|
 | GetCapabilities     | ✅     | Layers from the catalog |
-| GetMap              | ✅     | Raster (PNG/JPEG/GIF/WebP), vector (SVG), KML, GeoJSON, GeoRSS, PDF, OpenLayers preview; CascadedWms proxy |
+| GetMap              | ✅     | Raster (PNG/JPEG/GIF/WebP/TIFF), vector (SVG), KML, GeoJSON, GML 3.2, Atom (GeoRSS), UTFGrid, GeoRSS, PDF, OpenLayers preview; CascadedWms proxy |
 | GetFeatureInfo      | ✅     | `text/plain`, `text/html`, `application/json`, **`application/vnd.ogc.gml`** (GML 3.1.1 feature collection) |
 | DescribeLayer       | ✅     | WMS 1.1.1 DescribeLayerResponse |
 | GetLegendGraphic    | ✅     | SLD-based legend |
@@ -269,7 +269,7 @@ convention: every file directly under `service/tests/` is its own binary), shari
 
 | Test crate          | Tests | Scope                                                     |
 |---------------------|-------|-----------------------------------------------------------|
-| `service/tests/wms_test.rs` | 30 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF, **GetFeatureInfo GML output**, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
+| `service/tests/wms_test.rs` | 34 (+2 ignored live) | WMS (all operations, formats incl. GeoRSS/PDF/GML/Atom/UTFGrid, **GetFeatureInfo GML output**, vendor params; + cascaded WMS live proxy incl. CQL_FILTER / TIME vendor-param pass-through) + WMS-C (GetCapabilities, GetMap `TILED=true` geodetic/mercator, plain GetMap) |
 | `service/tests/wfs_test.rs` | 15    | WFS (all operations + **LockFeature acquire/conflict/renew/release** + **GetFeatureWithLock lockId** + **GetPropertyValue** + **GetGmlObject** + WFS-T 501 (not implemented, planned) contract + FILTER= OGC XML / ECQL + CQL_FILTER + XML `ogc:Function` (strToLowerCase) + spatial `Intersects` + GeoPackage DescribeFeatureType typed columns + KML 2.2 + Shapefile SHAPE-ZIP) |
 | `service/tests/rest_test.rs`| 49 (+1 ignored live) | health / probes / metrics, REST CRUD (layers / workspaces / namespaces / **stores full CRUD** / **layer-groups PUT** / styles / sql-views / **users PUT**), **workspace-dimension endpoints** (`/workspaces/{ws}/layers|datastores|coveragestores`), **service settings** (`/services/wms/settings` + GetCapabilities title), **`/about/version` + `/about/system-status`**, **`/resources`** (list/upload/delete + path-traversal protection), **feature-type PUT** (GeoPackage columns), **tile seed/truncate REST** (`/tiles/seed` create/list/progress/cancel + truncate), **tile conditional requests** (ETag/Last-Modified → 304), **GeoFence ACL** (deny anonymous WMS/WFS → forbidden, admin bypass, allow rule for role user), **S3 upload validation** (`storage=s3` without bucket → 400), **production-stack smoke test** (full middleware + routes + static files serves index/API/OGC, TraceId echoed), MVT (incl. `.pbf` route), auth, backup, `/tiles` + tile cache, **GeoPackage data source over REST + `/layers/{layer}/feature-type` typed columns**; + PostGIS data source HTTP (live) |
 | `service/tests/wcs_test.rs` | 14    | WCS (DescribeCoverage / GetCoverage incl. real GeoTIFF / ArcGrid + SUBSET / SIZE, **range band subset Band(a:b)**, **INTERPOLATION** bilinear/nearest/unknown fallback, JPEG / netCDF) |

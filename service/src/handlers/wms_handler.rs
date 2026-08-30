@@ -1009,6 +1009,24 @@ fn render_map_image(
             .body(kml));
     }
 
+    // 非图片格式: UTFGrid (MapBox UTFGrid JSON, 1/4 分辨率网格 + 属性)
+    // 必须在 GeoJSON 分支之前匹配: GeoServer 以 application/json;type=utfgrid 请求。
+    if format_lower.contains("utfgrid") || format_lower.contains("utf-grid") {
+        let features: Vec<Feature> = layer_contexts
+            .iter()
+            .flat_map(|ctx| ctx.features.clone())
+            .collect();
+        let utfgrid = crate::utils::rendering::render_to_utfgrid(
+            &features,
+            &context.bounds,
+            context.width,
+            context.height,
+        );
+        return Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .body(utfgrid));
+    }
+
     // 非图片格式: GeoJSON (输出要素 GeoJSON)
     if format_lower.contains("json") || format_lower.contains("geojson") {
         let mut features: Vec<serde_json::Value> = Vec::new();
@@ -1037,6 +1055,32 @@ fn render_map_image(
         return Ok(HttpResponse::Ok()
             .content_type("application/rss+xml")
             .body(georss));
+    }
+
+    // 非图片格式: Atom (Atom 1.0 + GeoRSS 几何, GeoRSS 的 Atom 对应格式)
+    if format_lower.contains("atom") {
+        let layer_name = context.layers.first().map(|s| s.as_str()).unwrap_or("map");
+        let features: Vec<Feature> = layer_contexts
+            .iter()
+            .flat_map(|ctx| ctx.features.clone())
+            .collect();
+        let atom = crate::utils::rendering::render_to_atom(&features, layer_name);
+        return Ok(HttpResponse::Ok()
+            .content_type("application/atom+xml")
+            .body(atom));
+    }
+
+    // 非图片格式: GML (GML 3.2 FeatureCollection, 与 WFS 输出同构)
+    if format_lower.contains("gml") {
+        let layer_name = context.layers.first().map(|s| s.as_str()).unwrap_or("map");
+        let features: Vec<Feature> = layer_contexts
+            .iter()
+            .flat_map(|ctx| ctx.features.clone())
+            .collect();
+        let gml = crate::utils::rendering::render_to_gml(&features, layer_name);
+        return Ok(HttpResponse::Ok()
+            .content_type("application/gml+xml; version=3.2")
+            .body(gml));
     }
 
     // 非图片格式: PDF (渲染地图图像并封装为单页 PDF)

@@ -2,15 +2,16 @@
  * Shared layer-preview format definitions.
  *
  * The backend WMS GetMap already emits a wide range of formats (PNG / JPEG /
- * GIF / WebP / TIFF / SVG / KML / GeoJSON / PDF / GeoRSS); the frontend preview
- * surfaces a curated subset aligned with GeoServer's layer-preview page. Each
- * format is categorized so the preview components know how to render it:
+ * GIF / WebP / TIFF / SVG / KML / GeoJSON / GML / Atom / UTFGrid / PDF /
+ * GeoRSS); the frontend preview surfaces a curated subset aligned with
+ * GeoServer's layer-preview page. Each format is categorized so the preview
+ * components know how to render it:
  *
  * - `openlayers` — interactive OpenLayers map (iframe)
  * - `image`      — raster output rendered as an <img>
- * - `document`   — vector/document output (SVG / KML / GeoJSON / PDF) rendered
- *                  in an <iframe> (browsers render SVG/PDF natively, raw text
- *                  for KML/GeoJSON)
+ * - `document`   — vector/document output (SVG / KML / GeoJSON / GML / Atom /
+ *                  UTFGrid / PDF) rendered in an <iframe> (browsers render
+ *                  SVG/PDF natively, raw text for KML/GeoJSON/GML/Atom/JSON)
  * - `mvt`        — Mapbox Vector Tile (binary .pbf), opened in a new tab
  */
 
@@ -41,6 +42,17 @@ export const PREVIEW_FORMATS: PreviewFormatDef[] = [
     category: 'document',
   },
   { value: 'application/geo+json', keySuffix: 'formatGeoJson', category: 'document' },
+  {
+    value: 'application/gml+xml; version=3.2',
+    keySuffix: 'formatGml',
+    category: 'document',
+  },
+  { value: 'application/atom+xml', keySuffix: 'formatAtom', category: 'document' },
+  {
+    value: 'application/json;type=utfgrid',
+    keySuffix: 'formatUtfGrid',
+    category: 'document',
+  },
   { value: 'application/pdf', keySuffix: 'formatPdf', category: 'document' },
   {
     value: 'application/vnd.mapbox-vector-tile',

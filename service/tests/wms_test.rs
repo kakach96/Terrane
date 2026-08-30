@@ -289,6 +289,132 @@ async fn test_wms_get_map_georss() {
 }
 
 #[actix_rt::test]
+async fn test_wms_get_map_atom() {
+    let app = build_test_app!();
+
+    let uri = GET_MAP_BASE.replace("FORMAT=image/png", "FORMAT=application/atom+xml");
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS GetMap (Atom) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("application/atom+xml"),
+        "Content-Type 应为 application/atom+xml, 实际: {}",
+        content_type
+    );
+
+    let body = actix_web::test::read_body(resp).await;
+    let text = String::from_utf8_lossy(&body);
+    assert!(
+        text.contains(r#"<feed xmlns="http://www.w3.org/2005/Atom" xmlns:georss="http://www.georss.org/georss">"#),
+        "Atom 应包含 Atom + georss 命名空间"
+    );
+    assert!(
+        text.contains("<title>world</title>"),
+        "Atom 应包含图层名标题"
+    );
+    assert!(text.contains("<updated>"), "Atom 应包含 updated 时间戳");
+    assert!(text.contains("</feed>"), "Atom 应以 </feed> 结尾");
+}
+
+#[actix_rt::test]
+async fn test_wms_get_map_gml() {
+    let app = build_test_app!();
+
+    // 分号/空格不是合法 URI 字符, 这里用不带 version 参数的简写形式
+    // (分派按 "gml" 子串匹配; 完整格式串由前端 URLSearchParams 编码)。
+    let uri = GET_MAP_BASE.replace("FORMAT=image/png", "FORMAT=application/gml+xml");
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS GetMap (GML) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("gml+xml"),
+        "Content-Type 应为 application/gml+xml, 实际: {}",
+        content_type
+    );
+
+    let body = actix_web::test::read_body(resp).await;
+    let text = String::from_utf8_lossy(&body);
+    assert!(
+        text.contains(r#"<gml:FeatureCollection xmlns:gml="http://www.opengis.net/gml/3.2""#),
+        "GML 应包含 gml:FeatureCollection + GML 3.2 命名空间"
+    );
+    assert!(
+        text.contains("numberMatched=\"0\""),
+        "GML 应包含 numberMatched 计数"
+    );
+    assert!(text.contains("</gml:FeatureCollection>"), "GML 应正确闭合");
+}
+
+#[actix_rt::test]
+async fn test_wms_get_map_utfgrid() {
+    let app = build_test_app!();
+
+    // GeoServer-style UTFGrid request format string.
+    let uri = GET_MAP_BASE.replace("FORMAT=image/png", "FORMAT=application/json;type=utfgrid");
+    let req = test::TestRequest::get().uri(&uri).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "WMS GetMap (UTFGrid) 应返回 200, 实际: {}",
+        resp.status()
+    );
+
+    let content_type = resp
+        .headers()
+        .get("Content-Type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        content_type.contains("application/json"),
+        "Content-Type 应为 application/json, 实际: {}",
+        content_type
+    );
+
+    // UTFGrid: grid = 64x64 (256/4), keys[0] = "" (empty), data per key.
+    let body: serde_json::Value = actix_web::test::read_body_json(resp).await;
+    let grid = body["grid"].as_array().expect("UTFGrid 应包含 grid 数组");
+    assert_eq!(grid.len(), 64, "grid 应为 64 行 (256/4)");
+    for (i, row) in grid.iter().enumerate() {
+        assert_eq!(
+            row.as_str().map(|s| s.len()),
+            Some(64),
+            "grid 第 {} 行应为 64 列",
+            i
+        );
+    }
+    let keys = body["keys"].as_array().expect("UTFGrid 应包含 keys 数组");
+    assert_eq!(keys.len(), 1, "无要素时 keys 应只有空占位项");
+    assert_eq!(keys[0].as_str(), Some(""), "keys[0] 应为空字符串");
+    assert!(
+        body["data"].as_object().is_some(),
+        "UTFGrid 应包含 data 对象"
+    );
+}
+
+#[actix_rt::test]
 async fn test_wms_get_map_pdf() {
     let app = build_test_app!();
 

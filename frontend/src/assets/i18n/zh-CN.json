@@ -384,6 +384,9 @@
     "formatSvg": "SVG",
     "formatKml": "KML",
     "formatGeoJson": "GeoJSON",
+    "formatGml": "GML",
+    "formatAtom": "Atom (GeoRSS)",
+    "formatUtfGrid": "UTFGrid (JSON)",
     "formatPdf": "PDF",
     "formatMvt": "MVT 矢量瓦片",
     "mvtHint": "MVT 为矢量瓦片格式（.pbf 二进制），请点击右上角按钮在新窗口打开。"
@@ -695,6 +698,9 @@
     "formatSvg": "SVG",
     "formatKml": "KML",
     "formatGeoJson": "GeoJSON",
+    "formatGml": "GML",
+    "formatAtom": "Atom (GeoRSS)",
+    "formatUtfGrid": "UTFGrid (JSON)",
     "formatPdf": "PDF",
     "formatMvt": "MVT 矢量瓦片",
     "mvtHint": "MVT 为矢量瓦片格式（.pbf 二进制），请点击右上角按钮在新窗口打开。"

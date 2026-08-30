@@ -1770,6 +1770,323 @@ fn geometry_to_georss(g: &GeoJsonGeometry) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Atom / UTFGrid / GML output — remaining GetMap vector formats (GeoServer
+// layer-preview parity)
+// ---------------------------------------------------------------------------
+
+/// Render features as an Atom 1.0 feed carrying GeoRSS geometries (the Atom
+/// counterpart of `render_to_georss`, mirroring GeoServer's Atom output).
+pub fn render_to_atom(features: &[Feature], layer_name: &str) -> String {
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut atom = String::new();
+    atom.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
+    atom.push_str(
+        r#"<feed xmlns="http://www.w3.org/2005/Atom" xmlns:georss="http://www.georss.org/georss">"#,
+    );
+    atom.push_str(&format!(
+        "<title>{}</title><subtitle>Feature feed for layer {}</subtitle>\
+         <id>urn:terrane:layer:{}</id><updated>{}</updated>",
+        escape_xml(layer_name),
+        escape_xml(layer_name),
+        escape_xml(layer_name),
+        now
+    ));
+
+    for (i, feature) in features.iter().enumerate() {
+        atom.push_str(&format!(
+            "<entry><title>Feature {}</title><id>urn:terrane:feature:{}</id>\
+             <updated>{}</updated>{}<summary>Feature {} of layer {}</summary></entry>",
+            i,
+            escape_xml(&feature.id),
+            now,
+            geometry_to_georss(&feature.geometry),
+            i,
+            escape_xml(layer_name)
+        ));
+    }
+
+    atom.push_str("</feed>");
+    atom
+}
+
+/// Render features as a GML 3.2 `FeatureCollection` — the same element shape
+/// as the WFS GetFeature GML 3.2 output, reusing the shared `gml` helpers.
+pub fn render_to_gml(features: &[Feature], layer_name: &str) -> String {
+    let mut members = String::new();
+    for feature in features {
+        members.push_str(&format!(
+            "        <gml:featureMember>\n{}\n        </gml:featureMember>\n",
+            crate::utils::gml::feature_to_gml32(feature)
+        ));
+    }
+
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<gml:FeatureCollection xmlns:gml="http://www.opengis.net/gml/3.2"
+                       xmlns:feature="http://geoserver.org/feature"
+                       gml:id="{layer_id}" timeStamp="{ts}"
+                       numberMatched="{total}" numberReturned="{total}">
+{members}        </gml:FeatureCollection>"#,
+        // gml:id must be an NCName: prefix the layer name so it cannot start
+        // with a digit.
+        layer_id = escape_xml(&format!("layer-{}", layer_name)),
+        ts = chrono::Utc::now().to_rfc3339(),
+        total = features.len(),
+        members = members
+    )
+}
+
+/// UTFGrid cell resolution divisor: one grid cell per 4×4 px block (the
+/// convention from the MapBox UTFGrid spec).
+const UTFGRID_RESOLUTION: u32 = 4;
+
+/// Callback that maps a world coordinate to a grid cell and records it in the
+/// target cell list.
+type CellPush<'a> = &'a dyn Fn(f64, f64, &mut Vec<(usize, usize)>);
+
+/// Render features as a MapBox UTFGrid JSON (`grid` + `keys` + `data`) at 1/4
+/// of the request resolution. Cell chars encode the key index offset by 32
+/// (space = empty cell, or a cell hit by multiple features); `data` carries
+/// the feature properties per key.
+pub fn render_to_utfgrid(features: &[Feature], bounds: &Bounds, width: u32, height: u32) -> String {
+    let grid_w = (width / UTFGRID_RESOLUTION).max(1) as usize;
+    let grid_h = (height / UTFGRID_RESOLUTION).max(1) as usize;
+
+    // key id per cell: 0 = empty, n > 0 → keys[n]; cells hit by more than one
+    // feature fall back to the empty char (the spec's "multiple" behavior).
+    let mut cells: Vec<i64> = vec![0; grid_w * grid_h];
+    let mut keys: Vec<String> = vec![String::new()];
+    let mut data = serde_json::Map::new();
+
+    for (idx, feature) in features.iter().enumerate() {
+        let id = (idx + 1) as i64;
+        for (gx, gy) in feature_cells(&feature.geometry, bounds, grid_w, grid_h) {
+            let pos = gy * grid_w + gx;
+            if cells[pos] == 0 {
+                cells[pos] = id;
+            } else if cells[pos] != id {
+                cells[pos] = 0;
+            }
+        }
+        let key = format!("f{}", idx + 1);
+        keys.push(key.clone());
+        data.insert(
+            key,
+            serde_json::to_value(&feature.properties).unwrap_or(serde_json::Value::Null),
+        );
+    }
+
+    let grid: Vec<String> = cells
+        .chunks(grid_w)
+        .map(|row| {
+            row.iter()
+                .map(|&id| {
+                    if id > 0 {
+                        char::from_u32(32 + id as u32).unwrap_or(' ')
+                    } else {
+                        ' '
+                    }
+                })
+                .collect()
+        })
+        .collect();
+
+    serde_json::json!({ "grid": grid, "keys": keys, "data": data }).to_string()
+}
+
+/// Grid cells covered by a geometry: the containing cell for points, cells
+/// along each segment for lines (sampled at sub-cell steps), and cells whose
+/// center falls inside the polygon for (multi-)polygons.
+fn feature_cells(
+    geometry: &GeoJsonGeometry,
+    bounds: &Bounds,
+    grid_w: usize,
+    grid_h: usize,
+) -> Vec<(usize, usize)> {
+    use crate::models::GeoJsonGeometry as G;
+    let dx = (bounds.maxx - bounds.minx).abs();
+    let dy = (bounds.maxy - bounds.miny).abs();
+    let to_cell = |x: f64, y: f64| -> Option<(usize, usize)> {
+        // Degenerate extents map everything to a single row/column so a
+        // point layer still renders one cell.
+        let gx = if dx > f64::EPSILON {
+            ((x - bounds.minx) / dx * grid_w as f64).floor() as i64
+        } else {
+            0
+        };
+        let gy = if dy > f64::EPSILON {
+            ((bounds.maxy - y) / dy * grid_h as f64).floor() as i64
+        } else {
+            0
+        };
+        if (0..grid_w as i64).contains(&gx) && (0..grid_h as i64).contains(&gy) {
+            Some((gx as usize, gy as usize))
+        } else {
+            None
+        }
+    };
+
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    let push = |x: f64, y: f64, out: &mut Vec<(usize, usize)>| {
+        if let Some(c) = to_cell(x, y) {
+            if !out.contains(&c) {
+                out.push(c);
+            }
+        }
+    };
+
+    match geometry {
+        G::Point { coordinates } => {
+            if coordinates.len() >= 2 {
+                push(coordinates[0], coordinates[1], &mut out);
+            }
+        },
+        G::MultiPoint { coordinates } => {
+            for c in coordinates {
+                if c.len() >= 2 {
+                    push(c[0], c[1], &mut out);
+                }
+            }
+        },
+        G::LineString { coordinates } => {
+            for w in coordinates.windows(2) {
+                line_cells(&w[0], &w[1], &mut out, &push);
+            }
+        },
+        G::MultiLineString { coordinates } => {
+            for line in coordinates {
+                for w in line.windows(2) {
+                    line_cells(&w[0], &w[1], &mut out, &push);
+                }
+            }
+        },
+        G::Polygon { coordinates } => polygon_cells(coordinates, bounds, grid_w, grid_h, &mut out),
+        G::MultiPolygon { coordinates } => {
+            for poly in coordinates {
+                polygon_cells(poly, bounds, grid_w, grid_h, &mut out);
+            }
+        },
+        G::GeometryCollection { geometries } => {
+            for g in geometries {
+                out.extend(feature_cells(g, bounds, grid_w, grid_h));
+            }
+        },
+    }
+    out
+}
+
+/// Sample cells along a segment at sub-cell steps (grid space is unknown
+/// here, so reuse the world-space distance divided by a nominal step).
+fn line_cells(a: &[f64], b: &[f64], out: &mut Vec<(usize, usize)>, push: CellPush<'_>) {
+    if a.len() < 2 || b.len() < 2 {
+        return;
+    }
+    // Steps in world units; the caller's to_cell quantizes to cells, so a
+    // fine-enough sampling (segment length / 16, min 1) hits every cell.
+    let dist = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+    let steps = (dist / 16.0).ceil().max(1.0) as usize;
+    for i in 0..=steps {
+        let t = i as f64 / steps as f64;
+        push(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, out);
+    }
+}
+
+/// Cells whose center lies inside the polygon (exterior ring minus holes,
+/// manual even-odd ray casting — `GeoJsonGeometry::to_geo()` degrades
+/// multi-geometries, so containment is computed from raw coordinates).
+fn polygon_cells(
+    rings: &[Vec<Vec<f64>>],
+    bounds: &Bounds,
+    grid_w: usize,
+    grid_h: usize,
+    out: &mut Vec<(usize, usize)>,
+) {
+    let exterior = match rings.first() {
+        Some(r) if r.len() >= 3 => r,
+        _ => return,
+    };
+    let (mut minx, mut miny) = (f64::MAX, f64::MAX);
+    let (mut maxx, mut maxy) = (f64::MIN, f64::MIN);
+    for c in exterior {
+        minx = minx.min(c[0]);
+        miny = miny.min(c[1]);
+        maxx = maxx.max(c[0]);
+        maxy = maxy.max(c[1]);
+    }
+
+    let dx = (bounds.maxx - bounds.minx).abs();
+    let dy = (bounds.maxy - bounds.miny).abs();
+    let cell_w = if dx > f64::EPSILON {
+        dx / grid_w as f64
+    } else {
+        f64::MAX
+    };
+    let cell_h = if dy > f64::EPSILON {
+        dy / grid_h as f64
+    } else {
+        f64::MAX
+    };
+    if cell_w == f64::MAX || cell_h == f64::MAX {
+        // Degenerate extent: fall back to the ring vertices' cells.
+        for c in exterior {
+            let gx = 0usize;
+            let gy = ((bounds.maxy - c[1]) / dy.max(f64::EPSILON) * grid_h as f64).floor();
+            if gy >= 0.0 && (gy as usize) < grid_h {
+                let cell = (gx, gy as usize);
+                if !out.contains(&cell) {
+                    out.push(cell);
+                }
+            }
+        }
+        return;
+    }
+
+    // Candidate cell range from the ring bbox; cell centers in world space
+    // (row 0 = north).
+    let gx0 = (((minx - bounds.minx) / dx * grid_w as f64).floor() as i64).max(0);
+    let gx1 = ((((maxx - bounds.minx) / dx * grid_w as f64).floor() as i64).min(grid_w as i64 - 1))
+        .max(0);
+    let gy0 = (((bounds.maxy - maxy) / dy * grid_h as f64).floor() as i64).max(0);
+    let gy1 = ((((bounds.maxy - miny) / dy * grid_h as f64).floor() as i64).min(grid_h as i64 - 1))
+        .max(0);
+
+    for gy in gy0..=gy1 {
+        for gx in gx0..=gx1 {
+            let wx = bounds.minx + (gx as f64 + 0.5) * cell_w;
+            let wy = bounds.maxy - (gy as f64 + 0.5) * cell_h;
+            if !point_in_rings(wx, wy, rings) {
+                continue;
+            }
+            let cell = (gx as usize, gy as usize);
+            if !out.contains(&cell) {
+                out.push(cell);
+            }
+        }
+    }
+}
+
+/// Even-odd point-in-polygon test over an exterior ring and its holes.
+fn point_in_rings(x: f64, y: f64, rings: &[Vec<Vec<f64>>]) -> bool {
+    let inside = |ring: &[Vec<f64>]| -> bool {
+        let mut inside = false;
+        let mut j = ring.len() - 1;
+        for i in 0..ring.len() {
+            let (xi, yi) = (ring[i][0], ring[i][1]);
+            let (xj, yj) = (ring[j][0], ring[j][1]);
+            if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+                inside = !inside;
+            }
+            j = i;
+        }
+        inside
+    };
+    match rings.first() {
+        Some(ext) if inside(ext) => !rings[1..].iter().any(|hole| inside(hole)),
+        _ => false,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // PDF 渲染 — 将渲染好的地图图像封装为单页 PDF
 // ---------------------------------------------------------------------------
 
@@ -1912,6 +2229,101 @@ mod tests {
         let rss = render_to_georss(&features, "shapes");
         assert!(rss.contains("<georss:line>1 0 3 2 5 4</georss:line>"));
         assert!(rss.contains("<georss:polygon>0 0 4 0 4 4 0 4 0 0</georss:polygon>"));
+    }
+
+    fn feature_with_props(
+        geom: GeoJsonGeometry,
+        props: Vec<(&str, crate::models::PropertyValue)>,
+    ) -> Feature {
+        Feature {
+            id: "test-1".to_string(),
+            geometry: geom,
+            properties: props.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+        }
+    }
+
+    #[test]
+    fn test_render_to_atom_point_entry() {
+        let f = feature_with_props(
+            point(103.8, 44.3),
+            vec![("name", crate::models::PropertyValue::String("site".into()))],
+        );
+        let atom = render_to_atom(&[f], "archsites");
+        assert!(atom.contains(
+            r#"<feed xmlns="http://www.w3.org/2005/Atom" xmlns:georss="http://www.georss.org/georss">"#
+        ));
+        assert!(atom.contains("<title>archsites</title>"));
+        assert!(atom.contains("<entry><title>Feature 0</title>"));
+        // GeoRSS geometry carries the "lat lon" ordering.
+        assert!(atom.contains("<georss:point>44.3 103.8</georss:point>"));
+        assert!(atom.ends_with("</feed>"));
+    }
+
+    #[test]
+    fn test_render_to_gml_feature_collection() {
+        let f = feature_with_props(
+            point(103.8, 44.3),
+            vec![("name", crate::models::PropertyValue::String("site".into()))],
+        );
+        let gml = render_to_gml(&[f], "archsites");
+        assert!(
+            gml.contains(r#"<gml:FeatureCollection xmlns:gml="http://www.opengis.net/gml/3.2""#)
+        );
+        assert!(gml.contains("<gml:featureMember>"));
+        assert!(gml.contains(r#"<Feature gml:id="test-1">"#));
+        assert!(gml.contains("<feature:name>site</feature:name>"));
+        assert!(gml.contains("numberMatched=\"1\""));
+        assert!(gml.contains("gml:id=\"layer-archsites\""));
+        assert!(gml.ends_with("</gml:FeatureCollection>"));
+    }
+
+    #[test]
+    fn test_render_to_utfgrid_point_and_polygon() {
+        use crate::models::PropertyValue;
+        let bounds = Bounds::new(0.0, 0.0, 100.0, 100.0);
+        // Point at the exact center; polygon over the lower-left quadrant.
+        let pt = feature_with_props(
+            point(50.0, 50.0),
+            vec![("kind", PropertyValue::String("pt".into()))],
+        );
+        let polygon = GeoJsonGeometry::Polygon {
+            coordinates: vec![vec![
+                vec![0.0, 0.0],
+                vec![0.0, 50.0],
+                vec![50.0, 50.0],
+                vec![50.0, 0.0],
+                vec![0.0, 0.0],
+            ]],
+        };
+        let poly = feature_with_props(
+            polygon,
+            vec![("kind", PropertyValue::String("poly".into()))],
+        );
+        let json = render_to_utfgrid(&[pt, poly], &bounds, 64, 64);
+        let v: serde_json::Value = serde_json::from_str(&json).expect("valid UTFGrid JSON");
+
+        // 64/4 = 16 grid rows of 16 chars.
+        let grid = v["grid"].as_array().expect("grid array");
+        assert_eq!(grid.len(), 16);
+        for row in grid {
+            assert_eq!(row.as_str().map(|s| s.chars().count()), Some(16));
+        }
+
+        // keys[0] is the empty placeholder; one key per feature with data.
+        let keys = v["keys"].as_array().expect("keys array");
+        assert_eq!(keys.len(), 3);
+        assert_eq!(keys[0].as_str(), Some(""));
+        assert_eq!(keys[1].as_str(), Some("f1"));
+        assert_eq!(v["data"]["f1"]["kind"], "pt");
+        assert_eq!(v["data"]["f2"]["kind"], "poly");
+
+        // Point (50,50) → cell (8,8): char 32 + 1 = '!'.
+        let row8 = grid[8].as_str().unwrap();
+        assert_eq!(row8.as_bytes()[8], b'!');
+        // Polygon covers x,y ∈ [0,50] → cell (0,15) center (3.125, 3.125) is
+        // inside: char 32 + 2 = '"'.
+        let row15 = grid[15].as_str().unwrap();
+        assert_eq!(row15.as_bytes()[0], b'"');
     }
 
     fn find_bytes(hay: &[u8], needle: &[u8]) -> Option<usize> {
