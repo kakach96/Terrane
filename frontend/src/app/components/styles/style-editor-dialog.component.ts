@@ -128,6 +128,9 @@ import { StyleInfo } from '../../models/terrane.models';
         width: 100%;
         margin-bottom: 16px;
       }
+      mat-dialog-actions button {
+        width: 120px;
+      }
       .form-row {
         display: flex;
         gap: 16px;

@@ -47,3 +47,12 @@
     }
   }
 }
+
+mat-dialog-actions {
+  padding: 8px 24px 16px;
+  justify-content: flex-end;
+
+  .action-btn {
+    width: 120px;
+  }
+}

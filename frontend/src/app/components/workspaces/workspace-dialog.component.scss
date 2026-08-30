@@ -11,3 +11,9 @@ mat-dialog-content {
 textarea {
   resize: vertical;
 }
+
+mat-dialog-actions {
+  button {
+    width: 120px;
+  }
+}

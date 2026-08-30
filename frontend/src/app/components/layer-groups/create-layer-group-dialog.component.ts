@@ -50,6 +50,9 @@ import { Layer } from '../../models/terrane.models';
         width: 100%;
         margin-bottom: 16px;
       }
+      mat-dialog-actions button {
+        width: 120px;
+      }
     `,
   ],
 })

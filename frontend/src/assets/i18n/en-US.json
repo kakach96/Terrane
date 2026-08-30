@@ -193,7 +193,7 @@
   "dataSources": {
     "title": "Data Sources",
     "subtitle": "Manage spatial data store connections",
-    "create": "Create data source",
+    "create": "Create",
     "empty": "No data sources",
     "emptyCreate": "Create your first data source",
     "tooltipEdit": "Edit",

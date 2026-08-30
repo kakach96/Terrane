@@ -312,7 +312,7 @@
     </ng-container>
   </form>
 </mat-dialog-content>
-<mat-dialog-actions>
+<mat-dialog-actions align="end">
   <button
     mat-button
     (click)="testConnection()"
@@ -329,8 +329,8 @@
     <mat-icon>{{ isTesting ? 'hourglass_empty' : 'network_check' }}</mat-icon>
     {{ isTesting ? ('dataSources.testing' | translate) : ('common.testConnection' | translate) }}
   </button>
-  <button mat-stroked-button (click)="onCancel()">{{ 'common.cancel' | translate }}</button>
-  <button mat-raised-button color="primary" (click)="onSubmit()">
+  <button mat-stroked-button class="action-btn" (click)="onCancel()">{{ 'common.cancel' | translate }}</button>
+  <button mat-raised-button color="primary" class="action-btn" (click)="onSubmit()">
     {{ mode === 'create' ? ('dataSources.create' | translate) : ('common.update' | translate) }}
   </button>
 </mat-dialog-actions>
