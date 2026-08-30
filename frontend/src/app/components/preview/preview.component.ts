@@ -39,7 +39,8 @@ export class PreviewComponent {
   private languageService = inject(LanguageService);
 
   previewMode: 'layer' | 'group' = 'layer';
-  searchQuery = '';
+  searchQuery = signal('');
+  selectedWorkspace = signal('');
 
   selectedLayer = '';
   selectedGroup = '';
@@ -126,6 +127,13 @@ export class PreviewComponent {
   layers = computed(() => this.data().layers.filter((l) => l.enabled));
   groups = computed(() => this.data().groups);
 
+  // Unique workspace names derived from the enabled layers, for the toolbar filter.
+  workspaces = computed(() => {
+    const set = new Set<string>();
+    this.layers().forEach((l) => set.add(l.workspace));
+    return [...set].sort();
+  });
+
   // Plain methods (not computed) because previewOptions.format is a plain field,
   // not a signal — a computed would cache the initial value and never reflect
   // format changes (breaking the img/iframe switch and the size controls).
@@ -152,8 +160,10 @@ export class PreviewComponent {
   }
 
   filteredLayers = computed(() => {
-    const q = this.searchQuery.trim().toLowerCase();
+    const q = this.searchQuery().trim().toLowerCase();
+    const ws = this.selectedWorkspace();
     return this.layers().filter((l) => {
+      if (ws && l.workspace !== ws) return false;
       if (!q) return true;
       return (
         l.name.toLowerCase().includes(q) ||
@@ -164,7 +174,7 @@ export class PreviewComponent {
   });
 
   filteredGroups = computed(() => {
-    const q = this.searchQuery.trim().toLowerCase();
+    const q = this.searchQuery().trim().toLowerCase();
     return this.groups().filter((g) => {
       if (!q) return true;
       return g.name.toLowerCase().includes(q) || (g.title || '').toLowerCase().includes(q);
@@ -268,6 +278,16 @@ export class PreviewComponent {
     }
   }
 
+  // Filtering is reactive via signals; this handler exists so pressing Enter
+  // in the search box applies the current query (kept for future extension).
+  applySearch(): void {
+    // No-op: the layer/group lists filter reactively as the query changes.
+  }
+
+  clearSearch(): void {
+    this.searchQuery.set('');
+  }
+
   refreshPreview(): void {
     if (this.previewMode === 'layer') {
       const layer = this.currentLayer();
@@ -360,6 +380,11 @@ export class PreviewComponent {
   // array is recreated on each change detection (avoids DOM rebuild storms).
   trackByKey(index: number, item: { name?: string; value?: string }): string {
     return item?.value || item?.name || String(index);
+  }
+
+  // Track by the workspace name itself (string items).
+  trackByWorkspace(index: number, ws: string): string {
+    return ws;
   }
 
   openInNewWindow(): void {

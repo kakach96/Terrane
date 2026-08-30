@@ -16,6 +16,16 @@
       <mat-button-toggle value="group">{{ 'preview.modeGroup' | translate }}</mat-button-toggle>
     </mat-button-toggle-group>
 
+    <mat-form-field appearance="outline" class="workspace-field">
+      <mat-label>{{ 'preview.workspaceLabel' | translate }}</mat-label>
+      <mat-select [ngModel]="selectedWorkspace()" (ngModelChange)="selectedWorkspace.set($event)">
+        <mat-option value="">{{ 'preview.allWorkspaces' | translate }}</mat-option>
+        <mat-option *ngFor="let ws of workspaces(); trackBy: trackByWorkspace" [value]="ws">
+          {{ ws }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
     <mat-form-field appearance="outline" class="format-field">
       <mat-label>{{ 'preview.formatLabel' | translate }}</mat-label>
       <mat-select [(ngModel)]="previewOptions.format" (selectionChange)="refreshPreview()">
@@ -30,9 +40,21 @@
       <mat-icon matPrefix>search</mat-icon>
       <input
         matInput
-        [(ngModel)]="searchQuery"
+        [ngModel]="searchQuery()"
+        (ngModelChange)="searchQuery.set($event)"
+        (keyup.enter)="applySearch()"
         placeholder="{{ 'preview.searchPlaceholder' | translate }}"
       />
+      <button
+        matSuffix
+        mat-icon-button
+        *ngIf="searchQuery()"
+        (click)="clearSearch()"
+        [attr.aria-label]="'preview.clearSearchAria' | translate"
+        matTooltip="{{ 'preview.clearSearch' | translate }}"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="size-field" *ngIf="isStaticFormat()">

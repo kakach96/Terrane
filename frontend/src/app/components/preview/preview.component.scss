@@ -23,6 +23,10 @@
       min-width: 200px;
     }
 
+    .workspace-field {
+      width: 180px;
+    }
+
     .format-field {
       width: 280px;
     }
@@ -55,8 +59,9 @@
       }
     }
 
-    // Search and format fields: match toggle height and border
+    // Search, workspace and format fields: match toggle height and border
     .search-field,
+    .workspace-field,
     .format-field {
       height: 48px;
 
