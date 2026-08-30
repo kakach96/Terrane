@@ -526,6 +526,88 @@ async fn test_rest_mongo_data_source_crud() {
 }
 
 #[actix_rt::test]
+async fn test_rest_mongo_cluster_data_source_roundtrip() {
+    let app = build_test_app!();
+
+    // 集群连接: 逗号分隔主机列表 + 副本集名称应完整持久化。
+    let create = test::TestRequest::post()
+        .uri("/geoserver/data-sources")
+        .set_json(serde_json::json!({
+            "name": "mongo_cluster_1",
+            "type": "mongo",
+            "workspace": "default",
+            "enabled": true,
+            "connection": {
+                "host": "mongo1:27018,mongo2",
+                "port": 27017,
+                "database": "geodb",
+                "username": "admin",
+                "password": "secret",
+                "replica_set": "rs0",
+            },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, create).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::CREATED,
+        "创建 MongoDB 集群数据源应返回 201"
+    );
+
+    let req = test::TestRequest::get()
+        .uri("/geoserver/data-sources")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let found = body["data"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .find(|d| d["name"] == "mongo_cluster_1")
+        .expect("MongoDB 集群数据源应存在");
+    assert_eq!(
+        found["connection"]["host"], "mongo1:27018,mongo2",
+        "集群主机列表应原样持久化"
+    );
+    assert_eq!(
+        found["connection"]["replica_set"], "rs0",
+        "副本集名称应持久化"
+    );
+}
+
+#[actix_rt::test]
+async fn test_data_source_cluster_connection_test() {
+    let app = build_test_app!();
+
+    // PostGIS 集群连接测试: 逗号分隔主机列表 (端口拒绝连接) →
+    // 走 libpq 风格 "host=a,b port=pa,pb" 路径, 应快速失败而非报错。
+    let req = test::TestRequest::post()
+        .uri("/geoserver/data-sources/test")
+        .set_json(serde_json::json!({
+            "name": "pg_cluster_probe",
+            "type": "postgis",
+            "workspace": "default",
+            "enabled": true,
+            "connection": {
+                "host": "127.0.0.1,127.0.0.1",
+                "port": 1,
+                "database": "geodb",
+                "username": "postgres",
+                "password": "secret",
+            },
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(
+        body["success"], false,
+        "无存活节点时连接测试应返回 success=false"
+    );
+}
+
+#[actix_rt::test]
 async fn test_browse_local_directory() {
     let app = build_test_app!();
 

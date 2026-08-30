@@ -449,24 +449,9 @@ async fn test_mongo_connection(ds: &DataSource) -> serde_json::Value {
             })
         },
     };
-    let host = conn_info.host.as_deref().unwrap_or("127.0.0.1");
-    let port = conn_info.port.unwrap_or(27017);
+    // 集群连接: host 可为 mongodb:// 完整 URI 或逗号分隔主机列表 (+ replica_set)
+    let uri = crate::utils::cluster::mongo_uri_from_connection(conn_info);
     let database = conn_info.database.as_deref().unwrap_or("geoserver");
-    let user = conn_info.username.as_deref();
-    let password = conn_info.password.as_deref();
-
-    let uri = if let Some(u) = user {
-        format!(
-            "mongodb://{}:{}@{}:{}/{}",
-            uri_enc(u),
-            uri_enc(password.unwrap_or("")),
-            host,
-            port,
-            database
-        )
-    } else {
-        format!("mongodb://{}:{}/{}", host, port, database)
-    };
 
     let client = match mongodb::Client::with_uri_str(&uri).await {
         Ok(c) => c,
@@ -493,20 +478,6 @@ async fn test_mongo_connection(ds: &DataSource) -> serde_json::Value {
     }
 }
 
-/// URI 组件百分号编码 (MongoDB 连接串用户名/密码)。
-fn uri_enc(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for b in s.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char)
-            },
-            _ => out.push_str(&format!("%{:02X}", b)),
-        }
-    }
-    out
-}
-
 /// MySQL 数据源连接测试: 建立连接并执行 `SELECT 1` 验证可连通性。
 async fn test_mysql_connection(ds: &DataSource) -> serde_json::Value {
     let conn_info = match &ds.connection {
@@ -518,8 +489,6 @@ async fn test_mysql_connection(ds: &DataSource) -> serde_json::Value {
             })
         },
     };
-    let host = conn_info.host.as_deref().unwrap_or("127.0.0.1").to_string();
-    let port = conn_info.port.unwrap_or(3306);
     let database = conn_info
         .database
         .clone()
@@ -530,35 +499,41 @@ async fn test_mysql_connection(ds: &DataSource) -> serde_json::Value {
         .unwrap_or_else(|| "root".to_string());
     let password = conn_info.password.clone();
 
-    let opts = mysql_async::OptsBuilder::default()
-        .ip_or_hostname(host)
-        .tcp_port(port)
-        .db_name(Some(database))
-        .user(Some(user))
-        .pass(password)
-        .wait_timeout(Some(5));
-    let pool = mysql_async::Pool::new(opts);
-    match pool.get_conn().await {
-        Ok(mut conn) => {
-            let ok: mysql_async::Result<()> =
-                mysql_async::prelude::Queryable::query_drop(&mut conn, "SELECT 1").await;
-            drop(conn);
-            match ok {
-                Ok(()) => serde_json::json!({
-                    "success": true,
-                    "message": "MySQL connection successful",
-                }),
-                Err(e) => serde_json::json!({
-                    "success": false,
-                    "message": format!("MySQL query failed: {}", e),
-                }),
-            }
-        },
-        Err(e) => serde_json::json!({
-            "success": false,
-            "message": format!("MySQL connection failed: {}", e),
-        }),
+    // 集群连接: 依次尝试逗号分隔主机列表, 第一个连通节点即测试成功。
+    let hosts =
+        crate::utils::cluster::parse_host_list(conn_info.host.as_deref(), conn_info.port, 3306);
+    let mut last_err = String::new();
+    for h in &hosts {
+        let opts = mysql_async::OptsBuilder::default()
+            .ip_or_hostname(h.host.clone())
+            .tcp_port(h.port)
+            .db_name(Some(database.clone()))
+            .user(Some(user.clone()))
+            .pass(password.clone())
+            .wait_timeout(Some(5));
+        let pool = mysql_async::Pool::new(opts);
+        match pool.get_conn().await {
+            Ok(mut conn) => {
+                let ok: mysql_async::Result<()> =
+                    mysql_async::prelude::Queryable::query_drop(&mut conn, "SELECT 1").await;
+                drop(conn);
+                match ok {
+                    Ok(()) => {
+                        return serde_json::json!({
+                            "success": true,
+                            "message": format!("MySQL connection successful ({}:{})", h.host, h.port),
+                        })
+                    },
+                    Err(e) => last_err = format!("MySQL query failed: {}", e),
+                }
+            },
+            Err(e) => last_err = format!("MySQL connection failed: {}", e),
+        }
     }
+    serde_json::json!({
+        "success": false,
+        "message": last_err,
+    })
 }
 
 /// ImageMosaic / ImagePyramid 数据源连接测试: 目录存在且包含至少一个
@@ -651,24 +626,36 @@ async fn test_postgis_connection(ds: &DataSource) -> serde_json::Value {
         },
     };
 
-    let pg_host = conn_info.host.as_deref().unwrap_or("localhost");
-    let pg_port = conn_info.port.unwrap_or(5432);
-    let pg_db = conn_info.database.as_deref().unwrap_or("geoserver");
-    let pg_user = conn_info.username.as_deref().unwrap_or("postgres");
+    let pg_host = conn_info.host.as_deref().unwrap_or("localhost").trim();
 
-    match tokio_postgres::connect(
-        &format!(
+    // 集群连接: 完整连接串直接透传; 否则逗号分隔主机列表 → libpq 风格
+    // "host=h1,h2 port=p1,p2" (tokio-postgres 原生按序故障转移)。
+    let conn_str = if crate::utils::cluster::is_connection_string(pg_host) {
+        pg_host.to_string()
+    } else {
+        let hosts =
+            crate::utils::cluster::parse_host_list(conn_info.host.as_deref(), conn_info.port, 5432);
+        let host_list = hosts
+            .iter()
+            .map(|h| h.host.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        let port_list = hosts
+            .iter()
+            .map(|h| h.port.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(
             "host={} port={} dbname={} user={} password={}",
-            pg_host,
-            pg_port,
-            pg_db,
-            pg_user,
+            host_list,
+            port_list,
+            conn_info.database.as_deref().unwrap_or("geoserver"),
+            conn_info.username.as_deref().unwrap_or("postgres"),
             conn_info.password.as_deref().unwrap_or("")
-        ),
-        tokio_postgres::NoTls,
-    )
-    .await
-    {
+        )
+    };
+
+    match tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await {
         Ok((client, connection)) => {
             tokio::spawn(connection);
             match client.query_one("SELECT 1", &[]).await {

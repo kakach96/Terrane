@@ -2,6 +2,7 @@ pub mod arcgrid;
 pub mod bitmap_font;
 pub mod bounds;
 pub mod cascaded;
+pub mod cluster;
 pub mod cql_filter;
 pub mod css_parser;
 pub mod geofence;

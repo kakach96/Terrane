@@ -73,6 +73,15 @@
             formControlName="host"
             placeholder="{{ 'dataSources.hostPlaceholder' | translate }}"
           />
+          <mat-hint
+            *ngIf="
+              selectedType === 'postgis' ||
+              selectedType === 'mysql' ||
+              selectedType === 'mongo'
+            "
+          >
+            {{ 'dataSources.hostClusterHint' | translate }}
+          </mat-hint>
         </mat-form-field>
 
         <mat-form-field class="form-field">
@@ -83,6 +92,22 @@
             type="number"
             placeholder="{{ 'dataSources.portPlaceholder' | translate }}"
           />
+          <mat-hint *ngIf="selectedType === 'mongo'">
+            {{ 'dataSources.mongoMultiPortHint' | translate }}
+          </mat-hint>
+        </mat-form-field>
+      </div>
+
+      <!-- MongoDB cluster connection: replica-set name -->
+      <div class="form-row" *ngIf="selectedType === 'mongo'">
+        <mat-form-field class="form-field">
+          <mat-label>{{ 'dataSources.replicaSet' | translate }}</mat-label>
+          <input
+            matInput
+            formControlName="replica_set"
+            placeholder="{{ 'dataSources.replicaSetPlaceholder' | translate }}"
+          />
+          <mat-hint>{{ 'dataSources.replicaSetHint' | translate }}</mat-hint>
         </mat-form-field>
       </div>
 

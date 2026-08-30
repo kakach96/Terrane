@@ -121,6 +121,9 @@ impl std::fmt::Display for DataSourceType {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DataSourceConnection {
     // -- PostGIS 字段 (均为可选，以便文件型数据源留空) --
+    /// 主机。支持逗号分隔的集群主机列表 ("pg1,pg2" 共用 port, 或
+    /// "pg1:5433,pg2:5432" 逐主机端口); 也可直接填完整连接串
+    /// (postgres:// / mysql:// / mongodb://, 见 utils/cluster.rs)。
     #[serde(default)]
     pub host: Option<String>,
     #[serde(default)]
@@ -133,6 +136,9 @@ pub struct DataSourceConnection {
     pub username: Option<String>,
     #[serde(default)]
     pub password: Option<String>,
+    /// MongoDB 副本集名称 (可选; host 为主机列表时写入 ?replicaSet= 参数)
+    #[serde(default)]
+    pub replica_set: Option<String>,
 
     // -- 文件型字段 --
     /// 文件路径 (shapefile .shp / geotiff .tif / geojson .geojson)

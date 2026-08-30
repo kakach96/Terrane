@@ -89,6 +89,7 @@ impl SqliteStore {
                 s3_bucket TEXT,
                 s3_access_key TEXT,
                 s3_secret_key TEXT,
+                replica_set TEXT,
                 created TEXT,
                 modified TEXT
             )",
@@ -130,6 +131,11 @@ impl SqliteStore {
                     [],
                 )?;
             }
+        }
+
+        // 检查并添加 replica_set 列 (MongoDB 副本集, 集群连接)
+        if !column_exists(conn, "data_sources", "replica_set") {
+            conn.execute("ALTER TABLE data_sources ADD COLUMN replica_set TEXT", [])?;
         }
 
         conn.execute(
@@ -554,18 +560,21 @@ impl SqliteStore {
         let (user_idx, pass_idx, file_path_idx, file_storage_idx, created_idx, modified_idx) =
             if has_s3 {
                 // name,type,ws,enabled,host,port,db,schema,user,pass,file_path,file_storage,
-                // s3_endpoint,s3_region,s3_bucket,s3_access_key,s3_secret_key,created,modified
-                (8, 9, 10, 11, 17, 18)
+                // s3_endpoint,s3_region,s3_bucket,s3_access_key,s3_secret_key,replica_set,created,modified
+                (8, 9, 10, 11, 18, 19)
             } else if has_file {
-                // name,type,workspace,enabled,host,port,db,schema,user,pass,file_path,file_storage,created,modified
-                (8, 9, 10, 11, 12, 13)
+                // name,type,workspace,enabled,host,port,db,schema,user,pass,file_path,file_storage,replica_set,created,modified
+                (8, 9, 10, 11, 13, 14)
             } else if has_schema {
-                // name,type,workspace,enabled,host,port,db,schema,user,pass,created,modified
-                (8, 9, 10, 11, 12, 13) // file columns at end (dummy), will be None
+                // name,type,workspace,enabled,host,port,db,schema,user,pass,replica_set,created,modified
+                (8, 9, 10, 11, 11, 12) // file columns at end (dummy), will be None
             } else {
-                // name,type,workspace,enabled,host,port,db,user,pass,created,modified
-                (7, 8, 99, 99, 9, 10) // file_path/storage idx unused
+                // name,type,workspace,enabled,host,port,db,user,pass,replica_set,created,modified
+                (7, 8, 99, 99, 10, 11) // file_path/storage idx unused
             };
+        // replica_set 列紧挨 created 之前 (迁移保证存在)
+        let replica_idx = created_idx - 1;
+        let replica_set: Option<String> = row.get(replica_idx)?;
 
         let username: Option<String> = if has_schema || has_file {
             row.get(user_idx)?
@@ -619,6 +628,7 @@ impl SqliteStore {
                 s3_bucket,
                 s3_access_key,
                 s3_secret_key,
+                replica_set,
             }),
             created,
             modified,
@@ -633,16 +643,16 @@ impl SqliteStore {
         let has_s3 = column_exists(&conn, "data_sources", "s3_bucket");
 
         let sql = if has_s3 {
-            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, created, modified
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, replica_set, created, modified
              FROM data_sources WHERE name = ?"
         } else if has_file {
-            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, created, modified
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, replica_set, created, modified
              FROM data_sources WHERE name = ?"
         } else if has_schema {
-            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, replica_set, created, modified
              FROM data_sources WHERE name = ?"
         } else {
-            "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified
+            "SELECT name, type, workspace, enabled, host, port, database_name, username, password, replica_set, created, modified
              FROM data_sources WHERE name = ?"
         };
 
@@ -665,16 +675,16 @@ impl SqliteStore {
         let has_s3 = column_exists(&conn, "data_sources", "s3_bucket");
 
         let sql = if has_s3 {
-            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, created, modified
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, replica_set, created, modified
              FROM data_sources ORDER BY name"
         } else if has_file {
-            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, created, modified
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, replica_set, created, modified
              FROM data_sources ORDER BY name"
         } else if has_schema {
-            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified
+            "SELECT name, type, workspace, enabled, host, port, database_name, schema_name, username, password, replica_set, created, modified
              FROM data_sources ORDER BY name"
         } else {
-            "SELECT name, type, workspace, enabled, host, port, database_name, username, password, created, modified
+            "SELECT name, type, workspace, enabled, host, port, database_name, username, password, replica_set, created, modified
              FROM data_sources ORDER BY name"
         };
 
@@ -705,8 +715,8 @@ impl SqliteStore {
 
         if has_s3 {
             conn.execute(
-                "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, created, modified)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, replica_set, created, modified)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     name,
                     format!("{}", data_source_type).to_lowercase(),
@@ -725,14 +735,15 @@ impl SqliteStore {
                     connection.s3_bucket,
                     connection.s3_access_key,
                     connection.s3_secret_key,
+                    connection.replica_set,
                     now.clone(),
                     now
                 ],
             )?;
         } else if has_file {
             conn.execute(
-                "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, created, modified)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, file_path, file_storage_type, replica_set, created, modified)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     name,
                     format!("{}", data_source_type).to_lowercase(),
@@ -746,14 +757,15 @@ impl SqliteStore {
                     connection.password,
                     connection.file_path,
                     connection.file_storage_type,
+                    connection.replica_set,
                     now.clone(),
                     now
                 ],
             )?;
         } else {
             conn.execute(
-                "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, created, modified)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name, schema_name, username, password, replica_set, created, modified)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     name,
                     format!("{}", data_source_type).to_lowercase(),
@@ -765,6 +777,7 @@ impl SqliteStore {
                     connection.schema,
                     connection.username,
                     connection.password,
+                    connection.replica_set,
                     now.clone(),
                     now
                 ],
@@ -842,6 +855,9 @@ impl SqliteStore {
                 updates.push("s3_secret_key = ?".to_string());
                 values.push(Box::new(c.s3_secret_key));
             }
+            // replica_set 列由启动迁移保证存在
+            updates.push("replica_set = ?".to_string());
+            values.push(Box::new(c.replica_set));
         }
 
         let query = format!(

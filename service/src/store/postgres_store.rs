@@ -120,6 +120,7 @@ impl PostgresStore {
                 s3_bucket TEXT,
                 s3_access_key TEXT,
                 s3_secret_key TEXT,
+                replica_set TEXT,
                 created TEXT,
                 modified TEXT
             );
@@ -248,6 +249,8 @@ impl PostgresStore {
             ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_bucket TEXT;
             ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_access_key TEXT;
             ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS s3_secret_key TEXT;
+            -- MongoDB replica-set name (cluster connections, migrate existing tables)
+            ALTER TABLE data_sources ADD COLUMN IF NOT EXISTS replica_set TEXT;
 
             -- Layer-level tile cache backend data source (migrate existing layers tables)
             ALTER TABLE layers ADD COLUMN IF NOT EXISTS cache_store TEXT;
@@ -271,8 +274,9 @@ impl PostgresStore {
         let s3_bucket: Option<String> = row.try_get(14)?;
         let s3_access_key: Option<String> = row.try_get(15)?;
         let s3_secret_key: Option<String> = row.try_get(16)?;
-        let created: Option<String> = row.try_get(17)?;
-        let modified: Option<String> = row.try_get(18)?;
+        let replica_set: Option<String> = row.try_get(17)?;
+        let created: Option<String> = row.try_get(18)?;
+        let modified: Option<String> = row.try_get(19)?;
 
         Ok(DataSource {
             name: row.try_get(0)?,
@@ -293,6 +297,7 @@ impl PostgresStore {
                 s3_bucket,
                 s3_access_key,
                 s3_secret_key,
+                replica_set,
             }),
             created,
             modified,
@@ -563,7 +568,7 @@ impl Store for PostgresStore {
             .query(
                 "SELECT name, type, workspace, enabled, host, port, database_name, schema_name,
                         username, password, file_path, file_storage_type, s3_endpoint, s3_region,
-                        s3_bucket, s3_access_key, s3_secret_key, created, modified
+                        s3_bucket, s3_access_key, s3_secret_key, replica_set, created, modified
                  FROM data_sources WHERE name = $1",
                 &[&name],
             )
@@ -581,7 +586,7 @@ impl Store for PostgresStore {
             .query(
                 "SELECT name, type, workspace, enabled, host, port, database_name, schema_name,
                         username, password, file_path, file_storage_type, s3_endpoint, s3_region,
-                        s3_bucket, s3_access_key, s3_secret_key, created, modified
+                        s3_bucket, s3_access_key, s3_secret_key, replica_set, created, modified
                  FROM data_sources ORDER BY name",
                 &[],
             )
@@ -605,8 +610,8 @@ impl Store for PostgresStore {
                 "INSERT INTO data_sources (name, type, workspace, enabled, host, port, database_name,
                         schema_name, username, password, file_path, file_storage_type,
                         s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key,
-                        created, modified)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
+                        replica_set, created, modified)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)",
                 &[
                     &name,
                     &data_source_type.to_string().to_lowercase(),
@@ -625,6 +630,7 @@ impl Store for PostgresStore {
                     &connection.s3_bucket,
                     &connection.s3_access_key,
                     &connection.s3_secret_key,
+                    &connection.replica_set,
                     &ts,
                     &ts,
                 ],
@@ -693,6 +699,8 @@ impl Store for PostgresStore {
             sets.push(format!("s3_access_key = ${}", params.len()));
             params.push(Box::new(c.s3_secret_key.clone()));
             sets.push(format!("s3_secret_key = ${}", params.len()));
+            params.push(Box::new(c.replica_set.clone()));
+            sets.push(format!("replica_set = ${}", params.len()));
         }
         params.push(Box::new(name.to_string()));
         let sql = format!(

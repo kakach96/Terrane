@@ -137,12 +137,15 @@ export interface DataSource {
 
 export interface DataSourceConnection {
   // PostGIS fields
+  /** Single host, comma-separated cluster list ("pg1,pg2" / "pg1:5433,pg2") or a full connection URL */
   host?: string;
   port?: number;
   database?: string;
   schema?: string;
   username?: string;
   password?: string;
+  /** MongoDB replica-set name (appended as ?replicaSet=… for cluster connections) */
+  replica_set?: string;
   // File-based fields
   file_path?: string;
   file_storage_type?: string;

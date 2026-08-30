@@ -472,24 +472,50 @@ impl AppState {
         );
 
         let t2 = Instant::now();
+        // 集群连接: host 为完整连接串 (postgres://…, 含多主机 URL) 时交给
+        // deadpool 的 url 字段解析; 否则解析逗号分隔主机列表 (见 utils/cluster.rs)。
+        // 先用 tokio-postgres 校验连接串, 避免无效输入在 create_pool 处 panic。
         let mut cfg = deadpool_postgres::Config::new();
-        // 将 localhost 转为 127.0.0.1 以避免 IPv6 解析导致的连接超时
-        let host = if host_str.eq_ignore_ascii_case("localhost") {
-            "127.0.0.1".to_string()
+        if crate::utils::cluster::is_connection_string(host_str) {
+            match <tokio_postgres::Config as std::str::FromStr>::from_str(host_str) {
+                Ok(_) => cfg.url = Some(host_str.to_string()),
+                Err(e) => {
+                    tracing::warn!(
+                        "[get_pg_pool] 无效的连接串, 回退默认主机: {}, err={}",
+                        host_str,
+                        e
+                    );
+                    cfg.host = Some("127.0.0.1".to_string());
+                    cfg.port = Some(5432);
+                },
+            }
         } else {
-            host_str.to_string()
-        };
-        cfg.host = Some(host);
-        cfg.port = Some(port_u16);
-        cfg.dbname = conn_info
-            .database
-            .clone()
-            .or_else(|| Some("geoserver".to_string()));
-        cfg.user = conn_info
-            .username
-            .clone()
-            .or_else(|| Some("postgres".to_string()));
-        cfg.password = conn_info.password.clone();
+            let hosts = crate::utils::cluster::parse_host_list(
+                conn_info.host.as_deref(),
+                conn_info.port,
+                5432,
+            );
+            if hosts.len() == 1 {
+                cfg.host = Some(hosts[0].host.clone());
+                cfg.port = Some(hosts[0].port);
+            } else {
+                // 多主机: deadpool/tokio-postgres 原生按序故障转移
+                cfg.hosts = Some(hosts.iter().map(|h| h.host.clone()).collect());
+                cfg.ports = Some(hosts.iter().map(|h| h.port).collect());
+            }
+        }
+        // 连接串模式下 dbname/user/password 已含在 URI 中, 不再以字段默认值覆盖。
+        if !crate::utils::cluster::is_connection_string(host_str) {
+            cfg.dbname = conn_info
+                .database
+                .clone()
+                .or_else(|| Some("geoserver".to_string()));
+            cfg.user = conn_info
+                .username
+                .clone()
+                .or_else(|| Some("postgres".to_string()));
+            cfg.password = conn_info.password.clone();
+        }
         // 设置连接超时，避免因网络问题长时间挂起
         cfg.connect_timeout = Some(std::time::Duration::from_secs(
             self.config.server.connect_timeout_secs,
@@ -531,8 +557,6 @@ impl AppState {
             return pool.clone();
         }
 
-        let host = conn_info.host.as_deref().unwrap_or("127.0.0.1").to_string();
-        let port = conn_info.port.unwrap_or(3306);
         let database = conn_info
             .database
             .clone()
@@ -543,9 +567,30 @@ impl AppState {
             .unwrap_or_else(|| "root".to_string());
         let password = conn_info.password.clone();
 
+        // 集群连接: 逗号分隔主机列表 → 依次 TCP 探活, 池绑定第一个可达节点
+        // (mysql_async 连接池为单主机; 未探到可达节点时退回首主机)。
+        let hosts =
+            crate::utils::cluster::parse_host_list(conn_info.host.as_deref(), conn_info.port, 3306);
+        let chosen = if hosts.len() > 1 {
+            crate::utils::cluster::first_reachable_tcp(
+                &hosts,
+                std::time::Duration::from_secs(self.config.server.connect_timeout_secs.clamp(1, 3)),
+            )
+            .unwrap_or_else(|| hosts[0].clone())
+        } else {
+            hosts[0].clone()
+        };
+        tracing::debug!(
+            "[get_mysql_pool] ds_name={}, 主机列表 {} 项, 选中 {}:{}",
+            ds_name,
+            hosts.len(),
+            chosen.host,
+            chosen.port
+        );
+
         let opts = mysql_async::OptsBuilder::default()
-            .ip_or_hostname(host)
-            .tcp_port(port)
+            .ip_or_hostname(chosen.host)
+            .tcp_port(chosen.port)
             .db_name(Some(database))
             .user(Some(user))
             .pass(password)
@@ -575,31 +620,22 @@ impl AppState {
         crate::utils::secrets::resolve_connection_secrets(&mut resolved);
         let conn_info = &resolved;
 
-        let host = conn_info.host.as_deref().unwrap_or("127.0.0.1");
-        let port = conn_info.port.unwrap_or(27017);
-        let database = conn_info.database.as_deref().unwrap_or("geoserver");
-        let user = conn_info.username.as_deref();
-        let password = conn_info.password.as_deref();
-
-        // 组装 mongodb:// URI; 含认证信息时编码进 URI。
-        let uri = if let Some(u) = user {
-            format!(
-                "mongodb://{}:{}@{}:{}/{}",
-                urlencode(u),
-                urlencode(password.unwrap_or("")),
-                host,
-                port,
-                database
-            )
-        } else {
-            format!("mongodb://{}:{}/{}", host, port, database)
-        };
+        // 集群连接: host 为 mongodb:// / mongodb+srv:// 完整 URI 时直接使用;
+        // 否则由逗号分隔主机列表 + replica_set 组装副本集 URI (见 utils/cluster.rs)。
+        let uri = crate::utils::cluster::mongo_uri_from_connection(conn_info);
 
         let client = match mongodb::Client::with_uri_str(&uri).await {
             Ok(c) => c,
-            Err(_) => mongodb::Client::with_uri_str("mongodb://127.0.0.1:27017")
-                .await
-                .unwrap_or_else(|_| unreachable!("default mongodb URI is valid")),
+            Err(e) => {
+                tracing::warn!(
+                    "[get_mongo_client] 无效的 MongoDB URI, 回退默认主机: {}, err={}",
+                    uri,
+                    e
+                );
+                mongodb::Client::with_uri_str("mongodb://127.0.0.1:27017")
+                    .await
+                    .unwrap_or_else(|_| unreachable!("default mongodb URI is valid"))
+            },
         };
         let mut clients = self.mongo_clients.lock().unwrap();
         clients.insert(ds_name.to_string(), client.clone());
@@ -851,18 +887,4 @@ async fn refresh_catalog_from_store(
     }
 
     tracing::debug!("[catalog] refreshed from metadata store");
-}
-
-/// URI 组件百分号编码 (用于 MongoDB 连接串中的用户名/密码)。
-fn urlencode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for b in s.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char)
-            },
-            _ => out.push_str(&format!("%{:02X}", b)),
-        }
-    }
-    out
 }

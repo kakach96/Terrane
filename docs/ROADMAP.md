@@ -78,14 +78,22 @@ state lives in external stores, so replicas stay stateless and interchangeable.
   `demo` workspace, so the product demos out-of-the-box. Remaining (deferred):
   - Shapefile / GeoTIFF sample files (binary formats — not yet curated)
   - Reuse the samples in integration tests, replacing runtime-generated fixtures
-- **Database cluster connections** — `DataSourceConnection` and the PostGIS / MySQL /
-  MongoDB pool builders (`service/src/state.rs`) only support a single `host`/`port`; the
-  frontend data-source dialog exposes a single host/port too. Plan:
-  - PostGIS: multi-host (comma-separated / array), read/write replica separation,
-    connection-string support
-  - MySQL: multi-host support
-  - MongoDB: replica-set URI (`mongodb://host1,host2/db?replicaSet=…`)
-  - Frontend data-source dialog: cluster fields; connection test adapted for clusters
+- **Database cluster connections** — ✅ **done** (multi-host + connection strings +
+  replica sets; read/write replica *separation* stays deferred until WFS-T writes exist —
+  every query path is read-only today). `DataSourceConnection.host` now accepts a
+  comma-separated host list (`pg1,pg2` sharing `port`, or `pg1:5433,pg2` with per-host
+  ports, IPv6 literals included) or a full connection URL (`postgres://…` /
+  `mongodb://…`, see `service/src/utils/cluster.rs`):
+  - PostGIS: deadpool `hosts`/`ports` multi-host failover + `url` connection-string
+    support (`state.rs::get_pg_pool`); the connection test builds the libpq-style
+    `host=h1,h2 port=p1,p2` string
+  - MySQL: sequential TCP probe at pool build pins the pool to the first reachable
+    node; the connection test tries each host in order
+  - MongoDB: `replica_set` field on the connection (persisted in both stores as the
+    `replica_set` column) → `mongodb://user:pass@h1:p1,h2:p2/db?replicaSet=rs0`; a full
+    `mongodb://` / `mongodb+srv://` URI in `host` is used verbatim
+  - Frontend: cluster hint under the host field + a MongoDB replica-set field
+    (data-source dialog), i18n labels in both locales
 - **`geoserver` → `terrane` naming migration (breaking change)** — the codebase still
   carries `geoserver` in type names, env vars, API paths, defaults, tests and docs. Plan:
   - Backend types: `GeoServerConfig` → `TerraneConfig`, `GeoServerError` → `TerraneError`,
@@ -149,7 +157,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
   simplified polygons) is shipped and auto-seeded on first startup (see v1.2 above);
   Shapefile / GeoTIFF sample files and reusing the samples in integration tests are
   still deferred.
-- **Database data sources are single-host only** — PostGIS / MySQL / MongoDB pools (`service/src/state.rs`) and the frontend dialog support one `host`/`port`; no cluster / replica-set / read-write separation. Planned in v1.2.
+- **Database cluster connections — done (multi-host failover + connection strings + MongoDB replica sets)**: `host` accepts comma-separated host lists or full `postgres://` / `mongodb://` URLs (`service/src/utils/cluster.rs`); read/write replica *separation* remains deferred until WFS-T writes exist.
 - **Security-sensitive defaults**: CORS `["*"]` and hardcoded JWT secret — revisit before production.
 - **Broken doc link**: README referenced `BUILD_INTEGRATION.md`, which did not exist (fixed in this docs pass).
 

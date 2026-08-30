@@ -99,6 +99,7 @@ export class DataSourceDialogComponent {
       schema: ['public'],
       username: [''],
       password: [''],
+      replica_set: [''],
       file_path: [''],
       file_storage_type: ['local'],
       s3_endpoint: [''],
@@ -119,6 +120,7 @@ export class DataSourceDialogComponent {
         database: this.dataSource.connection?.database || '',
         schema: this.dataSource.connection?.schema || 'public',
         username: this.dataSource.connection?.username || '',
+        replica_set: this.dataSource.connection?.replica_set || '',
         file_path: this.dataSource.connection?.file_path || '',
         file_storage_type: this.dataSource.connection?.file_storage_type || 'local',
         s3_endpoint: this.dataSource.connection?.s3_endpoint || '',
@@ -275,6 +277,7 @@ export class DataSourceDialogComponent {
 
   /** Build a host/port/database/username/password connection (shared by PostGIS and Redis) */
   private buildTcpConnection(): DataSourceConnection {
+    const replicaSet = (this.form.get('replica_set')?.value || '').trim();
     return {
       host: this.form.get('host')?.value,
       port: parseInt(this.form.get('port')?.value, 10),
@@ -282,6 +285,8 @@ export class DataSourceDialogComponent {
       schema: this.form.get('schema')?.value,
       username: this.form.get('username')?.value,
       password: this.form.get('password')?.value,
+      // MongoDB cluster connection: replica-set name (ignored by other types)
+      ...(replicaSet ? { replica_set: replicaSet } : {}),
     };
   }
 
