@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, Signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { TranslateService } from '@ngx-translate/core';
@@ -6,7 +6,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
 import { Workspace, DataSource } from '../../models/terrane.models';
-import { switchMap, tap, map, distinctUntilChanged, catchError, of } from 'rxjs';
+import { Observable, switchMap, tap, map, distinctUntilChanged, catchError, of } from 'rxjs';
 
 @Component({
   standalone: false,
@@ -35,8 +35,32 @@ export class LayerCreateComponent {
   workspaces = toSignal(this.workspaces$, { initialValue: [] as Workspace[] });
 
   // ── Signal pipelines: form-driven cascading data ──────────────────
-  private dataSources$ =
-    this.layerForm?.get('workspace')?.valueChanges.pipe(
+  // NOTE: these are initialized in the constructor AFTER layerForm is built,
+  // because they subscribe to layerForm controls' valueChanges. Declaring them
+  // as class-field initializers would run before the constructor body, when
+  // layerForm is still undefined, so the cascading would never fire.
+  private dataSources$!: Observable<DataSource[]>;
+  private tables$!: Observable<string[]>;
+  dataSources!: Signal<DataSource[]>;
+  tables!: Signal<string[]>;
+
+  constructor() {
+    this.layerForm = this.fb.group({
+      name: ['', [Validators.required, Validators.pattern(/^[a-z][a-z0-9_]*$/)]],
+      title: ['', Validators.required],
+      workspace: ['', Validators.required],
+      dataSource: ['', Validators.required],
+      table: ['', Validators.required],
+      srs: ['EPSG:4326', Validators.required],
+      abstract: [''],
+      minx: [-180],
+      miny: [-90],
+      maxx: [180],
+      maxy: [90],
+    });
+
+    // Cascading data sources: reload when the workspace changes.
+    this.dataSources$ = this.layerForm.get('workspace')!.valueChanges.pipe(
       distinctUntilChanged(),
       tap(() => {
         this.layerForm.get('dataSource')?.setValue('');
@@ -51,12 +75,11 @@ export class LayerCreateComponent {
           catchError(() => of([] as DataSource[])),
         );
       }),
-    ) ?? of([] as DataSource[]);
+    );
+    this.dataSources = toSignal(this.dataSources$, { initialValue: [] as DataSource[] });
 
-  dataSources = toSignal(this.dataSources$, { initialValue: [] as DataSource[] });
-
-  private tables$ =
-    this.layerForm?.get('dataSource')?.valueChanges.pipe(
+    // Cascading tables: reload when the data source changes.
+    this.tables$ = this.layerForm.get('dataSource')!.valueChanges.pipe(
       distinctUntilChanged(),
       switchMap((dataSourceName: string) => {
         if (!dataSourceName) {
@@ -91,24 +114,8 @@ export class LayerCreateComponent {
           }),
         );
       }),
-    ) ?? of([] as string[]);
-
-  tables = toSignal(this.tables$, { initialValue: [] as string[] });
-
-  constructor() {
-    this.layerForm = this.fb.group({
-      name: ['', [Validators.required, Validators.pattern(/^[a-z][a-z0-9_]*$/)]],
-      title: ['', Validators.required],
-      workspace: ['', Validators.required],
-      dataSource: ['', Validators.required],
-      table: ['', Validators.required],
-      srs: ['EPSG:4326', Validators.required],
-      abstract: [''],
-      minx: [-180],
-      miny: [-90],
-      maxx: [180],
-      maxy: [90],
-    });
+    );
+    this.tables = toSignal(this.tables$, { initialValue: [] as string[] });
 
     // When the metadata built-in data source has no existing business tables: auto-use the layer name as the table
     this.layerForm.get('name')?.valueChanges.subscribe((name: string) => {
@@ -159,22 +166,6 @@ export class LayerCreateComponent {
         );
         this.loading = false;
       },
-    });
-  }
-
-  resetForm(): void {
-    this.layerForm.reset({
-      name: '',
-      title: '',
-      workspace: '',
-      dataSource: '',
-      table: '',
-      srs: 'EPSG:4326',
-      abstract: '',
-      minx: -180,
-      miny: -90,
-      maxx: 180,
-      maxy: 90,
     });
   }
 

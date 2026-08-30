@@ -11,6 +11,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { MatTabChangeEvent } from '@angular/material/tabs';
 import { TerraneService } from '../../services/terrane.service';
+import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
 import {
   MonitorStats,
@@ -39,6 +40,7 @@ export class MonitorComponent {
   private translate = inject(TranslateService);
   private languageService = inject(LanguageService);
   private destroyRef = inject(DestroyRef);
+  private notificationService = inject(NotificationService);
 
   activeTab: 'overview' | 'requests' | 'audit' = 'overview';
   error = '';
@@ -145,13 +147,16 @@ export class MonitorComponent {
   }
 
   resetStats(): void {
-    if (confirm(this.translate.instant('monitor.confirmReset'))) {
-      this.terrane.resetMonitorStats().subscribe({
-        next: () => this.refreshTrigger.update((v) => v + 1),
-        error: (e) =>
-          (this.error = this.translate.instant('monitor.resetFail', { message: e.message })),
+    this.notificationService
+      .confirm(this.translate.instant('common.confirm'), this.translate.instant('monitor.confirmReset'))
+      .subscribe((confirmed: boolean) => {
+        if (!confirmed) return;
+        this.terrane.resetMonitorStats().subscribe({
+          next: () => this.refreshTrigger.update((v) => v + 1),
+          error: (e) =>
+            (this.error = this.translate.instant('monitor.resetFail', { message: e.message })),
+        });
       });
-    }
   }
 
   switchTab(tab: 'overview' | 'requests' | 'audit'): void {

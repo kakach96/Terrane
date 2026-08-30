@@ -85,16 +85,24 @@ export class PermissionsComponent {
   }
 
   deletePermission(perm: Permission): void {
-    if (!perm.id) return;
+    const id = perm.id;
+    if (!id) return;
     const label = `${perm.effect} ${perm.accessMode} ${perm.resourceType}:${perm.resourceName}`;
-    if (!confirm(this.translate.instant('permissions.deleteConfirm', { label }))) return;
-    this.terrane.deletePermission(perm.id).subscribe({
-      next: () => {
-        this.notificationService.success(this.translate.instant('permissions.deleteSuccess'));
-        this.refreshTrigger.update((v) => v + 1);
-      },
-      error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
-    });
+    this.notificationService
+      .confirm(
+        this.translate.instant('common.confirm'),
+        this.translate.instant('permissions.deleteConfirm', { label }),
+      )
+      .subscribe((confirmed: boolean) => {
+        if (!confirmed) return;
+        this.terrane.deletePermission(id).subscribe({
+          next: () => {
+            this.notificationService.success(this.translate.instant('permissions.deleteSuccess'));
+            this.refreshTrigger.update((v) => v + 1);
+          },
+          error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
+        });
+      });
   }
 
   private resetForm(): void {

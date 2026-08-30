@@ -329,7 +329,7 @@
     <mat-icon>{{ isTesting ? 'hourglass_empty' : 'network_check' }}</mat-icon>
     {{ isTesting ? ('dataSources.testing' | translate) : ('common.testConnection' | translate) }}
   </button>
-  <button mat-button (click)="onCancel()">{{ 'common.cancel' | translate }}</button>
+  <button mat-stroked-button (click)="onCancel()">{{ 'common.cancel' | translate }}</button>
   <button mat-raised-button color="primary" (click)="onSubmit()">
     {{ mode === 'create' ? ('dataSources.create' | translate) : ('common.update' | translate) }}
   </button>

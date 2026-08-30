@@ -88,14 +88,21 @@ export class UsersComponent {
       this.notificationService.warning(this.translate.instant('users.cannotDeleteAdmin'));
       return;
     }
-    if (!confirm(this.translate.instant('users.deleteUserConfirm', { username }))) return;
-    this.terrane.deleteUser(username).subscribe({
-      next: () => {
-        this.notificationService.success(this.translate.instant('users.deleteSuccess'));
-        this.refreshTrigger.update((v) => v + 1);
-      },
-      error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
-    });
+    this.notificationService
+      .confirm(
+        this.translate.instant('common.confirm'),
+        this.translate.instant('users.deleteUserConfirm', { username }),
+      )
+      .subscribe((confirmed: boolean) => {
+        if (!confirmed) return;
+        this.terrane.deleteUser(username).subscribe({
+          next: () => {
+            this.notificationService.success(this.translate.instant('users.deleteSuccess'));
+            this.refreshTrigger.update((v) => v + 1);
+          },
+          error: (e) => this.notificationService.error(this.notificationService.fromError(e)),
+        });
+      });
   }
 
   changePassword(): void {

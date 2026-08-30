@@ -38,7 +38,7 @@ import { Layer } from '../../models/terrane.models';
       </mat-form-field>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button (click)="cancel()">{{ 'layerGroups.cancel' | translate }}</button>
+      <button mat-stroked-button (click)="cancel()">{{ 'layerGroups.cancel' | translate }}</button>
       <button mat-raised-button color="primary" (click)="save()" [disabled]="!name">
         {{ 'layerGroups.create' | translate }}
       </button>

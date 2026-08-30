@@ -74,13 +74,20 @@ export class StylesComponent {
       this.notificationService.info(this.translate.instant('styles.builtinNotDeletable'));
       return;
     }
-    if (!confirm(this.translate.instant('styles.deleteConfirm', { title: style.title }))) return;
-    this.terraneService.deleteStyle(style.name).subscribe({
-      next: () => {
-        this.notificationService.success(this.translate.instant('styles.deleteSuccess'));
-        this.refreshTrigger.update((v) => v + 1);
-      },
-      error: () => this.notificationService.error(this.translate.instant('styles.deleteFail')),
-    });
+    this.notificationService
+      .confirm(
+        this.translate.instant('common.confirm'),
+        this.translate.instant('styles.deleteConfirm', { title: style.title }),
+      )
+      .subscribe((confirmed: boolean) => {
+        if (!confirmed) return;
+        this.terraneService.deleteStyle(style.name).subscribe({
+          next: () => {
+            this.notificationService.success(this.translate.instant('styles.deleteSuccess'));
+            this.refreshTrigger.update((v) => v + 1);
+          },
+          error: () => this.notificationService.error(this.translate.instant('styles.deleteFail')),
+        });
+      });
   }
 }

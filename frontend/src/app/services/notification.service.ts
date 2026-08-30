@@ -1,7 +1,9 @@
 import { Injectable } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
-import { Observable, of } from 'rxjs';
+import { Observable } from 'rxjs';
+import { ConfirmDialogComponent } from '../shared/components/confirm-dialog.component';
 
 @Injectable({
   providedIn: 'root',
@@ -9,6 +11,7 @@ import { Observable, of } from 'rxjs';
 export class NotificationService {
   constructor(
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
     private translate: TranslateService,
   ) {}
 
@@ -63,7 +66,10 @@ export class NotificationService {
   }
 
   confirm(title: string, message: string): Observable<boolean> {
-    const confirmed = window.confirm(`${title}\n\n${message}`);
-    return of(confirmed);
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '420px',
+      data: { title, message },
+    });
+    return dialogRef.afterClosed() as Observable<boolean>;
   }
 }
