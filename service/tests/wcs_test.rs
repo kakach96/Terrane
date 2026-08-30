@@ -193,7 +193,7 @@ async fn test_wcs_get_coverage_real_geotiff() {
 
     // 2. 创建 geotiff 数据源, connection.file_path 指向 fixture
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "cov1",
             "type": "geotiff",
@@ -287,7 +287,7 @@ async fn test_wcs_get_coverage_real_arcgrid() {
 
     // 2. 创建 arcgrid 数据源, connection.file_path 指向 fixture
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "cov_asc",
             "type": "arcgrid",
@@ -437,7 +437,7 @@ async fn test_wcs_get_coverage_real_arcgrid_subset_size() {
     .unwrap();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "cov_asc_sub",
             "type": "arcgrid",
@@ -551,7 +551,7 @@ async fn test_wcs_get_coverage_real_geotiff_subset_size() {
 
     // 2. 创建 geotiff 数据源
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "cov_geo",
             "type": "geotiff",
@@ -642,7 +642,7 @@ async fn test_wcs_get_coverage_range_subset() {
 
     let app = build_test_app!();
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "cov_band",
             "type": "geotiff",
@@ -710,7 +710,7 @@ async fn test_wcs_get_coverage_interpolation() {
 
     let app = build_test_app!();
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "cov_interp",
             "type": "geotiff",

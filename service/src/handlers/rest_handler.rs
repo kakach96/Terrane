@@ -106,7 +106,7 @@ pub async fn health_ready(state: web::Data<AppState>) -> HttpResponse {
 
 pub async fn get_server_status(
     state: web::Data<AppState>,
-) -> Result<HttpResponse, crate::error::GeoServerError> {
+) -> Result<HttpResponse, crate::error::TerraneError> {
     let uptime = state.get_uptime();
     let request_count = state
         .request_count

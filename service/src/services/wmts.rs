@@ -7,7 +7,7 @@
 //! - GetTile — 返回瓦片图像 (复用底层 /tiles 端点)
 //! - GetFeatureInfo — 获取要素信息
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::Layer;
 use serde::Serialize;
 
@@ -314,7 +314,7 @@ pub struct ResourceUrl {
 // ---------------------------------------------------------------------------
 
 /// 解析 WMTS KVP 请求参数
-pub fn parse_wmts_request(params: &[(String, String)]) -> Result<WmtsRequest, GeoServerError> {
+pub fn parse_wmts_request(params: &[(String, String)]) -> Result<WmtsRequest, TerraneError> {
     let mut service = String::new();
     let mut version = None;
     let mut request = String::new();
@@ -374,7 +374,7 @@ pub fn parse_wmts_request(params: &[(String, String)]) -> Result<WmtsRequest, Ge
             info_format,
         },
         _ => {
-            return Err(GeoServerError::BadRequest(format!(
+            return Err(TerraneError::BadRequest(format!(
                 "Unsupported WMTS operation: {}",
                 request
             )))
@@ -393,7 +393,7 @@ pub fn build_capabilities(
     base_url: &str,
     layers: &[Layer],
     api_context: &str,
-) -> Result<String, GeoServerError> {
+) -> Result<String, TerraneError> {
     let wmts_base = format!("{}{}/wmts", base_url, api_context);
 
     let capabilities = WmtsCapabilities {
@@ -435,7 +435,7 @@ pub fn build_capabilities(
                         administrative_area: "N/A".to_string(),
                         postal_code: "N/A".to_string(),
                         country: "N/A".to_string(),
-                        electronic_mail_address: "admin@geoserver.local".to_string(),
+                        electronic_mail_address: "admin@terrane.local".to_string(),
                     },
                 },
             },
@@ -467,7 +467,7 @@ pub fn build_capabilities(
     };
 
     let xml = quick_xml::se::to_string(&capabilities).map_err(|e| {
-        GeoServerError::ServiceError(format!("WMTS Capabilities serialization failed: {}", e))
+        TerraneError::ServiceError(format!("WMTS Capabilities serialization failed: {}", e))
     })?;
 
     Ok(format!(r#"<?xml version="1.0" encoding="UTF-8"?>{}"#, xml))

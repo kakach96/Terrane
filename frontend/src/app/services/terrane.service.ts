@@ -40,14 +40,14 @@ import {
   SeedJobResult,
   TruncateResult,
   User,
-} from '../models/geoserver.models';
+} from '../models/terrane.models';
 import { transformBounds } from '../utils/coords';
 
 @Injectable({
   providedIn: 'root',
 })
-export class GeoserverService {
-  private readonly apiUrl = '/geoserver';
+export class TerraneService {
+  private readonly apiUrl = '/terrane';
 
   constructor(private http: HttpClient) {}
 

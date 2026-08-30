@@ -8,7 +8,7 @@
 //! [`StoreEntry`] (`name` / `path` / `is_dir` / `size`), so the frontend
 //! directory picker can reuse a single list model for local and S3 browsing.
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::handlers::rest_handler::ApiResponse;
 use crate::models::DataSourceConnection;
 use crate::state::AppState;
@@ -56,7 +56,7 @@ pub struct BrowseResponse {
 pub async fn browse_local(
     query: web::Query<BrowseLocalQuery>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let root = query
         .path
         .clone()
@@ -89,7 +89,7 @@ pub async fn browse_local(
 }
 
 /// List an S3 bucket directory using the connection details in the request.
-pub async fn browse_s3(body: web::Json<BrowseS3Request>) -> Result<HttpResponse, GeoServerError> {
+pub async fn browse_s3(body: web::Json<BrowseS3Request>) -> Result<HttpResponse, TerraneError> {
     let conn = DataSourceConnection {
         file_storage_type: Some("s3".to_string()),
         s3_endpoint: body.connection.s3_endpoint.clone(),
@@ -101,13 +101,13 @@ pub async fn browse_s3(body: web::Json<BrowseS3Request>) -> Result<HttpResponse,
     };
 
     let store = S3FileStore::from_connection(&conn)
-        .map_err(|e| GeoServerError::BadRequest(format!("S3 configuration error: {}", e)))?;
+        .map_err(|e| TerraneError::BadRequest(format!("S3 configuration error: {}", e)))?;
 
     let prefix = body.prefix.clone().unwrap_or_default();
     let entries = store
         .browse(&prefix)
         .await
-        .map_err(|e| GeoServerError::BadRequest(format!("S3 browse error: {}", e)))?;
+        .map_err(|e| TerraneError::BadRequest(format!("S3 browse error: {}", e)))?;
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::success(BrowseResponse {

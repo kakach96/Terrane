@@ -195,7 +195,7 @@ sequenceDiagram
     participant S as Store (SQLite/Postgres)
     participant C as AppState cache
 
-    UI->>H: POST /geoserver/layers
+    UI->>H: POST /terrane/layers
     H->>S: create_layer(request)
     S-->>H: Layer
     H->>C: refresh in-memory layers
@@ -235,7 +235,7 @@ sequenceDiagram
     participant A as auth.rs (JWT)
     participant L as LDAP (optional)
 
-    UI->>H: POST /geoserver/auth/login
+    UI->>H: POST /terrane/auth/login
     H->>S: validate user (sha256 + salt)
     alt local user missing / password rejected AND [security.ldap] enabled
         H->>L: LDAP bind (user DN or service account + search)
@@ -268,7 +268,7 @@ sequenceDiagram
   `user_filter` template / `admin_group` / `default_role`). Login falls back to
   an LDAP bind when the local user is missing or the password is rejected, then
   auto-provisions the local user with the group-mapped role (RFC 4514 DN
-  escaping). Enabled via `GEOSERVER__SECURITY__LDAP__*`.
+  escaping). Enabled via `TERRANE__SECURITY__LDAP__*`.
 - **Fine-grained GeoFence ACL** — `service/src/utils/geofence.rs`: per-request
   `workspace / store / layer` rules over the `/permissions` model. Most-specific
   rule wins (user > role, layer > store > workspace > global), deny wins
@@ -300,7 +300,7 @@ flowchart LR
 ### 6.1 Base paths
 
 - **OGC services** on the root path: `/wms`, `/wfs`, `/wcs`, `/wmts`
-- **REST API** under the configurable context path (default `/geoserver`)
+- **REST API** under the configurable context path (default `/terrane`)
 - **Probes & metrics** on the root path, decoupled from the context: `/health/live`, `/health/ready`, `/metrics`
 
 > See [PROTOCOLS.md](PROTOCOLS.md) for the full protocol adaptation matrix (versions,
@@ -308,7 +308,7 @@ flowchart LR
 
 ### 6.2 REST endpoint groups
 
-All endpoints below live under `/geoserver` (the configurable `api_context`).
+All endpoints below live under `/terrane` (the configurable `api_context`).
 
 | Group         | Endpoints                                                                                          |
 |---------------|----------------------------------------------------------------------------------------------------|
@@ -340,6 +340,6 @@ Errors are returned as JSON with an HTTP status code; error mapping is centraliz
 
 ### 6.5 Configuration contract
 
-All options are externalized via `service/terrane.toml` + `GEOSERVER__<SECTION>__<KEY>` env
+All options are externalized via `service/terrane.toml` + `TERRANE__<SECTION>__<KEY>` env
 overrides (precedence: CLI > env > file > defaults). See
 [DEVELOPMENT.md](DEVELOPMENT.md) for the full variable reference.

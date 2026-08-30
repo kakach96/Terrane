@@ -1,4 +1,4 @@
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{
     Bounds, CoordinateReferenceSystem, DataSourceType, Feature, GeoJsonGeometry, Layer,
 };
@@ -91,7 +91,7 @@ pub async fn handle_wms_request(
         },
         wms::WmsOperation::DescribeLayer => handle_describe_layer(&state, &wms_request).await,
         wms::WmsOperation::GetStyles => handle_get_styles(&state, &wms_request).await,
-        _ => Err(GeoServerError::BadRequest(
+        _ => Err(TerraneError::BadRequest(
             "Operation not implemented".to_string(),
         )),
     };
@@ -102,7 +102,7 @@ pub async fn handle_wms_request(
     }
 }
 
-fn format_wms_error_response(err: &GeoServerError, params: &[(String, String)]) -> HttpResponse {
+fn format_wms_error_response(err: &TerraneError, params: &[(String, String)]) -> HttpResponse {
     let exceptions = params
         .iter()
         .find(|(k, _)| k.to_uppercase() == "EXCEPTIONS")
@@ -139,7 +139,7 @@ pub async fn render_ogc_map(
     bgcolor: Option<String>,
     time: Option<String>,
     cql_filter: Option<String>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let request = wms::WmsRequest {
         service: "WMS".to_string(),
         version: Some("1.3.0".to_string()),
@@ -184,7 +184,7 @@ async fn enforce_geofence_for_layers(
     state: &AppState,
     req: &HttpRequest,
     layers: &[String],
-) -> Result<(), GeoServerError> {
+) -> Result<(), TerraneError> {
     if !state.config.security.geofence_enabled {
         return Ok(());
     }
@@ -227,7 +227,7 @@ async fn enforce_geofence_for_layers(
 async fn handle_get_capabilities(
     state: &AppState,
     _request: &WmsRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let base_url = format!(
         "http://{}:{}",
         state.config.server.host, state.config.server.port
@@ -256,7 +256,7 @@ async fn handle_get_capabilities(
     }
 
     let xml = to_string(&capabilities).map_err(|e| {
-        GeoServerError::ServiceError(format!("Failed to serialize capabilities: {}", e))
+        TerraneError::ServiceError(format!("Failed to serialize capabilities: {}", e))
     })?;
 
     let xml = format!(
@@ -272,7 +272,7 @@ async fn handle_get_map(
     state: &AppState,
     request: &WmsRequest,
     req: &HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     info!("[GetMap] 开始处理请求");
     debug!(
         "[GetMap] 请求参数: layers={:?}, format={:?}, bbox={:?}, crs={:?}",
@@ -325,11 +325,11 @@ async fn handle_get_map(
     render_map_image(&context, &layer_contexts)
 }
 
-fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServerError> {
+fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, TerraneError> {
     let layers_param = request
         .layers
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("LAYERS parameter is required".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("LAYERS parameter is required".to_string()))?;
 
     let width = request.width.unwrap_or(512);
     let height = request.height.unwrap_or(512);
@@ -337,7 +337,7 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
     let bbox = request
         .bbox
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("BBOX parameter is required".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("BBOX parameter is required".to_string()))?;
     let bounds = Bounds::new(bbox.minx, bbox.miny, bbox.maxx, bbox.maxy);
 
     let output_crs = request.crs.as_deref().unwrap_or("EPSG:4326").to_string();
@@ -346,7 +346,7 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
     let format = request
         .format
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("FORMAT parameter is required".to_string()))?
+        .ok_or_else(|| TerraneError::BadRequest("FORMAT parameter is required".to_string()))?
         .clone();
 
     let transparent = request.transparent.unwrap_or(false);
@@ -415,7 +415,7 @@ fn parse_get_map_params(request: &WmsRequest) -> Result<GetMapContext, GeoServer
 async fn resolve_layer_metadata(
     state: &AppState,
     context: &GetMapContext,
-) -> Result<Vec<LayerMetadata>, GeoServerError> {
+) -> Result<Vec<LayerMetadata>, TerraneError> {
     info!(
         "[resolve_layer_metadata] 开始处理 {} 个图层",
         context.layers.len()
@@ -448,11 +448,11 @@ async fn resolve_layer_metadata(
             .find(|l| {
                 l.name == *layer_name || (l.workspace == workspace && l.name == layer_short_name)
             })
-            .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+            .ok_or_else(|| TerraneError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
         let data_source = if let Some(store) = &state.store {
             store.get_data_source(&layer.store).await.map_err(|e| {
-                GeoServerError::InternalError(format!("Failed to get data source: {}", e))
+                TerraneError::InternalError(format!("Failed to get data source: {}", e))
             })?
         } else {
             None
@@ -540,7 +540,7 @@ async fn query_all_layer_features(
     state: &AppState,
     context: &GetMapContext,
     metadata_list: &[LayerMetadata],
-) -> Result<Vec<LayerRenderContext>, GeoServerError> {
+) -> Result<Vec<LayerRenderContext>, TerraneError> {
     info!(
         "[query_all_layer_features] 开始查询 {} 个图层的要素，查询范围: {:?}, 坐标系: {}",
         metadata_list.len(),
@@ -712,7 +712,7 @@ async fn query_layer_features_optimized(
     bbox: &Bounds,
     output_crs: &str,
     scale_denominator: f64,
-) -> Result<Vec<Feature>, GeoServerError> {
+) -> Result<Vec<Feature>, TerraneError> {
     info!("[query_layer_features_optimized] 查询图层 '{}', native_name='{}', native_crs='{}', data_source_type='{:?}'",
           metadata.layer_name, metadata.native_name, metadata.native_crs, metadata.data_source_type);
 
@@ -785,7 +785,7 @@ async fn query_postgis_features_optimized(
     bbox: &Bounds,
     scale_denominator: f64,
     max_features: u32,
-) -> Result<Vec<Feature>, GeoServerError> {
+) -> Result<Vec<Feature>, TerraneError> {
     let schema_name = conn
         .schema
         .as_deref()
@@ -808,7 +808,7 @@ async fn query_postgis_features_optimized(
     let client = pool
         .get()
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("Pool error: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("Pool error: {}", e)))?;
 
     let schema = schema_name;
 
@@ -871,7 +871,7 @@ async fn query_postgis_features_optimized(
     let rows = client
         .query(&sql, &[])
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("PostGIS query error: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("PostGIS query error: {}", e)))?;
 
     info!("[PostGIS] SQL执行完成, 返回 {} 行", rows.len());
 
@@ -971,7 +971,7 @@ fn resolve_feature_styles(
 fn render_map_image(
     context: &GetMapContext,
     layer_contexts: &[LayerRenderContext],
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     info!(
         "[render_map_image] 开始渲染地图，尺寸: {}x{}, 透明背景: {}",
         context.width, context.height, context.transparent
@@ -1169,12 +1169,12 @@ fn render_map_image(
                 .to_rgb8()
                 .write_to(&mut buffer, image_format)
                 .map_err(|e| {
-                    GeoServerError::RenderingError(format!("Failed to render image: {}", e))
+                    TerraneError::RenderingError(format!("Failed to render image: {}", e))
                 })?;
         },
-        _ => img.write_to(&mut buffer, image_format).map_err(|e| {
-            GeoServerError::RenderingError(format!("Failed to render image: {}", e))
-        })?,
+        _ => img
+            .write_to(&mut buffer, image_format)
+            .map_err(|e| TerraneError::RenderingError(format!("Failed to render image: {}", e)))?,
     }
 
     let image_size = buffer.get_ref().len();
@@ -1199,10 +1199,12 @@ fn render_map_image(
 
 fn render_openlayers_preview(
     context: &GetMapContext,
-    _state: &AppState,
-) -> Result<HttpResponse, GeoServerError> {
+    state: &AppState,
+) -> Result<HttpResponse, TerraneError> {
     // 使用相对 URL，通过前端代理或同源访问 WMS
     let wms_url = "/wms?";
+    // 要素接口位于 api_context 之下 (默认 `/terrane`)
+    let features_base = format!("{}/layers/", state.config.server.api_context);
 
     // OpenLayers 原生支持的投影 (无需 proj4js)。请求 bbox 处于请求 SRS 下,
     // 对 ol 原生投影直接使用; 其他投影将 bbox 转换到 EPSG:4326 渲染。
@@ -1368,7 +1370,7 @@ fn render_openlayers_preview(
 
     function loadLayerFeatures(layerName) {{
       var xhr = new XMLHttpRequest();
-      xhr.open('GET', '/geoserver/layers/' + encodeURIComponent(layerName) + '/features?limit=5000', true);
+      xhr.open('GET', '{features_base}' + encodeURIComponent(layerName) + '/features?limit=5000', true);
       xhr.onreadystatechange = function() {{
         if (xhr.readyState === 4 && xhr.status === 200) {{
           try {{
@@ -1521,6 +1523,7 @@ fn render_openlayers_preview(
         layer_name = context.layers.join(","),
         layers_json = layers_json,
         wms_url = wms_url,
+        features_base = features_base,
         view_crs = view_crs,
         center_x = center_x,
         center_y = center_y,
@@ -1545,7 +1548,7 @@ async fn handle_get_feature_info(
     state: &AppState,
     request: &WmsRequest,
     req: &HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if let Some(layers) = &request.query_layers {
         enforce_geofence_for_layers(state, req, layers).await?;
     }
@@ -1659,7 +1662,7 @@ async fn handle_get_feature_info(
                 })
                 .collect();
             serde_json::to_string_pretty(&json_features)
-                .map_err(|e| GeoServerError::ServiceError(e.to_string()))?
+                .map_err(|e| TerraneError::ServiceError(e.to_string()))?
         },
         "text/html" => {
             let rows: String = found_features
@@ -1833,11 +1836,11 @@ fn point_in_ring(px: f64, py: f64, ring: &[Vec<f64>]) -> bool {
 async fn handle_describe_layer(
     state: &AppState,
     request: &WmsRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layers_param = request
         .layers
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("LAYERS parameter required".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("LAYERS parameter required".to_string()))?;
 
     let layers_lock = state.layers.read().await;
     let mut layer_descriptions = Vec::new();
@@ -1899,9 +1902,9 @@ async fn handle_describe_layer(
 async fn handle_get_styles(
     state: &AppState,
     request: &WmsRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layers_param = request.layers.as_ref().ok_or_else(|| {
-        GeoServerError::BadRequest("LAYERS parameter required for GetStyles".to_string())
+        TerraneError::BadRequest("LAYERS parameter required for GetStyles".to_string())
     })?;
 
     let styles_lock = state.styles.read().await;
@@ -1957,13 +1960,13 @@ async fn handle_get_styles(
 async fn handle_get_legend_graphic(
     state: &AppState,
     request: &WmsRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = request
         .layers
         .as_ref()
         .and_then(|l| l.first())
         .ok_or_else(|| {
-            GeoServerError::BadRequest("LAYER parameter required for GetLegendGraphic".to_string())
+            TerraneError::BadRequest("LAYER parameter required for GetLegendGraphic".to_string())
         })?;
 
     let layers_lock = state.layers.read().await;
@@ -1972,7 +1975,7 @@ async fn handle_get_legend_graphic(
     let layer = layers_lock
         .iter()
         .find(|l| l.name == *layer_name)
-        .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
     // 规则列表; 若请求带 SCALE (比例尺分母), 仅保留在该比例尺下激活的规则。
     let all_rules = get_layer_rules(request, &styles_lock, layer);
@@ -2098,7 +2101,7 @@ async fn handle_get_legend_graphic(
 
     let mut buffer = Cursor::new(Vec::new());
     img.write_to(&mut buffer, ImageFormat::Png)
-        .map_err(|e| GeoServerError::RenderingError(e.to_string()))?;
+        .map_err(|e| TerraneError::RenderingError(e.to_string()))?;
 
     Ok(HttpResponse::Ok()
         .content_type("image/png")
@@ -2538,16 +2541,16 @@ async fn handle_cascaded_wms_request(
     state: &AppState,
     context: &GetMapContext,
     meta: &LayerMetadata,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     use crate::utils::cascaded::{extract_cascaded_config, fetch_cascaded_map, CascadedResilience};
 
     let conn = meta
         .connection
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("级联 WMS 缺少连接配置".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("级联 WMS 缺少连接配置".to_string()))?;
 
     let config = extract_cascaded_config(conn)
-        .ok_or_else(|| GeoServerError::BadRequest("无法解析级联 WMS 配置".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("无法解析级联 WMS 配置".to_string()))?;
 
     // 级联韧性参数来自 [server] 配置 (重试 + 指数退避); 熔断器由
     // state.cascaded_circuits 持有 (按上游 URL 隔离, 配置于 AppState 初始化)
@@ -2632,7 +2635,7 @@ async fn handle_cascaded_wms_request(
         },
         Err(e) => {
             warn!("[Cascaded] 代理请求失败: {}", e);
-            Err(GeoServerError::ServiceError(format!(
+            Err(TerraneError::ServiceError(format!(
                 "级联 WMS 请求失败: {}",
                 e
             )))

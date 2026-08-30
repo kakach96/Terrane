@@ -12,7 +12,7 @@
 //! - [`materialize_dir`] — resolve a multi-file format to a local path while
 //!   fetching sibling sidecar objects (Shapefile, WorldImage).
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::DataSourceConnection;
 use crate::store::{FileStore, S3FileStore};
 use std::path::PathBuf;
@@ -37,8 +37,8 @@ pub fn storage_type(conn: &DataSourceConnection) -> &str {
     }
 }
 
-fn map_store_err(e: crate::store::StoreError) -> GeoServerError {
-    GeoServerError::InternalError(format!("File storage error: {}", e))
+fn map_store_err(e: crate::store::StoreError) -> TerraneError {
+    TerraneError::InternalError(format!("File storage error: {}", e))
 }
 
 fn file_path_of(conn: &DataSourceConnection) -> Option<String> {
@@ -51,7 +51,7 @@ fn file_path_of(conn: &DataSourceConnection) -> Option<String> {
 /// Build the file store for a connection (local or s3).
 pub fn file_store_from_connection(
     conn: &DataSourceConnection,
-) -> Result<Box<dyn FileStore>, GeoServerError> {
+) -> Result<Box<dyn FileStore>, TerraneError> {
     match storage_type(conn) {
         "local" => Ok(Box::new(crate::store::LocalFileStore::new(PathBuf::from(
             ".",
@@ -59,7 +59,7 @@ pub fn file_store_from_connection(
         "s3" => Ok(Box::new(
             S3FileStore::from_connection(conn).map_err(map_store_err)?,
         )),
-        other => Err(GeoServerError::NotImplemented(format!(
+        other => Err(TerraneError::NotImplemented(format!(
             "Unsupported file storage type: {}",
             other
         ))),
@@ -72,7 +72,7 @@ pub fn file_store_from_connection(
 /// - s3: downloads the object.
 ///
 /// Returns `None` when the connection has no usable `file_path`.
-pub async fn read_bytes(conn: &DataSourceConnection) -> Result<Option<Vec<u8>>, GeoServerError> {
+pub async fn read_bytes(conn: &DataSourceConnection) -> Result<Option<Vec<u8>>, TerraneError> {
     let file_path = match file_path_of(conn) {
         Some(p) => p,
         None => return Ok(None),
@@ -81,7 +81,7 @@ pub async fn read_bytes(conn: &DataSourceConnection) -> Result<Option<Vec<u8>>, 
     match storage_type(conn) {
         "local" => {
             let bytes = std::fs::read(&file_path).map_err(|e| {
-                GeoServerError::InternalError(format!("读取文件失败 '{}': {}", file_path, e))
+                TerraneError::InternalError(format!("读取文件失败 '{}': {}", file_path, e))
             })?;
             Ok(Some(bytes))
         },
@@ -89,13 +89,13 @@ pub async fn read_bytes(conn: &DataSourceConnection) -> Result<Option<Vec<u8>>, 
             let store = S3FileStore::from_connection(conn).map_err(map_store_err)?;
             match store.get(&file_path).await.map_err(map_store_err)? {
                 Some(bytes) => Ok(Some(bytes)),
-                None => Err(GeoServerError::NotFound(format!(
+                None => Err(TerraneError::NotFound(format!(
                     "S3 object not found: {}",
                     file_path
                 ))),
             }
         },
-        other => Err(GeoServerError::NotImplemented(format!(
+        other => Err(TerraneError::NotImplemented(format!(
             "Unsupported file storage type: {}",
             other
         ))),
@@ -110,7 +110,7 @@ pub async fn read_bytes(conn: &DataSourceConnection) -> Result<Option<Vec<u8>>, 
 /// Returns `None` when the connection has no usable `file_path`.
 pub async fn materialize_file(
     conn: &DataSourceConnection,
-) -> Result<Option<MaterializedFile>, GeoServerError> {
+) -> Result<Option<MaterializedFile>, TerraneError> {
     let file_path = match file_path_of(conn) {
         Some(p) => p,
         None => return Ok(None),
@@ -128,21 +128,21 @@ pub async fn materialize_file(
                 .await
                 .map_err(map_store_err)?
                 .ok_or_else(|| {
-                    GeoServerError::NotFound(format!("S3 object not found: {}", file_path))
+                    TerraneError::NotFound(format!("S3 object not found: {}", file_path))
                 })?;
             let dir = tempfile::Builder::new()
                 .prefix("terrane-s3-")
                 .tempdir()
-                .map_err(GeoServerError::IoError)?;
+                .map_err(TerraneError::IoError)?;
             let file_name = file_path.rsplit('/').next().unwrap_or(&file_path);
             let path = dir.path().join(sanitize_name(file_name));
-            std::fs::write(&path, &bytes).map_err(GeoServerError::IoError)?;
+            std::fs::write(&path, &bytes).map_err(TerraneError::IoError)?;
             Ok(Some(MaterializedFile {
                 _dir: Some(dir),
                 path,
             }))
         },
-        other => Err(GeoServerError::NotImplemented(format!(
+        other => Err(TerraneError::NotImplemented(format!(
             "Unsupported file storage type: {}",
             other
         ))),
@@ -157,7 +157,7 @@ pub async fn materialize_file(
 /// Returns the path to the main file.
 pub async fn materialize_dir(
     conn: &DataSourceConnection,
-) -> Result<Option<MaterializedFile>, GeoServerError> {
+) -> Result<Option<MaterializedFile>, TerraneError> {
     let file_path = match file_path_of(conn) {
         Some(p) => p,
         None => return Ok(None),
@@ -175,7 +175,7 @@ pub async fn materialize_dir(
             let base = strip_extension(&file_path);
             let keys = store.list_prefix(&base).await.map_err(map_store_err)?;
             if keys.is_empty() {
-                return Err(GeoServerError::NotFound(format!(
+                return Err(TerraneError::NotFound(format!(
                     "S3 object not found: {}",
                     file_path
                 )));
@@ -183,12 +183,12 @@ pub async fn materialize_dir(
             let dir = tempfile::Builder::new()
                 .prefix("terrane-s3-")
                 .tempdir()
-                .map_err(GeoServerError::IoError)?;
+                .map_err(TerraneError::IoError)?;
             for key in &keys {
                 if let Some(bytes) = store.get(key).await.map_err(map_store_err)? {
                     let file_name = key.rsplit('/').next().unwrap_or(key);
                     std::fs::write(dir.path().join(sanitize_name(file_name)), &bytes)
-                        .map_err(GeoServerError::IoError)?;
+                        .map_err(TerraneError::IoError)?;
                 }
             }
             let main_name = file_path.rsplit('/').next().unwrap_or(&file_path);
@@ -198,7 +198,7 @@ pub async fn materialize_dir(
                 path: main_path,
             }))
         },
-        other => Err(GeoServerError::NotImplemented(format!(
+        other => Err(TerraneError::NotImplemented(format!(
             "Unsupported file storage type: {}",
             other
         ))),

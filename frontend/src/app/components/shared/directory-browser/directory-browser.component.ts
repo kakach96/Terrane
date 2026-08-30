@@ -1,9 +1,9 @@
 import { Component, Inject, OnInit, inject, computed } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../../services/geoserver.service';
+import { TerraneService } from '../../../services/terrane.service';
 import { LanguageService } from '../../../services/language.service';
-import { FileEntry, S3BrowseRequest } from '../../../models/geoserver.models';
+import { FileEntry, S3BrowseRequest } from '../../../models/terrane.models';
 
 export interface DirectoryBrowserData {
   mode: 'local' | 's3';
@@ -39,7 +39,7 @@ export class DirectoryBrowserComponent implements OnInit {
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: DirectoryBrowserData,
     private dialogRef: MatDialogRef<DirectoryBrowserComponent>,
-    private geoserverService: GeoserverService,
+    private terraneService: TerraneService,
     private translate: TranslateService,
   ) {
     this.mode = data.mode;
@@ -72,8 +72,8 @@ export class DirectoryBrowserComponent implements OnInit {
     const request: S3BrowseRequest = { ...this.data.s3Connection, prefix: path };
     const observable =
       this.mode === 'local'
-        ? this.geoserverService.browseLocalDirectory(path)
-        : this.geoserverService.browseS3Directory(request);
+        ? this.terraneService.browseLocalDirectory(path)
+        : this.terraneService.browseS3Directory(request);
 
     observable.subscribe({
       next: (entries) => {

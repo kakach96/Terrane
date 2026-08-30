@@ -1,5 +1,5 @@
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{CoordinateReferenceSystem, FeatureCollection, Layer};
 use crate::state::AppState;
 use crate::store::FileStore;
@@ -76,7 +76,7 @@ pub struct GeoJsonUploadRequest {
     pub title: String,
 }
 
-pub async fn list_layers(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn list_layers(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         match store.get_all_layers().await {
             Ok(layers) => {
@@ -106,7 +106,7 @@ pub async fn list_layers(state: web::Data<AppState>) -> Result<HttpResponse, Geo
             },
             Err(e) => {
                 eprintln!("Failed to list layers: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to list layers".to_string(),
                 ))
             },
@@ -143,7 +143,7 @@ pub async fn list_layers(state: web::Data<AppState>) -> Result<HttpResponse, Geo
 pub async fn get_layer(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     let response = if let Some(store) = &state.store {
@@ -218,13 +218,13 @@ pub async fn get_layer(
                 serde_json::Value::Object(map)
             },
             Ok(None) => {
-                return Err(GeoServerError::NotFound(format!(
+                return Err(TerraneError::NotFound(format!(
                     "Layer '{}' not found",
                     layer_name
                 )))
             },
             Err(e) => {
-                return Err(GeoServerError::InternalError(format!(
+                return Err(TerraneError::InternalError(format!(
                     "Failed to get layer: {}",
                     e
                 )))
@@ -294,7 +294,7 @@ pub async fn get_layer(
             );
             serde_json::Value::Object(map)
         } else {
-            return Err(GeoServerError::NotFound(format!(
+            return Err(TerraneError::NotFound(format!(
                 "Layer '{}' not found",
                 layer_name
             )));
@@ -307,7 +307,7 @@ pub async fn get_layer(
 pub async fn create_layer(
     body: web::Json<CreateLayerRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let srs = body.srs.clone().unwrap_or_else(|| "EPSG:4326".to_string());
 
     // 1. 用户显式提供了边界 → 优先使用
@@ -434,13 +434,13 @@ pub async fn create_layer(
             },
             Err(e) => {
                 eprintln!("Failed to create layer: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to create layer".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -450,7 +450,7 @@ pub async fn update_layer(
     req: HttpRequest,
     body: web::Json<UpdateLayerRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -476,7 +476,7 @@ pub async fn update_layer(
             },
             Err(e) => {
                 eprintln!("Failed to update layer: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to update layer".to_string(),
                 ))
             },
@@ -495,7 +495,7 @@ pub async fn update_layer(
                 }))),
             )
         } else {
-            Err(GeoServerError::NotFound(format!(
+            Err(TerraneError::NotFound(format!(
                 "Layer '{}' not found",
                 layer_name
             )))
@@ -506,7 +506,7 @@ pub async fn update_layer(
 pub async fn delete_layer(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -523,7 +523,7 @@ pub async fn delete_layer(
             },
             Err(e) => {
                 eprintln!("Failed to delete layer: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to delete layer".to_string(),
                 ))
             },
@@ -537,7 +537,7 @@ pub async fn delete_layer(
                 }))),
             )
         } else {
-            Err(GeoServerError::NotFound(format!(
+            Err(TerraneError::NotFound(format!(
                 "Layer '{}' not found",
                 layer_name
             )))
@@ -549,11 +549,11 @@ pub async fn preview_layer(
     req: HttpRequest,
     query: web::Query<PreviewRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     if state.get_layer(layer_name).await.is_none() {
-        return Err(GeoServerError::NotFound(format!(
+        return Err(TerraneError::NotFound(format!(
             "Layer '{}' not found",
             layer_name
         )));
@@ -584,14 +584,14 @@ pub async fn preview_layer(
 pub async fn upload_geojson(
     body: web::Json<serde_json::Value>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     // 校验 GeoJSON FeatureCollection
     let fc = if let Some(fc) = body.get("FeatureCollection") {
         serde_json::from_value::<FeatureCollection>(fc.clone())
-            .map_err(|e| GeoServerError::BadRequest(format!("Invalid GeoJSON: {}", e)))?
+            .map_err(|e| TerraneError::BadRequest(format!("Invalid GeoJSON: {}", e)))?
     } else {
         serde_json::from_value::<FeatureCollection>(body.clone())
-            .map_err(|e| GeoServerError::BadRequest(format!("Invalid GeoJSON: {}", e)))?
+            .map_err(|e| TerraneError::BadRequest(format!("Invalid GeoJSON: {}", e)))?
     };
 
     // 数据源名: 优先从要素属性 layer_name 读取, 否则用默认
@@ -611,7 +611,7 @@ pub async fn upload_geojson(
 
     if let Some(store) = &state.store {
         if let Ok(Some(_)) = store.get_data_source(&ds_name).await {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "Data source '{}' already exists",
                 ds_name
             )));
@@ -624,11 +624,11 @@ pub async fn upload_geojson(
     let file_store = crate::store::LocalFileStore::new(geojson_dir.clone());
     let file_name = format!("{}.geojson", ds_name);
     let bytes = serde_json::to_vec_pretty(&fc)
-        .map_err(|e| GeoServerError::InternalError(format!("序列化 GeoJSON 失败: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("序列化 GeoJSON 失败: {}", e)))?;
     file_store
         .put(&file_name, &bytes)
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("保存 GeoJSON 文件失败: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("保存 GeoJSON 文件失败: {}", e)))?;
     let file_path = file_store
         .local_path(&file_name)
         .unwrap_or_else(|| geojson_dir.join(&file_name));
@@ -660,10 +660,10 @@ pub async fn upload_geojson(
             },
             Err(e) => {
                 tracing::warn!("[Upload] 创建数据源失败: {}", e);
-                Err(GeoServerError::InternalError("创建数据源失败".to_string()))
+                Err(TerraneError::InternalError("创建数据源失败".to_string()))
             },
         }
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }

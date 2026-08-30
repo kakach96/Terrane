@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct GeoServerConfig {
+pub struct TerraneConfig {
     /// 服务端配置 (无配置文件/env-only 时使用默认值)
     #[serde(default)]
     pub server: ServerConfig,
@@ -94,7 +94,7 @@ pub struct MetadataConfig {
 
 /// 缓存存储配置 — 瓦片缓存 + 会话缓存。
 ///
-/// 不作为配置文件节 (`GeoServerConfig.cache` 标记 `#[serde(skip)]`), 仅提供
+/// 不作为配置文件节 (`TerraneConfig.cache` 标记 `#[serde(skip)]`), 仅提供
 /// 内置默认 (瓦片缓存落盘 `<data_dir>/gwc`, 会话缓存内存)。代码/测试可编程覆盖。
 /// 图层级 Redis 缓存后端通过 Redis 数据源选择 (见 `Layer.cache_store`)。
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -193,7 +193,7 @@ pub struct PostgresConfig {
 /// 安全配置 (集群部署时各副本必须共享相同密钥)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SecurityConfig {
-    /// JWT 签名密钥 (建议通过 GEOSERVER__SECURITY__JWT_SECRET 环境变量注入)
+    /// JWT 签名密钥 (建议通过 TERRANE__SECURITY__JWT_SECRET 环境变量注入)
     #[serde(default = "default_jwt_secret")]
     pub jwt_secret: String,
     /// LDAP 企业身份认证 (可选; 未配置时仅使用本地用户)
@@ -205,7 +205,7 @@ pub struct SecurityConfig {
     pub geofence_enabled: bool,
 }
 
-/// LDAP 企业身份认证配置 (对应 `[security.ldap]` / `GEOSERVER__SECURITY__LDAP__*`)。
+/// LDAP 企业身份认证配置 (对应 `[security.ldap]` / `TERRANE__SECURITY__LDAP__*`)。
 ///
 /// 启用后登录流程为: 先查本地用户; 本地缺失或密码校验失败时回退到 LDAP
 /// bind 认证; 成功后自动在本地登记用户 (角色按组映射), 再签发 JWT。
@@ -259,7 +259,7 @@ fn default_db_port() -> u16 {
 }
 
 fn default_db_instance() -> String {
-    "geoserver".to_string()
+    "terrane".to_string()
 }
 
 fn default_pg_schema() -> String {
@@ -312,7 +312,7 @@ impl Default for ServerConfig {
         ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
-            api_context: "/geoserver".to_string(),
+            api_context: "/terrane".to_string(),
             static_dir: default_static_dir(),
             connect_timeout_secs: default_connect_timeout(),
             shutdown_timeout_secs: default_shutdown_timeout(),
@@ -457,7 +457,7 @@ fn default_cascaded_circuit_reset_secs() -> u64 {
 }
 
 fn default_sqlite_path() -> PathBuf {
-    PathBuf::from("geoserver.sqlite")
+    PathBuf::from("terrane.sqlite")
 }
 
 fn default_log_level() -> String {
@@ -571,13 +571,13 @@ pub struct BoundsConfig {
     pub maxy: f64,
 }
 
-impl Default for GeoServerConfig {
+impl Default for TerraneConfig {
     fn default() -> Self {
-        GeoServerConfig {
+        TerraneConfig {
             server: ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 8080,
-                api_context: "/geoserver".to_string(),
+                api_context: "/terrane".to_string(),
                 static_dir: default_static_dir(),
                 connect_timeout_secs: default_connect_timeout(),
                 shutdown_timeout_secs: default_shutdown_timeout(),
@@ -623,11 +623,14 @@ impl Default for GeoServerConfig {
     }
 }
 
-impl GeoServerConfig {
+impl TerraneConfig {
     pub fn load() -> Result<Self, config::ConfigError> {
         let config = Config::builder()
             .add_source(File::with_name("terrane").required(false))
+            // `TERRANE__` is the current env prefix; `GEOSERVER__` is kept as a
+            // deprecated alias for backward compatibility during the transition.
             .add_source(config::Environment::with_prefix("GEOSERVER").separator("__"))
+            .add_source(config::Environment::with_prefix("TERRANE").separator("__"))
             .build()?;
 
         config.try_deserialize()
@@ -650,7 +653,10 @@ impl GeoServerConfig {
         }
 
         builder
+            // `TERRANE__` is the current env prefix; `GEOSERVER__` is kept as a
+            // deprecated alias for backward compatibility during the transition.
             .add_source(config::Environment::with_prefix("GEOSERVER").separator("__"))
+            .add_source(config::Environment::with_prefix("TERRANE").separator("__"))
             .build()?
             .try_deserialize()
     }
@@ -685,7 +691,7 @@ mod tests {
     use super::*;
     use config::{Config, File, FileFormat};
 
-    fn parse_toml(content: &str) -> GeoServerConfig {
+    fn parse_toml(content: &str) -> TerraneConfig {
         Config::builder()
             .add_source(File::from_str(content, FileFormat::Toml))
             .build()
@@ -740,7 +746,7 @@ mod tests {
 
     #[test]
     fn test_cache_defaults() {
-        let cfg = GeoServerConfig::default();
+        let cfg = TerraneConfig::default();
         let c = &cfg.cache;
         assert_eq!(c.kind, "local");
         assert_eq!(c.cache_dir, PathBuf::from("./data/gwc"));
@@ -750,7 +756,7 @@ mod tests {
 
     #[test]
     fn test_ldap_defaults() {
-        let cfg = GeoServerConfig::default();
+        let cfg = TerraneConfig::default();
         let l = &cfg.security.ldap;
         assert!(!l.enabled);
         assert!(l.url.is_empty());
@@ -795,5 +801,42 @@ mod tests {
             "#,
         );
         assert!(cfg.security.geofence_enabled);
+    }
+
+    #[test]
+    fn test_env_prefix_alias() {
+        // `TERRANE__` is the primary env prefix; `GEOSERVER__` is kept as a
+        // deprecated alias during the transition. `TERRANE__` wins when both
+        // are set (later sources take precedence in the `config` crate).
+        let set_all = |prefix: &str, port: &str| {
+            std::env::set_var(format!("{prefix}__SERVER__HOST"), "127.0.0.1");
+            std::env::set_var(format!("{prefix}__SERVER__PORT"), port);
+            std::env::set_var(format!("{prefix}__SERVER__API_CONTEXT"), "/terrane");
+        };
+        let clear_all = |prefix: &str| {
+            std::env::remove_var(format!("{prefix}__SERVER__HOST"));
+            std::env::remove_var(format!("{prefix}__SERVER__PORT"));
+            std::env::remove_var(format!("{prefix}__SERVER__API_CONTEXT"));
+        };
+
+        // Primary prefix: TERRANE__.
+        set_all("TERRANE", "9090");
+        let cfg = TerraneConfig::load().expect("load with TERRANE__ prefix");
+        assert_eq!(cfg.server.port, 9090);
+        clear_all("TERRANE");
+
+        // Deprecated alias: GEOSERVER__.
+        set_all("GEOSERVER", "9191");
+        let cfg = TerraneConfig::load().expect("load with GEOSERVER__ alias");
+        assert_eq!(cfg.server.port, 9191);
+        clear_all("GEOSERVER");
+
+        // Both set -> TERRANE__ wins.
+        set_all("TERRANE", "9292");
+        set_all("GEOSERVER", "9393");
+        let cfg = TerraneConfig::load().expect("load with both prefixes");
+        assert_eq!(cfg.server.port, 9292);
+        clear_all("TERRANE");
+        clear_all("GEOSERVER");
     }
 }

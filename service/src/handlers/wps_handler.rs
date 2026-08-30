@@ -3,7 +3,7 @@
 //! Routes: `GET/POST /wps` (KVP), `POST /wps` (XML Execute). Supports
 //! GetCapabilities, DescribeProcess and Execute for the built-in processes.
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::services::wps::{self, ResolvedInput, WpsOperation};
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -25,21 +25,21 @@ fn xml_response(body: String) -> HttpResponse {
 
 /// Resolve an input value to features: `layer:<name>` loads the layer, a JSON
 /// feature collection is parsed inline; otherwise it stays a literal.
-async fn resolve_input(state: &AppState, value: &str) -> Result<ResolvedInput, GeoServerError> {
+async fn resolve_input(state: &AppState, value: &str) -> Result<ResolvedInput, TerraneError> {
     if let Some(layer) = value.strip_prefix("layer:") {
         let features =
             match crate::handlers::features::query_layer_features(state, layer, None, None, None)
                 .await
             {
                 Ok(f) => f,
-                Err(GeoServerError::NotFound(_)) => {
-                    return Err(GeoServerError::BadRequest(format!(
+                Err(TerraneError::NotFound(_)) => {
+                    return Err(TerraneError::BadRequest(format!(
                         "Layer '{}' not found",
                         layer
                     )))
                 },
                 Err(e) => {
-                    return Err(GeoServerError::InternalError(format!(
+                    return Err(TerraneError::InternalError(format!(
                         "Failed to load layer features: {}",
                         e
                     )))
@@ -49,7 +49,7 @@ async fn resolve_input(state: &AppState, value: &str) -> Result<ResolvedInput, G
     }
     if value.trim_start().starts_with('{') {
         let features =
-            wps::parse_feature_collection_json(value).map_err(GeoServerError::BadRequest)?;
+            wps::parse_feature_collection_json(value).map_err(TerraneError::BadRequest)?;
         return Ok(ResolvedInput::Features(features));
     }
     Ok(ResolvedInput::Literal(value.to_string()))

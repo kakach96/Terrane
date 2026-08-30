@@ -6,7 +6,7 @@ import {
   Workspace,
   CreateWorkspaceRequest,
   UpdateWorkspaceRequest,
-} from '../../models/geoserver.models';
+} from '../../models/terrane.models';
 
 @Component({
   standalone: false,

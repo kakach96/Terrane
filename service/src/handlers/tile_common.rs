@@ -5,7 +5,7 @@
 //! same PNG bytes via the in-memory metadata store and the local vector store,
 //! and share the GeoWebCache-style tile cache when it is enabled.
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::handlers::features;
 use crate::models::Bounds;
 use crate::state::AppState;
@@ -129,7 +129,7 @@ pub async fn render_tile_bytes(
     col: u32,
     row: u32,
     format: TileFormat,
-) -> Result<(Vec<u8>, bool), GeoServerError> {
+) -> Result<(Vec<u8>, bool), TerraneError> {
     let gridset = tile_grid::canonical_gridset(gridset);
 
     // 0. Resolve the per-layer cache backend (layer.cache_store → Redis data
@@ -154,7 +154,7 @@ pub async fn render_tile_bytes(
 
     // 2. Compute the tile bounds from the shared grid math.
     let bounds = tile_grid::tile_bounds(&gridset, z, col, row).ok_or_else(|| {
-        GeoServerError::BadRequest(format!(
+        TerraneError::BadRequest(format!(
             "Tile index z={} x={} y={} is out of range for gridset {}",
             z, col, row, gridset
         ))
@@ -336,7 +336,7 @@ async fn finish_tile(
         crate::models::GeoJsonGeometry,
         crate::utils::rendering::Style,
     )>,
-) -> Result<(Vec<u8>, bool), GeoServerError> {
+) -> Result<(Vec<u8>, bool), TerraneError> {
     let mut img = image::RgbaImage::new(256, 256);
 
     // 栅格底图 (与 WMS GetMap 相同的裁剪/缩放逻辑)。
@@ -356,11 +356,11 @@ async fn finish_tile(
     match format {
         TileFormat::Png => img
             .write_to(&mut buffer, image::ImageFormat::Png)
-            .map_err(|e| GeoServerError::RenderingError(e.to_string()))?,
+            .map_err(|e| TerraneError::RenderingError(e.to_string()))?,
         TileFormat::Jpeg => image::DynamicImage::ImageRgba8(img)
             .to_rgb8()
             .write_to(&mut buffer, image::ImageFormat::Jpeg)
-            .map_err(|e| GeoServerError::RenderingError(e.to_string()))?,
+            .map_err(|e| TerraneError::RenderingError(e.to_string()))?,
     }
     let tile_data = buffer.into_inner();
 

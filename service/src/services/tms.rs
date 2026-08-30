@@ -287,7 +287,7 @@ mod tests {
             "sf:archsites",
             "Spearfish archeological sites",
         )];
-        let doc = build_tile_map_service("http://127.0.0.1:8080/geoserver", &layers);
+        let doc = build_tile_map_service("http://127.0.0.1:8080/terrane", &layers);
         assert!(doc.contains("<TileMapService version=\"1.0.0\""));
         assert!(doc.contains("<TileMaps>"));
         // 2 gridsets × 2 formats per layer.
@@ -301,13 +301,8 @@ mod tests {
     #[test]
     fn test_build_tile_map_document() {
         let layer = sample_layer("world", "World");
-        let doc = build_tile_map(
-            "http://127.0.0.1:8080/geoserver",
-            &layer,
-            "EPSG:4326",
-            "png",
-        )
-        .unwrap();
+        let doc =
+            build_tile_map("http://127.0.0.1:8080/terrane", &layer, "EPSG:4326", "png").unwrap();
         assert!(doc.contains("<TileMap version=\"1.0.0\""));
         assert!(doc.contains("<SRS>EPSG:4326</SRS>"));
         assert!(doc.contains("<BoundingBox minx=\"-180\""));

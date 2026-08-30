@@ -1621,18 +1621,18 @@ mod tests {
     use crate::config::PostgresConfig;
 
     /// 构造一个指向本地 PostGIS 的元数据配置。
-    /// 连接参数可用 `GEOSERVER_TEST_PG_*` 环境变量覆盖, 默认匹配本地开发栈
+    /// 连接参数可用 `TERRANE_TEST_PG_*` 环境变量覆盖, 默认匹配本地开发栈
     /// (`docker compose -f build/docker-compose.yml up -d` 或本机 postgis 容器)。
     fn test_metadata_config(schema: &str) -> MetadataConfig {
-        let host = std::env::var("GEOSERVER_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
-        let port: u16 = std::env::var("GEOSERVER_TEST_PG_PORT")
+        let host = std::env::var("TERRANE_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+        let port: u16 = std::env::var("TERRANE_TEST_PG_PORT")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(5433);
-        let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "terrane".into());
+        let user = std::env::var("TERRANE_TEST_PG_USER").unwrap_or_else(|_| "terrane".into());
         let password =
-            std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "terrane".into());
-        let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "terrane".into());
+            std::env::var("TERRANE_TEST_PG_PASSWORD").unwrap_or_else(|_| "terrane".into());
+        let instance = std::env::var("TERRANE_TEST_PG_DB").unwrap_or_else(|_| "terrane".into());
 
         MetadataConfig {
             kind: "postgres".into(),

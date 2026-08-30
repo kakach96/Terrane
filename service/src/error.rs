@@ -3,7 +3,7 @@ use actix_web::{HttpResponse, ResponseError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum GeoServerError {
+pub enum TerraneError {
     #[error("Data not found: {0}")]
     NotFound(String),
 
@@ -50,10 +50,10 @@ pub enum GeoServerError {
     },
 }
 
-impl GeoServerError {
+impl TerraneError {
     /// Build a localized error with a stable code and explicit HTTP status.
     pub fn localized(code: &'static str, status: StatusCode, message: impl Into<String>) -> Self {
-        GeoServerError::Localized {
+        TerraneError::Localized {
             code,
             status,
             message: message.into(),
@@ -61,81 +61,81 @@ impl GeoServerError {
     }
 }
 
-impl ResponseError for GeoServerError {
+impl ResponseError for TerraneError {
     fn error_response(&self) -> HttpResponse {
         match self {
-            GeoServerError::NotFound(msg) => HttpResponse::NotFound().json(serde_json::json!({
+            TerraneError::NotFound(msg) => HttpResponse::NotFound().json(serde_json::json!({
                 "error": "Not Found",
                 "code": "NOT_FOUND",
                 "message": msg
             })),
-            GeoServerError::BadRequest(msg) => HttpResponse::BadRequest().json(serde_json::json!({
+            TerraneError::BadRequest(msg) => HttpResponse::BadRequest().json(serde_json::json!({
                 "error": "Bad Request",
                 "code": "BAD_REQUEST",
                 "message": msg
             })),
-            GeoServerError::Conflict(msg) => HttpResponse::Conflict().json(serde_json::json!({
+            TerraneError::Conflict(msg) => HttpResponse::Conflict().json(serde_json::json!({
                 "error": "Conflict",
                 "code": "CONFLICT",
                 "message": msg
             })),
-            GeoServerError::NotImplemented(msg) => {
+            TerraneError::NotImplemented(msg) => {
                 HttpResponse::NotImplemented().json(serde_json::json!({
                     "error": "Not Implemented",
                     "code": "NOT_IMPLEMENTED",
                     "message": msg
                 }))
             },
-            GeoServerError::ServiceError(msg) => {
+            TerraneError::ServiceError(msg) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Service Error",
                     "code": "SERVICE_ERROR",
                     "message": msg
                 }))
             },
-            GeoServerError::ProjectionError(msg) => {
+            TerraneError::ProjectionError(msg) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Projection Error",
                     "code": "PROJECTION_ERROR",
                     "message": msg
                 }))
             },
-            GeoServerError::RenderingError(msg) => {
+            TerraneError::RenderingError(msg) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Rendering Error",
                     "code": "RENDERING_ERROR",
                     "message": msg
                 }))
             },
-            GeoServerError::ConfigError(msg) => {
+            TerraneError::ConfigError(msg) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Configuration Error",
                     "code": "CONFIG_ERROR",
                     "message": msg
                 }))
             },
-            GeoServerError::IoError(msg) => {
+            TerraneError::IoError(msg) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "IO Error",
                     "code": "IO_ERROR",
                     "message": msg.to_string()
                 }))
             },
-            GeoServerError::SerdeError(msg) => {
+            TerraneError::SerdeError(msg) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Serialization Error",
                     "code": "SERIALIZATION_ERROR",
                     "message": msg.to_string()
                 }))
             },
-            GeoServerError::ImageError(msg) => {
+            TerraneError::ImageError(msg) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Image Processing Error",
                     "code": "IMAGE_ERROR",
                     "message": msg.to_string()
                 }))
             },
-            GeoServerError::Localized {
+            TerraneError::Localized {
                 code,
                 status,
                 message,

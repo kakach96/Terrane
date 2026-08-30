@@ -70,9 +70,9 @@ async fn test_wmts_get_tile_kvp() {
 async fn test_wmts_get_tile_restful() {
     let app = build_test_app!();
 
-    // RESTful 模板: /geoserver/wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}
+    // RESTful 模板: /terrane/wmts/{layer}/{tileMatrixSet}/{tileMatrix}/{tileCol}/{tileRow}
     let req = test::TestRequest::get()
-        .uri("/geoserver/wmts/world/EPSG:4326/0/0/0")
+        .uri("/terrane/wmts/world/EPSG:4326/0/0/0")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(

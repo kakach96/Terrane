@@ -2,10 +2,10 @@ import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/cor
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
-import { LayerGroup, Layer } from '../../models/geoserver.models';
+import { LayerGroup, Layer } from '../../models/terrane.models';
 import { CreateLayerGroupDialogComponent } from './create-layer-group-dialog.component';
 import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
@@ -17,7 +17,7 @@ import { switchMap, tap, startWith, catchError, of } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LayerGroupsComponent {
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private dialog = inject(MatDialog);
   private translate = inject(TranslateService);
@@ -31,7 +31,7 @@ export class LayerGroupsComponent {
     startWith(0),
     tap(() => this.loading.set(true)),
     switchMap(() =>
-      this.geoserverService.getLayerGroups().pipe(
+      this.terraneService.getLayerGroups().pipe(
         catchError(() => {
           this.notificationService.error(this.translate.instant('layerGroups.loadFail'));
           return of([] as LayerGroup[]);
@@ -45,7 +45,7 @@ export class LayerGroupsComponent {
 
   private layers$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
-    switchMap(() => this.geoserverService.getLayers().pipe(catchError(() => of([] as Layer[])))),
+    switchMap(() => this.terraneService.getLayers().pipe(catchError(() => of([] as Layer[])))),
   );
 
   layers = toSignal(this.layers$, { initialValue: [] as Layer[] });
@@ -71,7 +71,7 @@ export class LayerGroupsComponent {
     });
     dialogRef.afterClosed().subscribe((confirmed) => {
       if (!confirmed) return;
-      this.geoserverService.deleteLayerGroup(group.name).subscribe({
+      this.terraneService.deleteLayerGroup(group.name).subscribe({
         next: () => {
           this.notificationService.success(this.translate.instant('layerGroups.deleteSuccess'));
           this.refreshTrigger.update((v) => v + 1);

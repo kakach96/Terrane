@@ -1,4 +1,4 @@
-use crate::config::GeoServerConfig;
+use crate::config::TerraneConfig;
 use crate::models::{layer::LayerGroup, Layer};
 use crate::store::{build_session_cache, PostgresStore, SessionCache, SqliteStore, Store};
 use crate::utils::cascaded::CascadedCircuits;
@@ -55,7 +55,7 @@ pub struct RequestRecord {
 }
 
 pub struct AppState {
-    pub config: GeoServerConfig,
+    pub config: TerraneConfig,
     pub layers: Arc<RwLock<Vec<Layer>>>,
     pub styles: Arc<RwLock<HashMap<String, String>>>,
     pub styles_meta: Arc<RwLock<HashMap<String, StyleMeta>>>,
@@ -98,7 +98,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new(config: GeoServerConfig) -> Self {
+    pub async fn new(config: TerraneConfig) -> Self {
         // 根据配置选择元数据存储后端: "postgres" (集群) / "sqlite" (默认, 本地开发)
         let store: Option<Arc<dyn Store>> = match config.metadata.kind.as_str() {
             "postgres" => match PostgresStore::new(&config.metadata).await {
@@ -119,7 +119,7 @@ impl AppState {
                     .metadata
                     .sqlite_path
                     .to_str()
-                    .unwrap_or("geoserver.sqlite");
+                    .unwrap_or("terrane.sqlite");
                 match SqliteStore::new(sqlite_path).await {
                     Ok(s) => {
                         tracing::info!("Metadata store backend: SQLite ({})", sqlite_path);
@@ -509,7 +509,7 @@ impl AppState {
             cfg.dbname = conn_info
                 .database
                 .clone()
-                .or_else(|| Some("geoserver".to_string()));
+                .or_else(|| Some("terrane".to_string()));
             cfg.user = conn_info
                 .username
                 .clone()
@@ -560,7 +560,7 @@ impl AppState {
         let database = conn_info
             .database
             .clone()
-            .unwrap_or_else(|| "geoserver".to_string());
+            .unwrap_or_else(|| "terrane".to_string());
         let user = conn_info
             .username
             .clone()

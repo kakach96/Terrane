@@ -258,7 +258,7 @@ Overall progress ████████████████░░  87%
 - ✅ **User/group/role system** — SHA-256+salt password hashing + JWT tokens + audit logs; users CRUD + PUT (role / enabled / password reset) via `/auth/users/{username}`
 - ✅ **REST API authentication** — Bearer token + `require_auth()` middleware
 - ✅ **Layer-level permissions** — Permission model + CRUD + matching rule engine
-- ✅ **Frontend security** — login page (LoginComponent) + AuthInterceptor + default admin `admin / geoserver`
+- ✅ **Frontend security** — login page (LoginComponent) + AuthInterceptor + default admin `admin / terrane`
 - ✅ **Enterprise identity (LDAP)** — `service/src/utils/ldap.rs`: `[security.ldap]` (url/base_dn/bind/user_filter/admin_group/default_role); login falls back to an LDAP bind when the local user is missing or the password is rejected, auto-provisioning the local user with the group-mapped role; RFC 4514 DN escaping; live test `#[ignore]`
 - ✅ **Fine-grained GeoFence ACL** — `service/src/utils/geofence.rs`: per-request `workspace / store / layer` rules over the `/permissions` model (most-specific rule wins, deny overrides ties, mode hierarchy admin ⊇ write ⊇ read, open default); opt-in via `[security] geofence_enabled`, enforced on WMS GetMap/GetFeatureInfo, WFS GetFeature/GetFeatureWithLock/LockFeature/GetPropertyValue/GetGmlObject, WCS GetCoverage and OGC API Maps; admin bypass; 403 on deny
 
@@ -287,7 +287,7 @@ Overall progress ████████████████░░  87%
 | 36 | **Layer preview format parity** | Frontend preview + backend WMS GetMap now cover OpenLayers/PNG/JPEG/GIF/WebP/TIFF/SVG/KML/GeoJSON/GML/Atom/UTFGrid/PDF + MVT (`.pbf`) preview; new formats advertised in capabilities, i18n labels in both locales, covered by WMS integration tests | ✅ done |
 | 37 | **Built-in sample data** | Curated `service/samples/` set (GeoJSON point/line/polygon + simplified world map) + first-startup seeding into a `demo` workspace (`[samples] enabled`, default true); Shapefile/GeoTIFF samples and reusing samples in integration tests remain deferred | ✅ GeoJSON set done |
 | 38 | **Database cluster connections** | `host` accepts comma-separated host lists or full connection URLs for PostGIS (deadpool multi-host failover) / MySQL (first-reachable probe) / MongoDB (replica-set URI + `mongodb://` override, `replica_set` persisted); frontend dialog cluster hint + replica-set field; read/write replica separation deferred until WFS-T | ✅ done |
-| 39 | **`geoserver` → `terrane` naming migration** | Type names (`GeoServerConfig`/`GeoServerError`/`GeoServerBackup`), `GEOSERVER__` env prefix (keep alias), default `/geoserver` API context, defaults (admin password/DB name/namespace/`geoserver.sqlite`), frontend files, tests, docs, Docker/CI env vars | ⏳ planned (breaking) |
+| 39 | **`geoserver` → `terrane` naming migration** | Type names (`GeoServerConfig`/`GeoServerError`/`GeoServerBackup` → `Terrane*`), `TERRANE__` env prefix (keep `GEOSERVER__` as deprecated alias), default `/terrane` API context, defaults (admin password/DB name/`terrane.sqlite`), frontend files (`terrane.service.ts`/`terrane.models.ts`), tests, docs, Docker/CI env vars | ✅ done (v1.2) |
 
 ---
 
@@ -413,7 +413,7 @@ Overall progress ████████████████░░  87%
 | Dimension | Current State | Gap | Priority |
 |------|------|------|:-----:|
 | **Containerization** | Multi-stage `Dockerfile` + `.dockerignore` + `build/docker-compose.yml` (dev deps: PostGIS + Redis + MinIO; app via `--profile terrane`); image `HEALTHCHECK` based on `/health/ready` | CI image build/push/scan not wired into a real repo yet | **P0 ✅** |
-| **12-Factor config** | `service/terrane.toml` + `GEOSERVER__` env var prefix; `load_from_file()` mounts `config::Environment` | Default `host=127.0.0.1` (Dockerfile env sets 0.0.0.0); JWT secret default hardcoded in `service/src/auth.rs` | **P0 ✅** |
+| **12-Factor config** | `service/terrane.toml` + `TERRANE__` env var prefix; `load_from_file()` mounts `config::Environment` | Default `host=127.0.0.1` (Dockerfile env sets 0.0.0.0); JWT secret default hardcoded in `service/src/auth.rs` | **P0 ✅** |
 | **Statelessness / scalability** | Config keeps only `[metadata]` (SQLite/PostgreSQL); vector/raster data sources registered per data source (persisted in metadata store, `file_path` + `file_storage_type`); cache local (`service/src/store/cache/`); layers/styles cached in memory `Arc<RwLock<...>>` (`service/src/state.rs`); **env-injectable credentials** (`service/src/utils/secrets.rs`: `${ENV_VAR}` interpolation at connection build — K8s Secrets style, never persisted/logged); **S3/MinIO uploads** (`/data/upload/geotiff?storage=s3` → `file_storage_type=s3`, shared across replicas) | In-memory state still diverges across replicas (bounded by periodic + event-driven catalog refresh); SQLite remains single-writer for standalone mode — production HA uses PostgreSQL metadata + Redis cache + shared object storage | **P1 ✅** |
 | **Observability** | stdout logs (tracing); split probes `/health/live` & `/health/ready`; Prometheus `/metrics` (requests/errors, method/status/endpoint, tile cache hit rate, PG pool watermarks, system); **structured JSON logs (`[logging] format = "json"`) + request-level `trace_id` done** | OpenTelemetry tracing pending | **P1 ✅** |
 | **Lifecycle** | SIGTERM/SIGINT graceful shutdown + `shutdown_timeout_secs` draining in-flight requests (`main.rs`) | — | **P1 ✅** |
@@ -432,8 +432,8 @@ Overall progress ████████████████░░  87%
 
 #### Phase 1: 12-Factor Configuration & Observability ✅
 
-- ✅ Unified config loading: `load_from_file()` mounts `config::Environment` (`GEOSERVER__` prefix); env overrides file config
-- ⚠️ JWT secret: `GEOSERVER__SECURITY__JWT_SECRET` injection supported; default still hardcoded in `service/src/auth.rs` — production must inject explicitly
+- ✅ Unified config loading: `load_from_file()` mounts `config::Environment` (`TERRANE__` prefix, `GEOSERVER__` kept as a deprecated alias); env overrides file config
+- ⚠️ JWT secret: `TERRANE__SECURITY__JWT_SECRET` injection supported; default still hardcoded in `service/src/auth.rs` — production must inject explicitly
 - ✅ Split health probes: `/health/live` (liveness) + `/health/ready` (metadata/business stores ready, 200/503)
 - ✅ Structured JSON logs (tracing JSON layer, `[logging] format = "json"`) with request-level `trace_id` (middleware generates/pass-throughs `X-Trace-Id`/`X-Request-Id`, echoed in response headers; default `text` stays human-readable)
 - ✅ Prometheus `/metrics`: request/error counts, method/status/endpoint distribution, tile cache hit rate, PG pool watermarks, system resources (hand-written pure-Rust text format, zero external deps)

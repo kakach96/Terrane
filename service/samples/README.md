@@ -26,7 +26,7 @@ enabled = true
 source_dir = "./samples"
 ```
 
-Set `enabled = false` (or `GEOSERVER__SAMPLES__ENABLED=false`) to skip seeding.
+Set `enabled = false` (or `TERRANE__SAMPLES__ENABLED=false`) to skip seeding.
 Seeding only runs when the catalog contains no layers, so existing installs are
 never modified.
 

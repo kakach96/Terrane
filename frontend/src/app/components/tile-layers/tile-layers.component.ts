@@ -9,9 +9,9 @@ import {
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
-import { Layer, SeedJob } from '../../models/geoserver.models';
+import { Layer, SeedJob } from '../../models/terrane.models';
 import {
   SeedJobDialogComponent,
   SeedJobDialogResult,
@@ -27,7 +27,7 @@ import { switchMap, tap, startWith, catchError, of, interval } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TileLayersComponent implements OnDestroy {
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private dialog = inject(MatDialog);
   private translate = inject(TranslateService);
@@ -45,7 +45,7 @@ export class TileLayersComponent implements OnDestroy {
   private layers$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
     tap(() => this.loading.set(true)),
-    switchMap(() => this.geoserverService.getLayers().pipe(catchError(() => of([] as Layer[])))),
+    switchMap(() => this.terraneService.getLayers().pipe(catchError(() => of([] as Layer[])))),
     tap(() => this.loading.set(false)),
   );
   layers = toSignal(this.layers$, { initialValue: [] as Layer[] });
@@ -64,7 +64,7 @@ export class TileLayersComponent implements OnDestroy {
   private seedJobs$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
     switchMap(() =>
-      this.geoserverService.getSeedJobs().pipe(catchError(() => of([] as SeedJob[]))),
+      this.terraneService.getSeedJobs().pipe(catchError(() => of([] as SeedJob[]))),
     ),
   );
   seedJobs = toSignal(this.seedJobs$, { initialValue: [] as SeedJob[] });
@@ -103,7 +103,7 @@ export class TileLayersComponent implements OnDestroy {
     const { layer, operation, gridset, z_min, z_max, format } = result;
 
     if (operation === 'truncate') {
-      this.geoserverService.truncateTileCache(layer, gridset).subscribe({
+      this.terraneService.truncateTileCache(layer, gridset).subscribe({
         next: (res) => {
           this.notificationService.success(
             res.message || this.translate.instant('tileLayers.truncateSuccess'),
@@ -118,7 +118,7 @@ export class TileLayersComponent implements OnDestroy {
 
     // seed / reseed → POST /tiles/seed (reseed truncates first)
     const doSeed = () => {
-      this.geoserverService.createSeedJob({ layer, gridset, z_min, z_max, format }).subscribe({
+      this.terraneService.createSeedJob({ layer, gridset, z_min, z_max, format }).subscribe({
         next: (res) => {
           this.notificationService.success(
             res.message || this.translate.instant('tileLayers.seedStarted'),
@@ -130,7 +130,7 @@ export class TileLayersComponent implements OnDestroy {
     };
 
     if (operation === 'reseed') {
-      this.geoserverService.truncateTileCache(layer, gridset).subscribe({
+      this.terraneService.truncateTileCache(layer, gridset).subscribe({
         next: () => doSeed(),
         error: () => doSeed(),
       });
@@ -153,7 +153,7 @@ export class TileLayersComponent implements OnDestroy {
       .afterClosed()
       .subscribe((confirmed) => {
         if (!confirmed) return;
-        this.geoserverService.truncateTileCache(layer.name).subscribe({
+        this.terraneService.truncateTileCache(layer.name).subscribe({
           next: (res) => {
             this.notificationService.success(
               res.message || this.translate.instant('tileLayers.truncateSuccess'),
@@ -180,7 +180,7 @@ export class TileLayersComponent implements OnDestroy {
       .afterClosed()
       .subscribe((confirmed) => {
         if (!confirmed) return;
-        this.geoserverService.clearTileCache(layer.name).subscribe({
+        this.terraneService.clearTileCache(layer.name).subscribe({
           next: (res) => {
             this.notificationService.success(
               res.message || this.translate.instant('tileLayers.cacheCleared'),
@@ -210,7 +210,7 @@ export class TileLayersComponent implements OnDestroy {
             this.refreshTrigger.update((v) => v + 1);
             return;
           }
-          this.geoserverService.clearTileCache(layers[idx].name).subscribe({
+          this.terraneService.clearTileCache(layers[idx].name).subscribe({
             next: () => clearNext(idx + 1),
             error: () => clearNext(idx + 1),
           });
@@ -220,7 +220,7 @@ export class TileLayersComponent implements OnDestroy {
   }
 
   cancelSeedJob(job: SeedJob): void {
-    this.geoserverService.cancelSeedJob(job.id).subscribe({
+    this.terraneService.cancelSeedJob(job.id).subscribe({
       next: (res) => {
         this.notificationService.info(
           res.message || this.translate.instant('tileLayers.cancelRequested'),

@@ -104,7 +104,7 @@ Detailed notes on the core modules follow.
 
 ### 3. Service Layer (Services)
 
-#### 🔧 geoserver.service.ts
+#### 🔧 terrane.service.ts
 Complete GeoServer API wrapper, including:
 - Layer CRUD operations
 - Read-only feature queries and export
@@ -121,7 +121,7 @@ Material Snackbar notification service:
 
 ### 4. Data Models (Models)
 
-#### 📦 geoserver.models.ts
+#### 📦 terrane.models.ts
 Complete TypeScript interface definitions:
 - Layer
 - Feature

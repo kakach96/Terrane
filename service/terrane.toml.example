@@ -5,12 +5,14 @@
 #
 # Configuration sources & precedence (highest first):
 #   1. CLI flags:         --host, --port   (override [server] host/port)
-#   2. Environment vars:  GEOSERVER__<SECTION>__<FIELD>  (double underscore)
+#   2. Environment vars:  TERRANE__<SECTION>__<FIELD>  (double underscore)
 #   3. Config file:       terrane.toml   (path via --config, default "terrane")
 #
-# Env var naming: prefix "GEOSERVER", sections and fields joined with "__".
-#   GEOSERVER__SERVER__HOST                 -> [server] host
-#   GEOSERVER__METADATA__POSTGRES__HOST     -> [metadata.postgres] host
+# Env var naming: prefix "TERRANE", sections and fields joined with "__".
+#   TERRANE__SERVER__HOST                 -> [server] host
+#   TERRANE__METADATA__POSTGRES__HOST     -> [metadata.postgres] host
+# The deprecated prefix "GEOSERVER" is still accepted as an alias during the
+# transition (TERRANE__ takes precedence when both are set).
 # The special var RUST_LOG overrides [logging] level (see below).
 #
 # NOTE: if any REQUIRED key is missing (host / port / api_context /
@@ -27,7 +29,7 @@
 # ---------------------------------------------------------------------------
 # Data directory (top-level key — must stay before any [section] header)
 # Root directory for vector/raster data files (default: "./data")
-# Env: GEOSERVER__DATA_DIR
+# Env: TERRANE__DATA_DIR
 # ---------------------------------------------------------------------------
 data_dir = "./data"
 
@@ -36,28 +38,28 @@ data_dir = "./data"
 # ---------------------------------------------------------------------------
 [server]
 # Bind address (REQUIRED; built-in default: "127.0.0.1")
-# Env: GEOSERVER__SERVER__HOST | CLI: --host
+# Env: TERRANE__SERVER__HOST | CLI: --host
 host = "127.0.0.1"
 
 # Listen port (REQUIRED; built-in default: 8080)
-# Env: GEOSERVER__SERVER__PORT | CLI: --port
+# Env: TERRANE__SERVER__PORT | CLI: --port
 port = 8080
 
-# REST API context path (REQUIRED; built-in default: "/geoserver")
-# Env: GEOSERVER__SERVER__API_CONTEXT
-api_context = "/geoserver"
+# REST API context path (REQUIRED; built-in default: "/terrane")
+# Env: TERRANE__SERVER__API_CONTEXT
+api_context = "/terrane"
 
 # Static file directory holding the built Angular frontend (default: "./static")
-# Env: GEOSERVER__SERVER__STATIC_DIR
+# Env: TERRANE__SERVER__STATIC_DIR
 static_dir = "./static"
 
 # PostgreSQL connection timeout in seconds (default: 10)
-# Env: GEOSERVER__SERVER__CONNECT_TIMEOUT_SECS
+# Env: TERRANE__SERVER__CONNECT_TIMEOUT_SECS
 connect_timeout_secs = 10
 
 # Graceful shutdown: seconds to wait for in-flight requests on SIGTERM/SIGINT
 # before force-drop (default: 30; container/K8s rolling updates rely on this)
-# Env: GEOSERVER__SERVER__SHUTDOWN_TIMEOUT_SECS
+# Env: TERRANE__SERVER__SHUTDOWN_TIMEOUT_SECS
 shutdown_timeout_secs = 30
 
 # ---------------------------------------------------------------------------
@@ -65,16 +67,16 @@ shutdown_timeout_secs = 30
 # ---------------------------------------------------------------------------
 # Per-request timeout in seconds; requests exceeding the deadline are cancelled
 # and answered with HTTP 504. 0 disables the timeout (default: 60).
-# Env: GEOSERVER__SERVER__REQUEST_TIMEOUT_SECS
+# Env: TERRANE__SERVER__REQUEST_TIMEOUT_SECS
 request_timeout_secs = 60
 
 # Sliding-window rate limit per client (by IP, falling back to X-Forwarded-For).
 # Maximum requests allowed inside the window; over-limit requests are answered
 # with HTTP 429. 0 disables rate limiting (default: 0).
-# Env: GEOSERVER__SERVER__RATE_LIMIT_MAX_REQUESTS
+# Env: TERRANE__SERVER__RATE_LIMIT_MAX_REQUESTS
 rate_limit_max_requests = 0
 # Rate limit window in seconds (default: 1)
-# Env: GEOSERVER__SERVER__RATE_LIMIT_WINDOW_SECS
+# Env: TERRANE__SERVER__RATE_LIMIT_WINDOW_SECS
 rate_limit_window_secs = 1
 
 # ---------------------------------------------------------------------------
@@ -84,20 +86,20 @@ rate_limit_window_secs = 1
 # ---------------------------------------------------------------------------
 [metadata]
 # Storage backend: "sqlite" (default, local dev) | "postgres" (cluster deploy)
-# Env: GEOSERVER__METADATA__KIND   (legacy: GEOSERVER__DATABASE__KIND)
+# Env: TERRANE__METADATA__KIND   (legacy: TERRANE__DATABASE__KIND)
 kind = "sqlite"
-# SQLite database file path (default: "geoserver.sqlite"; used only when kind = "sqlite")
-# Env: GEOSERVER__METADATA__SQLITE_PATH
-sqlite_path = "geoserver.sqlite"
+# SQLite database file path (default: "terrane.sqlite"; used only when kind = "sqlite")
+# Env: TERRANE__METADATA__SQLITE_PATH
+sqlite_path = "terrane.sqlite"
 
 # PostgreSQL connection config (used only when kind = "postgres").
 # The whole section is optional; every field below has a default.
-# Env overrides: GEOSERVER__METADATA__POSTGRES__HOST / __PORT / __INSTANCE
+# Env overrides: TERRANE__METADATA__POSTGRES__HOST / __PORT / __INSTANCE
 #                / __SCHEMA / __USER / __PASSWORD / __POOL_SIZE
 [metadata.postgres]
 host = "127.0.0.1"
 port = 5432
-instance = "geoserver"
+instance = "terrane"
 schema = "public"
 user = "postgres"
 # Built-in default is an empty string ""; the value here is just an example.
@@ -110,7 +112,7 @@ pool_size = 10
 # ---------------------------------------------------------------------------
 [security]
 # JWT signing secret. In a multi-replica cluster every replica MUST share the
-# same value. For production, inject it via the GEOSERVER__SECURITY__JWT_SECRET
+# same value. For production, inject it via the TERRANE__SECURITY__JWT_SECRET
 # environment variable instead of committing it to a file.
 # Built-in default: "terrane-jwt-secret-2026"
 jwt_secret = "terrane-jwt-secret-2026"
@@ -120,7 +122,7 @@ jwt_secret = "terrane-jwt-secret-2026"
 # ---------------------------------------------------------------------------
 [logging]
 # Log level: trace / debug / info / warn / error (default: "info")
-# Env: GEOSERVER__LOGGING__LEVEL, or RUST_LOG (RUST_LOG takes precedence)
+# Env: TERRANE__LOGGING__LEVEL, or RUST_LOG (RUST_LOG takes precedence)
 level = "info"
 
 # ---------------------------------------------------------------------------
@@ -128,22 +130,22 @@ level = "info"
 # ---------------------------------------------------------------------------
 [cors]
 # Enable CORS (default: true)
-# Env: GEOSERVER__CORS__ENABLED
+# Env: TERRANE__CORS__ENABLED
 enabled = true
 # Allowed origins ("*" = allow all; default: ["*"])
-# Env: GEOSERVER__CORS__ALLOWED_ORIGINS
+# Env: TERRANE__CORS__ALLOWED_ORIGINS
 allowed_origins = ["*"]
 # Allowed HTTP methods (default: GET, POST, PUT, DELETE, OPTIONS, PATCH)
-# Env: GEOSERVER__CORS__ALLOWED_METHODS
+# Env: TERRANE__CORS__ALLOWED_METHODS
 allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
 # Allowed request headers (default: ["*"])
-# Env: GEOSERVER__CORS__ALLOWED_HEADERS
+# Env: TERRANE__CORS__ALLOWED_HEADERS
 allowed_headers = ["*"]
 # Allow credentials (default: true)
-# Env: GEOSERVER__CORS__ALLOW_CREDENTIALS
+# Env: TERRANE__CORS__ALLOW_CREDENTIALS
 allow_credentials = true
 # Preflight request cache time in seconds (default: 3600)
-# Env: GEOSERVER__CORS__MAX_AGE
+# Env: TERRANE__CORS__MAX_AGE
 max_age = 3600
 
 # ---------------------------------------------------------------------------
@@ -195,8 +197,8 @@ maxy = 90.0
 # ---------------------------------------------------------------------------
 [samples]
 # Auto-register built-in sample data on first startup (default: true)
-# Env: GEOSERVER__SAMPLES__ENABLED
+# Env: TERRANE__SAMPLES__ENABLED
 enabled = true
 # Directory that holds the curated sample files (default: "./samples")
-# Env: GEOSERVER__SAMPLES__SOURCE_DIR
+# Env: TERRANE__SAMPLES__SOURCE_DIR
 source_dir = "./samples"

@@ -11,7 +11,7 @@ use tokio::io::AsyncWriteExt;
 use tracing::{debug, info, warn};
 
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{DataSourceConnection, DataSourceType};
 use crate::state::AppState;
 use crate::store::FileStore;
@@ -21,12 +21,12 @@ pub async fn upload_shapefile(
     req: HttpRequest,
     payload: Multipart,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let data_dir = state.config.data_dir.clone();
     let upload_dir = data_dir.join("uploads").join("shapefiles");
     tokio::fs::create_dir_all(&upload_dir)
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("无法创建上传目录: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("无法创建上传目录: {}", e)))?;
 
     // 从查询参数中读取图层名称（可选）
     let layer_name = req
@@ -47,9 +47,9 @@ pub async fn upload_shapefile(
 
     // 验证 ZIP 内容
     let file = std::fs::File::open(&saved_path)
-        .map_err(|e| GeoServerError::InternalError(format!("无法打开上传文件: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("无法打开上传文件: {}", e)))?;
     let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| GeoServerError::BadRequest(format!("无效的 ZIP 文件: {}", e)))?;
+        .map_err(|e| TerraneError::BadRequest(format!("无效的 ZIP 文件: {}", e)))?;
 
     let has_shp = (0..archive.len()).any(|i| {
         archive
@@ -62,7 +62,7 @@ pub async fn upload_shapefile(
     if !has_shp {
         // 清理无效文件
         let _ = tokio::fs::remove_file(&saved_path).await;
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "ZIP 文件中未找到 .shp 文件".to_string(),
         ));
     }
@@ -81,7 +81,7 @@ pub async fn upload_shapefile(
     if let Some(store) = &state.store {
         // 检查是否已存在同名数据源
         if let Ok(Some(_)) = store.get_data_source(&ds_name).await {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "Data source '{}' already exists",
                 ds_name
             )));
@@ -108,11 +108,11 @@ pub async fn upload_shapefile(
             },
             Err(e) => {
                 warn!("[Upload] 创建数据源失败: {}", e);
-                Err(GeoServerError::InternalError("创建数据源失败".to_string()))
+                Err(TerraneError::InternalError("创建数据源失败".to_string()))
             },
         }
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
@@ -127,7 +127,7 @@ pub async fn upload_geotiff(
     req: HttpRequest,
     payload: Multipart,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     // 从 multipart 读取全部字节与原始文件名
     let (data, filename) = read_multipart_bytes(payload).await?;
 
@@ -138,7 +138,7 @@ pub async fn upload_geotiff(
         .map(|e| e.to_lowercase())
         .unwrap_or_default();
     if ext != "tif" && ext != "tiff" {
-        return Err(GeoServerError::BadRequest(format!(
+        return Err(TerraneError::BadRequest(format!(
             "不支持的文件格式: .{}, 仅支持 .tif/.tiff",
             ext
         )));
@@ -168,7 +168,7 @@ pub async fn upload_geotiff(
     // 提前检查重名, 避免已写入文件后才发现冲突
     if let Some(store) = &state.store {
         if let Ok(Some(_)) = store.get_data_source(&ds_name).await {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "Data source '{}' already exists",
                 ds_name
             )));
@@ -205,7 +205,7 @@ pub async fn upload_geotiff(
         };
         let bucket = q("bucket")
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| GeoServerError::BadRequest("storage=s3 需要 bucket 参数".to_string()))?;
+            .ok_or_else(|| TerraneError::BadRequest("storage=s3 需要 bucket 参数".to_string()))?;
         let mut conn = DataSourceConnection::file(file_name.clone());
         conn.file_storage_type = Some("s3".to_string());
         conn.s3_endpoint = q("endpoint");
@@ -215,11 +215,11 @@ pub async fn upload_geotiff(
         conn.s3_secret_key = q("secret_key");
 
         let store = crate::store::S3FileStore::from_connection(&conn)
-            .map_err(|e| GeoServerError::InternalError(format!("S3 配置无效: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("S3 配置无效: {}", e)))?;
         store
             .put(&file_name, &data)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("S3 上传失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("S3 上传失败: {}", e)))?;
         info!("[Upload] GeoTIFF 已上传至 S3: {}", file_name);
         (conn, "s3")
     } else {
@@ -230,7 +230,7 @@ pub async fn upload_geotiff(
         file_store
             .put(&file_name, &data)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("保存栅格文件失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("保存栅格文件失败: {}", e)))?;
         let file_path = file_store
             .local_path(&file_name)
             .unwrap_or_else(|| raster_dir.join(&file_name));
@@ -264,16 +264,16 @@ pub async fn upload_geotiff(
             },
             Err(e) => {
                 warn!("[Upload] 创建数据源失败: {}", e);
-                Err(GeoServerError::InternalError("创建数据源失败".to_string()))
+                Err(TerraneError::InternalError("创建数据源失败".to_string()))
             },
         }
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
 /// 从 multipart 读取单个文件的全部字节与原始文件名 (供栅格存储直接落盘)。
-async fn read_multipart_bytes(mut payload: Multipart) -> Result<(Vec<u8>, String), GeoServerError> {
+async fn read_multipart_bytes(mut payload: Multipart) -> Result<(Vec<u8>, String), TerraneError> {
     let mut data: Vec<u8> = Vec::new();
     let mut filename = "upload".to_string();
     while let Some(Ok(mut field)) = payload.next().await {
@@ -285,7 +285,7 @@ async fn read_multipart_bytes(mut payload: Multipart) -> Result<(Vec<u8>, String
         }
     }
     if data.is_empty() {
-        return Err(GeoServerError::BadRequest("未接收到上传文件".to_string()));
+        return Err(TerraneError::BadRequest("未接收到上传文件".to_string()));
     }
     Ok((data, filename))
 }
@@ -294,7 +294,7 @@ async fn read_multipart_bytes(mut payload: Multipart) -> Result<(Vec<u8>, String
 async fn save_multipart_file(
     mut payload: Multipart,
     upload_dir: &Path,
-) -> Result<PathBuf, GeoServerError> {
+) -> Result<PathBuf, TerraneError> {
     let mut saved_path: Option<PathBuf> = None;
 
     while let Some(Ok(mut field)) = payload.next().await {
@@ -308,24 +308,24 @@ async fn save_multipart_file(
         let file_path = upload_dir.join(&filename);
         let mut file = tokio::fs::File::create(&file_path)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("无法创建文件: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("无法创建文件: {}", e)))?;
 
         // 流式写入
         while let Some(Ok(chunk)) = field.next().await {
             file.write_all(&chunk)
                 .await
-                .map_err(|e| GeoServerError::InternalError(format!("写入文件失败: {}", e)))?;
+                .map_err(|e| TerraneError::InternalError(format!("写入文件失败: {}", e)))?;
         }
 
         file.flush()
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("刷新文件失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("刷新文件失败: {}", e)))?;
 
         debug!("[Upload] 保存文件: {:?}", file_path);
         saved_path = Some(file_path);
     }
 
-    saved_path.ok_or_else(|| GeoServerError::BadRequest("未接收到上传文件".to_string()))
+    saved_path.ok_or_else(|| TerraneError::BadRequest("未接收到上传文件".to_string()))
 }
 
 /// 清理文件名，防止路径遍历攻击

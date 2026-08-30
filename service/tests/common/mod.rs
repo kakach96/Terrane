@@ -4,13 +4,13 @@
 //! files directly under `tests/` are compiled as separate test binaries, so this
 //! module is compiled into every test crate that does `#[macro_use] mod common;`.
 
-/// Build a test `GeoServerConfig`:
+/// Build a test `TerraneConfig`:
 /// - in-memory SQLite metadata store
 /// - vector store reuses the metadata store (no files written to `./data/business`)
 /// - tile cache disabled (no files written to `./data/gwc`)
 /// - one default workspace `default` → store `shapes` → layer `world` (EPSG:4326)
-pub fn create_test_config() -> terrane::config::GeoServerConfig {
-    let mut config = terrane::config::GeoServerConfig::default();
+pub fn create_test_config() -> terrane::config::TerraneConfig {
+    let mut config = terrane::config::TerraneConfig::default();
     config.server.host = "127.0.0.1".to_string();
     config.server.port = 0;
     config.metadata.sqlite_path = ":memory:".into();
@@ -54,7 +54,7 @@ pub fn create_test_config() -> terrane::config::GeoServerConfig {
 }
 
 /// Build a fully-initialized test application: in-memory SQLite + the default
-/// `world` layer, wired to the real route table under `/geoserver`.
+/// `world` layer, wired to the real route table under `/terrane`.
 ///
 /// Consumed via `#[macro_use] mod common;` at the top of each protocol test
 /// crate (e.g. `tests/wms_test.rs`). The macro uses fully-qualified paths, so
@@ -68,13 +68,13 @@ macro_rules! build_test_app {
             actix_web::App::new()
                 .app_data(state.clone())
                 .wrap(actix_web::middleware::Logger::default())
-                .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+                .configure(|svc| terrane::routes::configure_routes(svc, "/terrane")),
         )
         .await
     }};
 }
 
-/// Log in as the default administrator (admin/geoserver) over HTTP and return
+/// Log in as the default administrator (admin/terrane) over HTTP and return
 /// the JWT token. Used by authenticated REST endpoints (permissions/backup).
 ///
 /// Implemented as a macro so that it expands at the call site where `$app`'s
@@ -84,8 +84,8 @@ macro_rules! build_test_app {
 macro_rules! login_admin_token {
     ($app:expr) => {{
         let req = actix_web::test::TestRequest::post()
-            .uri("/geoserver/auth/login")
-            .set_json(&serde_json::json!({ "username": "admin", "password": "geoserver" }))
+            .uri("/terrane/auth/login")
+            .set_json(&serde_json::json!({ "username": "admin", "password": "terrane" }))
             .to_request();
         let resp = actix_web::test::call_service(&$app, req).await;
         let body: serde_json::Value = actix_web::test::read_body_json(resp).await;

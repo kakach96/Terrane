@@ -1,9 +1,9 @@
 import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
-import { Permission, CreatePermissionRequest } from '../../models/geoserver.models';
+import { Permission, CreatePermissionRequest } from '../../models/terrane.models';
 import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
 @Component({
@@ -14,7 +14,7 @@ import { switchMap, tap, startWith, catchError, of } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PermissionsComponent {
-  private geoserver = inject(GeoserverService);
+  private terrane = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private translate = inject(TranslateService);
 
@@ -56,7 +56,7 @@ export class PermissionsComponent {
     startWith(0),
     tap(() => this.loading.set(true)),
     switchMap(() =>
-      this.geoserver.getPermissions().pipe(
+      this.terrane.getPermissions().pipe(
         catchError(() => {
           this.notificationService.error(this.translate.instant('permissions.loadFail'));
           return of([] as Permission[]);
@@ -73,7 +73,7 @@ export class PermissionsComponent {
       this.notificationService.warning(this.translate.instant('permissions.resourceNameRequired'));
       return;
     }
-    this.geoserver.createPermission(this.newPerm).subscribe({
+    this.terrane.createPermission(this.newPerm).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('permissions.createSuccess'));
         this.showCreateForm = false;
@@ -88,7 +88,7 @@ export class PermissionsComponent {
     if (!perm.id) return;
     const label = `${perm.effect} ${perm.accessMode} ${perm.resourceType}:${perm.resourceName}`;
     if (!confirm(this.translate.instant('permissions.deleteConfirm', { label }))) return;
-    this.geoserver.deletePermission(perm.id).subscribe({
+    this.terrane.deletePermission(perm.id).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('permissions.deleteSuccess'));
         this.refreshTrigger.update((v) => v + 1);

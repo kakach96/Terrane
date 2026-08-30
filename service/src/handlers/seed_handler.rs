@@ -8,7 +8,7 @@
 //!
 //! Create / cancel / truncate require admin auth (they mutate the tile cache).
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::handlers::auth_handler::require_auth;
 use crate::handlers::rest_handler::ApiResponse;
 use crate::state::AppState;
@@ -30,16 +30,14 @@ pub async fn create_seed_job(
     req: HttpRequest,
     body: web::Json<SeedRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
 
     if body.z_min > body.z_max {
-        return Err(GeoServerError::BadRequest(
-            "z_min 不能大于 z_max".to_string(),
-        ));
+        return Err(TerraneError::BadRequest("z_min 不能大于 z_max".to_string()));
     }
     if body.z_max > 22 {
-        return Err(GeoServerError::BadRequest("z_max 不能超过 22".to_string()));
+        return Err(TerraneError::BadRequest("z_max 不能超过 22".to_string()));
     }
 
     // 图层必须存在
@@ -47,13 +45,13 @@ pub async fn create_seed_job(
         let layers = state.layers.read().await;
         layers.iter().find(|l| l.name == body.layer).cloned()
     }
-    .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", body.layer)))?;
+    .ok_or_else(|| TerraneError::NotFound(format!("Layer '{}' not found", body.layer)))?;
 
     // 校验 gridset
     let gridset =
         crate::utils::tile_grid::canonical_gridset(body.gridset.as_deref().unwrap_or("EPSG:4326"));
     if crate::utils::tile_grid::gridset_profile(&gridset).is_none() {
-        return Err(GeoServerError::BadRequest(format!(
+        return Err(TerraneError::BadRequest(format!(
             "Unsupported gridset '{}'",
             gridset
         )));
@@ -65,7 +63,7 @@ pub async fn create_seed_job(
         .unwrap_or_else(|| "png".to_string())
         .to_lowercase();
     if format != "png" && format != "jpeg" && format != "jpg" {
-        return Err(GeoServerError::BadRequest(format!(
+        return Err(TerraneError::BadRequest(format!(
             "Unsupported format '{}' (png/jpeg)",
             format
         )));
@@ -111,7 +109,7 @@ pub async fn create_seed_job(
 }
 
 /// GET /tiles/seed — 任务列表。
-pub async fn list_seed_jobs(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn list_seed_jobs(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     let map = state.seed_jobs.lock().unwrap();
     let mut jobs: Vec<&SeedJob> = map.values().collect();
     jobs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -122,12 +120,12 @@ pub async fn list_seed_jobs(state: web::Data<AppState>) -> Result<HttpResponse, 
 pub async fn get_seed_job(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let id = req.match_info().get("id").unwrap_or("");
     let map = state.seed_jobs.lock().unwrap();
     let job = map
         .get(id)
-        .ok_or_else(|| GeoServerError::NotFound(format!("Seed job '{}' not found", id)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("Seed job '{}' not found", id)))?;
     Ok(HttpResponse::Ok().json(ApiResponse::success(job)))
 }
 
@@ -135,13 +133,13 @@ pub async fn get_seed_job(
 pub async fn cancel_seed_job(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
     let id = req.match_info().get("id").unwrap_or("").to_string();
     let mut map = state.seed_jobs.lock().unwrap();
     let job = map
         .get_mut(&id)
-        .ok_or_else(|| GeoServerError::NotFound(format!("Seed job '{}' not found", id)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("Seed job '{}' not found", id)))?;
     match job.status {
         SeedStatus::Pending | SeedStatus::Running => {
             job.status = SeedStatus::Cancelled;
@@ -153,7 +151,7 @@ pub async fn cancel_seed_job(
                 }))),
             )
         },
-        _ => Err(GeoServerError::BadRequest(format!(
+        _ => Err(TerraneError::BadRequest(format!(
             "Seed job '{}' is not running (status: {:?})",
             id, job.status
         ))),
@@ -165,7 +163,7 @@ pub async fn truncate_tiles(
     req: HttpRequest,
     body: web::Json<TruncateRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
 
     let cache = {
@@ -181,7 +179,7 @@ pub async fn truncate_tiles(
             }
         },
         None => {
-            return Err(GeoServerError::NotFound(format!(
+            return Err(TerraneError::NotFound(format!(
                 "Layer '{}' not found",
                 body.layer
             )))

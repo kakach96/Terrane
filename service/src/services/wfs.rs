@@ -163,7 +163,7 @@ impl WfsCapabilities {
                 keywords: vec![
                     "WFS".to_string(),
                     "Web Feature Service".to_string(),
-                    "GeoServer".to_string(),
+                    "Terrane".to_string(),
                     "GIS".to_string(),
                 ],
                 online_resource: base_url.to_string(),
@@ -465,7 +465,7 @@ impl Default for TransactionResponse {
 
 pub fn parse_wfs_request(
     params: &[(String, String)],
-) -> Result<WfsRequest, crate::error::GeoServerError> {
+) -> Result<WfsRequest, crate::error::TerraneError> {
     let mut service = None;
     let mut version = None;
     let mut request = None;
@@ -500,7 +500,7 @@ pub fn parse_wfs_request(
                     "getgmlobject" => Some(WfsOperation::GetGmlObject),
                     "transaction" => Some(WfsOperation::Transaction),
                     _ => {
-                        return Err(crate::error::GeoServerError::BadRequest(format!(
+                        return Err(crate::error::TerraneError::BadRequest(format!(
                             "Unknown request: {}",
                             value
                         )))
@@ -521,7 +521,7 @@ pub fn parse_wfs_request(
             "FILTER" => filter = Some(parse_filter(value)?),
             "CQL_FILTER" => {
                 let expr = parse_cql(value).map_err(|e| {
-                    crate::error::GeoServerError::BadRequest(format!("Invalid CQL_FILTER: {}", e))
+                    crate::error::TerraneError::BadRequest(format!("Invalid CQL_FILTER: {}", e))
                 })?;
                 filter = Some(Filter::Cql(Box::new(expr)));
             },
@@ -560,12 +560,12 @@ pub fn parse_wfs_request(
     }
 
     let request = request.ok_or_else(|| {
-        crate::error::GeoServerError::BadRequest("Missing REQUEST parameter".to_string())
+        crate::error::TerraneError::BadRequest("Missing REQUEST parameter".to_string())
     })?;
 
     if let Some(ref svc) = service {
         if svc.to_uppercase() != "WFS" {
-            return Err(crate::error::GeoServerError::BadRequest(
+            return Err(crate::error::TerraneError::BadRequest(
                 "Invalid service type".to_string(),
             ));
         }
@@ -598,13 +598,13 @@ pub fn parse_wfs_request(
 /// 与参考 GeoServer 行为一致，支持两种编码:
 /// - OGC XML Filter 编码 (WFS 1.0/1.1/2.0 标准): `<Filter>...</Filter>`
 /// - ECQL / CQL (GeoServer 厂商扩展): `name='x' AND bbox(geom, ...)`
-pub fn parse_filter(value: &str) -> Result<Filter, crate::error::GeoServerError> {
+pub fn parse_filter(value: &str) -> Result<Filter, crate::error::TerraneError> {
     let trimmed = value.trim();
     if trimmed.starts_with('<') {
         return parse_ogc_filter_xml(trimmed);
     }
     let expr = parse_cql(trimmed).map_err(|e| {
-        crate::error::GeoServerError::BadRequest(format!("Invalid FILTER expression: {}", e))
+        crate::error::TerraneError::BadRequest(format!("Invalid FILTER expression: {}", e))
     })?;
     Ok(Filter::Cql(Box::new(expr)))
 }
@@ -1091,15 +1091,15 @@ fn parse_bbox_corners(node: &XmlNode) -> Result<(f64, f64, f64, f64), String> {
     Ok((minx, miny, maxx, maxy))
 }
 
-fn parse_ogc_filter_xml(xml: &str) -> Result<Filter, crate::error::GeoServerError> {
+fn parse_ogc_filter_xml(xml: &str) -> Result<Filter, crate::error::TerraneError> {
     let roots = parse_xml_nodes(xml).map_err(|e| {
-        crate::error::GeoServerError::BadRequest(format!("Invalid FILTER XML: {}", e))
+        crate::error::TerraneError::BadRequest(format!("Invalid FILTER XML: {}", e))
     })?;
     let node = roots
         .first()
-        .ok_or_else(|| crate::error::GeoServerError::BadRequest("Empty FILTER XML".to_string()))?;
+        .ok_or_else(|| crate::error::TerraneError::BadRequest("Empty FILTER XML".to_string()))?;
     node_to_filter(node)
-        .map_err(|e| crate::error::GeoServerError::BadRequest(format!("Invalid FILTER XML: {}", e)))
+        .map_err(|e| crate::error::TerraneError::BadRequest(format!("Invalid FILTER XML: {}", e)))
 }
 
 /// 属性比较操作符
@@ -1235,7 +1235,7 @@ pub fn validate_filter(feature: &Feature, filter: &Filter) -> bool {
 #[allow(unused_assignments, unused_variables)]
 pub fn parse_transaction_xml(
     xml_text: &str,
-) -> Result<TransactionRequest, crate::error::GeoServerError> {
+) -> Result<TransactionRequest, crate::error::TerraneError> {
     use quick_xml::events::Event;
     use quick_xml::Reader;
 

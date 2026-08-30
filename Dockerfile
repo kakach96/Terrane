@@ -108,8 +108,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Run as a non-root user (container security baseline)
-RUN groupadd --system --gid 10001 geoserver \
-    && useradd --system --uid 10001 --gid geoserver geoserver
+RUN groupadd --system --gid 10001 terrane \
+    && useradd --system --uid 10001 --gid terrane terrane
 
 WORKDIR /app
 
@@ -120,27 +120,27 @@ COPY service/samples/ /app/samples/
 
 # Data dir: metadata sqlite + business data + tile cache + uploads (mountable volume)
 RUN mkdir -p /data \
-    && chown -R geoserver:geoserver /app /data
+    && chown -R terrane:terrane /app /data
 
 # 12-Factor config: listen on 0.0.0.0 inside the container, persist data under
 # /data (all overridable via env). NOTE: api_context is a required field with no
 # default - it MUST be provided here or config loading falls back to defaults
 # Dev-only JWT secret; OVERRIDE with a strong random value in production
-# (e.g. GEOSERVER__SECURITY__JWT_SECRET=... on docker run / K8s Secret)
-ENV GEOSERVER__SERVER__HOST=0.0.0.0 \
-    GEOSERVER__SERVER__PORT=8080 \
-    GEOSERVER__SERVER__API_CONTEXT=/geoserver \
-    GEOSERVER__SERVER__STATIC_DIR=/app/static \
-    GEOSERVER__DATA_DIR=/data \
-    GEOSERVER__METADATA__SQLITE_PATH=/data/geoserver.sqlite \
-    GEOSERVER__CACHE__CACHE_DIR=/data/gwc \
-    GEOSERVER__CACHE__META_DIR=/data/gwc/meta \
-    GEOSERVER__SECURITY__JWT_SECRET=terrane-dev-secret \
+# (e.g. TERRANE__SECURITY__JWT_SECRET=... on docker run / K8s Secret)
+ENV TERRANE__SERVER__HOST=0.0.0.0 \
+    TERRANE__SERVER__PORT=8080 \
+    TERRANE__SERVER__API_CONTEXT=/terrane \
+    TERRANE__SERVER__STATIC_DIR=/app/static \
+    TERRANE__DATA_DIR=/data \
+    TERRANE__METADATA__SQLITE_PATH=/data/terrane.sqlite \
+    TERRANE__CACHE__CACHE_DIR=/data/gwc \
+    TERRANE__CACHE__META_DIR=/data/gwc/meta \
+    TERRANE__SECURITY__JWT_SECRET=terrane-dev-secret \
     RUST_LOG=info
 
 EXPOSE 8080
 
-USER geoserver
+USER terrane
 
 # Readiness probe: /health/ready is registered on the root path, decoupled from api_context
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \

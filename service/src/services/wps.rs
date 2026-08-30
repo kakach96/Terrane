@@ -10,7 +10,7 @@
 //! - `vec:Buffer`   — point-buffer each feature by a distance → polygons
 //! - `gs:Bounds`    — bounding box of the input collection → rectangle polygon
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{Feature, GeoJsonGeometry};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -158,7 +158,7 @@ pub enum WpsOperation {
 }
 
 /// Parse a WPS KVP request.
-pub fn parse_wps_request(params: &[(String, String)]) -> Result<WpsOperation, GeoServerError> {
+pub fn parse_wps_request(params: &[(String, String)]) -> Result<WpsOperation, TerraneError> {
     let mut service = None;
     let mut request = None;
     let mut identifier = None;
@@ -184,14 +184,12 @@ pub fn parse_wps_request(params: &[(String, String)]) -> Result<WpsOperation, Ge
 
     if let Some(svc) = &service {
         if !svc.eq_ignore_ascii_case("WPS") {
-            return Err(GeoServerError::BadRequest(
-                "Invalid service type".to_string(),
-            ));
+            return Err(TerraneError::BadRequest("Invalid service type".to_string()));
         }
     }
 
-    let request = request
-        .ok_or_else(|| GeoServerError::BadRequest("Missing REQUEST parameter".to_string()))?;
+    let request =
+        request.ok_or_else(|| TerraneError::BadRequest("Missing REQUEST parameter".to_string()))?;
 
     match request.as_str() {
         "GETCAPABILITIES" => Ok(WpsOperation::GetCapabilities),
@@ -202,7 +200,7 @@ pub fn parse_wps_request(params: &[(String, String)]) -> Result<WpsOperation, Ge
         },
         "EXECUTE" => {
             let identifier = identifier.ok_or_else(|| {
-                GeoServerError::BadRequest("Missing IDENTIFIER parameter".to_string())
+                TerraneError::BadRequest("Missing IDENTIFIER parameter".to_string())
             })?;
             let data_inputs = parse_kvp_data_inputs(data_inputs_raw.as_deref().unwrap_or(""));
             let response_raw = matches!(
@@ -216,7 +214,7 @@ pub fn parse_wps_request(params: &[(String, String)]) -> Result<WpsOperation, Ge
                 output_id,
             })
         },
-        _ => Err(GeoServerError::BadRequest(format!(
+        _ => Err(TerraneError::BadRequest(format!(
             "Unknown request: {}",
             request
         ))),
@@ -354,7 +352,7 @@ fn output_block(kind: WpsOutputKind) -> String {
 
 /// Build the WPS 1.0.0 DescribeProcess document for the given identifiers
 /// (empty = all built-in processes). Unknown identifiers are rejected.
-pub fn build_process_descriptions(identifiers: &[String]) -> Result<String, GeoServerError> {
+pub fn build_process_descriptions(identifiers: &[String]) -> Result<String, TerraneError> {
     let specs: Vec<ProcessSpec> = if identifiers.is_empty() {
         builtin_processes()
     } else {
@@ -362,7 +360,7 @@ pub fn build_process_descriptions(identifiers: &[String]) -> Result<String, GeoS
             .iter()
             .map(|id| {
                 find_process(id)
-                    .ok_or_else(|| GeoServerError::BadRequest(format!("Unknown process: {}", id)))
+                    .ok_or_else(|| TerraneError::BadRequest(format!("Unknown process: {}", id)))
             })
             .collect::<Result<_, _>>()?
     };

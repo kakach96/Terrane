@@ -2,11 +2,11 @@ import { Component, ChangeDetectionStrategy, inject, signal, computed } from '@a
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
 import { DataSourceDialogComponent } from './data-source-dialog/data-source-dialog.component';
-import { DataSource } from '../../models/geoserver.models';
+import { DataSource } from '../../models/terrane.models';
 import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
 @Component({
@@ -17,7 +17,7 @@ import { switchMap, tap, startWith, catchError, of } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DataSourcesComponent {
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private dialog = inject(MatDialog);
   private translate = inject(TranslateService);
@@ -44,7 +44,7 @@ export class DataSourcesComponent {
     startWith(0),
     tap(() => this.loading.set(true)),
     switchMap(() =>
-      this.geoserverService.getDataSources().pipe(
+      this.terraneService.getDataSources().pipe(
         catchError(() => {
           this.notificationService.error(this.translate.instant('dataSources.loadFail'));
           return of([] as DataSource[]);
@@ -90,7 +90,7 @@ export class DataSourcesComponent {
       )
       .subscribe((confirmed: boolean) => {
         if (confirmed) {
-          this.geoserverService.deleteDataSource(name).subscribe({
+          this.terraneService.deleteDataSource(name).subscribe({
             next: () => {
               this.notificationService.success(this.translate.instant('dataSources.deleteSuccess'));
               this.refreshTrigger.update((v) => v + 1);
@@ -105,7 +105,7 @@ export class DataSourcesComponent {
   }
 
   testConnection(dataSource: DataSource): void {
-    this.geoserverService.testDataSourceConnection(dataSource.name).subscribe({
+    this.terraneService.testDataSourceConnection(dataSource.name).subscribe({
       next: (result) => {
         if (result.success) {
           this.notificationService.success(this.translate.instant('dataSources.testSuccess'));
@@ -124,7 +124,7 @@ export class DataSourcesComponent {
 
   toggleEnabled(dataSource: DataSource): void {
     const enabled = !dataSource.enabled;
-    this.geoserverService.updateDataSource(dataSource.name, { enabled }).subscribe({
+    this.terraneService.updateDataSource(dataSource.name, { enabled }).subscribe({
       next: () => {
         dataSource.enabled = enabled;
         this.notificationService.success(

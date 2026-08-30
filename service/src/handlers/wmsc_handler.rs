@@ -4,13 +4,13 @@
 //! the `TILED=true` vendor parameter: a grid-aligned GetMap resolves to a
 //! single tile through the shared tile engine (mirroring GeoWebCache).
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::services::{wms, wmsc};
 use crate::state::AppState;
 use crate::utils::tile_grid;
 use actix_web::{web, HttpRequest, HttpResponse};
 
-/// Service base URL including the API context (e.g. `http://host:port/geoserver`).
+/// Service base URL including the API context (e.g. `http://host:port/terrane`).
 fn base_url(state: &AppState) -> String {
     format!(
         "http://{}:{}{}",
@@ -62,21 +62,21 @@ pub async fn handle_wmsc_request(
 async fn handle_tiled_get_map(
     state: &AppState,
     params: &[(String, String)],
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let request = wms::parse_wms_request(params)?;
     let layers = request
         .layers
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("LAYERS parameter is required".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("LAYERS parameter is required".to_string()))?;
     if layers.len() != 1 {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "TILED=true currently supports exactly one layer".to_string(),
         ));
     }
     let bbox = request
         .bbox
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("BBOX parameter is required".to_string()))?
+        .ok_or_else(|| TerraneError::BadRequest("BBOX parameter is required".to_string()))?
         .to_bounds();
     let width = request.width.unwrap_or(256) as f64;
 
@@ -87,7 +87,7 @@ async fn handle_tiled_get_map(
     } else if crs.contains("4326") {
         "EPSG:4326"
     } else {
-        return Err(GeoServerError::BadRequest(format!(
+        return Err(TerraneError::BadRequest(format!(
             "CRS '{}' is not cached by the tile service",
             crs
         )));
@@ -97,7 +97,7 @@ async fn handle_tiled_get_map(
     let res = (bbox.maxx - bbox.minx) / width;
     let z = tile_grid::zoom_for_resolution(gridset, res);
     let (col, row) = tile_grid::tile_for_bbox(gridset, z, &bbox)
-        .ok_or_else(|| GeoServerError::BadRequest("BBOX out of gridset range".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("BBOX out of gridset range".to_string()))?;
 
     let format = crate::handlers::tile_common::TileFormat::from_mime(
         request.format.as_deref().unwrap_or("image/png"),

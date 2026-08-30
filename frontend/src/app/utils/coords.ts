@@ -1,4 +1,4 @@
-import { LayerBounds } from '../models/geoserver.models';
+import { LayerBounds } from '../models/terrane.models';
 
 /**
  * Frontend coordinate transformation utilities (no third-party dependencies).

@@ -23,7 +23,7 @@ backend itself. Log in with the default administrator:
 
 | Username | Password   |
 |----------|------------|
-| `admin`  | `geoserver` |
+| `admin`  | `terrane` |
 
 ### 1.2 Run with Docker
 
@@ -32,7 +32,7 @@ docker build -t terrane:latest .
 docker compose -f build/docker-compose.yml --profile terrane up -d
 ```
 
-The image listens on `0.0.0.0:8080`; inject `GEOSERVER_JWT_SECRET` in any
+The image listens on `0.0.0.0:8080`; inject `TERRANE_JWT_SECRET` in any
 multi-user / multi-replica deployment.
 
 ### 1.3 Where things live
@@ -40,7 +40,7 @@ multi-user / multi-replica deployment.
 | Path                        | Purpose                                        |
 |-----------------------------|------------------------------------------------|
 | `http://localhost:8080`     | Admin console (UI)                             |
-| `http://localhost:8080/geoserver/...` | REST API (`api_context`)             |
+| `http://localhost:8080/terrane/...` | REST API (`api_context`)             |
 | `http://localhost:8080/wms|wfs|wcs|wmts|wps|csw` | OGC services (root paths) |
 | `/health/live`, `/health/ready`, `/metrics` | Probes & Prometheus metrics     |
 
@@ -81,7 +81,7 @@ Drag-free, REST-only example — upload a GeoJSON FeatureCollection; Terrane
 creates the data source **and** you then publish the layer:
 
 ```bash
-curl -X POST http://localhost:8080/geoserver/data/upload \
+curl -X POST http://localhost:8080/terrane/data/upload \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
@@ -94,7 +94,7 @@ curl -X POST http://localhost:8080/geoserver/data/upload \
     }]
   }'
 
-curl -X POST http://localhost:8080/geoserver/layers \
+curl -X POST http://localhost:8080/terrane/layers \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
@@ -108,8 +108,8 @@ curl -X POST http://localhost:8080/geoserver/layers \
 
 > The data source name is taken from the features' `layer_name` property.
 > Shapefile (`.zip`) and GeoTIFF uploads use multipart form-data:
-> `POST /geoserver/data/upload/shapefile?layer=myshp` and
-> `POST /geoserver/data/upload/geotiff?layer=mytif`.
+> `POST /terrane/data/upload/shapefile?layer=myshp` and
+> `POST /terrane/data/upload/geotiff?layer=mytif`.
 > Add `&storage=s3&bucket=my-bucket` to the GeoTIFF upload to store the raster
 > in S3/MinIO so all replicas can read it.
 
@@ -119,28 +119,28 @@ In the admin UI the same flow lives under **Data Sources → Upload**, then
 ### 3.2 Publish a database table
 
 1. Register the connection — **Data Sources → Add** (or
-   `POST /geoserver/data-sources`) with `type: postgis` (or `mysql`, `mongo`)
+   `POST /terrane/data-sources`) with `type: postgis` (or `mysql`, `mongo`)
    plus host/port/database/user/password.
-2. Use `GET /geoserver/data-sources/{name}/tables` to list publishable tables.
+2. Use `GET /terrane/data-sources/{name}/tables` to list publishable tables.
 3. Publish: create a layer whose `store` = data source name and
    `native_name` = table name.
-4. Test connectivity anytime via `POST /geoserver/data-sources/{name}/test`.
+4. Test connectivity anytime via `POST /terrane/data-sources/{name}/test`.
 
 For virtual layers built from parameterized SQL, see **SQL views**
-(`POST /geoserver/sql-views`, preview at `/geoserver/sql-views/preview`).
+(`POST /terrane/sql-views`, preview at `/terrane/sql-views/preview`).
 
 ### 3.3 Style it
 
 Styles support four syntaxes; pick per layer via
-`PUT /geoserver/layers/{name}/style`:
+`PUT /terrane/layers/{name}/style`:
 
 ```bash
-curl -X PUT http://localhost:8080/geoserver/layers/pois/style \
+curl -X PUT http://localhost:8080/terrane/layers/pois/style \
   -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
   -d '{"style": "points"}'
 ```
 
-Manage styles under **Styles** in the UI or `GET/POST /geoserver/styles`
+Manage styles under **Styles** in the UI or `GET/POST /terrane/styles`
 (formats: `sld`, `css`, `ysld`, `mbstyle`). Built-in templates are listed by
 the styles API.
 
@@ -148,7 +148,7 @@ the styles API.
 
 - UI: open the layer → **Preview** (OpenLayers map).
 - Plain image:
-  `GET /geoserver/layers/pois/preview?width=512&height=512&format=png`
+  `GET /terrane/layers/pois/preview?width=512&height=512&format=png`
 
 ---
 
@@ -217,15 +217,15 @@ curl "http://localhost:8080/wmts?SERVICE=WMTS&REQUEST=GetTile&LAYER=pois\
 &STYLE=default&TILEMATRIXSET=EPSG:4326&TILEMATRIX=EPSG:4326:3&TILEROW=2&TILECOL=6&FORMAT=image/png"
 
 # RESTful template
-curl "http://localhost:8080/geoserver/wmts/pois/EPSG:4326/3/6/2"
+curl "http://localhost:8080/terrane/wmts/pois/EPSG:4326/3/6/2"
 
 # Simple XYZ tiles (slippy) and vector tiles (.pbf / MVT)
-curl "http://localhost:8080/geoserver/tiles/pois/3/6/2"
-curl "http://localhost:8080/geoserver/tiles/pois/3/6/2.pbf"
+curl "http://localhost:8080/terrane/tiles/pois/3/6/2"
+curl "http://localhost:8080/terrane/tiles/pois/3/6/2.pbf"
 ```
 
-GeoWebCache-compatible endpoints: `/geoserver/gwc/service/tms` (TMS 1.0.0) and
-`/geoserver/gwc/service/wms` (WMS-C).
+GeoWebCache-compatible endpoints: `/terrane/gwc/service/tms` (TMS 1.0.0) and
+`/terrane/gwc/service/wms` (WMS-C).
 
 ### 4.5 WPS · CSW · OGC API
 
@@ -248,16 +248,16 @@ via the layer's `cache_store` for multi-replica sharing).
 
 ```bash
 # Seed a zoom range in the background
-curl -X POST http://localhost:8080/geoserver/tiles/seed \
+curl -X POST http://localhost:8080/terrane/tiles/seed \
   -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
   -d '{"layer": "pois", "z_min": 0, "z_max": 10}'
 
-curl http://localhost:8080/geoserver/tiles/seed            # list jobs / progress
-curl -X DELETE http://localhost:8080/geoserver/tiles/seed/<job-id>   # cancel
+curl http://localhost:8080/terrane/tiles/seed            # list jobs / progress
+curl -X DELETE http://localhost:8080/terrane/tiles/seed/<job-id>   # cancel
 
-curl http://localhost:8080/geoserver/tiles/cache/stats     # hit rate & size
-curl -X DELETE http://localhost:8080/geoserver/tiles/cache/clear/pois
-curl -X POST http://localhost:8080/geoserver/tiles/seed/truncate \
+curl http://localhost:8080/terrane/tiles/cache/stats     # hit rate & size
+curl -X DELETE http://localhost:8080/terrane/tiles/cache/clear/pois
+curl -X POST http://localhost:8080/terrane/tiles/seed/truncate \
   -H "Content-Type: application/json" -d '{"layer": "pois"}'
 ```
 
@@ -272,12 +272,12 @@ Last-Modified).
 ### 6.1 Authentication (JWT)
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8080/geoserver/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:8080/terrane/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "geoserver"}' \
+  -d '{"username": "admin", "password": "terrane"}' \
   | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
 
-curl http://localhost:8080/geoserver/auth/verify -H "Authorization: Bearer $TOKEN"
+curl http://localhost:8080/terrane/auth/verify -H "Authorization: Bearer $TOKEN"
 ```
 
 Send `Authorization: Bearer $TOKEN` for administrative calls (writes,
@@ -287,10 +287,10 @@ locked down with permissions.
 ### 6.2 Users & roles
 
 ```bash
-curl -X POST http://localhost:8080/geoserver/auth/users \
+curl -X POST http://localhost:8080/terrane/auth/users \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"username": "alice", "password": "secret123", "role": "user"}'
-curl http://localhost:8080/geoserver/auth/users -H "Authorization: Bearer $TOKEN"
+curl http://localhost:8080/terrane/auth/users -H "Authorization: Bearer $TOKEN"
 ```
 
 Roles: `admin` ⊇ `write` ⊇ `read`. Enterprise deployments can delegate login to
@@ -303,12 +303,12 @@ Rules match user/role against workspace/store/layer with allow/deny effect
 (most specific wins, deny beats ties):
 
 ```bash
-curl -X POST http://localhost:8080/geoserver/permissions \
+curl -X POST http://localhost:8080/terrane/permissions \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"username": "*", "role": "user", "resource_type": "layer", "resource_name": "pois", \
        "access_mode": "read", "effect": "allow", "priority": 10}'
 
-curl http://localhost:8080/geoserver/permissions/check/layer/pois -H "Authorization: Bearer $TOKEN"
+curl http://localhost:8080/terrane/permissions/check/layer/pois -H "Authorization: Bearer $TOKEN"
 ```
 
 Enable the fine-grained **GeoFence** engine (per-request enforcement on
@@ -320,12 +320,12 @@ WMS/WFS/WCS) with `[security] geofence_enabled = true` in `service/terrane.toml`
 
 | Task               | How                                                              |
 |--------------------|------------------------------------------------------------------|
-| Server status      | `GET /geoserver/server/status` · `/about/version`                |
-| Monitoring         | `GET /geoserver/monitor/stats` · `/monitor/requests` · `/monitor/logs` |
+| Server status      | `GET /terrane/server/status` · `/about/version`                |
+| Monitoring         | `GET /terrane/monitor/stats` · `/monitor/requests` · `/monitor/logs` |
 | Metrics (Prometheus)| `GET /metrics`                                                  |
 | Health probes      | `GET /health/live` · `GET /health/ready`                         |
-| Backup / restore   | `GET /geoserver/backup/export` · `POST /geoserver/backup/import` |
-| Audit logs         | `GET /geoserver/monitor/logs`                                    |
+| Backup / restore   | `GET /terrane/backup/export` · `POST /terrane/backup/import` |
+| Audit logs         | `GET /terrane/monitor/logs`                                    |
 
 Graceful shutdown drains in-flight requests (`shutdown_timeout_secs`);
 structured JSON logs + `trace_id` via `[logging] format = "json"`.
@@ -343,11 +343,11 @@ defaults**. Common knobs:
 
 | Setting              | Env var / config key                              |
 |----------------------|---------------------------------------------------|
-| Host / port          | `GEOSERVER__SERVER__HOST` / `_PORT`               |
+| Host / port          | `TERRANE__SERVER__HOST` / `_PORT`               |
 | Metadata store       | `[metadata] kind = sqlite \| postgres`            |
-| JWT secret           | `GEOSERVER__SECURITY__JWT_SECRET` (**set in prod**) |
+| JWT secret           | `TERRANE__SECURITY__JWT_SECRET` (**set in prod**) |
 | Rate limiting / timeouts | `[server] rate_limit_*` / `request_timeout_secs` |
-| Tile cache dir       | `GEOSERVER__DATA_DIR` + `[cache]`                 |
+| Tile cache dir       | `TERRANE__DATA_DIR` + `[cache]`                 |
 
 The full variable table, Docker guidance and troubleshooting live in
 [DEVELOPMENT.md](DEVELOPMENT.md).
@@ -362,5 +362,34 @@ The full variable table, Docker guidance and troubleshooting live in
 | Preview shows empty map            | Check layer bounds vs data extent; verify CRS matches request SRS     |
 | WMS returns ServiceException XML   | Read the exception text — usually bad BBOX order or unknown layer    |
 | Login rejected after restart       | Sessions persist in the metadata DB; check SQLite/PostgreSQL path     |
-| Tiles stale after data change      | `DELETE /geoserver/tiles/cache/clear/{layer}` or truncate + reseed    |
+| Tiles stale after data change      | `DELETE /terrane/tiles/cache/clear/{layer}` or truncate + reseed    |
 | 401 on admin REST call             | Missing/expired Bearer token → log in again                          |
+
+---
+
+## 10. Upgrading from pre-1.2 (`geoserver` → `terrane` naming)
+
+v1.2 renamed the product identifiers from `geoserver` to `terrane`. This is a
+**breaking change** — review the items below before upgrading an existing
+installation.
+
+| What changed                                   | Old (pre-1.2)                    | New (1.2+)                          | Migration                                                                 |
+|------------------------------------------------|----------------------------------|-------------------------------------|---------------------------------------------------------------------------|
+| Default metadata SQLite path                   | `geoserver.sqlite`               | `terrane.sqlite`                    | Rename the file, or set `[metadata] sqlite_path` / `TERRANE__METADATA__SQLITE_PATH` to the old path |
+| Default API context                            | `/geoserver`                     | `/terrane`                          | Update clients/proxies, or set `[server] api_context = "/geoserver"` temporarily |
+| Environment variable prefix                    | `GEOSERVER__*`                   | `TERRANE__*`                        | `GEOSERVER__*` still works as a deprecated alias; `TERRANE__*` wins when both are set. Migrate scripts/manifests at your own pace |
+| Default admin password (fresh installs only)   | `geoserver`                      | `terrane`                           | Existing databases keep their users; only brand-new catalogs get the new default |
+| Default PostgreSQL database name               | `geoserver`                      | `terrane`                           | Set `[metadata.postgres] instance` if your DB keeps the old name |
+| Frontend localStorage keys                     | `geoserver_user` / `geoserver_token` | `terrane_user` / `terrane_token` | Users are logged out once after upgrade; no action needed                |
+| Docker compose volume                          | `geoserver-data`                 | `terrane-data`                      | Re-attach the old volume or copy its contents to the new one             |
+
+> **Warning**: if you upgrade without migrating the SQLite path, the backend
+> starts with an empty catalog and (with `[samples] enabled`, the default)
+> auto-seeds the demo workspace — this can look like "data loss". The old
+> `geoserver.sqlite` file is never deleted; point `sqlite_path` back at it to
+> recover.
+
+GML / XML namespace URIs such as `http://geoserver.org/feature` and
+`http://geoserver.org/{workspace}` in WFS output are **intentionally kept** for
+GeoServer wire compatibility — they are not part of the rename (see
+[PROTOCOLS.md](PROTOCOLS.md) §3).

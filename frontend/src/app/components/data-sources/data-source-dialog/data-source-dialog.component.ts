@@ -3,7 +3,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { GeoserverService } from '../../../services/geoserver.service';
+import { TerraneService } from '../../../services/terrane.service';
 import { NotificationService } from '../../../services/notification.service';
 import { LanguageService } from '../../../services/language.service';
 import {
@@ -14,7 +14,7 @@ import {
   ConnectionTestResult,
   Workspace,
   S3BrowseRequest,
-} from '../../../models/geoserver.models';
+} from '../../../models/terrane.models';
 import {
   DirectoryBrowserComponent,
   DirectoryBrowserResult,
@@ -31,7 +31,7 @@ export class DataSourceDialogComponent {
   private dialogRef = inject(MatDialogRef<DataSourceDialogComponent>);
   private dialog = inject(MatDialog);
   private fb = inject(FormBuilder);
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private translate = inject(TranslateService);
   private languageService = inject(LanguageService);
@@ -78,7 +78,7 @@ export class DataSourceDialogComponent {
   selectedFile: File | null = null;
 
   // ── Signal pipeline: workspaces ───────────────────────────────────
-  private workspaces$ = this.geoserverService
+  private workspaces$ = this.terraneService
     .getAllWorkspaces()
     .pipe(catchError(() => of([] as Workspace[])));
 
@@ -256,7 +256,7 @@ export class DataSourceDialogComponent {
       this.isTesting = false;
       return;
     }
-    this.geoserverService.testConnection(request).subscribe({
+    this.terraneService.testConnection(request).subscribe({
       next: (result: ConnectionTestResult) => {
         this.isTesting = false;
         if (result.success) {
@@ -376,8 +376,8 @@ export class DataSourceDialogComponent {
       const dsName = this.form.get('name')?.value;
       const upload$ =
         type === 'shapefile'
-          ? this.geoserverService.uploadShapefile(this.selectedFile, dsName)
-          : this.geoserverService.uploadGeoTiff(this.selectedFile, dsName);
+          ? this.terraneService.uploadShapefile(this.selectedFile, dsName)
+          : this.terraneService.uploadGeoTiff(this.selectedFile, dsName);
 
       upload$.subscribe({
         next: () => {
@@ -394,7 +394,7 @@ export class DataSourceDialogComponent {
         },
       });
     } else if (this.mode === 'create') {
-      this.geoserverService.createDataSource(this.buildCreateRequest()).subscribe({
+      this.terraneService.createDataSource(this.buildCreateRequest()).subscribe({
         next: () => {
           this.notificationService.success(this.translate.instant('dataSources.createSuccess'));
           this.dialogRef.close(true);
@@ -405,7 +405,7 @@ export class DataSourceDialogComponent {
         },
       });
     } else {
-      this.geoserverService
+      this.terraneService
         .updateDataSource(this.dataSource!.name, this.buildUpdateRequest())
         .subscribe({
           next: () => {

@@ -1,7 +1,7 @@
 //! 权限管理处理器
 
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::handlers::auth_handler::require_auth;
 use crate::models::permission::{AccessMode, Effect, Permission};
 use crate::state::AppState;
@@ -24,7 +24,7 @@ pub struct CreatePermissionRequest {
 pub async fn list_permissions(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
 
     if let Some(store) = &state.store {
@@ -47,13 +47,10 @@ pub async fn list_permissions(
                     .collect();
                 Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
             },
-            Err(e) => Err(GeoServerError::InternalError(format!(
-                "查询权限失败: {}",
-                e
-            ))),
+            Err(e) => Err(TerraneError::InternalError(format!("查询权限失败: {}", e))),
         }
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
@@ -62,7 +59,7 @@ pub async fn create_permission(
     body: web::Json<CreatePermissionRequest>,
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
 
     let perm = Permission {
@@ -100,13 +97,10 @@ pub async fn create_permission(
                     }))),
                 )
             },
-            Err(e) => Err(GeoServerError::InternalError(format!(
-                "创建权限失败: {}",
-                e
-            ))),
+            Err(e) => Err(TerraneError::InternalError(format!("创建权限失败: {}", e))),
         }
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
@@ -114,26 +108,26 @@ pub async fn create_permission(
 pub async fn delete_permission(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
     let id: i64 = req
         .match_info()
         .get("id")
         .and_then(|v| v.parse().ok())
-        .ok_or_else(|| GeoServerError::BadRequest("无效的权限 ID".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("无效的权限 ID".to_string()))?;
 
     if let Some(store) = &state.store {
         store
             .delete_permission(id)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("删除失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("删除失败: {}", e)))?;
         Ok(
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "message": "权限已删除",
             }))),
         )
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
@@ -141,7 +135,7 @@ pub async fn delete_permission(
 pub async fn check_permission_handler(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let claims = require_auth(&req)?;
     let resource_type = req.match_info().get("type").unwrap_or("");
     let resource_name = req.match_info().get("name").unwrap_or("");
@@ -177,12 +171,9 @@ pub async fn check_permission_handler(
                     "mode": required_mode,
                 }))),
             ),
-            Err(e) => Err(GeoServerError::InternalError(format!(
-                "权限检查失败: {}",
-                e
-            ))),
+            Err(e) => Err(TerraneError::InternalError(format!("权限检查失败: {}", e))),
         }
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }

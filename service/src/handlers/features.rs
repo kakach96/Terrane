@@ -1,4 +1,4 @@
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{
     Bounds, DataSource, DataSourceConnection, DataSourceType, Feature, GeoJsonGeometry,
     METADATA_DATA_SOURCE,
@@ -31,13 +31,13 @@ pub async fn query_layer_features(
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     offset: Option<u64>,
-) -> Result<Vec<Feature>, GeoServerError> {
+) -> Result<Vec<Feature>, TerraneError> {
     let layer = {
         let layers = state.layers.read().await;
         resolve_layer(&layers, layer_name).cloned()
     };
-    let layer = layer
-        .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+    let layer =
+        layer.ok_or_else(|| TerraneError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
     // 解析图层数据源。内置 metadata 数据源被当作普通数据源看待: 它除了存储元数据外,
     // 也可发布其承载的业务数据 (postgres 元数据模式复用同一 PG, 走 PostGIS 查询)。
@@ -45,7 +45,7 @@ pub async fn query_layer_features(
         store
             .get_data_source(&layer.store)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("DB error: {}", e)))?
+            .map_err(|e| TerraneError::InternalError(format!("DB error: {}", e)))?
     } else {
         None
     };
@@ -224,25 +224,25 @@ async fn query_geojson_features(
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     offset: Option<u64>,
-) -> Result<Vec<Feature>, GeoServerError> {
+) -> Result<Vec<Feature>, TerraneError> {
     let conn = ds
         .connection
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("GeoJSON 数据源缺少连接信息".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("GeoJSON 数据源缺少连接信息".to_string()))?;
     let file_path = conn
         .file_path
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("GeoJSON 数据源缺少文件路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("GeoJSON 数据源缺少文件路径".to_string()))?;
 
     info!("[Features] 从 GeoJSON 读取要素: {}", file_path);
 
     let bytes = crate::store::read_bytes(conn)
         .await?
-        .ok_or_else(|| GeoServerError::NotFound(format!("GeoJSON 文件不存在: {}", file_path)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("GeoJSON 文件不存在: {}", file_path)))?;
     let raw = String::from_utf8(bytes)
-        .map_err(|e| GeoServerError::InternalError(format!("GeoJSON 编码错误: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("GeoJSON 编码错误: {}", e)))?;
     let root: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| GeoServerError::InternalError(format!("解析 GeoJSON 失败: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("解析 GeoJSON 失败: {}", e)))?;
 
     let features: Vec<Feature> = root
         .get("features")
@@ -276,23 +276,23 @@ async fn query_shapefile_features(
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     offset: Option<u64>,
-) -> Result<Vec<Feature>, GeoServerError> {
+) -> Result<Vec<Feature>, TerraneError> {
     let conn = ds
         .connection
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("Shapefile 数据源缺少连接信息".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("Shapefile 数据源缺少连接信息".to_string()))?;
     let file_path = conn
         .file_path
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("Shapefile 数据源缺少文件路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("Shapefile 数据源缺少文件路径".to_string()))?;
 
     info!("[Features] 从 Shapefile 读取要素: {}", file_path);
 
     let materialized = crate::store::materialize_dir(conn)
         .await?
-        .ok_or_else(|| GeoServerError::NotFound(format!("Shapefile 文件不存在: {}", file_path)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("Shapefile 文件不存在: {}", file_path)))?;
     let result = crate::utils::shapefile::read_shapefile(&materialized.path)
-        .map_err(|e| GeoServerError::InternalError(format!("读取 Shapefile 失败: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("读取 Shapefile 失败: {}", e)))?;
 
     let mut features = result.features;
 
@@ -345,11 +345,11 @@ async fn query_postgis_features(
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     _offset: Option<u64>,
-) -> Result<Vec<Feature>, GeoServerError> {
+) -> Result<Vec<Feature>, TerraneError> {
     let client = pool
         .get()
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("Pool error: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("Pool error: {}", e)))?;
 
     let schema = conn
         .schema
@@ -401,7 +401,7 @@ async fn query_postgis_features(
     let rows = client
         .query(&sql, &[])
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("PostGIS query error: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("PostGIS query error: {}", e)))?;
 
     let mut features = Vec::with_capacity(rows.len());
     for row in &rows {
@@ -431,16 +431,16 @@ async fn query_mysql_features(
     native_name: &str,
     bbox: Option<&Bounds>,
     limit: Option<u64>,
-) -> Result<Vec<Feature>, GeoServerError> {
+) -> Result<Vec<Feature>, TerraneError> {
     let mut db = pool
         .get_conn()
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("MySQL pool error: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("MySQL pool error: {}", e)))?;
 
     let database = conn
         .database
         .clone()
-        .unwrap_or_else(|| "geoserver".to_string());
+        .unwrap_or_else(|| "terrane".to_string());
 
     let table = native_name.replace('`', "``");
     let cols: Vec<(String, String)> = mysql_async::prelude::Queryable::query(
@@ -453,7 +453,7 @@ async fn query_mysql_features(
         ),
     )
     .await
-    .map_err(|e| GeoServerError::InternalError(format!("MySQL metadata error: {}", e)))?;
+    .map_err(|e| TerraneError::InternalError(format!("MySQL metadata error: {}", e)))?;
 
     let geom_col = cols
         .iter()
@@ -511,7 +511,7 @@ async fn query_mysql_features(
 
     let rows: Vec<mysql_async::Row> = mysql_async::prelude::Queryable::query(&mut db, sql)
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("MySQL query error: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("MySQL query error: {}", e)))?;
 
     let mut features = Vec::with_capacity(rows.len());
     for (idx, row) in rows.iter().enumerate() {
@@ -555,11 +555,11 @@ async fn query_mongo_features(
     collection_name: &str,
     bbox: Option<&Bounds>,
     limit: Option<u64>,
-) -> Result<Vec<Feature>, GeoServerError> {
+) -> Result<Vec<Feature>, TerraneError> {
     let database = conn
         .database
         .clone()
-        .unwrap_or_else(|| "geoserver".to_string());
+        .unwrap_or_else(|| "terrane".to_string());
     let db = client.database(&database);
     let coll = db.collection::<mongodb::bson::Document>(collection_name);
 
@@ -581,7 +581,7 @@ async fn query_mongo_features(
         .find(filter)
         .limit(limit_val)
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("MongoDB query error: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("MongoDB query error: {}", e)))?;
 
     let mut features = Vec::new();
     let mut idx = 0usize;
@@ -699,29 +699,29 @@ async fn query_geopackage_features(
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     offset: Option<u64>,
-) -> Result<Vec<Feature>, GeoServerError> {
+) -> Result<Vec<Feature>, TerraneError> {
     let conn = ds
         .connection
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("GeoPackage 数据源缺少连接信息".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("GeoPackage 数据源缺少连接信息".to_string()))?;
     let file_path = conn
         .file_path
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("GeoPackage 数据源缺少文件路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("GeoPackage 数据源缺少文件路径".to_string()))?;
 
     info!("[Features] 从 GeoPackage 读取要素: {}", file_path);
 
     let materialized = crate::store::materialize_file(conn)
         .await?
-        .ok_or_else(|| GeoServerError::NotFound(format!("GeoPackage 文件不存在: {}", file_path)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("GeoPackage 文件不存在: {}", file_path)))?;
     let local_path = materialized.path.as_path();
 
     // 读取所有图层（取第一个有数据的图层）
     let layers = crate::utils::geopackage::read_geopackage_layers(local_path)
-        .map_err(|e| GeoServerError::InternalError(format!("读取 GeoPackage 失败: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("读取 GeoPackage 失败: {}", e)))?;
 
     if layers.is_empty() {
-        return Err(GeoServerError::NotFound(
+        return Err(TerraneError::NotFound(
             "GeoPackage 中没有找到图层".to_string(),
         ));
     }
@@ -733,7 +733,7 @@ async fn query_geopackage_features(
         &first_layer.table_name,
         limit,
     )
-    .map_err(|e| GeoServerError::InternalError(format!("读取要素失败: {}", e)))?;
+    .map_err(|e| TerraneError::InternalError(format!("读取要素失败: {}", e)))?;
 
     let mut features = result.features;
 

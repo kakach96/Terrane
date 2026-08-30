@@ -3,9 +3,9 @@ import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { TranslateService } from '@ngx-translate/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
-import { Workspace, DataSource } from '../../models/geoserver.models';
+import { Workspace, DataSource } from '../../models/terrane.models';
 import { switchMap, tap, map, distinctUntilChanged, catchError, of } from 'rxjs';
 
 @Component({
@@ -17,7 +17,7 @@ import { switchMap, tap, map, distinctUntilChanged, catchError, of } from 'rxjs'
 })
 export class LayerCreateComponent {
   private fb = inject(FormBuilder);
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private router = inject(Router);
   private translate = inject(TranslateService);
@@ -28,7 +28,7 @@ export class LayerCreateComponent {
   metadataNewTable = false;
 
   // ── Signal pipeline: workspaces ───────────────────────────────────
-  private workspaces$ = this.geoserverService
+  private workspaces$ = this.terraneService
     .getAllWorkspaces()
     .pipe(catchError(() => of([] as Workspace[])));
 
@@ -44,7 +44,7 @@ export class LayerCreateComponent {
       }),
       switchMap((workspaceName: string) => {
         if (!workspaceName) return of([] as DataSource[]);
-        return this.geoserverService.getDataSources().pipe(
+        return this.terraneService.getDataSources().pipe(
           map((dataSources) =>
             dataSources.filter((ds) => ds.workspace === workspaceName || ds.name === 'metadata'),
           ),
@@ -70,7 +70,7 @@ export class LayerCreateComponent {
           this.layerForm.get('table')?.setValue('');
           return of([] as string[]);
         }
-        return this.geoserverService.getDataSourceTables(dataSourceName).pipe(
+        return this.terraneService.getDataSourceTables(dataSourceName).pipe(
           tap((tables) => {
             if (ds.name === 'metadata') {
               if (tables.length > 0) {
@@ -143,7 +143,7 @@ export class LayerCreateComponent {
       },
     };
 
-    this.geoserverService.createLayer(layerData).subscribe({
+    this.terraneService.createLayer(layerData).subscribe({
       next: (layer) => {
         this.notificationService.success(
           this.translate.instant('layerCreate.success', { name: layer.name }),

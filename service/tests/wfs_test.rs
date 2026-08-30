@@ -326,7 +326,7 @@ fn create_props_gpkg() -> std::path::PathBuf {
 macro_rules! publish_props_layer {
     ($app:expr, $path:expr) => {{
         let create = test::TestRequest::post()
-            .uri("/geoserver/data-sources")
+            .uri("/terrane/data-sources")
             .set_json(serde_json::json!({
                 "name": "gpkg_ds_lock",
                 "type": "geopackage",
@@ -343,7 +343,7 @@ macro_rules! publish_props_layer {
             resp.status()
         );
         let create = test::TestRequest::post()
-            .uri("/geoserver/layers")
+            .uri("/terrane/layers")
             .set_json(serde_json::json!({
                 "name": "props_layer",
                 "title": "Props",
@@ -603,7 +603,7 @@ async fn test_wfs_describe_feature_type_geopackage() {
 
     // 2. 通过 REST 发布: geopackage 数据源 + 图层
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "gpkg_ds",
             "type": "geopackage",
@@ -621,7 +621,7 @@ async fn test_wfs_describe_feature_type_geopackage() {
     );
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "typed_layer",
             "title": "Typed",
@@ -750,7 +750,7 @@ async fn test_wfs_get_property_value() {
 
     // 2. REST 发布数据源 + 图层
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "gpkg_ds_b",
             "type": "geopackage",
@@ -762,7 +762,7 @@ async fn test_wfs_get_property_value() {
     let resp = test::call_service(&app, create).await;
     assert_eq!(resp.status(), actix_web::http::StatusCode::CREATED);
     let create = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "props_layer",
             "title": "Props",

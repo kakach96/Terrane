@@ -862,7 +862,7 @@ async fn test_wmsc_get_capabilities() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetCapabilities")
+        .uri("/terrane/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetCapabilities")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -903,7 +903,7 @@ async fn test_wmsc_get_map_tiled() {
 
     // TILED=true + 网格对齐 BBOX (global-geodetic z=0 左半: -180,-90,0,90)
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&STYLES=&SRS=EPSG:4326&BBOX=-180,-90,0,90&WIDTH=256&HEIGHT=256&FORMAT=image/png&TILED=true")
+        .uri("/terrane/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&STYLES=&SRS=EPSG:4326&BBOX=-180,-90,0,90&WIDTH=256&HEIGHT=256&FORMAT=image/png&TILED=true")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -931,7 +931,7 @@ async fn test_wmsc_get_map_tiled_mercator() {
 
     // TILED=true on the mercator gridset: 整世界 z=0 (1x1).
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&STYLES=&SRS=EPSG:900913&BBOX=-20037508.34,-20037508.34,20037508.34,20037508.34&WIDTH=256&HEIGHT=256&FORMAT=image/png&TILED=true")
+        .uri("/terrane/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&STYLES=&SRS=EPSG:900913&BBOX=-20037508.34,-20037508.34,20037508.34,20037508.34&WIDTH=256&HEIGHT=256&FORMAT=image/png&TILED=true")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -959,7 +959,7 @@ async fn test_wmsc_get_map_untiled() {
 
     // 无 TILED 参数 → 走标准 WMS 1.1.1 GetMap 管线.
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&STYLES=&SRS=EPSG:4326&BBOX=-180,-90,180,90&WIDTH=256&HEIGHT=256&FORMAT=image/png")
+        .uri("/terrane/gwc/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&STYLES=&SRS=EPSG:4326&BBOX=-180,-90,180,90&WIDTH=256&HEIGHT=256&FORMAT=image/png")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -994,7 +994,7 @@ async fn test_wms_cascaded_live() {
 
     // 1. 创建级联 WMS 数据源, 指向参考 GeoServer 的 WMS 端点 (sf:archsites 点图层)
     let create_ds = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "casc1",
             "type": "cascaded_wms",
@@ -1003,7 +1003,7 @@ async fn test_wms_cascaded_live() {
             "connection": {
                 "host": "127.0.0.1",
                 "port": 18080,
-                "database": "/geoserver/wms",
+                "database": "/terrane/wms",
                 "schema": "sf:archsites"
             },
         }))
@@ -1018,7 +1018,7 @@ async fn test_wms_cascaded_live() {
 
     // 2. 创建图层引用该级联数据源
     let create_layer = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "casc_layer",
             "title": "Cascaded Layer",
@@ -1079,7 +1079,7 @@ async fn test_wms_cascaded_vendor_params_live() {
 
     // 1. 创建级联 WMS 数据源 (参考 GeoServer sf:archsites, 原生 CRS EPSG:26713)
     let create_ds = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "casc_vendor",
             "type": "cascaded_wms",
@@ -1088,7 +1088,7 @@ async fn test_wms_cascaded_vendor_params_live() {
             "connection": {
                 "host": "127.0.0.1",
                 "port": 18080,
-                "database": "/geoserver/wms",
+                "database": "/terrane/wms",
                 "schema": "sf:archsites"
             },
         }))
@@ -1101,7 +1101,7 @@ async fn test_wms_cascaded_vendor_params_live() {
     );
 
     let create_layer = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "casc_vendor_layer",
             "title": "Cascaded Vendor Layer",

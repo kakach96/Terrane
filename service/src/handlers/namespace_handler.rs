@@ -1,5 +1,5 @@
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
@@ -19,7 +19,7 @@ pub struct UpdateNamespaceRequest {
     pub workspace: Option<String>,
 }
 
-pub async fn list_namespaces(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn list_namespaces(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         match store.get_all_namespaces().await {
             Ok(ns_list) => {
@@ -40,7 +40,7 @@ pub async fn list_namespaces(state: web::Data<AppState>) -> Result<HttpResponse,
             },
             Err(e) => {
                 eprintln!("Failed to list namespaces: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to list namespaces".to_string(),
                 ))
             },
@@ -54,7 +54,7 @@ pub async fn list_namespaces(state: web::Data<AppState>) -> Result<HttpResponse,
 pub async fn get_namespace(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let prefix = req.match_info().get("prefix").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -70,19 +70,19 @@ pub async fn get_namespace(
                 });
                 Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
             },
-            Ok(None) => Err(GeoServerError::NotFound(format!(
+            Ok(None) => Err(TerraneError::NotFound(format!(
                 "Namespace '{}' not found",
                 prefix
             ))),
             Err(e) => {
                 eprintln!("Failed to get namespace: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to get namespace".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::NotFound(format!(
+        Err(TerraneError::NotFound(format!(
             "Namespace '{}' not found",
             prefix
         )))
@@ -92,11 +92,11 @@ pub async fn get_namespace(
 pub async fn create_namespace(
     body: web::Json<CreateNamespaceRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         // 检查是否已存在
         if let Ok(Some(_)) = store.get_namespace(&body.prefix).await {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "Namespace '{}' already exists",
                 body.prefix
             )));
@@ -121,13 +121,13 @@ pub async fn create_namespace(
             ),
             Err(e) => {
                 eprintln!("Failed to create namespace: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to create namespace".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -137,7 +137,7 @@ pub async fn update_namespace(
     req: HttpRequest,
     body: web::Json<UpdateNamespaceRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let prefix = req.match_info().get("prefix").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -157,13 +157,13 @@ pub async fn update_namespace(
             ),
             Err(e) => {
                 eprintln!("Failed to update namespace: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to update namespace".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -172,7 +172,7 @@ pub async fn update_namespace(
 pub async fn delete_namespace(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let prefix = req.match_info().get("prefix").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -184,13 +184,13 @@ pub async fn delete_namespace(
             ),
             Err(e) => {
                 eprintln!("Failed to delete namespace: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to delete namespace".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }

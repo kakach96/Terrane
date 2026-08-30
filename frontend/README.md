@@ -55,10 +55,10 @@ frontend/
 │   │   │   ├── users/            # 👥 User management
 │   │   │   └── permissions/      # 🛡️ Permissions
 │   │   ├── services/             # 🔧 Business services
-│   │   │   ├── geoserver.service.ts      # GeoServer API
+│   │   │   ├── terrane.service.ts      # Terrane API
 │   │   │   └── notification.service.ts   # Notification service
 │   │   ├── models/               # 📦 Data models
-│   │   │   └── geoserver.models.ts
+│   │   │   └── terrane.models.ts
 │   │   ├── shared/               # 🔄 Shared components
 │   │   │   └── components/
 │   │   │       └── confirm-dialog.component.ts
@@ -117,17 +117,17 @@ frontend/
 ## 🔌 API Integration
 
 The frontend communicates with the backend via Angular HttpClient. The API base path is
-`/geoserver` (matching the backend `api_context`, see [DEVELOPMENT.md](../docs/DEVELOPMENT.md)), e.g.:
+`/terrane` (matching the backend `api_context`, see [DEVELOPMENT.md](../docs/DEVELOPMENT.md)), e.g.:
 
 | Method | Endpoint | Description |
 |------|------|------|
-| GET | `/geoserver/layers` | Get all layers |
-| POST | `/geoserver/layers` | Create a new layer |
-| GET | `/geoserver/layers/:name` | Get layer details |
-| PUT | `/geoserver/layers/:name` | Update a layer |
-| DELETE | `/geoserver/layers/:name` | Delete a layer |
-| GET | `/geoserver/layers/:name/preview` | Get layer preview image |
-| GET | `/geoserver/layers/:name/features` | Get layer features (read-only) |
+| GET | `/terrane/layers` | Get all layers |
+| POST | `/terrane/layers` | Create a new layer |
+| GET | `/terrane/layers/:name` | Get layer details |
+| PUT | `/terrane/layers/:name` | Update a layer |
+| DELETE | `/terrane/layers/:name` | Delete a layer |
+| GET | `/terrane/layers/:name/preview` | Get layer preview image |
+| GET | `/terrane/layers/:name/features` | Get layer features (read-only) |
 
 ## 🛠️ Dev Commands
 
@@ -173,13 +173,13 @@ Edit `src/styles.scss` to modify the theme configuration:
 ```scss
 @use '@angular/material' as mat;
 
-$geoserver-primary: mat.m2-define-palette(mat.$m2-indigo-palette, 700, 500, 900);
-$geoserver-accent: mat.m2-define-palette(mat.$m2-teal-palette, A400, A200, A700);
+$terrane-primary: mat.m2-define-palette(mat.$m2-indigo-palette, 700, 500, 900);
+$terrane-accent: mat.m2-define-palette(mat.$m2-teal-palette, A400, A200, A700);
 
-$geoserver-theme: mat.m2-define-light-theme((
+$terrane-theme: mat.m2-define-light-theme((
   color: (
-    primary: $geoserver-primary,
-    accent: $geoserver-accent,
+    primary: $terrane-primary,
+    accent: $terrane-accent,
   ),
 ));
 ```
@@ -218,7 +218,7 @@ Copy the `dist/terrane-ui/` directory to the backend project's static file direc
 ### Cloud-Native Deployment
 
 - **Multi-stage container build (recommended)**: run `npm ci && ng build --configuration production` in the Docker `node` stage; the `dist/terrane-ui/` output is bundled into the runtime image alongside the Rust binary and served from the backend `static/` directory — **no separate frontend service needed** (see section 6 of `docs/IMPLEMENTATION_PLAN.md`).
-- **Standalone NGINX container (optional)**: serve the static assets separately and reverse-proxy `/api`, `/geoserver`, `/wms`, `/wfs`, `/wcs`, `/tiles` to the backend service.
+- **Standalone NGINX container (optional)**: serve the static assets separately and reverse-proxy `/api`, `/terrane`, `/wms`, `/wfs`, `/wcs`, `/tiles` to the backend service.
 - The build output defaults to `dist/terrane-ui/`.
 
 ## 📚 Learning Resources

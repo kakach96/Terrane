@@ -13,7 +13,7 @@ use actix_web::test;
 macro_rules! create_layer {
     ($app:expr, $name:expr, $title:expr, $minx:expr, $miny:expr, $maxx:expr, $maxy:expr) => {{
         let req = test::TestRequest::post()
-            .uri("/geoserver/layers")
+            .uri("/terrane/layers")
             .set_json(&serde_json::json!({
                 "name": $name,
                 "title": $title,

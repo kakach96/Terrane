@@ -454,14 +454,14 @@ mod tests {
         let conn = conn_with(
             Some("example.com"),
             Some(8080),
-            Some("/geoserver/wms"),
+            Some("/terrane/wms"),
             Some("remote_layer"),
         );
         let cfg = extract_cascaded_config(&conn).expect("应能提取级联配置");
 
         assert!(cfg
             .get_map_url
-            .contains("http://example.com:8080/geoserver/wms"));
+            .contains("http://example.com:8080/terrane/wms"));
         assert!(cfg.get_map_url.contains("REQUEST=GetMap"));
         assert!(cfg
             .capabilities_url

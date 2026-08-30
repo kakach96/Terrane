@@ -2,9 +2,9 @@ import { Component, ChangeDetectionStrategy, computed, inject, signal } from '@a
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
-import { Layer } from '../../models/geoserver.models';
+import { Layer } from '../../models/terrane.models';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
@@ -16,7 +16,7 @@ import { switchMap, tap, startWith, catchError, of } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LayersComponent {
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private dialog = inject(MatDialog);
   private translate = inject(TranslateService);
@@ -31,7 +31,7 @@ export class LayersComponent {
     startWith(0),
     tap(() => this.loading.set(true)),
     switchMap(() =>
-      this.geoserverService.getLayers().pipe(
+      this.terraneService.getLayers().pipe(
         catchError(() => {
           this.notificationService.error(this.translate.instant('layers.loadFail'));
           return of([] as Layer[]);
@@ -68,7 +68,7 @@ export class LayersComponent {
 
     dialogRef.afterClosed().subscribe((result) => {
       if (result) {
-        this.geoserverService.deleteLayer(layer.name).subscribe({
+        this.terraneService.deleteLayer(layer.name).subscribe({
           next: () => {
             this.notificationService.success(this.translate.instant('layers.deleteSuccess'));
             this.refreshTrigger.update((v) => v + 1);

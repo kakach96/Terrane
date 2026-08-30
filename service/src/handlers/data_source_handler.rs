@@ -1,5 +1,5 @@
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{
     CreateDataSourceRequest, DataSource, DataSourceConnection, DataSourceType,
     UpdateDataSourceRequest, METADATA_DATA_SOURCE,
@@ -56,7 +56,7 @@ fn is_builtin_metadata(name: &str) -> bool {
     name == METADATA_DATA_SOURCE
 }
 
-pub async fn list_data_sources(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn list_data_sources(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         match store.get_all_data_sources().await {
             Ok(data_sources) => {
@@ -85,13 +85,13 @@ pub async fn list_data_sources(state: web::Data<AppState>) -> Result<HttpRespons
             },
             Err(e) => {
                 eprintln!("Failed to list data sources: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to list data sources".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -100,7 +100,7 @@ pub async fn list_data_sources(state: web::Data<AppState>) -> Result<HttpRespons
 pub async fn get_data_source(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     // 内置 metadata 数据源
@@ -124,19 +124,19 @@ pub async fn get_data_source(
                     "builtin": false,
                 }))),
             ),
-            Ok(None) => Err(GeoServerError::NotFound(format!(
+            Ok(None) => Err(TerraneError::NotFound(format!(
                 "Data source '{}' not found",
                 name
             ))),
             Err(e) => {
                 eprintln!("Failed to get data source: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to get data source".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -145,16 +145,16 @@ pub async fn get_data_source(
 pub async fn create_data_source(
     body: web::Json<CreateDataSourceRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if is_builtin_metadata(&body.name) {
-        return Err(GeoServerError::Conflict(format!(
+        return Err(TerraneError::Conflict(format!(
             "Data source '{}' is a built-in data source",
             body.name
         )));
     }
     if let Some(store) = &state.store {
         if let Ok(Some(_)) = store.get_data_source(&body.name).await {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "Data source '{}' already exists",
                 body.name
             )));
@@ -184,13 +184,13 @@ pub async fn create_data_source(
             ),
             Err(e) => {
                 eprintln!("Failed to create data source: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to create data source".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -200,11 +200,11 @@ pub async fn update_data_source(
     req: HttpRequest,
     body: web::Json<UpdateDataSourceRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     if is_builtin_metadata(name) {
-        return Err(GeoServerError::BadRequest(format!(
+        return Err(TerraneError::BadRequest(format!(
             "Data source '{}' is a built-in data source and cannot be modified",
             name
         )));
@@ -228,13 +228,13 @@ pub async fn update_data_source(
             ),
             Err(e) => {
                 eprintln!("Failed to update data source: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to update data source".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -243,11 +243,11 @@ pub async fn update_data_source(
 pub async fn delete_data_source(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     if is_builtin_metadata(name) {
-        return Err(GeoServerError::BadRequest(format!(
+        return Err(TerraneError::BadRequest(format!(
             "Data source '{}' is a built-in data source and cannot be deleted",
             name
         )));
@@ -262,13 +262,13 @@ pub async fn delete_data_source(
             ),
             Err(e) => {
                 eprintln!("Failed to delete data source: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to delete data source".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -277,7 +277,7 @@ pub async fn delete_data_source(
 pub async fn test_data_source_connection(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     // 内置 metadata 数据源: 测试元数据存储连接
@@ -308,7 +308,7 @@ pub async fn test_data_source_connection(
             eprintln!(
                 "[test_data_source_connection] metadata 数据源连接测试仅支持 postgres 元数据存储"
             );
-            return Err(GeoServerError::BadRequest(
+            return Err(TerraneError::BadRequest(
                 "Metadata data source connection test only supports postgres metadata store"
                     .to_string(),
             ));
@@ -321,19 +321,19 @@ pub async fn test_data_source_connection(
                 let result = test_datasource_connection(&ds).await;
                 Ok(HttpResponse::Ok().json(result))
             },
-            Ok(None) => Err(GeoServerError::NotFound(format!(
+            Ok(None) => Err(TerraneError::NotFound(format!(
                 "Data source '{}' not found",
                 name
             ))),
             Err(e) => {
                 eprintln!("Failed to get data source: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to get data source".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -342,7 +342,7 @@ pub async fn test_data_source_connection(
 pub async fn test_connection(
     body: web::Json<CreateDataSourceRequest>,
     _state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let ds = DataSource {
         name: body.name.clone(),
         data_source_type: body.data_source_type.clone(),
@@ -451,7 +451,7 @@ async fn test_mongo_connection(ds: &DataSource) -> serde_json::Value {
     };
     // 集群连接: host 可为 mongodb:// 完整 URI 或逗号分隔主机列表 (+ replica_set)
     let uri = crate::utils::cluster::mongo_uri_from_connection(conn_info);
-    let database = conn_info.database.as_deref().unwrap_or("geoserver");
+    let database = conn_info.database.as_deref().unwrap_or("terrane");
 
     let client = match mongodb::Client::with_uri_str(&uri).await {
         Ok(c) => c,
@@ -492,7 +492,7 @@ async fn test_mysql_connection(ds: &DataSource) -> serde_json::Value {
     let database = conn_info
         .database
         .clone()
-        .unwrap_or_else(|| "geoserver".to_string());
+        .unwrap_or_else(|| "terrane".to_string());
     let user = conn_info
         .username
         .clone()
@@ -649,7 +649,7 @@ async fn test_postgis_connection(ds: &DataSource) -> serde_json::Value {
             "host={} port={} dbname={} user={} password={}",
             host_list,
             port_list,
-            conn_info.database.as_deref().unwrap_or("geoserver"),
+            conn_info.database.as_deref().unwrap_or("terrane"),
             conn_info.username.as_deref().unwrap_or("postgres"),
             conn_info.password.as_deref().unwrap_or("")
         )
@@ -679,7 +679,7 @@ async fn test_postgis_connection(ds: &DataSource) -> serde_json::Value {
 pub async fn get_data_source_tables(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let start_total = Instant::now();
     let name = req.match_info().get("name").unwrap_or("");
     tracing::debug!("[get_data_source_tables] 开始处理, name={}", name);
@@ -718,13 +718,13 @@ pub async fn get_data_source_tables(
                 if data_source.data_source_type == DataSourceType::Geopackage {
                     // GeoPackage: 列出文件中的要素表 (local / s3)
                     let conn = data_source.connection.as_ref().ok_or_else(|| {
-                        GeoServerError::BadRequest(
+                        TerraneError::BadRequest(
                             "GeoPackage data source has no connection".to_string(),
                         )
                     })?;
                     let materialized =
                         crate::store::materialize_file(conn).await?.ok_or_else(|| {
-                            GeoServerError::BadRequest(
+                            TerraneError::BadRequest(
                                 "GeoPackage data source has no file path".to_string(),
                             )
                         })?;
@@ -742,7 +742,7 @@ pub async fn get_data_source_tables(
 
                 if data_source.data_source_type != DataSourceType::Postgis {
                     tracing::debug!("[get_data_source_tables] 非 PostGIS/GeoPackage 数据源, 跳过");
-                    return Err(GeoServerError::BadRequest(
+                    return Err(TerraneError::BadRequest(
                         "Only PostGIS and GeoPackage data sources support table listing"
                             .to_string(),
                     ));
@@ -768,14 +768,14 @@ pub async fn get_data_source_tables(
                     Ok(HttpResponse::Ok().json(ApiResponse::success(tables)))
                 } else {
                     tracing::debug!("[get_data_source_tables] 数据源无连接配置");
-                    Err(GeoServerError::BadRequest(
+                    Err(TerraneError::BadRequest(
                         "Data source has no connection configuration".to_string(),
                     ))
                 }
             },
             Ok(None) => {
                 tracing::debug!("[get_data_source_tables] 数据源 '{}' 未找到", name);
-                Err(GeoServerError::NotFound(format!(
+                Err(TerraneError::NotFound(format!(
                     "Data source '{}' not found",
                     name
                 )))
@@ -783,14 +783,14 @@ pub async fn get_data_source_tables(
             Err(e) => {
                 tracing::debug!("[get_data_source_tables] 获取数据源失败: {}", e);
                 eprintln!("Failed to get data source: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to get data source".to_string(),
                 ))
             },
         }
     } else {
         tracing::debug!("[get_data_source_tables] 数据库不可用");
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -876,7 +876,7 @@ async fn list_postgis_tables_from_pool(
 pub async fn get_layer_feature_type(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -885,24 +885,24 @@ pub async fn get_layer_feature_type(
             .await
             .map_err(|e| {
                 eprintln!("Failed to get layer: {}", e);
-                GeoServerError::InternalError("Failed to get layer".to_string())
+                TerraneError::InternalError("Failed to get layer".to_string())
             })?
-            .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+            .ok_or_else(|| TerraneError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
         let data_source = store
             .get_data_source(&layer.store)
             .await
             .map_err(|e| {
                 eprintln!("Failed to get data source: {}", e);
-                GeoServerError::InternalError("Failed to get data source".to_string())
+                TerraneError::InternalError("Failed to get data source".to_string())
             })?
             .ok_or_else(|| {
-                GeoServerError::NotFound(format!("Data source '{}' not found", layer.store))
+                TerraneError::NotFound(format!("Data source '{}' not found", layer.store))
             })?;
 
         if data_source.data_source_type == DataSourceType::Postgis {
             let table_name = layer.native_name.as_ref().ok_or_else(|| {
-                GeoServerError::BadRequest("Layer has no native table name configured".to_string())
+                TerraneError::BadRequest("Layer has no native table name configured".to_string())
             })?;
 
             if let Some(conn_info) = &data_source.connection {
@@ -910,35 +910,35 @@ pub async fn get_layer_feature_type(
                 let columns = get_postgis_table_columns(&pool, conn_info, table_name).await;
                 Ok(HttpResponse::Ok().json(ApiResponse::success(columns)))
             } else {
-                Err(GeoServerError::BadRequest(
+                Err(TerraneError::BadRequest(
                     "Data source has no connection configuration".to_string(),
                 ))
             }
         } else if data_source.data_source_type == DataSourceType::Geopackage {
             // GeoPackage: 从 .gpkg 文件的要素表读取列定义 (local / s3)
             let table_name = layer.native_name.as_ref().ok_or_else(|| {
-                GeoServerError::BadRequest("Layer has no native table name configured".to_string())
+                TerraneError::BadRequest("Layer has no native table name configured".to_string())
             })?;
             let conn = data_source.connection.as_ref().ok_or_else(|| {
-                GeoServerError::BadRequest("GeoPackage data source has no connection".to_string())
+                TerraneError::BadRequest("GeoPackage data source has no connection".to_string())
             })?;
             let materialized = crate::store::materialize_file(conn).await?.ok_or_else(|| {
-                GeoServerError::BadRequest("GeoPackage data source has no file path".to_string())
+                TerraneError::BadRequest("GeoPackage data source has no file path".to_string())
             })?;
             let local_path = materialized.path.to_string_lossy().to_string();
             let columns = get_geopackage_table_columns(&local_path, table_name)
                 .await
                 .map_err(|e| {
-                    GeoServerError::BadRequest(format!("Failed to read GeoPackage: {}", e))
+                    TerraneError::BadRequest(format!("Failed to read GeoPackage: {}", e))
                 })?;
             Ok(HttpResponse::Ok().json(ApiResponse::success(columns)))
         } else {
-            Err(GeoServerError::BadRequest(
+            Err(TerraneError::BadRequest(
                 "Feature type information is only available for PostGIS and GeoPackage data sources".to_string()
             ))
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -1054,7 +1054,7 @@ pub async fn update_layer_feature_type(
     req: HttpRequest,
     body: web::Json<UpdateFeatureTypeRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     crate::handlers::auth_handler::require_auth(&req)?;
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
@@ -1064,47 +1064,47 @@ pub async fn update_layer_feature_type(
             .await
             .map_err(|e| {
                 eprintln!("Failed to get layer: {}", e);
-                GeoServerError::InternalError("Failed to get layer".to_string())
+                TerraneError::InternalError("Failed to get layer".to_string())
             })?
-            .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+            .ok_or_else(|| TerraneError::NotFound(format!("Layer '{}' not found", layer_name)))?;
 
         let data_source = store
             .get_data_source(&layer.store)
             .await
             .map_err(|e| {
                 eprintln!("Failed to get data source: {}", e);
-                GeoServerError::InternalError("Failed to get data source".to_string())
+                TerraneError::InternalError("Failed to get data source".to_string())
             })?
             .ok_or_else(|| {
-                GeoServerError::NotFound(format!("Data source '{}' not found", layer.store))
+                TerraneError::NotFound(format!("Data source '{}' not found", layer.store))
             })?;
 
         if data_source.data_source_type != DataSourceType::Geopackage {
-            return Err(GeoServerError::BadRequest(
+            return Err(TerraneError::BadRequest(
                 "Feature type update is only supported for GeoPackage data sources".to_string(),
             ));
         }
         let table_name = layer.native_name.as_ref().ok_or_else(|| {
-            GeoServerError::BadRequest("Layer has no native table name configured".to_string())
+            TerraneError::BadRequest("Layer has no native table name configured".to_string())
         })?;
         let conn = data_source.connection.as_ref().ok_or_else(|| {
-            GeoServerError::BadRequest("GeoPackage data source has no connection".to_string())
+            TerraneError::BadRequest("GeoPackage data source has no connection".to_string())
         })?;
         // 仅本地文件可直接修改; s3/oss 需先下载再回传, 暂不支持
         let storage = conn.file_storage_type.as_deref().unwrap_or("local");
         if storage != "local" {
-            return Err(GeoServerError::BadRequest(format!(
+            return Err(TerraneError::BadRequest(format!(
                 "Feature type update is not supported for '{}' storage (local only)",
                 storage
             )));
         }
         let local_path = conn.file_path.as_ref().ok_or_else(|| {
-            GeoServerError::BadRequest("GeoPackage data source has no file path".to_string())
+            TerraneError::BadRequest("GeoPackage data source has no file path".to_string())
         })?;
 
         let properties = body.into_inner().properties;
         if properties.is_empty() {
-            return Err(GeoServerError::BadRequest(
+            return Err(TerraneError::BadRequest(
                 "properties 至少需要一个列定义".to_string(),
             ));
         }
@@ -1113,11 +1113,11 @@ pub async fn update_layer_feature_type(
         let allowed_types = ["TEXT", "INTEGER", "REAL", "BOOLEAN", "BLOB"];
         for p in &properties {
             if p.name.is_empty() {
-                return Err(GeoServerError::BadRequest("列名不能为空".to_string()));
+                return Err(TerraneError::BadRequest("列名不能为空".to_string()));
             }
             let ty = p.property_type.to_uppercase();
             if !allowed_types.contains(&ty.as_str()) {
-                return Err(GeoServerError::BadRequest(format!(
+                return Err(TerraneError::BadRequest(format!(
                     "不支持的属性类型 '{}' (允许: TEXT/INTEGER/REAL/BOOLEAN/BLOB)",
                     p.property_type
                 )));
@@ -1130,7 +1130,7 @@ pub async fn update_layer_feature_type(
                 .map(|p| (p.name.clone(), p.property_type.to_uppercase()))
                 .collect();
             crate::utils::geopackage::add_geopackage_columns(local_path, table_name, &defs)
-                .map_err(GeoServerError::BadRequest)?
+                .map_err(TerraneError::BadRequest)?
         };
 
         Ok(
@@ -1141,7 +1141,7 @@ pub async fn update_layer_feature_type(
             }))),
         )
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }

@@ -274,13 +274,13 @@ mod tests {
         let conn = DataSourceConnection::postgis(
             "localhost".to_string(),
             5432,
-            "geoserver".to_string(),
+            "terrane".to_string(),
             "user".to_string(),
             Some("pass".to_string()),
         );
         assert_eq!(conn.host.as_deref(), Some("localhost"));
         assert_eq!(conn.port, Some(5432));
-        assert_eq!(conn.database.as_deref(), Some("geoserver"));
+        assert_eq!(conn.database.as_deref(), Some("terrane"));
         assert_eq!(conn.schema.as_deref(), Some("public"));
         assert_eq!(conn.username.as_deref(), Some("user"));
         assert_eq!(conn.password.as_deref(), Some("pass"));

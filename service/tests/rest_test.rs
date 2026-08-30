@@ -14,9 +14,7 @@ use actix_web::test;
 async fn test_health_endpoint() {
     let app = build_test_app!();
 
-    let req = test::TestRequest::get()
-        .uri("/geoserver/health")
-        .to_request();
+    let req = test::TestRequest::get().uri("/terrane/health").to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success(), "健康检查应返回 200");
 
@@ -46,7 +44,7 @@ async fn test_server_status() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/server/status")
+        .uri("/terrane/server/status")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success(), "GET /server/status 应返回 200");
@@ -64,9 +62,7 @@ async fn test_server_status() {
 async fn test_rest_layers() {
     let app = build_test_app!();
 
-    let req = test::TestRequest::get()
-        .uri("/geoserver/layers")
-        .to_request();
+    let req = test::TestRequest::get().uri("/terrane/layers").to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success(), "GET /layers 应返回 200");
 
@@ -84,7 +80,7 @@ async fn test_rest_workspaces_crud() {
     let app = build_test_app!();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/workspaces")
+        .uri("/terrane/workspaces")
         .set_json(serde_json::json!({
             "name": "ws_test_1",
             "title": "Test Workspace",
@@ -95,7 +91,7 @@ async fn test_rest_workspaces_crud() {
     assert_eq!(resp.status(), StatusCode::CREATED, "创建工作空间应返回 201");
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/workspaces")
+        .uri("/terrane/workspaces")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -113,7 +109,7 @@ async fn test_rest_workspaces_crud() {
     );
 
     let req = test::TestRequest::delete()
-        .uri("/geoserver/workspaces/ws_test_1")
+        .uri("/terrane/workspaces/ws_test_1")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -123,7 +119,7 @@ async fn test_rest_workspaces_crud() {
     );
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/workspaces/ws_test_1")
+        .uri("/terrane/workspaces/ws_test_1")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND, "删除后查询应返回 404");
@@ -138,7 +134,7 @@ async fn test_rest_namespaces_crud() {
     let app = build_test_app!();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/namespaces")
+        .uri("/terrane/namespaces")
         .set_json(serde_json::json!({
             "prefix": "ns_test_1",
             "uri": "http://example.com/ns_test_1",
@@ -148,7 +144,7 @@ async fn test_rest_namespaces_crud() {
     assert_eq!(resp.status(), StatusCode::CREATED, "创建命名空间应返回 201");
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/namespaces")
+        .uri("/terrane/namespaces")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -166,7 +162,7 @@ async fn test_rest_namespaces_crud() {
     );
 
     let req = test::TestRequest::delete()
-        .uri("/geoserver/namespaces/ns_test_1")
+        .uri("/terrane/namespaces/ns_test_1")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -185,7 +181,7 @@ async fn test_rest_styles_crud() {
     let app = build_test_app!();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/styles")
+        .uri("/terrane/styles")
         .set_json(serde_json::json!({
             "name": "style_test_1",
             "title": "Test Style",
@@ -196,9 +192,7 @@ async fn test_rest_styles_crud() {
     let resp = test::call_service(&app, create).await;
     assert_eq!(resp.status(), StatusCode::CREATED, "创建样式应返回 201");
 
-    let req = test::TestRequest::get()
-        .uri("/geoserver/styles")
-        .to_request();
+    let req = test::TestRequest::get().uri("/terrane/styles").to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
     let names: Vec<String> = body["data"]
@@ -224,7 +218,7 @@ async fn test_rest_layer_groups_crud() {
     let app = build_test_app!();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/layer-groups")
+        .uri("/terrane/layer-groups")
         .set_json(serde_json::json!({
             "name": "lg_test_1",
             "title": "Test Layer Group",
@@ -235,7 +229,7 @@ async fn test_rest_layer_groups_crud() {
     assert_eq!(resp.status(), StatusCode::CREATED, "创建图层组应返回 201");
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/layer-groups")
+        .uri("/terrane/layer-groups")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -263,7 +257,7 @@ async fn test_rest_features_readonly() {
 
     // GET 读取要素 (world 图层空发布 → 200 空集合)
     let req = test::TestRequest::get()
-        .uri("/geoserver/layers/world/features")
+        .uri("/terrane/layers/world/features")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -286,7 +280,7 @@ async fn test_rest_feature_write_not_supported() {
 
     // POST 创建要素 → 405 (要素写入接口尚未实现)
     let create = test::TestRequest::post()
-        .uri("/geoserver/layers/world/features")
+        .uri("/terrane/layers/world/features")
         .set_json(serde_json::json!({
             "geometry": { "type": "Point", "coordinates": [10.0, 20.0] },
             "properties": { "name": "integration-test" },
@@ -309,7 +303,7 @@ async fn test_rest_sql_views_crud() {
     let app = build_test_app!();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/sql-views")
+        .uri("/terrane/sql-views")
         .set_json(serde_json::json!({
             "name": "sqlview_test_1",
             "sql": "SELECT id, geom FROM cities",
@@ -328,7 +322,7 @@ async fn test_rest_sql_views_crud() {
     );
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/sql-views")
+        .uri("/terrane/sql-views")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -355,7 +349,7 @@ async fn test_rest_data_sources_crud() {
     let app = build_test_app!();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "ds_test_1",
             "type": "shapefile",
@@ -368,7 +362,7 @@ async fn test_rest_data_sources_crud() {
     assert_eq!(resp.status(), StatusCode::CREATED, "创建数据源应返回 201");
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -397,7 +391,7 @@ async fn test_rest_image_pyramid_data_source_crud() {
     std::fs::write(dir.join("properties"), "levels=1\n").unwrap();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "pyr_test_1",
             "type": "image_pyramid",
@@ -418,7 +412,7 @@ async fn test_rest_image_pyramid_data_source_crud() {
 
     // 列表应包含且类型持久化为 image_pyramid。
     let req = test::TestRequest::get()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -442,7 +436,7 @@ async fn test_rest_mysql_data_source_crud() {
     let app = build_test_app!();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "mysql_test_1",
             "type": "mysql",
@@ -466,7 +460,7 @@ async fn test_rest_mysql_data_source_crud() {
 
     // 列表应包含且类型持久化为 mysql。
     let req = test::TestRequest::get()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -486,7 +480,7 @@ async fn test_rest_mongo_data_source_crud() {
     let app = build_test_app!();
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "mongo_test_1",
             "type": "mongo",
@@ -510,7 +504,7 @@ async fn test_rest_mongo_data_source_crud() {
 
     // 列表应包含且类型持久化为 mongo。
     let req = test::TestRequest::get()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -531,7 +525,7 @@ async fn test_rest_mongo_cluster_data_source_roundtrip() {
 
     // 集群连接: 逗号分隔主机列表 + 副本集名称应完整持久化。
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "mongo_cluster_1",
             "type": "mongo",
@@ -555,7 +549,7 @@ async fn test_rest_mongo_cluster_data_source_roundtrip() {
     );
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -583,7 +577,7 @@ async fn test_data_source_cluster_connection_test() {
     // PostGIS 集群连接测试: 逗号分隔主机列表 (端口拒绝连接) →
     // 走 libpq 风格 "host=a,b port=pa,pb" 路径, 应快速失败而非报错。
     let req = test::TestRequest::post()
-        .uri("/geoserver/data-sources/test")
+        .uri("/terrane/data-sources/test")
         .set_json(serde_json::json!({
             "name": "pg_cluster_probe",
             "type": "postgis",
@@ -620,7 +614,7 @@ async fn test_browse_local_directory() {
 
     // Windows 路径用正斜杠编码进查询串
     let url = format!(
-        "/geoserver/data-sources/browse?path={}",
+        "/terrane/data-sources/browse?path={}",
         dir.to_string_lossy().replace('\\', "/")
     );
     let req = test::TestRequest::get().uri(&url).to_request();
@@ -645,7 +639,7 @@ async fn test_browse_local_directory() {
 
     // 子目录浏览
     let url2 = format!(
-        "/geoserver/data-sources/browse?path={}",
+        "/terrane/data-sources/browse?path={}",
         sub.to_string_lossy().replace('\\', "/")
     );
     let req2 = test::TestRequest::get().uri(&url2).to_request();
@@ -671,7 +665,7 @@ async fn test_mvt_endpoint() {
 
     // /mvt/ 专用路由 (与 .pbf 路由等价; .pbf 遮蔽已修复, 见 test_rest_mvt_pbf_route)
     let req = test::TestRequest::get()
-        .uri("/geoserver/mvt/world/0/0/0")
+        .uri("/terrane/mvt/world/0/0/0")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -700,7 +694,7 @@ async fn test_mvt_endpoint_qualified_name() {
     // 带 workspace 前缀的限定名 (workspace:layer) 应能解析到图层 (与 WMS 一致)。
     // 内置 world 图层 workspace = "default"。
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/default:world/0/0/0.pbf")
+        .uri("/terrane/tiles/default:world/0/0/0.pbf")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -723,7 +717,7 @@ async fn test_mvt_endpoint_qualified_name() {
 
     // 不存在的 workspace 前缀应 404
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/nope:world/0/0/0.pbf")
+        .uri("/terrane/tiles/nope:world/0/0/0.pbf")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(
@@ -740,7 +734,7 @@ async fn test_png_tile_qualified_name() {
 
     // PNG 瓦片也应支持 workspace:layer 限定名
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/default:world/0/0/0")
+        .uri("/terrane/tiles/default:world/0/0/0")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -768,7 +762,7 @@ async fn test_rest_feature_readonly() {
 
     // world 图层空发布 (无数据源), GET 单要素应返回 404 (要素不存在)
     let req = test::TestRequest::get()
-        .uri("/geoserver/layers/world/features/nonexistent")
+        .uri("/terrane/layers/world/features/nonexistent")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -788,8 +782,8 @@ async fn test_rest_auth_login_and_verify() {
 
     // 默认管理员登录
     let login = test::TestRequest::post()
-        .uri("/geoserver/auth/login")
-        .set_json(serde_json::json!({ "username": "admin", "password": "geoserver" }))
+        .uri("/terrane/auth/login")
+        .set_json(serde_json::json!({ "username": "admin", "password": "terrane" }))
         .to_request();
     let resp = test::call_service(&app, login).await;
     assert_eq!(
@@ -808,7 +802,7 @@ async fn test_rest_auth_login_and_verify() {
 
     // 用 token 验证身份
     let verify = test::TestRequest::get()
-        .uri("/geoserver/auth/verify")
+        .uri("/terrane/auth/verify")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, verify).await;
@@ -823,7 +817,7 @@ async fn test_rest_auth_login_and_verify() {
 
     // 错误密码 → 400
     let bad = test::TestRequest::post()
-        .uri("/geoserver/auth/login")
+        .uri("/terrane/auth/login")
         .set_json(serde_json::json!({ "username": "admin", "password": "wrong" }))
         .to_request();
     let resp = test::call_service(&app, bad).await;
@@ -842,7 +836,7 @@ async fn test_rest_auth_users_crud() {
 
     // 创建用户
     let create = test::TestRequest::post()
-        .uri("/geoserver/auth/users")
+        .uri("/terrane/auth/users")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(
             serde_json::json!({ "username": "tester1", "password": "secret123", "role": "guest" }),
@@ -858,7 +852,7 @@ async fn test_rest_auth_users_crud() {
 
     // 列出用户 → 包含 tester1
     let list = test::TestRequest::get()
-        .uri("/geoserver/auth/users")
+        .uri("/terrane/auth/users")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, list).await;
@@ -883,7 +877,7 @@ async fn test_rest_auth_users_crud() {
 
     // 新用户可登录
     let login2 = test::TestRequest::post()
-        .uri("/geoserver/auth/login")
+        .uri("/terrane/auth/login")
         .set_json(serde_json::json!({ "username": "tester1", "password": "secret123" }))
         .to_request();
     let resp = test::call_service(&app, login2).await;
@@ -896,7 +890,7 @@ async fn test_rest_auth_users_crud() {
 
     // 删除用户
     let del = test::TestRequest::delete()
-        .uri("/geoserver/auth/users/tester1")
+        .uri("/terrane/auth/users/tester1")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, del).await;
@@ -918,7 +912,7 @@ async fn test_rest_permissions_crud() {
 
     // 创建权限 (layer/world 只读)
     let create = test::TestRequest::post()
-        .uri("/geoserver/permissions")
+        .uri("/terrane/permissions")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "username": "admin",
@@ -940,7 +934,7 @@ async fn test_rest_permissions_crud() {
 
     // 列出权限 → 包含该资源
     let list = test::TestRequest::get()
-        .uri("/geoserver/permissions")
+        .uri("/terrane/permissions")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, list).await;
@@ -961,7 +955,7 @@ async fn test_rest_permissions_crud() {
 
     // 删除权限
     let del = test::TestRequest::delete()
-        .uri(&format!("/geoserver/permissions/{}", perm_id))
+        .uri(&format!("/terrane/permissions/{}", perm_id))
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, del).await;
@@ -982,7 +976,7 @@ async fn test_rest_backup_export() {
     let token = login_admin_token!(app);
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/backup/export")
+        .uri("/terrane/backup/export")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -1030,7 +1024,7 @@ async fn test_rest_upload_geojson() {
         ]
     });
     let req = test::TestRequest::post()
-        .uri("/geoserver/data/upload")
+        .uri("/terrane/data/upload")
         .set_json(&payload)
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -1043,7 +1037,7 @@ async fn test_rest_upload_geojson() {
 
     // 上传登记为 geojson 文件数据源 (文件数据源登记, 数据发布平台只读)
     let req = test::TestRequest::get()
-        .uri("/geoserver/data-sources/uploaded_layer")
+        .uri("/terrane/data-sources/uploaded_layer")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(
@@ -1061,7 +1055,7 @@ async fn test_rest_upload_geojson() {
 
     // 发布图层 (store = 数据源名) 后可查询上传的要素
     let create = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "uploaded_layer",
             "title": "Uploaded",
@@ -1081,7 +1075,7 @@ async fn test_rest_upload_geojson() {
     );
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/layers/uploaded_layer/features")
+        .uri("/terrane/layers/uploaded_layer/features")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -1106,7 +1100,7 @@ async fn test_rest_tiles_endpoint() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/world/0/0/0")
+        .uri("/terrane/tiles/world/0/0/0")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -1139,7 +1133,7 @@ async fn test_rest_tile_cache_stats_and_clear() {
 
     // 缓存统计
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/cache/stats")
+        .uri("/terrane/tiles/cache/stats")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -1171,7 +1165,7 @@ async fn test_rest_tile_cache_stats_and_clear() {
 
     // 清除图层缓存
     let req = test::TestRequest::delete()
-        .uri("/geoserver/tiles/cache/clear/world")
+        .uri("/terrane/tiles/cache/clear/world")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -1208,11 +1202,11 @@ async fn test_rest_tile_cache_hit() {
         actix_web::App::new()
             .app_data(state.clone())
             .wrap(actix_web::middleware::Logger::default())
-            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+            .configure(|svc| terrane::routes::configure_routes(svc, "/terrane")),
     )
     .await;
 
-    let uri = "/geoserver/tiles/world/0/0/0";
+    let uri = "/terrane/tiles/world/0/0/0";
     let req = test::TestRequest::get().uri(uri).to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -1261,7 +1255,7 @@ async fn test_layer_cache_store_persists_through_api() {
 
     // 1. 创建 Redis 缓存数据源
     let create_ds = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "my_redis_cache",
             "type": "redis",
@@ -1283,7 +1277,7 @@ async fn test_layer_cache_store_persists_through_api() {
 
     // 2. 创建图层并指定 cache_store = my_redis_cache
     let create_layer = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "cached_layer",
             "title": "Cached Layer",
@@ -1302,7 +1296,7 @@ async fn test_layer_cache_store_persists_through_api() {
 
     // 3. GET /layers/{name} 应回显 cache_store
     let get_layer = test::TestRequest::get()
-        .uri("/geoserver/layers/cached_layer")
+        .uri("/terrane/layers/cached_layer")
         .to_request();
     let resp = test::call_service(&app, get_layer).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -1314,7 +1308,7 @@ async fn test_layer_cache_store_persists_through_api() {
 
     // 4. PUT 更新 cache_store = null (回到默认缓存)
     let update_layer = test::TestRequest::put()
-        .uri("/geoserver/layers/cached_layer")
+        .uri("/terrane/layers/cached_layer")
         .set_json(serde_json::json!({ "cache_store": null }))
         .to_request();
     let resp = test::call_service(&app, update_layer).await;
@@ -1325,7 +1319,7 @@ async fn test_layer_cache_store_persists_through_api() {
     );
 
     let get_layer = test::TestRequest::get()
-        .uri("/geoserver/layers/cached_layer")
+        .uri("/terrane/layers/cached_layer")
         .to_request();
     let resp = test::call_service(&app, get_layer).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -1349,13 +1343,13 @@ async fn test_event_driven_refresh_updates_memory_immediately() {
         actix_web::App::new()
             .app_data(state.clone())
             .wrap(actix_web::middleware::Logger::default())
-            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+            .configure(|svc| terrane::routes::configure_routes(svc, "/terrane")),
     )
     .await;
 
     // 创建图层 (持久化 + 内存)。
     let create_layer = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "evt_refresh",
             "title": "Original Title",
@@ -1369,7 +1363,7 @@ async fn test_event_driven_refresh_updates_memory_immediately() {
 
     // PUT 更新 title。
     let update_layer = test::TestRequest::put()
-        .uri("/geoserver/layers/evt_refresh")
+        .uri("/terrane/layers/evt_refresh")
         .set_json(serde_json::json!({ "title": "Updated Title" }))
         .to_request();
     let resp = test::call_service(&app, update_layer).await;
@@ -1399,13 +1393,13 @@ async fn test_catalog_refresh_reloads_layers() {
         actix_web::App::new()
             .app_data(state.clone())
             .wrap(actix_web::middleware::Logger::default())
-            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+            .configure(|svc| terrane::routes::configure_routes(svc, "/terrane")),
     )
     .await;
 
     // 通过 API 创建图层 (持久化到元数据存储)
     let create_layer = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "refresh_target",
             "title": "Refresh Target",
@@ -1434,7 +1428,7 @@ async fn test_rest_backup_import_roundtrip() {
     let token_a = login_admin_token!(app_a);
 
     let create = test::TestRequest::post()
-        .uri("/geoserver/workspaces")
+        .uri("/terrane/workspaces")
         .set_json(serde_json::json!({
             "name": "ws_import",
             "title": "Import Workspace",
@@ -1450,7 +1444,7 @@ async fn test_rest_backup_import_roundtrip() {
     );
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/backup/export")
+        .uri("/terrane/backup/export")
         .insert_header(("Authorization", format!("Bearer {}", token_a)))
         .to_request();
     let resp = test::call_service(&app_a, req).await;
@@ -1476,7 +1470,7 @@ async fn test_rest_backup_import_roundtrip() {
     let token_b = login_admin_token!(app_b);
 
     let req = test::TestRequest::post()
-        .uri("/geoserver/backup/import")
+        .uri("/terrane/backup/import")
         .set_json(&backup)
         .insert_header(("Authorization", format!("Bearer {}", token_b)))
         .to_request();
@@ -1500,7 +1494,7 @@ async fn test_rest_backup_import_roundtrip() {
 
     // 验证 ws_import 已在 App B 中创建
     let req = test::TestRequest::get()
-        .uri("/geoserver/workspaces")
+        .uri("/terrane/workspaces")
         .to_request();
     let resp = test::call_service(&app_b, req).await;
     assert!(
@@ -1527,17 +1521,17 @@ async fn test_rest_backup_import_roundtrip() {
 // Batch 7: PostGIS 数据源 HTTP 层集成 (live, 需本机 PostGIS 容器)
 // ---------------------------------------------------------------------------
 
-/// 连接参数可用 `GEOSERVER_TEST_PG_*` 环境变量覆盖 (与 store 层 live 测试一致)。
+/// 连接参数可用 `TERRANE_TEST_PG_*` 环境变量覆盖 (与 store 层 live 测试一致)。
 /// 返回 (host, port, user, password, database)。
 fn pg_http_test_params() -> (String, u16, String, String, String) {
-    let host = std::env::var("GEOSERVER_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
-    let port: u16 = std::env::var("GEOSERVER_TEST_PG_PORT")
+    let host = std::env::var("TERRANE_TEST_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port: u16 = std::env::var("TERRANE_TEST_PG_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(5433);
-    let user = std::env::var("GEOSERVER_TEST_PG_USER").unwrap_or_else(|_| "terrane".into());
-    let password = std::env::var("GEOSERVER_TEST_PG_PASSWORD").unwrap_or_else(|_| "terrane".into());
-    let instance = std::env::var("GEOSERVER_TEST_PG_DB").unwrap_or_else(|_| "terrane".into());
+    let user = std::env::var("TERRANE_TEST_PG_USER").unwrap_or_else(|_| "terrane".into());
+    let password = std::env::var("TERRANE_TEST_PG_PASSWORD").unwrap_or_else(|_| "terrane".into());
+    let instance = std::env::var("TERRANE_TEST_PG_DB").unwrap_or_else(|_| "terrane".into());
     (host, port, user, password, instance)
 }
 
@@ -1605,7 +1599,7 @@ async fn test_live_rest_postgis_data_source_http() {
 
     // 1. 通过 REST 创建 postgis 数据源 (指向真实容器)
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "pg_http_ds",
             "type": "postgis",
@@ -1631,7 +1625,7 @@ async fn test_live_rest_postgis_data_source_http() {
 
     // 2. 数据源列表应包含
     let req = test::TestRequest::get()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -1650,7 +1644,7 @@ async fn test_live_rest_postgis_data_source_http() {
 
     // 3. 表列表 → 应包含 cities
     let req = test::TestRequest::get()
-        .uri("/geoserver/data-sources/pg_http_ds/tables")
+        .uri("/terrane/data-sources/pg_http_ds/tables")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -1674,7 +1668,7 @@ async fn test_live_rest_postgis_data_source_http() {
 
     // 4. 创建图层 (引用数据源 + native table name)
     let create = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "cities_layer",
             "title": "Cities",
@@ -1695,7 +1689,7 @@ async fn test_live_rest_postgis_data_source_http() {
 
     // 5. feature-type → 应返回表结构 (name / geom)
     let req = test::TestRequest::get()
-        .uri("/geoserver/layers/cities_layer/feature-type")
+        .uri("/terrane/layers/cities_layer/feature-type")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -1800,7 +1794,7 @@ async fn test_rest_geopackage_feature_type() {
 
     // 2. 通过 REST 创建 geopackage 数据源
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "gpkg_ds",
             "type": "geopackage",
@@ -1819,7 +1813,7 @@ async fn test_rest_geopackage_feature_type() {
 
     // 3. 表列表 → 应包含 typed
     let req = test::TestRequest::get()
-        .uri("/geoserver/data-sources/gpkg_ds/tables")
+        .uri("/terrane/data-sources/gpkg_ds/tables")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -1843,7 +1837,7 @@ async fn test_rest_geopackage_feature_type() {
 
     // 4. 创建图层 (store=gpkg_ds, native_name=typed)
     let create = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "typed_layer",
             "title": "Typed",
@@ -1864,7 +1858,7 @@ async fn test_rest_geopackage_feature_type() {
 
     // 5. feature-type → 返回类型化列 (name TEXT / count INTEGER / price REAL / active BOOLEAN)
     let req = test::TestRequest::get()
-        .uri("/geoserver/layers/typed_layer/feature-type")
+        .uri("/terrane/layers/typed_layer/feature-type")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -1921,13 +1915,13 @@ async fn test_rest_stores_crud() {
 
     // 创建 store (postgis 类型, 无真实连接, 仅测元数据 CRUD)
     let create = test::TestRequest::post()
-        .uri("/geoserver/stores")
+        .uri("/terrane/stores")
         .set_json(serde_json::json!({
             "name": "store_r1",
             "type": "postgis",
             "workspace": "default",
             "enabled": true,
-            "connection": { "host": "127.0.0.1", "port": 5432, "database": "geoserver" },
+            "connection": { "host": "127.0.0.1", "port": 5432, "database": "terrane" },
         }))
         .to_request();
     let resp = test::call_service(&app, create).await;
@@ -1939,9 +1933,7 @@ async fn test_rest_stores_crud() {
     );
 
     // 列表包含新 store
-    let req = test::TestRequest::get()
-        .uri("/geoserver/stores")
-        .to_request();
+    let req = test::TestRequest::get().uri("/terrane/stores").to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
     let names: Vec<String> = body["data"]
@@ -1959,7 +1951,7 @@ async fn test_rest_stores_crud() {
 
     // 详情: postgis → DataStore
     let req = test::TestRequest::get()
-        .uri("/geoserver/stores/store_r1")
+        .uri("/terrane/stores/store_r1")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success(), "GET store 应返回 200");
@@ -1973,13 +1965,13 @@ async fn test_rest_stores_crud() {
 
     // 更新 (禁用)
     let update = test::TestRequest::put()
-        .uri("/geoserver/stores/store_r1")
+        .uri("/terrane/stores/store_r1")
         .set_json(serde_json::json!({ "enabled": false }))
         .to_request();
     let resp = test::call_service(&app, update).await;
     assert!(resp.status().is_success(), "PUT store 应返回 200");
     let req = test::TestRequest::get()
-        .uri("/geoserver/stores/store_r1")
+        .uri("/terrane/stores/store_r1")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -1987,12 +1979,12 @@ async fn test_rest_stores_crud() {
 
     // 删除 → 404
     let del = test::TestRequest::delete()
-        .uri("/geoserver/stores/store_r1")
+        .uri("/terrane/stores/store_r1")
         .to_request();
     let resp = test::call_service(&app, del).await;
     assert!(resp.status().is_success(), "DELETE store 应返回 200");
     let req = test::TestRequest::get()
-        .uri("/geoserver/stores/store_r1")
+        .uri("/terrane/stores/store_r1")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(
@@ -2008,7 +2000,7 @@ async fn test_rest_create_store_in_workspace() {
 
     // 先创建工作空间 (测试配置的 default 工作空间仅存在于 config, 不在元数据存储)
     let create = test::TestRequest::post()
-        .uri("/geoserver/workspaces")
+        .uri("/terrane/workspaces")
         .set_json(serde_json::json!({
             "name": "ws_r1",
             "uri": "http://geoserver.org/ws_r1",
@@ -2023,7 +2015,7 @@ async fn test_rest_create_store_in_workspace() {
 
     // 在工作空间创建 store
     let create = test::TestRequest::post()
-        .uri("/geoserver/workspaces/ws_r1/stores")
+        .uri("/terrane/workspaces/ws_r1/stores")
         .set_json(serde_json::json!({
             "name": "store_ws1",
             "type": "shapefile",
@@ -2041,7 +2033,7 @@ async fn test_rest_create_store_in_workspace() {
 
     // 按工作空间列表包含
     let req = test::TestRequest::get()
-        .uri("/geoserver/workspaces/ws_r1/stores")
+        .uri("/terrane/workspaces/ws_r1/stores")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2060,7 +2052,7 @@ async fn test_rest_create_store_in_workspace() {
 
     // 不存在的工作空间 → 404
     let create = test::TestRequest::post()
-        .uri("/geoserver/workspaces/nonexistent/stores")
+        .uri("/terrane/workspaces/nonexistent/stores")
         .set_json(serde_json::json!({
             "name": "store_bad",
             "type": "shapefile",
@@ -2082,7 +2074,7 @@ async fn test_rest_update_layer_group() {
 
     // 创建
     let create = test::TestRequest::post()
-        .uri("/geoserver/layer-groups")
+        .uri("/terrane/layer-groups")
         .set_json(serde_json::json!({
             "name": "lg_r1",
             "title": "Original",
@@ -2094,7 +2086,7 @@ async fn test_rest_update_layer_group() {
 
     // PUT 更新标题 + 成员
     let update = test::TestRequest::put()
-        .uri("/geoserver/layer-groups/lg_r1")
+        .uri("/terrane/layer-groups/lg_r1")
         .set_json(serde_json::json!({
             "title": "Updated",
             "layers": ["world", "world"],
@@ -2110,7 +2102,7 @@ async fn test_rest_update_layer_group() {
 
     // GET 验证
     let req = test::TestRequest::get()
-        .uri("/geoserver/layer-groups/lg_r1")
+        .uri("/terrane/layer-groups/lg_r1")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2124,7 +2116,7 @@ async fn test_rest_update_layer_group() {
 
     // 更新不存在的组 → 404
     let update = test::TestRequest::put()
-        .uri("/geoserver/layer-groups/no_such_group")
+        .uri("/terrane/layer-groups/no_such_group")
         .set_json(serde_json::json!({ "title": "X" }))
         .to_request();
     let resp = test::call_service(&app, update).await;
@@ -2138,7 +2130,7 @@ async fn test_rest_update_user() {
 
     // 创建用户
     let create = test::TestRequest::post()
-        .uri("/geoserver/auth/users")
+        .uri("/terrane/auth/users")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({ "username": "u_r1", "password": "pass123", "role": "user" }))
         .to_request();
@@ -2147,7 +2139,7 @@ async fn test_rest_update_user() {
 
     // PUT 改角色 + 重置密码
     let update = test::TestRequest::put()
-        .uri("/geoserver/auth/users/u_r1")
+        .uri("/terrane/auth/users/u_r1")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({ "role": "manager", "password": "newpass456" }))
         .to_request();
@@ -2160,7 +2152,7 @@ async fn test_rest_update_user() {
 
     // 新密码可登录
     let login = test::TestRequest::post()
-        .uri("/geoserver/auth/login")
+        .uri("/terrane/auth/login")
         .set_json(serde_json::json!({ "username": "u_r1", "password": "newpass456" }))
         .to_request();
     let resp = test::call_service(&app, login).await;
@@ -2172,7 +2164,7 @@ async fn test_rest_update_user() {
 
     // 旧密码失效
     let login = test::TestRequest::post()
-        .uri("/geoserver/auth/login")
+        .uri("/terrane/auth/login")
         .set_json(serde_json::json!({ "username": "u_r1", "password": "pass123" }))
         .to_request();
     let resp = test::call_service(&app, login).await;
@@ -2184,7 +2176,7 @@ async fn test_rest_update_user() {
 
     // 更新不存在用户 → 404
     let update = test::TestRequest::put()
-        .uri("/geoserver/auth/users/no_such_user")
+        .uri("/terrane/auth/users/no_such_user")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({ "role": "admin" }))
         .to_request();
@@ -2198,7 +2190,7 @@ async fn test_rest_mvt_pbf_route() {
 
     // .pbf 尾缀路由不再被 /tiles/{layer}/{z}/{x}/{y} 遮蔽
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/world/0/0/0.pbf")
+        .uri("/terrane/tiles/world/0/0/0.pbf")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -2230,7 +2222,7 @@ async fn test_rest_workspace_dimension_endpoints() {
 
     // 创建 workspace
     let create = test::TestRequest::post()
-        .uri("/geoserver/workspaces")
+        .uri("/terrane/workspaces")
         .set_json(serde_json::json!({
             "name": "ws_dim",
             "uri": "http://geoserver.org/ws_dim",
@@ -2241,7 +2233,7 @@ async fn test_rest_workspace_dimension_endpoints() {
 
     // datastore (postgis) + coveragestore (geotiff)
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "ds_vec",
             "type": "postgis",
@@ -2253,7 +2245,7 @@ async fn test_rest_workspace_dimension_endpoints() {
     let resp = test::call_service(&app, create).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "ds_raster",
             "type": "geotiff",
@@ -2267,7 +2259,7 @@ async fn test_rest_workspace_dimension_endpoints() {
 
     // datastores → 仅 ds_vec
     let req = test::TestRequest::get()
-        .uri("/geoserver/workspaces/ws_dim/datastores")
+        .uri("/terrane/workspaces/ws_dim/datastores")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2286,7 +2278,7 @@ async fn test_rest_workspace_dimension_endpoints() {
 
     // coveragestores → 仅 ds_raster
     let req = test::TestRequest::get()
-        .uri("/geoserver/workspaces/ws_dim/coveragestores")
+        .uri("/terrane/workspaces/ws_dim/coveragestores")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2305,7 +2297,7 @@ async fn test_rest_workspace_dimension_endpoints() {
 
     // 创建图层 → /workspaces/ws_dim/layers 包含
     let create = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "layer_dim",
             "title": "Dim",
@@ -2318,7 +2310,7 @@ async fn test_rest_workspace_dimension_endpoints() {
     let resp = test::call_service(&app, create).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
     let req = test::TestRequest::get()
-        .uri("/geoserver/workspaces/ws_dim/layers")
+        .uri("/terrane/workspaces/ws_dim/layers")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2337,7 +2329,7 @@ async fn test_rest_workspace_dimension_endpoints() {
 
     // 不存在工作空间 → 404
     let req = test::TestRequest::get()
-        .uri("/geoserver/workspaces/nonexistent/layers")
+        .uri("/terrane/workspaces/nonexistent/layers")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
@@ -2350,7 +2342,7 @@ async fn test_rest_service_settings() {
 
     // GET 默认 (未设置 → 空)
     let req = test::TestRequest::get()
-        .uri("/geoserver/services/wms/settings")
+        .uri("/terrane/services/wms/settings")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success(), "GET settings 应返回 200");
@@ -2359,7 +2351,7 @@ async fn test_rest_service_settings() {
 
     // PUT 设置标题 (需 admin)
     let update = test::TestRequest::put()
-        .uri("/geoserver/services/wms/settings")
+        .uri("/terrane/services/wms/settings")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "title": "Terrane WMS Custom",
@@ -2376,7 +2368,7 @@ async fn test_rest_service_settings() {
 
     // GET 验证回读
     let req = test::TestRequest::get()
-        .uri("/geoserver/services/wms/settings")
+        .uri("/terrane/services/wms/settings")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2396,7 +2388,7 @@ async fn test_rest_service_settings() {
 
     // 未认证 PUT → 400
     let update = test::TestRequest::put()
-        .uri("/geoserver/services/wms/settings")
+        .uri("/terrane/services/wms/settings")
         .set_json(serde_json::json!({ "title": "X" }))
         .to_request();
     let resp = test::call_service(&app, update).await;
@@ -2404,7 +2396,7 @@ async fn test_rest_service_settings() {
 
     // 未知服务 → 400
     let req = test::TestRequest::get()
-        .uri("/geoserver/services/foo/settings")
+        .uri("/terrane/services/foo/settings")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status().as_u16(), 400);
@@ -2419,7 +2411,7 @@ async fn test_rest_about_endpoints() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/about/version")
+        .uri("/terrane/about/version")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success(), "/about/version 应返回 200");
@@ -2431,7 +2423,7 @@ async fn test_rest_about_endpoints() {
     );
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/about/system-status")
+        .uri("/terrane/about/system-status")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -2449,7 +2441,7 @@ async fn test_rest_resources() {
 
     // GET 列表 (data_dir 根)
     let req = test::TestRequest::get()
-        .uri("/geoserver/resources")
+        .uri("/terrane/resources")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success(), "GET /resources 应返回 200");
@@ -2461,7 +2453,7 @@ async fn test_rest_resources() {
         b = boundary
     );
     let req = test::TestRequest::post()
-        .uri("/geoserver/resources?path=uploads")
+        .uri("/terrane/resources?path=uploads")
         .insert_header((
             "Content-Type",
             format!("multipart/form-data; boundary={}", boundary),
@@ -2479,7 +2471,7 @@ async fn test_rest_resources() {
 
     // GET 验证目录包含文件
     let req = test::TestRequest::get()
-        .uri("/geoserver/resources?path=uploads")
+        .uri("/terrane/resources?path=uploads")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2498,7 +2490,7 @@ async fn test_rest_resources() {
 
     // 未认证上传 → 400
     let req = test::TestRequest::post()
-        .uri("/geoserver/resources")
+        .uri("/terrane/resources")
         .insert_header((
             "Content-Type",
             format!("multipart/form-data; boundary={}", boundary),
@@ -2510,7 +2502,7 @@ async fn test_rest_resources() {
 
     // DELETE 删除 (需认证)
     let req = test::TestRequest::delete()
-        .uri("/geoserver/resources?path=uploads/res_test.txt")
+        .uri("/terrane/resources?path=uploads/res_test.txt")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -2518,7 +2510,7 @@ async fn test_rest_resources() {
 
     // 删除后不存在 → 404
     let req = test::TestRequest::delete()
-        .uri("/geoserver/resources?path=uploads/res_test.txt")
+        .uri("/terrane/resources?path=uploads/res_test.txt")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -2556,7 +2548,7 @@ async fn test_rest_update_feature_type() {
 
     // 2. 发布数据源 + 图层
     let create = test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "gpkg_ft",
             "type": "geopackage",
@@ -2568,7 +2560,7 @@ async fn test_rest_update_feature_type() {
     let resp = test::call_service(&app, create).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
     let create = test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "ft_layer",
             "title": "FT",
@@ -2584,7 +2576,7 @@ async fn test_rest_update_feature_type() {
 
     // 3. PUT 新增列
     let update = test::TestRequest::put()
-        .uri("/geoserver/layers/ft_layer/feature-type")
+        .uri("/terrane/layers/ft_layer/feature-type")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "properties": [
@@ -2604,7 +2596,7 @@ async fn test_rest_update_feature_type() {
 
     // 4. GET 验证新列存在
     let req = test::TestRequest::get()
-        .uri("/geoserver/layers/ft_layer/feature-type")
+        .uri("/terrane/layers/ft_layer/feature-type")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2626,7 +2618,7 @@ async fn test_rest_update_feature_type() {
 
     // 5. 重复新增已存在列 → 400
     let update = test::TestRequest::put()
-        .uri("/geoserver/layers/ft_layer/feature-type")
+        .uri("/terrane/layers/ft_layer/feature-type")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "properties": [ { "name": "population", "type": "INTEGER" } ]
@@ -2637,7 +2629,7 @@ async fn test_rest_update_feature_type() {
 
     // 6. 非 GeoPackage 图层 → 4xx
     let update = test::TestRequest::put()
-        .uri("/geoserver/layers/world/feature-type")
+        .uri("/terrane/layers/world/feature-type")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "properties": [ { "name": "x", "type": "TEXT" } ]
@@ -2664,7 +2656,7 @@ async fn test_tiles_seed_completes() {
 
     // 创建种子任务: world z0 (global-geodetic 2 瓦片)
     let create = test::TestRequest::post()
-        .uri("/geoserver/tiles/seed")
+        .uri("/terrane/tiles/seed")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "layer": "world",
@@ -2689,7 +2681,7 @@ async fn test_tiles_seed_completes() {
     let mut status = String::new();
     for _ in 0..200 {
         let req = test::TestRequest::get()
-            .uri(&format!("/geoserver/tiles/seed/{}", job_id))
+            .uri(&format!("/terrane/tiles/seed/{}", job_id))
             .to_request();
         let resp = test::call_service(&app, req).await;
         let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2708,7 +2700,7 @@ async fn test_tiles_seed_completes() {
 
     // 任务列表包含
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/seed")
+        .uri("/terrane/tiles/seed")
         .to_request();
     let resp = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2734,7 +2726,7 @@ async fn test_tiles_seed_cancel() {
 
     // 大范围任务 → 立即取消
     let create = test::TestRequest::post()
-        .uri("/geoserver/tiles/seed")
+        .uri("/terrane/tiles/seed")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "layer": "world",
@@ -2749,7 +2741,7 @@ async fn test_tiles_seed_cancel() {
     let job_id = body["data"]["job"]["id"].as_str().unwrap_or("").to_string();
 
     let del = test::TestRequest::delete()
-        .uri(&format!("/geoserver/tiles/seed/{}", job_id))
+        .uri(&format!("/terrane/tiles/seed/{}", job_id))
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, del).await;
@@ -2763,7 +2755,7 @@ async fn test_tiles_seed_cancel() {
     let mut status = String::new();
     for _ in 0..200 {
         let req = test::TestRequest::get()
-            .uri(&format!("/geoserver/tiles/seed/{}", job_id))
+            .uri(&format!("/terrane/tiles/seed/{}", job_id))
             .to_request();
         let resp = test::call_service(&app, req).await;
         let body: serde_json::Value = test::read_body_json(resp).await;
@@ -2783,7 +2775,7 @@ async fn test_tiles_seed_truncate_and_validation() {
 
     // truncate (world; 缓存未启用时 removed=0 也返回 200)
     let truncate = test::TestRequest::post()
-        .uri("/geoserver/tiles/seed/truncate")
+        .uri("/terrane/tiles/seed/truncate")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({ "layer": "world", "gridset": "EPSG:4326" }))
         .to_request();
@@ -2798,7 +2790,7 @@ async fn test_tiles_seed_truncate_and_validation() {
 
     // truncate 不存在图层 → 404
     let truncate = test::TestRequest::post()
-        .uri("/geoserver/tiles/seed/truncate")
+        .uri("/terrane/tiles/seed/truncate")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({ "layer": "no_such_layer" }))
         .to_request();
@@ -2807,7 +2799,7 @@ async fn test_tiles_seed_truncate_and_validation() {
 
     // 未认证创建 → 400
     let create = test::TestRequest::post()
-        .uri("/geoserver/tiles/seed")
+        .uri("/terrane/tiles/seed")
         .set_json(serde_json::json!({
             "layer": "world", "z_min": 0, "z_max": 0
         }))
@@ -2817,7 +2809,7 @@ async fn test_tiles_seed_truncate_and_validation() {
 
     // 无效 gridset → 400
     let create = test::TestRequest::post()
-        .uri("/geoserver/tiles/seed")
+        .uri("/terrane/tiles/seed")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "layer": "world", "gridset": "EPSG:9999", "z_min": 0, "z_max": 0
@@ -2828,7 +2820,7 @@ async fn test_tiles_seed_truncate_and_validation() {
 
     // z_min > z_max → 400
     let create = test::TestRequest::post()
-        .uri("/geoserver/tiles/seed")
+        .uri("/terrane/tiles/seed")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "layer": "world", "z_min": 3, "z_max": 1
@@ -2839,7 +2831,7 @@ async fn test_tiles_seed_truncate_and_validation() {
 
     // 不存在图层 → 404
     let create = test::TestRequest::post()
-        .uri("/geoserver/tiles/seed")
+        .uri("/terrane/tiles/seed")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "layer": "no_such_layer", "z_min": 0, "z_max": 0
@@ -2859,7 +2851,7 @@ async fn test_tile_conditional_requests() {
 
     // 首次请求 → 200 + ETag/Last-Modified
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/world/0/0/0")
+        .uri("/terrane/tiles/world/0/0/0")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -2884,7 +2876,7 @@ async fn test_tile_conditional_requests() {
 
     // If-None-Match: <etag> → 304
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/world/0/0/0")
+        .uri("/terrane/tiles/world/0/0/0")
         .insert_header(("If-None-Match", etag.clone()))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -2897,7 +2889,7 @@ async fn test_tile_conditional_requests() {
 
     // If-Modified-Since: <last_modified> → 304
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/world/0/0/0")
+        .uri("/terrane/tiles/world/0/0/0")
         .insert_header(("If-Modified-Since", last_modified.clone()))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -2910,7 +2902,7 @@ async fn test_tile_conditional_requests() {
 
     // 不匹配的 ETag → 200
     let req = test::TestRequest::get()
-        .uri("/geoserver/tiles/world/0/0/0")
+        .uri("/terrane/tiles/world/0/0/0")
         .insert_header(("If-None-Match", "\"deadbeef\""))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -2954,12 +2946,12 @@ async fn test_ldap_login_fallback_live() {
     let app = actix_web::test::init_service(
         actix_web::App::new()
             .app_data(state.clone())
-            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+            .configure(|svc| terrane::routes::configure_routes(svc, "/terrane")),
     )
     .await;
 
     let req = actix_web::test::TestRequest::post()
-        .uri("/geoserver/auth/login")
+        .uri("/terrane/auth/login")
         .set_json(serde_json::json!({ "username": user, "password": password }))
         .to_request();
     let resp = actix_web::test::call_service(&app, req).await;
@@ -2969,7 +2961,7 @@ async fn test_ldap_login_fallback_live() {
 
     // Wrong password → rejected
     let req = actix_web::test::TestRequest::post()
-        .uri("/geoserver/auth/login")
+        .uri("/terrane/auth/login")
         .set_json(serde_json::json!({ "username": user, "password": "wrong-password" }))
         .to_request();
     let resp = actix_web::test::call_service(&app, req).await;
@@ -2990,7 +2982,7 @@ async fn test_geofence_denies_anonymous_wms() {
     let app = actix_web::test::init_service(
         actix_web::App::new()
             .app_data(state.clone())
-            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+            .configure(|svc| terrane::routes::configure_routes(svc, "/terrane")),
     )
     .await;
 
@@ -2998,7 +2990,7 @@ async fn test_geofence_denies_anonymous_wms() {
 
     // deny rule: anonymous/guest → no read on layer "world"
     let create = test::TestRequest::post()
-        .uri("/geoserver/permissions")
+        .uri("/terrane/permissions")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(serde_json::json!({
             "username": "*",
@@ -3059,7 +3051,7 @@ async fn test_geofence_allow_rule_for_user() {
     let app = actix_web::test::init_service(
         actix_web::App::new()
             .app_data(state.clone())
-            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+            .configure(|svc| terrane::routes::configure_routes(svc, "/terrane")),
     )
     .await;
 
@@ -3077,7 +3069,7 @@ async fn test_geofence_allow_rule_for_user() {
         }),
     ] {
         let create = test::TestRequest::post()
-            .uri("/geoserver/permissions")
+            .uri("/terrane/permissions")
             .insert_header(("Authorization", format!("Bearer {}", token)))
             .set_json(rule)
             .to_request();
@@ -3100,7 +3092,7 @@ async fn test_geofence_allow_rule_for_user() {
 
     // create a user with role "user" and log in
     let create = test::TestRequest::post()
-        .uri("/geoserver/auth/users")
+        .uri("/terrane/auth/users")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(
             serde_json::json!({ "username": "alice", "password": "pw123456", "role": "user" }),
@@ -3114,7 +3106,7 @@ async fn test_geofence_allow_rule_for_user() {
     );
 
     let login = test::TestRequest::post()
-        .uri("/geoserver/auth/login")
+        .uri("/terrane/auth/login")
         .set_json(serde_json::json!({ "username": "alice", "password": "pw123456" }))
         .to_request();
     let resp = test::call_service(&app, login).await;
@@ -3152,7 +3144,7 @@ async fn test_upload_geotiff_s3_missing_bucket_rejected() {
     body.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());
 
     let req = test::TestRequest::post()
-        .uri("/geoserver/data/upload/geotiff?storage=s3")
+        .uri("/terrane/data/upload/geotiff?storage=s3")
         .insert_header((
             actix_web::http::header::CONTENT_TYPE,
             format!("multipart/form-data; boundary={}", boundary),
@@ -3201,7 +3193,7 @@ async fn test_production_stack_serves_index_and_api() {
             ))
             .wrap(terrane::middleware::RateLimit::new(10000, 60))
             .wrap(terrane::middleware::TraceId)
-            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver"))
+            .configure(|svc| terrane::routes::configure_routes(svc, "/terrane"))
             .service(
                 actix_files::Files::new("/", &static_str)
                     .index_file("index.html")
@@ -3224,15 +3216,15 @@ async fn test_production_stack_serves_index_and_api() {
         "TraceId response header should be present"
     );
 
-    // 2) API under /geoserver
+    // 2) API under /terrane
     let req = actix_web::test::TestRequest::get()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .insert_header(("X-Trace-Id", "smoke-trace"))
         .to_request();
     let resp = actix_web::test::call_service(&app, req).await;
     assert!(
         resp.status().is_success(),
-        "/geoserver/layers should succeed under production stack, got {}",
+        "/terrane/layers should succeed under production stack, got {}",
         resp.status()
     );
 
@@ -3250,7 +3242,7 @@ async fn test_production_stack_serves_index_and_api() {
 
     // 4) trace id echoed on the API response (regression for the panic)
     let req = actix_web::test::TestRequest::get()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .insert_header(("X-Trace-Id", "smoke-trace"))
         .to_request();
     let resp = actix_web::test::call_service(&app, req).await;

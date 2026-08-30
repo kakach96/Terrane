@@ -1,4 +1,4 @@
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{Bounds, Layer};
 use serde::{Deserialize, Serialize};
 
@@ -256,7 +256,7 @@ impl WmsCapabilities {
                 keywords: vec![
                     "WMS".to_string(),
                     "Web Map Service".to_string(),
-                    "GeoServer".to_string(),
+                    "Terrane".to_string(),
                     "GIS".to_string(),
                     "Rust".to_string(),
                 ],
@@ -403,7 +403,7 @@ impl WmsCapabilities {
     }
 }
 
-pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoServerError> {
+pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, TerraneError> {
     let mut service = None;
     let mut version = None;
     let mut request = None;
@@ -446,7 +446,7 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
                     "getstyles" => Some(WmsOperation::GetStyles),
                     "putstyles" => Some(WmsOperation::PutStyles),
                     _ => {
-                        return Err(GeoServerError::BadRequest(format!(
+                        return Err(TerraneError::BadRequest(format!(
                             "Unknown request: {}",
                             value
                         )))
@@ -501,14 +501,12 @@ pub fn parse_wms_request(params: &[(String, String)]) -> Result<WmsRequest, GeoS
         }
     }
 
-    let request = request
-        .ok_or_else(|| GeoServerError::BadRequest("Missing REQUEST parameter".to_string()))?;
+    let request =
+        request.ok_or_else(|| TerraneError::BadRequest("Missing REQUEST parameter".to_string()))?;
 
     if let Some(ref svc) = service {
         if svc.to_uppercase() != "WMS" {
-            return Err(GeoServerError::BadRequest(
-                "Invalid service type".to_string(),
-            ));
+            return Err(TerraneError::BadRequest("Invalid service type".to_string()));
         }
     }
 
@@ -578,7 +576,7 @@ fn normalize_bbox(raw: Bbox, version: Option<&str>, crs: Option<&str>) -> Bbox {
 }
 
 pub fn format_wms_exception(
-    err: &GeoServerError,
+    err: &TerraneError,
     exceptions: Option<&str>,
     width: u32,
     height: u32,
@@ -636,15 +634,15 @@ pub fn format_wms_exception(
     }
 }
 
-pub fn validate_wms_get_map_request(req: &WmsRequest) -> Result<(), GeoServerError> {
+pub fn validate_wms_get_map_request(req: &WmsRequest) -> Result<(), TerraneError> {
     if req.layers.is_none() || req.layers.as_ref().unwrap().is_empty() {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "LAYERS parameter is required".to_string(),
         ));
     }
 
     if req.bbox.is_none() {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "BBOX parameter is required".to_string(),
         ));
     }
@@ -653,19 +651,19 @@ pub fn validate_wms_get_map_request(req: &WmsRequest) -> Result<(), GeoServerErr
     let height = req.height.unwrap_or(512);
 
     if width == 0 || width > 4096 {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "Invalid WIDTH parameter (must be between 1 and 4096)".to_string(),
         ));
     }
 
     if height == 0 || height > 4096 {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "Invalid HEIGHT parameter (must be between 1 and 4096)".to_string(),
         ));
     }
 
     if req.format.is_none() {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "FORMAT parameter is required".to_string(),
         ));
     }

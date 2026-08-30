@@ -142,7 +142,7 @@ pub fn mongo_uri_from_connection(conn: &DataSourceConnection) -> String {
         .map(|h| format!("{}:{}", h.host, h.port))
         .collect::<Vec<_>>()
         .join(",");
-    let database = conn.database.as_deref().unwrap_or("geoserver");
+    let database = conn.database.as_deref().unwrap_or("terrane");
     let creds = match conn.username.as_deref() {
         Some(u) => format!(
             "{}:{}@",

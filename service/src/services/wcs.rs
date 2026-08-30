@@ -124,7 +124,7 @@ impl WcsCapabilities {
                 keywords: vec![
                     "WCS".to_string(),
                     "Web Coverage Service".to_string(),
-                    "GeoServer".to_string(),
+                    "Terrane".to_string(),
                     "GIS".to_string(),
                     "Raster".to_string(),
                 ],
@@ -334,7 +334,7 @@ impl CoverageDescription {
 
 pub fn parse_wcs_request(
     params: &[(String, String)],
-) -> Result<WcsRequest, crate::error::GeoServerError> {
+) -> Result<WcsRequest, crate::error::TerraneError> {
     let mut service = None;
     let mut version = None;
     let mut request = None;
@@ -360,7 +360,7 @@ pub fn parse_wcs_request(
                     "describecoverage" => Some(WcsOperation::DescribeCoverage),
                     "getcoverage" => Some(WcsOperation::GetCoverage),
                     _ => {
-                        return Err(crate::error::GeoServerError::BadRequest(format!(
+                        return Err(crate::error::TerraneError::BadRequest(format!(
                             "Unknown request: {}",
                             value
                         )))
@@ -401,12 +401,12 @@ pub fn parse_wcs_request(
     }
 
     let request = request.ok_or_else(|| {
-        crate::error::GeoServerError::BadRequest("Missing REQUEST parameter".to_string())
+        crate::error::TerraneError::BadRequest("Missing REQUEST parameter".to_string())
     })?;
 
     if let Some(ref svc) = service {
         if svc.to_uppercase() != "WCS" {
-            return Err(crate::error::GeoServerError::BadRequest(
+            return Err(crate::error::TerraneError::BadRequest(
                 "Invalid service type".to_string(),
             ));
         }
@@ -430,7 +430,7 @@ pub fn parse_wcs_request(
     })
 }
 
-fn parse_subset(value: &str) -> Result<Subset, crate::error::GeoServerError> {
+fn parse_subset(value: &str) -> Result<Subset, crate::error::TerraneError> {
     // WCS 2.0 SUBSET 格式:
     //   SUBSET=axis_label,min_value,max_value[,crs][,resolution]
     //   SUBSET=axis_label,value[,crs]
@@ -439,7 +439,7 @@ fn parse_subset(value: &str) -> Result<Subset, crate::error::GeoServerError> {
     let parts: Vec<&str> = value.split(',').collect();
 
     if parts.is_empty() {
-        return Err(crate::error::GeoServerError::BadRequest(
+        return Err(crate::error::TerraneError::BadRequest(
             "Invalid SUBSET format: empty".to_string(),
         ));
     }

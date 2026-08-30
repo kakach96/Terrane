@@ -3,10 +3,10 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateService } from '@ngx-translate/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
-import { Layer, FeatureCollection, StyleInfo, DataSource } from '../../models/geoserver.models';
+import { Layer, FeatureCollection, StyleInfo, DataSource } from '../../models/terrane.models';
 import { PREVIEW_FORMATS, previewFormatCategory } from '../../utils/preview-formats';
 import { switchMap, tap, filter, map, startWith, catchError, of } from 'rxjs';
 
@@ -21,7 +21,7 @@ export class LayerDetailComponent {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private sanitizer = inject(DomSanitizer);
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private translate = inject(TranslateService);
   private languageService = inject(LanguageService);
@@ -61,7 +61,7 @@ export class LayerDetailComponent {
     startWith(0),
     filter(() => !!this.layerName),
     switchMap(() =>
-      this.geoserverService.getLayer(this.layerName).pipe(
+      this.terraneService.getLayer(this.layerName).pipe(
         catchError(() => {
           this.notificationService.error(this.translate.instant('layerDetail.loadFail'));
           return of(null as Layer | null);
@@ -84,7 +84,7 @@ export class LayerDetailComponent {
     startWith(0),
     filter(() => !!this.layerName),
     switchMap(() =>
-      this.geoserverService
+      this.terraneService
         .getLayerFeatures(this.layerName)
         .pipe(
           catchError(() => of({ type: 'FeatureCollection', features: [] } as FeatureCollection)),
@@ -99,7 +99,7 @@ export class LayerDetailComponent {
   private styleNames$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
     switchMap(() =>
-      this.geoserverService.getStyles().pipe(catchError(() => of([] as StyleInfo[]))),
+      this.terraneService.getStyles().pipe(catchError(() => of([] as StyleInfo[]))),
     ),
   );
 
@@ -110,7 +110,7 @@ export class LayerDetailComponent {
   private redisCacheSources$ = toObservable(this.refreshTrigger).pipe(
     startWith(0),
     switchMap(() =>
-      this.geoserverService.getDataSources().pipe(catchError(() => of([] as DataSource[]))),
+      this.terraneService.getDataSources().pipe(catchError(() => of([] as DataSource[]))),
     ),
   );
 
@@ -178,12 +178,12 @@ export class LayerDetailComponent {
     if (!l) return;
     if (this.previewOptions.format === 'application/vnd.mapbox-vector-tile') {
       // MVT: single tile at zoom 0 (whole layer extent) — open in a new tab.
-      this.previewUrl = this.geoserverService.getMvtTileUrl(l, 0, 0, 0);
+      this.previewUrl = this.terraneService.getMvtTileUrl(l, 0, 0, 0);
       this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
       return;
     }
     if (this.previewOptions.format === 'application/openlayers') {
-      this.previewUrl = this.geoserverService.getWmsPreviewUrl(l, {
+      this.previewUrl = this.terraneService.getWmsPreviewUrl(l, {
         width: this.previewOptions.width,
         height: this.previewOptions.height,
         crs: this.previewOptions.crs,
@@ -193,7 +193,7 @@ export class LayerDetailComponent {
     } else {
       const b = this.displayBounds();
       const bbox = `${b.minx},${b.miny},${b.maxx},${b.maxy}`;
-      this.previewUrl = this.geoserverService.getMapImageUrl(l, {
+      this.previewUrl = this.terraneService.getMapImageUrl(l, {
         width: this.previewOptions.width,
         height: this.previewOptions.height,
         format: this.previewOptions.format,
@@ -215,7 +215,7 @@ export class LayerDetailComponent {
     const l = this.layer();
     if (!l) return;
     const value = cacheStore || null;
-    this.geoserverService.updateLayer(l.name, { cache_store: value }).subscribe({
+    this.terraneService.updateLayer(l.name, { cache_store: value }).subscribe({
       next: () => {
         this.currentCacheStore = cacheStore;
         this.notificationService.success(this.translate.instant('layerDetail.cacheStoreSuccess'));
@@ -229,10 +229,10 @@ export class LayerDetailComponent {
   onStyleChange(styleName: string): void {
     const l = this.layer();
     if (!l) return;
-    this.geoserverService.getStyle(styleName).subscribe({
+    this.terraneService.getStyle(styleName).subscribe({
       next: (style) => {
         if (style.content) {
-          this.geoserverService.updateLayerStyle(l.name, style.content).subscribe({
+          this.terraneService.updateLayerStyle(l.name, style.content).subscribe({
             next: () => {
               this.currentStyleName = styleName;
               this.notificationService.success(
@@ -266,7 +266,7 @@ export class LayerDetailComponent {
   downloadGeoJson(): void {
     const l = this.layer();
     if (!l) return;
-    this.geoserverService.exportFeaturesGeoJson(l.name).subscribe({
+    this.terraneService.exportFeaturesGeoJson(l.name).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -286,7 +286,7 @@ export class LayerDetailComponent {
   downloadCsv(): void {
     const l = this.layer();
     if (!l) return;
-    this.geoserverService.exportFeaturesCsv(l.name).subscribe({
+    this.terraneService.exportFeaturesCsv(l.name).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');

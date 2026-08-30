@@ -1,4 +1,4 @@
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{Bounds, DataSourceType};
 use crate::services::wcs::{self, CoverageDescription, WcsCapabilities, WcsRequest};
 use crate::state::AppState;
@@ -11,7 +11,7 @@ pub async fn handle_wcs_request(
     req: HttpRequest,
     query: web::Query<Vec<(String, String)>>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let params = query.as_ref();
     let wcs_request = wcs::parse_wcs_request(params)?;
 
@@ -30,7 +30,7 @@ pub async fn handle_wcs_request(
 async fn materialize_raster(
     conn: &crate::models::DataSourceConnection,
     ds_type: &DataSourceType,
-) -> Result<Option<crate::store::file_resolver::MaterializedFile>, GeoServerError> {
+) -> Result<Option<crate::store::file_resolver::MaterializedFile>, TerraneError> {
     match ds_type {
         DataSourceType::WorldImage | DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => {
             crate::store::materialize_dir(conn).await
@@ -79,7 +79,7 @@ async fn find_raster_coverages(state: &AppState) -> Vec<(String, String, std::pa
 async fn handle_get_capabilities(
     state: &AppState,
     _request: &WcsRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let base_url = format!(
         "http://{}:{}",
         state.config.server.host, state.config.server.port
@@ -93,7 +93,7 @@ async fn handle_get_capabilities(
     }
 
     let xml = to_string(&capabilities).map_err(|e| {
-        GeoServerError::ServiceError(format!("Failed to serialize capabilities: {}", e))
+        TerraneError::ServiceError(format!("Failed to serialize capabilities: {}", e))
     })?;
 
     let xml = format!(
@@ -108,10 +108,11 @@ async fn handle_get_capabilities(
 async fn handle_describe_coverage(
     state: &AppState,
     request: &WcsRequest,
-) -> Result<HttpResponse, GeoServerError> {
-    let coverage_ids = request.coverage_id.as_ref().ok_or_else(|| {
-        GeoServerError::BadRequest("COVERAGEID parameter is required".to_string())
-    })?;
+) -> Result<HttpResponse, TerraneError> {
+    let coverage_ids = request
+        .coverage_id
+        .as_ref()
+        .ok_or_else(|| TerraneError::BadRequest("COVERAGEID parameter is required".to_string()))?;
 
     let mut descriptions = Vec::new();
 
@@ -198,7 +199,7 @@ async fn handle_describe_coverage(
     let mut inner_xml = String::new();
     for description in &descriptions {
         let item = to_string(description).map_err(|e| {
-            GeoServerError::ServiceError(format!("Failed to serialize coverage description: {}", e))
+            TerraneError::ServiceError(format!("Failed to serialize coverage description: {}", e))
         })?;
         inner_xml.push_str(&item);
         inner_xml.push('\n');
@@ -220,10 +221,11 @@ async fn handle_get_coverage(
     state: &AppState,
     request: &WcsRequest,
     req: &HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
-    let coverage_ids = request.coverage_id.as_ref().ok_or_else(|| {
-        GeoServerError::BadRequest("COVERAGEID parameter is required".to_string())
-    })?;
+) -> Result<HttpResponse, TerraneError> {
+    let coverage_ids = request
+        .coverage_id
+        .as_ref()
+        .ok_or_else(|| TerraneError::BadRequest("COVERAGEID parameter is required".to_string()))?;
 
     // GeoFence: per-coverage layer access (opt-in via geofence_enabled).
     for cid in coverage_ids {
@@ -253,7 +255,7 @@ async fn handle_get_coverage(
     }
 
     let coverage_id = coverage_ids.first().ok_or_else(|| {
-        GeoServerError::BadRequest("At least one COVERAGEID is required".to_string())
+        TerraneError::BadRequest("At least one COVERAGEID is required".to_string())
     })?;
 
     let output_format = request
@@ -686,7 +688,7 @@ fn encode_coverage_output(
     img: image::RgbaImage,
     output_format: &str,
     coverage_id: &str,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let (content_type, fmt) = match output_format {
         "image/png" => ("image/png", image::ImageFormat::Png),
         "image/jpeg" | "image/jpg" => ("image/jpeg", image::ImageFormat::Jpeg),
@@ -706,10 +708,10 @@ fn encode_coverage_output(
     if fmt == image::ImageFormat::Jpeg || fmt == image::ImageFormat::Tiff {
         let rgb = image::DynamicImage::ImageRgba8(img).to_rgb8();
         rgb.write_to(&mut std::io::Cursor::new(&mut buffer), fmt)
-            .map_err(|e| GeoServerError::RenderingError(e.to_string()))?;
+            .map_err(|e| TerraneError::RenderingError(e.to_string()))?;
     } else {
         img.write_to(&mut std::io::Cursor::new(&mut buffer), fmt)
-            .map_err(|e| GeoServerError::RenderingError(e.to_string()))?;
+            .map_err(|e| TerraneError::RenderingError(e.to_string()))?;
     }
 
     Ok(HttpResponse::Ok()

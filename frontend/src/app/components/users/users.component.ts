@@ -1,11 +1,11 @@
 import { Component, ChangeDetectionStrategy, inject, signal, computed } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { AuthService } from '../../services/auth.service';
 import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
-import { User } from '../../models/geoserver.models';
+import { User } from '../../models/terrane.models';
 import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
 @Component({
@@ -16,7 +16,7 @@ import { switchMap, tap, startWith, catchError, of } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UsersComponent {
-  private geoserver = inject(GeoserverService);
+  private terrane = inject(TerraneService);
   private auth = inject(AuthService);
   private notificationService = inject(NotificationService);
   private translate = inject(TranslateService);
@@ -56,7 +56,7 @@ export class UsersComponent {
     startWith(0),
     tap(() => this.loading.set(true)),
     switchMap(() =>
-      this.geoserver.listUsers().pipe(
+      this.terrane.listUsers().pipe(
         catchError(() => {
           this.error = this.translate.instant('users.loadFail');
           return of([] as User[]);
@@ -70,7 +70,7 @@ export class UsersComponent {
 
   createUser(): void {
     if (!this.newUsername || !this.newPassword) return;
-    this.geoserver.createUser(this.newUsername, this.newPassword, this.newRole).subscribe({
+    this.terrane.createUser(this.newUsername, this.newPassword, this.newRole).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('users.createSuccess'));
         this.showCreateForm = false;
@@ -89,7 +89,7 @@ export class UsersComponent {
       return;
     }
     if (!confirm(this.translate.instant('users.deleteUserConfirm', { username }))) return;
-    this.geoserver.deleteUser(username).subscribe({
+    this.terrane.deleteUser(username).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('users.deleteSuccess'));
         this.refreshTrigger.update((v) => v + 1);
@@ -103,7 +103,7 @@ export class UsersComponent {
       this.notificationService.warning(this.translate.instant('users.passwordMismatch'));
       return;
     }
-    this.geoserver.changePassword(this.oldPassword, this.newPassword1).subscribe({
+    this.terrane.changePassword(this.oldPassword, this.newPassword1).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('users.passwordChangeSuccess'));
         this.showPasswordForm = false;

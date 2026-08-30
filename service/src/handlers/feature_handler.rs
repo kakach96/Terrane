@@ -1,4 +1,4 @@
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{Bounds, Feature};
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -16,7 +16,7 @@ pub async fn get_layer_features(
     req: HttpRequest,
     query: web::Query<FeatureQuery>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     let bounds = query.bbox.as_ref().and_then(|b| {
@@ -66,7 +66,7 @@ pub async fn get_layer_features(
 pub async fn get_feature(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
     let feature_id = req.match_info().get("feature").unwrap_or("");
 
@@ -84,7 +84,7 @@ pub async fn get_feature(
         })));
     }
 
-    Err(GeoServerError::NotFound(format!(
+    Err(TerraneError::NotFound(format!(
         "Feature '{}' not found",
         feature_id
     )))

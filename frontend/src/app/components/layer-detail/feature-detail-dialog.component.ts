@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { TranslatePipe } from '@ngx-translate/core';
-import { Feature } from '../../models/geoserver.models';
+import { Feature } from '../../models/terrane.models';
 import { CommonModule } from '@angular/common';
 
 @Component({

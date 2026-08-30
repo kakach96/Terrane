@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, BehaviorSubject } from 'rxjs';
 import { map, tap } from 'rxjs/operators';
-import { ApiResponse } from '../models/geoserver.models';
+import { ApiResponse } from '../models/terrane.models';
 
 export interface AuthUser {
   username: string;
@@ -12,7 +12,7 @@ export interface AuthUser {
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly apiUrl = '/geoserver/auth';
+  private readonly apiUrl = '/terrane/auth';
   private currentUserSubject = new BehaviorSubject<AuthUser | null>(null);
   currentUser$ = this.currentUserSubject.asObservable();
 
@@ -21,12 +21,12 @@ export class AuthService {
   }
 
   private loadStoredUser(): void {
-    const stored = localStorage.getItem('geoserver_user');
+    const stored = localStorage.getItem('terrane_user');
     if (stored) {
       try {
         this.currentUserSubject.next(JSON.parse(stored));
       } catch {
-        localStorage.removeItem('geoserver_user');
+        localStorage.removeItem('terrane_user');
       }
     }
   }
@@ -37,8 +37,8 @@ export class AuthService {
       .pipe(map((res) => res.data as AuthUser))
       .pipe(
         tap((user) => {
-          localStorage.setItem('geoserver_user', JSON.stringify(user));
-          localStorage.setItem('geoserver_token', user.token);
+          localStorage.setItem('terrane_user', JSON.stringify(user));
+          localStorage.setItem('terrane_token', user.token);
           this.currentUserSubject.next(user);
         }),
       );
@@ -53,13 +53,13 @@ export class AuthService {
         error: () => {},
       });
     }
-    localStorage.removeItem('geoserver_user');
-    localStorage.removeItem('geoserver_token');
+    localStorage.removeItem('terrane_user');
+    localStorage.removeItem('terrane_token');
     this.currentUserSubject.next(null);
   }
 
   getToken(): string | null {
-    return localStorage.getItem('geoserver_token');
+    return localStorage.getItem('terrane_token');
   }
 
   isLoggedIn(): boolean {

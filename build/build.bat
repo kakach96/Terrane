@@ -165,7 +165,7 @@ if %BUILD_MODE%==release (
         echo Configuration:
         echo   Edit terrane.toml to configure server settings.
         echo.
-        echo API: http://localhost:8080/geoserver
+        echo API: http://localhost:8080/terrane
         echo Web: http://localhost:8080
     ) > "!RELEASE_DIR!\README.txt"
     

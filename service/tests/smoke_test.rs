@@ -8,7 +8,7 @@
 //!
 //! 1. **SPA index page** — the Angular app shell must be served for unknown
 //!    routes so that client-side routing works.
-//! 2. **REST /geoserver/layers** — the layer catalogue must return a non-empty
+//! 2. **REST /terrane/layers** — the layer catalogue must return a non-empty
 //!    JSON array; a regression here breaks every page in the UI.
 //! 3. **WMS GetMap (image/png)** — the most basic map render path.
 //! 4. **WMS OpenLayers preview HTML** — must return valid HTML containing an
@@ -31,7 +31,7 @@ use actix_web::test;
 
 // ---------------------------------------------------------------------------
 // 1. API root responds (SPA fallback requires static files, so test the
-//    /geoserver endpoint which is always registered)
+//    /terrane endpoint which is always registered)
 // ---------------------------------------------------------------------------
 
 #[actix_rt::test]
@@ -39,12 +39,12 @@ async fn smoke_api_root_responds() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/server/status")
+        .uri("/terrane/server/status")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
         resp.status().is_success(),
-        "GET /geoserver/server/status should return 200, got: {}",
+        "GET /terrane/server/status should return 200, got: {}",
         resp.status()
     );
 
@@ -67,11 +67,9 @@ async fn smoke_api_root_responds() {
 async fn smoke_layers_list_valid_json() {
     let app = build_test_app!();
 
-    let req = test::TestRequest::get()
-        .uri("/geoserver/layers")
-        .to_request();
+    let req = test::TestRequest::get().uri("/terrane/layers").to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 200, "GET /geoserver/layers should be 200");
+    assert_eq!(resp.status(), 200, "GET /terrane/layers should be 200");
 
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert!(body["success"].as_bool().unwrap_or(false));
@@ -205,7 +203,7 @@ async fn smoke_feature_query_limit() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/layers/world/features?limit=2")
+        .uri("/terrane/layers/world/features?limit=2")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(
@@ -400,10 +398,10 @@ async fn smoke_concurrent_requests() {
     for i in 0..10 {
         let app = app.clone();
         let uri = match i % 4 {
-            0 => "/geoserver/layers".to_string(),
+            0 => "/terrane/layers".to_string(),
             1 => "/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=world&BBOX=-180,-90,180,90&WIDTH=128&HEIGHT=128&SRS=EPSG:4326&FORMAT=image/png".to_string(),
-            2 => "/geoserver/layers/world/features?limit=1".to_string(),
-            _ => "/geoserver/layer-groups".to_string(),
+            2 => "/terrane/layers/world/features?limit=1".to_string(),
+            _ => "/terrane/layer-groups".to_string(),
         };
         handles.push(actix_rt::spawn(async move {
             let req = test::TestRequest::get().uri(&uri).to_request();

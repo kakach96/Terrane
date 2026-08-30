@@ -4,12 +4,12 @@
 //! - `GET /about/system-status` — runtime status (uptime, memory, counters).
 
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::state::AppState;
 use actix_web::{web, HttpResponse};
 
 /// GET /about/version — Terrane 版本与构建元数据。
-pub async fn about_version() -> Result<HttpResponse, GeoServerError> {
+pub async fn about_version() -> Result<HttpResponse, TerraneError> {
     Ok(
         HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
             "name": env!("CARGO_PKG_NAME"),
@@ -21,9 +21,7 @@ pub async fn about_version() -> Result<HttpResponse, GeoServerError> {
 }
 
 /// GET /about/system-status — 运行时状态 (与 /server/status 同源数据)。
-pub async fn about_system_status(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+pub async fn about_system_status(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     let uptime = state.get_uptime();
     let request_count = state
         .request_count

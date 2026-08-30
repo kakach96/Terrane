@@ -3,13 +3,13 @@ import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { WorkspaceDialogComponent } from './workspace-dialog.component';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
 import {
   Workspace,
   CreateWorkspaceRequest,
   UpdateWorkspaceRequest,
-} from '../../models/geoserver.models';
+} from '../../models/terrane.models';
 import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
 @Component({
@@ -20,7 +20,7 @@ import { switchMap, tap, startWith, catchError, of } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WorkspacesComponent {
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private dialog = inject(MatDialog);
   private translate = inject(TranslateService);
@@ -34,7 +34,7 @@ export class WorkspacesComponent {
     startWith(0),
     tap(() => this.loading.set(true)),
     switchMap(() =>
-      this.geoserverService.getAllWorkspaces().pipe(
+      this.terraneService.getAllWorkspaces().pipe(
         catchError(() => {
           return of(this.getDefaultWorkspaces());
         }),
@@ -98,7 +98,7 @@ export class WorkspacesComponent {
 
   createWorkspace(request: CreateWorkspaceRequest): void {
     this.loading.set(true);
-    this.geoserverService.createWorkspace(request).subscribe({
+    this.terraneService.createWorkspace(request).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('workspaces.createSuccess'));
         this.loading.set(false);
@@ -114,7 +114,7 @@ export class WorkspacesComponent {
 
   updateWorkspace(name: string, request: UpdateWorkspaceRequest): void {
     this.loading.set(true);
-    this.geoserverService.updateWorkspace(name, request).subscribe({
+    this.terraneService.updateWorkspace(name, request).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('workspaces.updateSuccess'));
         this.loading.set(false);
@@ -142,7 +142,7 @@ export class WorkspacesComponent {
       .subscribe((confirmed) => {
         if (confirmed) {
           this.loading.set(true);
-          this.geoserverService.deleteWorkspace(workspace.name).subscribe({
+          this.terraneService.deleteWorkspace(workspace.name).subscribe({
             next: () => {
               this.notificationService.success(this.translate.instant('workspaces.deleteSuccess'));
               this.loading.set(false);
@@ -161,7 +161,7 @@ export class WorkspacesComponent {
   toggleStatus(workspace: Workspace): void {
     const newStatus = !workspace.enabled;
     this.loading.set(true);
-    this.geoserverService.updateWorkspace(workspace.name, { enabled: newStatus }).subscribe({
+    this.terraneService.updateWorkspace(workspace.name, { enabled: newStatus }).subscribe({
       next: () => {
         this.notificationService.success(
           this.translate.instant('workspaces.toggleStatusSuccess', {

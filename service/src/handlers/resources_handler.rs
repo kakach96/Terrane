@@ -7,7 +7,7 @@
 //! Paths are resolved strictly inside `data_dir` (parent-dir components are
 //! stripped) to prevent path-traversal.
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::handlers::auth_handler::require_auth;
 use crate::handlers::rest_handler::ApiResponse;
 use crate::state::AppState;
@@ -49,7 +49,7 @@ fn resolve_in_data_dir(data_dir: &Path, rel: &str) -> PathBuf {
 pub async fn list_resources(
     query: web::Query<ResourcesQuery>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let dir = resolve_in_data_dir(&state.config.data_dir, query.path.as_deref().unwrap_or(""));
 
     let mut entries = Vec::new();
@@ -81,12 +81,12 @@ pub async fn upload_resource(
     query: web::Query<ResourcesQuery>,
     payload: Multipart,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
     let dir = resolve_in_data_dir(&state.config.data_dir, query.path.as_deref().unwrap_or(""));
     tokio::fs::create_dir_all(&dir)
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("无法创建目录: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("无法创建目录: {}", e)))?;
 
     let mut saved: Option<String> = None;
     let mut stream = payload;
@@ -99,15 +99,15 @@ pub async fn upload_resource(
         let file_path = dir.join(&filename);
         let mut file = tokio::fs::File::create(&file_path)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("无法创建文件: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("无法创建文件: {}", e)))?;
         while let Some(Ok(chunk)) = field.next().await {
             file.write_all(&chunk)
                 .await
-                .map_err(|e| GeoServerError::InternalError(format!("写入文件失败: {}", e)))?;
+                .map_err(|e| TerraneError::InternalError(format!("写入文件失败: {}", e)))?;
         }
         file.flush()
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("刷新文件失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("刷新文件失败: {}", e)))?;
         saved = Some(filename);
     }
 
@@ -119,7 +119,7 @@ pub async fn upload_resource(
                 "message": "Resource uploaded",
             }))),
         ),
-        None => Err(GeoServerError::BadRequest("未接收到上传文件".to_string())),
+        None => Err(TerraneError::BadRequest("未接收到上传文件".to_string())),
     }
 }
 
@@ -128,25 +128,25 @@ pub async fn delete_resource(
     req: HttpRequest,
     query: web::Query<ResourcesQuery>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
     let rel = query
         .path
         .clone()
-        .ok_or_else(|| GeoServerError::BadRequest("path 参数必填".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("path 参数必填".to_string()))?;
     let target = resolve_in_data_dir(&state.config.data_dir, &rel);
 
     let meta = tokio::fs::metadata(&target)
         .await
-        .map_err(|_| GeoServerError::NotFound(format!("资源不存在: {}", rel)))?;
+        .map_err(|_| TerraneError::NotFound(format!("资源不存在: {}", rel)))?;
     if meta.is_dir() {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "仅支持删除文件, 目录请逐项删除".to_string(),
         ));
     }
     tokio::fs::remove_file(&target)
         .await
-        .map_err(|e| GeoServerError::InternalError(format!("删除失败: {}", e)))?;
+        .map_err(|e| TerraneError::InternalError(format!("删除失败: {}", e)))?;
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({

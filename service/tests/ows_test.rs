@@ -1,7 +1,7 @@
 //! OWS (OGC Web Services) unified dispatcher integration tests.
 //!
 //! Covers the GeoServer-style `/ows` endpoint registered under the API context
-//! (`/geoserver/ows`): GET dispatch to WMS/WFS/WCS/WPS/CSW GetCapabilities,
+//! (`/terrane/ows`): GET dispatch to WMS/WFS/WCS/WPS/CSW GetCapabilities,
 //! missing/unsupported `service` handling, and POST dispatch to
 //! WFS (KVP form), WPS (XML Execute) and CSW (XML GetRecords).
 
@@ -16,10 +16,7 @@ use actix_web::test;
 macro_rules! assert_xml_capabilities {
     ($service:expr, $marker:expr) => {{
         let app = build_test_app!();
-        let uri = format!(
-            "/geoserver/ows?SERVICE={}&REQUEST=GetCapabilities",
-            $service
-        );
+        let uri = format!("/terrane/ows?SERVICE={}&REQUEST=GetCapabilities", $service);
         let req = actix_web::test::TestRequest::get().uri(&uri).to_request();
         let resp = actix_web::test::call_service(&app, req).await;
         assert!(
@@ -97,7 +94,7 @@ async fn test_ows_missing_service() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/ows?REQUEST=GetCapabilities")
+        .uri("/terrane/ows?REQUEST=GetCapabilities")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
@@ -119,7 +116,7 @@ async fn test_ows_unsupported_service() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/ows?SERVICE=FOO&REQUEST=GetCapabilities")
+        .uri("/terrane/ows?SERVICE=FOO&REQUEST=GetCapabilities")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
@@ -146,7 +143,7 @@ async fn test_ows_post_wfs_kvp() {
     let app = build_test_app!();
 
     let req = test::TestRequest::post()
-        .uri("/geoserver/ows?SERVICE=WFS")
+        .uri("/terrane/ows?SERVICE=WFS")
         .insert_header(("Content-Type", "application/x-www-form-urlencoded"))
         .set_payload("SERVICE=WFS&REQUEST=GetCapabilities&VERSION=2.0.0")
         .to_request();
@@ -184,7 +181,7 @@ async fn test_ows_post_wps_xml_sniff() {
 </wps:Execute>"#;
 
     let req = test::TestRequest::post()
-        .uri("/geoserver/ows")
+        .uri("/terrane/ows")
         .insert_header(("Content-Type", "application/xml"))
         .set_payload(xml_body)
         .to_request();
@@ -216,7 +213,7 @@ async fn test_ows_post_csw_xml_sniff() {
     </csw:GetRecords>"#;
 
     let req = test::TestRequest::post()
-        .uri("/geoserver/ows")
+        .uri("/terrane/ows")
         .insert_header(("Content-Type", "application/xml"))
         .set_payload(xml_body)
         .to_request();

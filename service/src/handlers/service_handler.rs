@@ -5,7 +5,7 @@
 //! `AppState.service_settings`. Writes require a valid admin token.
 
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::handlers::auth_handler::require_auth;
 use crate::models::ServiceSettings;
 use crate::state::AppState;
@@ -23,10 +23,10 @@ fn normalize_service(name: &str) -> Option<String> {
 pub async fn get_service_settings(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let raw = req.match_info().get("service").unwrap_or("");
     let service = normalize_service(raw)
-        .ok_or_else(|| GeoServerError::BadRequest(format!("Unknown service '{}'", raw)))?;
+        .ok_or_else(|| TerraneError::BadRequest(format!("Unknown service '{}'", raw)))?;
 
     let map = state.service_settings.read().await;
     let settings = map.get(&service).cloned().unwrap_or_default();
@@ -46,11 +46,11 @@ pub async fn update_service_settings(
     req: HttpRequest,
     body: web::Json<ServiceSettings>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
     let raw = req.match_info().get("service").unwrap_or("");
     let service = normalize_service(raw)
-        .ok_or_else(|| GeoServerError::BadRequest(format!("Unknown service '{}'", raw)))?;
+        .ok_or_else(|| TerraneError::BadRequest(format!("Unknown service '{}'", raw)))?;
     let settings = body.into_inner();
 
     // 持久化到元数据存储
@@ -58,7 +58,7 @@ pub async fn update_service_settings(
         store
             .save_service_settings(&service, &settings)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("保存服务设置失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("保存服务设置失败: {}", e)))?;
     }
 
     // 更新内存缓存 (读路径即刻生效)

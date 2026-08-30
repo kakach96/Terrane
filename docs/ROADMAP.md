@@ -141,7 +141,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 
 ## Known Technical Debt
 
-- **JWT secret hardcoded default** in `service/src/auth.rs` (`terrane-jwt-secret-2026`) — must be injected via `GEOSERVER__SECURITY__JWT_SECRET` in production.
+- **JWT secret hardcoded default** in `service/src/auth.rs` (`terrane-jwt-secret-2026`) — must be injected via `TERRANE__SECURITY__JWT_SECRET` in production.
 - **In-memory caches** (`Arc<RwLock<...>>` in `service/src/state.rs`) diverge across replicas; periodic catalog refresh added (`[server] catalog_refresh_secs`, reload layers/styles/groups from the metadata store) plus event-triggered refresh on REST layer writes (`AppState::refresh_catalog`) — multi-replica divergence is bounded, but refresh remains best-effort (no external event bus).
 - **WFS feature locks are in-memory only** (`service/src/utils/wfs_lock.rs`, per-replica): locks guard concurrent consumers within one process and are lost on restart — acceptable while WFS-T writes are not implemented, but multi-replica lock coordination (e.g. Redis) is not implemented.
 - **Tile cache backend**: local disk default (`service/data/gwc`, `service/src/store/cache/tile.rs`); layer-level Redis cache data sources added (`Layer.cache_store` → `DataSourceType::Redis`, shared across replicas).
@@ -151,7 +151,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - **Human-readable stdout logs by default** — structured JSON available via `[logging] format = "json"` with request `trace_id`; OpenTelemetry still pending.
 - **Resilience**: rate limiting + request timeout (`service/src/middleware.rs`, HTTP 429/504) and cascaded WMS retry/backoff + circuit breaking (`service/src/utils/cascaded.rs`) all done; no global circuit breaking for other upstream types yet.
 - **Test suite** — unit (`#[cfg(test)]`) and protocol-split integration tests exist (see [DEVELOPMENT.md](DEVELOPMENT.md) §7); still missing a **performance test suite** (micro-benchmarks + HTTP load harness, planned for v1.1) and frontend tests (`ng test` untested).
-- **`geoserver` naming residue** — the codebase still uses `geoserver` in type names (`GeoServerConfig` / `GeoServerError` / `GeoServerBackup`), the `GEOSERVER__` env prefix, the default `/geoserver` API context, defaults (admin password, DB name, namespace, `geoserver.sqlite`), frontend files (`geoserver.service.ts` / `geoserver.models.ts`), tests, docs and Docker/CI env vars. Planned as a breaking-change migration in v1.2 (keep `GEOSERVER__` as a deprecated alias).
+- **`geoserver` naming residue — migrated (v1.2)**: the codebase no longer carries `geoserver` in type names (`GeoServerConfig` / `GeoServerError` / `GeoServerBackup` → `TerraneConfig` / `TerraneError` / `TerraneBackup`), the env prefix is now `TERRANE__` (with `GEOSERVER__` kept as a deprecated alias), the default API context is `/terrane`, defaults use `terrane` (admin password, DB name, `terrane.sqlite`), frontend files are `terrane.service.ts` / `terrane.models.ts`, and tests / docs / Docker / CI env vars are updated.
 - **Layer preview format parity — done**: frontend preview and backend GetMap now cover OpenLayers / PNG / JPEG / GIF / WebP / TIFF / SVG / KML / GeoJSON / GML / Atom / UTFGrid / PDF / MVT.
 - **Sample data is GeoJSON-only** — a curated `service/samples/` set (points / lines /
   simplified polygons) is shipped and auto-seeded on first startup (see v1.2 above);

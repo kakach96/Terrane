@@ -25,7 +25,7 @@ mod state;
 mod store;
 mod utils;
 
-use config::GeoServerConfig;
+use config::TerraneConfig;
 use state::AppState;
 
 struct FriendlyTimeFormat;
@@ -98,18 +98,20 @@ fn init_tracing(default_level: &str, format: &str) {
     }
 }
 
-fn load_config(config_path: &str) -> GeoServerConfig {
-    // terrane.toml (可选) + GEOSERVER__ 环境变量双源加载，env 覆盖文件
-    GeoServerConfig::load_from_file(config_path).unwrap_or_else(|e| {
-        // 注意: load_config 在 init_tracing 之前调用, tracing::warn! 不生效,
-        // 因此必须同时输出到 stderr, 否则配置错误会被静默吞掉
+fn load_config(config_path: &str) -> TerraneConfig {
+    // Load from terrane.toml (optional) + TERRANE__/GEOSERVER__ (deprecated
+    // alias) environment variables; env overrides the file.
+    TerraneConfig::load_from_file(config_path).unwrap_or_else(|e| {
+        // Note: load_config runs before init_tracing, so tracing::warn! has no
+        // effect yet — also write to stderr, otherwise config errors would be
+        // silently swallowed.
         let msg = format!(
             "Failed to load config '{}': {}. Using defaults.",
             config_path, e
         );
         eprintln!("[config] WARNING: {}", msg);
         tracing::warn!("{}", msg);
-        GeoServerConfig::default()
+        TerraneConfig::default()
     })
 }
 

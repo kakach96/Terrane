@@ -85,9 +85,9 @@ impl From<deadpool_postgres::CreatePoolError> for StoreError {
     }
 }
 
-impl From<StoreError> for crate::error::GeoServerError {
+impl From<StoreError> for crate::error::TerraneError {
     fn from(e: StoreError) -> Self {
-        crate::error::GeoServerError::InternalError(format!("{}", e))
+        crate::error::TerraneError::InternalError(format!("{}", e))
     }
 }
 

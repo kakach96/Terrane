@@ -1,5 +1,5 @@
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
@@ -18,7 +18,7 @@ pub struct UpdateWorkspaceRequest {
     pub enabled: Option<bool>,
 }
 
-pub async fn list_workspaces(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn list_workspaces(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         match store.get_all_workspaces().await {
             Ok(ws) => {
@@ -40,7 +40,7 @@ pub async fn list_workspaces(state: web::Data<AppState>) -> Result<HttpResponse,
             },
             Err(e) => {
                 eprintln!("Failed to list workspaces: {}", e);
-                return Err(GeoServerError::InternalError(
+                return Err(TerraneError::InternalError(
                     "Failed to list workspaces".to_string(),
                 ));
             },
@@ -54,7 +54,7 @@ pub async fn list_workspaces(state: web::Data<AppState>) -> Result<HttpResponse,
 pub async fn get_workspace(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("workspace").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -71,19 +71,19 @@ pub async fn get_workspace(
                 });
                 Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
             },
-            Ok(None) => Err(GeoServerError::NotFound(format!(
+            Ok(None) => Err(TerraneError::NotFound(format!(
                 "Workspace '{}' not found",
                 name
             ))),
             Err(e) => {
                 eprintln!("Failed to get workspace: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to get workspace".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::NotFound(format!(
+        Err(TerraneError::NotFound(format!(
             "Workspace '{}' not found",
             name
         )))
@@ -93,7 +93,7 @@ pub async fn get_workspace(
 pub async fn create_workspace(
     body: web::Json<CreateWorkspaceRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         match store.create_workspace(&body).await {
             Ok(workspace) => {
@@ -117,13 +117,13 @@ pub async fn create_workspace(
             },
             Err(e) => {
                 eprintln!("Failed to create workspace: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to create workspace".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -133,7 +133,7 @@ pub async fn update_workspace(
     req: HttpRequest,
     body: web::Json<UpdateWorkspaceRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("workspace").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -153,13 +153,13 @@ pub async fn update_workspace(
             ),
             Err(e) => {
                 eprintln!("Failed to update workspace: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to update workspace".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -168,7 +168,7 @@ pub async fn update_workspace(
 pub async fn delete_workspace(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("workspace").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -180,13 +180,13 @@ pub async fn delete_workspace(
             ),
             Err(e) => {
                 eprintln!("Failed to delete workspace: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to delete workspace".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -201,23 +201,23 @@ pub async fn delete_workspace(
 async fn ensure_workspace(
     store: Option<&std::sync::Arc<dyn crate::store::Store>>,
     ws: &str,
-) -> Result<(), GeoServerError> {
+) -> Result<(), TerraneError> {
     if let Some(store) = store {
         match store.get_workspace(ws).await {
             Ok(Some(_)) => Ok(()),
-            Ok(None) => Err(GeoServerError::NotFound(format!(
+            Ok(None) => Err(TerraneError::NotFound(format!(
                 "Workspace '{}' not found",
                 ws
             ))),
             Err(e) => {
                 eprintln!("Failed to get workspace: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to get workspace".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -227,7 +227,7 @@ async fn ensure_workspace(
 pub async fn list_workspace_layers(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let ws = req.match_info().get("workspace").unwrap_or("");
     ensure_workspace(state.store.as_ref(), ws).await?;
 
@@ -260,7 +260,7 @@ pub async fn list_workspace_layers(
             },
             Err(e) => {
                 eprintln!("Failed to list layers: {}", e);
-                return Err(GeoServerError::InternalError(
+                return Err(TerraneError::InternalError(
                     "Failed to list layers".to_string(),
                 ));
             },
@@ -299,7 +299,7 @@ pub async fn list_workspace_layers(
 pub async fn list_workspace_datastores(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let ws = req.match_info().get("workspace").unwrap_or("");
     ensure_workspace(state.store.as_ref(), ws).await?;
     list_workspace_stores_filtered(&state, ws, "DataStore").await
@@ -309,7 +309,7 @@ pub async fn list_workspace_datastores(
 pub async fn list_workspace_coveragestores(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let ws = req.match_info().get("workspace").unwrap_or("");
     ensure_workspace(state.store.as_ref(), ws).await?;
     list_workspace_stores_filtered(&state, ws, "CoverageStore").await
@@ -320,7 +320,7 @@ async fn list_workspace_stores_filtered(
     state: &web::Data<AppState>,
     ws: &str,
     store_type: &str,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         match store.get_all_data_sources().await {
             Ok(ds_list) => {
@@ -350,7 +350,7 @@ async fn list_workspace_stores_filtered(
             },
             Err(e) => {
                 eprintln!("Failed to list data sources: {}", e);
-                return Err(GeoServerError::InternalError(
+                return Err(TerraneError::InternalError(
                     "Failed to list data sources".to_string(),
                 ));
             },

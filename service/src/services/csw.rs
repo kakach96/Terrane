@@ -10,7 +10,7 @@
 //! its WGS84 bounding box. A minimal CQL constraint (`Title = '...'` /
 //! `Identifier = '...'` / `Subject = '...'`, `=` and `like`) is supported.
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::Layer;
 use crate::services::wfs;
 
@@ -129,17 +129,15 @@ fn split_list(s: &str) -> Vec<String> {
 }
 
 /// Parse a CSW KVP request (`SERVICE=CSW&REQUEST=...`).
-pub fn parse_csw_request(params: &[(String, String)]) -> Result<CswOperation, GeoServerError> {
+pub fn parse_csw_request(params: &[(String, String)]) -> Result<CswOperation, TerraneError> {
     if let Some(svc) = first_param(params, "service") {
         if !svc.eq_ignore_ascii_case("CSW") {
-            return Err(GeoServerError::BadRequest(
-                "Invalid service type".to_string(),
-            ));
+            return Err(TerraneError::BadRequest("Invalid service type".to_string()));
         }
     }
 
     let request = first_param(params, "request")
-        .ok_or_else(|| GeoServerError::BadRequest("Missing REQUEST parameter".to_string()))?
+        .ok_or_else(|| TerraneError::BadRequest("Missing REQUEST parameter".to_string()))?
         .to_uppercase();
 
     match request.as_str() {
@@ -183,7 +181,7 @@ pub fn parse_csw_request(params: &[(String, String)]) -> Result<CswOperation, Ge
         "GETDOMAIN" => Ok(CswOperation::GetDomain {
             parameter_name: first_param(params, "parametername").map(|s| s.to_string()),
         }),
-        _ => Err(GeoServerError::BadRequest(format!(
+        _ => Err(TerraneError::BadRequest(format!(
             "Unknown request: {}",
             request
         ))),
@@ -232,11 +230,11 @@ fn collect_prop_lit(node: &wfs::XmlNode, props: &mut Vec<String>, lits: &mut Vec
 }
 
 /// Parse a CSW XML POST request body.
-pub fn parse_csw_post(xml: &str) -> Result<CswOperation, GeoServerError> {
-    let roots = wfs::parse_xml_nodes(xml).map_err(GeoServerError::BadRequest)?;
+pub fn parse_csw_post(xml: &str) -> Result<CswOperation, TerraneError> {
+    let roots = wfs::parse_xml_nodes(xml).map_err(TerraneError::BadRequest)?;
     let root = roots
         .first()
-        .ok_or_else(|| GeoServerError::BadRequest("Empty CSW request".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("Empty CSW request".to_string()))?;
 
     match root.name.as_str() {
         "GetCapabilities" => Ok(CswOperation::GetCapabilities),
@@ -305,7 +303,7 @@ pub fn parse_csw_post(xml: &str) -> Result<CswOperation, GeoServerError> {
                 .first()
                 .map(|c| c.text.trim().to_string()),
         }),
-        other => Err(GeoServerError::BadRequest(format!(
+        other => Err(TerraneError::BadRequest(format!(
             "Unknown CSW request: {}",
             other
         ))),
@@ -432,7 +430,7 @@ pub fn record_xml(base_url: &str, layer: &Layer, element_set: CswElementSet) -> 
             );
             let format = "    <dc:format>application/xml</dc:format>\n";
             let references = format!(
-                "    <dct:references xlink:href=\"{}/geoserver/layers/{}\"/>\n",
+                "    <dct:references xlink:href=\"{}/terrane/layers/{}\"/>\n",
                 base_url,
                 escape_xml(&layer.name)
             );

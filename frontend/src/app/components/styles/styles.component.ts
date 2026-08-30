@@ -2,9 +2,9 @@ import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/cor
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
-import { StyleInfo } from '../../models/geoserver.models';
+import { StyleInfo } from '../../models/terrane.models';
 import { StyleEditorDialogComponent } from './style-editor-dialog.component';
 import { switchMap, tap, startWith, catchError, of } from 'rxjs';
 
@@ -16,7 +16,7 @@ import { switchMap, tap, startWith, catchError, of } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class StylesComponent {
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private notificationService = inject(NotificationService);
   private dialog = inject(MatDialog);
   private translate = inject(TranslateService);
@@ -28,7 +28,7 @@ export class StylesComponent {
     startWith(0),
     tap(() => this.loading.set(true)),
     switchMap(() =>
-      this.geoserverService.getStyles().pipe(
+      this.terraneService.getStyles().pipe(
         catchError(() => {
           this.notificationService.error(this.translate.instant('styles.loadListFail'));
           return of([] as StyleInfo[]);
@@ -52,7 +52,7 @@ export class StylesComponent {
   }
 
   editStyle(style: StyleInfo): void {
-    this.geoserverService.getStyle(style.name).subscribe({
+    this.terraneService.getStyle(style.name).subscribe({
       next: (full) => {
         this.dialog
           .open(StyleEditorDialogComponent, {
@@ -75,7 +75,7 @@ export class StylesComponent {
       return;
     }
     if (!confirm(this.translate.instant('styles.deleteConfirm', { title: style.title }))) return;
-    this.geoserverService.deleteStyle(style.name).subscribe({
+    this.terraneService.deleteStyle(style.name).subscribe({
       next: () => {
         this.notificationService.success(this.translate.instant('styles.deleteSuccess'));
         this.refreshTrigger.update((v) => v + 1);

@@ -1,5 +1,5 @@
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{Bounds, CoordinateReferenceSystem, GeoJsonGeometry};
 use crate::state::AppState;
 use crate::utils::tile_cache::TileCache;
@@ -24,7 +24,7 @@ pub struct UpdateStyleRequest {
 pub async fn get_layer_style(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     let style_name = {
@@ -33,14 +33,14 @@ pub async fn get_layer_style(
             .iter()
             .find(|l| l.name == layer_name)
             .and_then(|l| l.styles.first().map(|s| s.name.clone()))
-            .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?
+            .ok_or_else(|| TerraneError::NotFound(format!("Layer '{}' not found", layer_name)))?
     };
 
     let styles = state.styles.read().await;
     let meta = state.styles_meta.read().await;
     let content = styles
         .get(&style_name)
-        .ok_or_else(|| GeoServerError::NotFound(format!("Style '{}' not found", style_name)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("Style '{}' not found", style_name)))?;
 
     let format = meta
         .get(&style_name)
@@ -62,7 +62,7 @@ pub async fn put_layer_style(
     req: HttpRequest,
     body: String,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     let style_name = {
@@ -71,7 +71,7 @@ pub async fn put_layer_style(
             .iter()
             .find(|l| l.name == layer_name)
             .and_then(|l| l.styles.first().map(|s| s.name.clone()))
-            .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?
+            .ok_or_else(|| TerraneError::NotFound(format!("Layer '{}' not found", layer_name)))?
     };
 
     let format = crate::models::style::detect_style_format(&body);
@@ -107,7 +107,7 @@ pub async fn put_layer_style(
     )
 }
 
-pub async fn list_styles(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn list_styles(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     let styles = state.styles.read().await;
     let meta = state.styles_meta.read().await;
     let result: Vec<serde_json::Value> = styles
@@ -131,23 +131,23 @@ pub async fn list_styles(state: web::Data<AppState>) -> Result<HttpResponse, Geo
 pub async fn create_style(
     body: web::Json<CreateStyleRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if body.name.is_empty() {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "Style name is required".to_string(),
         ));
     }
     {
         let styles = state.styles.read().await;
         if styles.contains_key(&body.name) {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "Style '{}' already exists",
                 body.name
             )));
         }
     }
     let content = if body.content.trim().is_empty() {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "Style content is required".to_string(),
         ));
     } else {
@@ -206,12 +206,12 @@ pub async fn create_style(
 pub async fn get_style_by_name(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
     let content = state
         .get_style(name)
         .await
-        .ok_or_else(|| GeoServerError::NotFound(format!("Style '{}' not found", name)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("Style '{}' not found", name)))?;
 
     let meta = state.styles_meta.read().await;
     let m = meta.get(name);
@@ -235,13 +235,13 @@ pub async fn update_style_by_name(
     req: HttpRequest,
     body: web::Json<UpdateStyleRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     {
         let styles = state.styles.read().await;
         if !styles.contains_key(name) {
-            return Err(GeoServerError::NotFound(format!(
+            return Err(TerraneError::NotFound(format!(
                 "Style '{}' not found",
                 name
             )));
@@ -293,13 +293,13 @@ pub async fn update_style_by_name(
 pub async fn delete_style_by_name(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     {
         let styles = state.styles.read().await;
         if !styles.contains_key(name) {
-            return Err(GeoServerError::NotFound(format!(
+            return Err(TerraneError::NotFound(format!(
                 "Style '{}' not found",
                 name
             )));
@@ -327,7 +327,7 @@ pub async fn delete_style_by_name(
     )
 }
 
-pub async fn list_layer_groups(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn list_layer_groups(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     let groups = state.layer_groups.read().await;
     let result: Vec<_> = groups
         .iter()
@@ -345,13 +345,13 @@ pub async fn list_layer_groups(state: web::Data<AppState>) -> Result<HttpRespons
 pub async fn get_layer_group(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
     let groups = state.layer_groups.read().await;
     let group = groups
         .iter()
         .find(|g| g.name == name)
-        .ok_or_else(|| GeoServerError::NotFound(format!("Layer group '{}' not found", name)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("Layer group '{}' not found", name)))?;
 
     Ok(
         HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
@@ -366,7 +366,7 @@ pub async fn get_layer_group(
 pub async fn create_layer_group(
     body: web::Json<serde_json::Value>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = body
         .get("name")
         .and_then(|v| v.as_str())
@@ -388,7 +388,7 @@ pub async fn create_layer_group(
         .unwrap_or_default();
 
     if name.is_empty() {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "Layer group name is required".to_string(),
         ));
     }
@@ -431,13 +431,13 @@ pub async fn create_layer_group(
 pub async fn delete_layer_group(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
     let mut groups = state.layer_groups.write().await;
     let pos = groups
         .iter()
         .position(|g| g.name == name)
-        .ok_or_else(|| GeoServerError::NotFound(format!("Layer group '{}' not found", name)))?;
+        .ok_or_else(|| TerraneError::NotFound(format!("Layer group '{}' not found", name)))?;
     groups.remove(pos);
 
     // 从存储删除
@@ -458,7 +458,7 @@ pub async fn update_layer_group(
     req: HttpRequest,
     body: web::Json<serde_json::Value>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("").to_string();
     let title = body
         .get("title")
@@ -477,7 +477,7 @@ pub async fn update_layer_group(
         });
 
     if title.is_none() && layers.is_none() && styles.is_none() {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "At least one of title / layers / styles is required".to_string(),
         ));
     }
@@ -487,7 +487,7 @@ pub async fn update_layer_group(
         let group = groups
             .iter_mut()
             .find(|g| g.name == name)
-            .ok_or_else(|| GeoServerError::NotFound(format!("Layer group '{}' not found", name)))?;
+            .ok_or_else(|| TerraneError::NotFound(format!("Layer group '{}' not found", name)))?;
         if let Some(t) = title {
             group.title = t;
         }
@@ -526,7 +526,7 @@ pub async fn update_layer_group(
 pub async fn get_tile(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
     let z: u32 = req
         .match_info()
@@ -652,7 +652,7 @@ pub async fn get_tile(
 
     let mut buffer = std::io::Cursor::new(Vec::new());
     img.write_to(&mut buffer, image::ImageFormat::Png)
-        .map_err(|e| GeoServerError::RenderingError(e.to_string()))?;
+        .map_err(|e| TerraneError::RenderingError(e.to_string()))?;
 
     let tile_data = buffer.into_inner();
 
@@ -683,7 +683,7 @@ pub async fn get_tile(
 pub async fn clear_tile_cache(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
     let mut total = 0u64;
 
@@ -691,7 +691,7 @@ pub async fn clear_tile_cache(
         total += cache
             .clear_layer(layer_name)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("清除缓存失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("清除缓存失败: {}", e)))?;
     }
     // 图层级 Redis 缓存 (按数据源) 也需要清理
     {
@@ -717,7 +717,7 @@ pub async fn clear_tile_cache(
 /// 获取缓存统计 (默认本地缓存 + 所有 Redis 数据源缓存)
 pub async fn get_tile_cache_stats(
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let mut hits = 0u64;
     let mut misses = 0u64;
     let mut total_tiles = 0u64;

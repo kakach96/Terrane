@@ -160,13 +160,13 @@ async fn test_s3_geojson_data_source_features() {
     let app = actix_web::test::init_service(
         actix_web::App::new()
             .app_data(state.clone())
-            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+            .configure(|svc| terrane::routes::configure_routes(svc, "/terrane")),
     )
     .await;
 
     // 创建 S3 数据源
     let create_ds = actix_web::test::TestRequest::post()
-        .uri("/geoserver/data-sources")
+        .uri("/terrane/data-sources")
         .set_json(serde_json::json!({
             "name": "s3_ds",
             "type": "geojson",
@@ -188,7 +188,7 @@ async fn test_s3_geojson_data_source_features() {
 
     // 创建图层
     let create_layer = actix_web::test::TestRequest::post()
-        .uri("/geoserver/layers")
+        .uri("/terrane/layers")
         .set_json(serde_json::json!({
             "name": "s3_points",
             "title": "S3 Points",
@@ -204,7 +204,7 @@ async fn test_s3_geojson_data_source_features() {
 
     // 查询要素 (应读到 S3 上的 GeoJSON, 2 条)
     let req = actix_web::test::TestRequest::get()
-        .uri("/geoserver/layers/s3_points/features")
+        .uri("/terrane/layers/s3_points/features")
         .to_request();
     let resp = actix_web::test::call_service(&app, req).await;
     let status = resp.status();
@@ -243,7 +243,7 @@ async fn test_s3_geotiff_upload() {
     let app = actix_web::test::init_service(
         actix_web::App::new()
             .app_data(state.clone())
-            .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver")),
+            .configure(|svc| terrane::routes::configure_routes(svc, "/terrane")),
     )
     .await;
 
@@ -294,7 +294,7 @@ async fn test_s3_geotiff_upload() {
     body.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());
 
     let uri = format!(
-        "/geoserver/data/upload/geotiff?storage=s3&bucket={}&endpoint={}&region={}&access_key={}&secret_key={}",
+        "/terrane/data/upload/geotiff?storage=s3&bucket={}&endpoint={}&region={}&access_key={}&secret_key={}",
         bucket, ENDPOINT, REGION, ACCESS_KEY, SECRET_KEY
     );
     let req = actix_web::test::TestRequest::post()

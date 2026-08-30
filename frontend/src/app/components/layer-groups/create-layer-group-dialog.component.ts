@@ -1,9 +1,9 @@
 import { Component, Inject } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
-import { Layer } from '../../models/geoserver.models';
+import { Layer } from '../../models/terrane.models';
 
 @Component({
   standalone: false,
@@ -61,13 +61,13 @@ export class CreateLayerGroupDialogComponent {
   constructor(
     public dialogRef: MatDialogRef<CreateLayerGroupDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { layers: Layer[] },
-    private geoserverService: GeoserverService,
+    private terraneService: TerraneService,
     private notificationService: NotificationService,
     private translate: TranslateService,
   ) {}
 
   save(): void {
-    this.geoserverService
+    this.terraneService
       .createLayerGroup({
         name: this.name,
         title: this.title || this.name,

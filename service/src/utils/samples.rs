@@ -8,7 +8,7 @@
 //! Seeding is opt-in via `[samples] enabled` (default: true) and only runs on a
 //! fresh catalog, so existing installs are never modified.
 
-use crate::config::GeoServerConfig;
+use crate::config::TerraneConfig;
 use crate::models::{
     BoundingBox, CoordinateReferenceSystem, DataSource, DataSourceConnection, DataSourceType, Layer,
 };
@@ -125,7 +125,7 @@ fn resolve_samples_source_dir(configured: &Path) -> PathBuf {
 ///    already exist).
 ///
 /// Returns the newly registered layers (empty when seeding is skipped or fails).
-pub async fn seed_samples(config: &GeoServerConfig, store: &Arc<dyn Store>) -> Vec<Layer> {
+pub async fn seed_samples(config: &TerraneConfig, store: &Arc<dyn Store>) -> Vec<Layer> {
     let source_dir = resolve_samples_source_dir(&config.samples.source_dir);
     let target_dir = config.data_dir.join("samples");
 

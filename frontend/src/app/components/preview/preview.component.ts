@@ -3,10 +3,10 @@ import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateService } from '@ngx-translate/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
-import { Layer, LayerGroup, ConnectionTestResult } from '../../models/geoserver.models';
+import { Layer, LayerGroup, ConnectionTestResult } from '../../models/terrane.models';
 import { transformBounds } from '../../utils/coords';
 import { PREVIEW_FORMATS, previewFormatCategory } from '../../utils/preview-formats';
 import { switchMap, tap, map, startWith, catchError, of, combineLatest, forkJoin } from 'rxjs';
@@ -32,7 +32,7 @@ interface PreviewData {
 })
 export class PreviewComponent {
   private route = inject(ActivatedRoute);
-  private geoserverService = inject(GeoserverService);
+  private terraneService = inject(TerraneService);
   private sanitizer = inject(DomSanitizer);
   private translate = inject(TranslateService);
   private notificationService = inject(NotificationService);
@@ -98,8 +98,8 @@ export class PreviewComponent {
     tap(() => this.loading.set(true)),
     switchMap(() =>
       combineLatest([
-        this.geoserverService.getLayers().pipe(catchError(() => of([] as Layer[]))),
-        this.geoserverService.getLayerGroups().pipe(catchError(() => of([] as LayerGroup[]))),
+        this.terraneService.getLayers().pipe(catchError(() => of([] as Layer[]))),
+        this.terraneService.getLayerGroups().pipe(catchError(() => of([] as LayerGroup[]))),
       ]).pipe(map(([layers, groups]) => ({ layers, groups }) as PreviewData)),
     ),
     tap((data) => {
@@ -242,7 +242,7 @@ export class PreviewComponent {
     if (unique.length === 0) return;
     forkJoin(
       unique.map((store) =>
-        this.geoserverService
+        this.terraneService
           .testDataSourceConnection(store)
           .pipe(catchError(() => of({ success: false, message: '' } as ConnectionTestResult))),
       ),
@@ -279,12 +279,12 @@ export class PreviewComponent {
       }
       if (this.previewOptions.format === 'application/vnd.mapbox-vector-tile') {
         // MVT: single tile at zoom 0 (whole layer extent) — open in a new tab.
-        this.previewUrl = this.geoserverService.getMvtTileUrl(layer, 0, 0, 0);
+        this.previewUrl = this.terraneService.getMvtTileUrl(layer, 0, 0, 0);
         this.safePreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewUrl);
         return;
       }
       if (this.previewOptions.format === 'application/openlayers') {
-        this.previewUrl = this.geoserverService.getWmsPreviewUrl(layer, {
+        this.previewUrl = this.terraneService.getWmsPreviewUrl(layer, {
           width: this.previewOptions.width,
           height: this.previewOptions.height,
           crs: this.previewOptions.crs,
@@ -292,7 +292,7 @@ export class PreviewComponent {
           transparent: true,
         });
       } else {
-        this.previewUrl = this.geoserverService.getMapImageUrl(layer, {
+        this.previewUrl = this.terraneService.getMapImageUrl(layer, {
           width: this.previewOptions.width,
           height: this.previewOptions.height,
           crs: this.previewOptions.crs,
@@ -334,7 +334,7 @@ export class PreviewComponent {
   }
 
   loadLayerStats(name: string): void {
-    this.geoserverService.getLayerFeatures(name).subscribe({
+    this.terraneService.getLayerFeatures(name).subscribe({
       next: (fc) => {
         this.featureCount = fc.features.length;
         this.geometryTypes = [

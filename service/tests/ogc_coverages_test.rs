@@ -54,7 +54,7 @@ macro_rules! create_geotiff_ds {
     ($app:expr, $dir:expr) => {{
         let tif_path = create_georef_tiff_fixture(&$dir, "cov_geo.tif");
         let create = test::TestRequest::post()
-            .uri("/geoserver/data-sources")
+            .uri("/terrane/data-sources")
             .set_json(&serde_json::json!({
                 "name": "cov_geo",
                 "type": "geotiff",

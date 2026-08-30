@@ -1,5 +1,5 @@
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{
     CreateDataSourceRequest, DataSourceType, UpdateDataSourceRequest, METADATA_DATA_SOURCE,
 };
@@ -52,7 +52,7 @@ fn store_type_to_ds_type(store_type: &StoreType) -> DataSourceType {
 }
 
 /// 列出所有存储（按工作空间过滤可选）
-pub async fn list_stores(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn list_stores(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         match store.get_all_data_sources().await {
             Ok(ds_list) => {
@@ -75,7 +75,7 @@ pub async fn list_stores(state: web::Data<AppState>) -> Result<HttpResponse, Geo
             },
             Err(e) => {
                 eprintln!("Failed to list stores: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to list stores".to_string(),
                 ))
             },
@@ -90,7 +90,7 @@ pub async fn list_stores(state: web::Data<AppState>) -> Result<HttpResponse, Geo
 pub async fn list_workspace_stores(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let ws_name = req.match_info().get("workspace").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -116,7 +116,7 @@ pub async fn list_workspace_stores(
             },
             Err(e) => {
                 eprintln!("Failed to list stores for workspace '{}': {}", ws_name, e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to list stores".to_string(),
                 ))
             },
@@ -131,7 +131,7 @@ pub async fn list_workspace_stores(
 pub async fn get_store(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -149,19 +149,19 @@ pub async fn get_store(
                 });
                 Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
             },
-            Ok(None) => Err(GeoServerError::NotFound(format!(
+            Ok(None) => Err(TerraneError::NotFound(format!(
                 "Store '{}' not found",
                 name
             ))),
             Err(e) => {
                 eprintln!("Failed to get store: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to get store".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::NotFound(format!(
+        Err(TerraneError::NotFound(format!(
             "Store '{}' not found",
             name
         )))
@@ -172,7 +172,7 @@ pub async fn get_store(
 pub async fn get_workspace_store(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let ws_name = req.match_info().get("workspace").unwrap_or("");
     let name = req.match_info().get("name").unwrap_or("");
 
@@ -180,7 +180,7 @@ pub async fn get_workspace_store(
         match store.get_data_source(name).await {
             Ok(Some(ds)) => {
                 if ds.workspace.as_deref() != Some(ws_name) {
-                    return Err(GeoServerError::NotFound(format!(
+                    return Err(TerraneError::NotFound(format!(
                         "Store '{}' not found in workspace '{}'",
                         name, ws_name
                     )));
@@ -197,19 +197,19 @@ pub async fn get_workspace_store(
                 });
                 Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
             },
-            Ok(None) => Err(GeoServerError::NotFound(format!(
+            Ok(None) => Err(TerraneError::NotFound(format!(
                 "Store '{}' not found",
                 name
             ))),
             Err(e) => {
                 eprintln!("Failed to get store: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to get store".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::NotFound(format!(
+        Err(TerraneError::NotFound(format!(
             "Store '{}' not found",
             name
         )))
@@ -225,16 +225,16 @@ pub async fn get_workspace_store(
 pub async fn create_store(
     body: web::Json<CreateDataSourceRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if body.name == METADATA_DATA_SOURCE {
-        return Err(GeoServerError::Conflict(format!(
+        return Err(TerraneError::Conflict(format!(
             "Store '{}' is a built-in store",
             body.name
         )));
     }
     if let Some(store) = &state.store {
         if let Ok(Some(_)) = store.get_data_source(&body.name).await {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "Store '{}' already exists",
                 body.name
             )));
@@ -263,13 +263,13 @@ pub async fn create_store(
             ),
             Err(e) => {
                 eprintln!("Failed to create store: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to create store".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -281,33 +281,33 @@ pub async fn create_workspace_store(
     req: HttpRequest,
     body: web::Json<CreateDataSourceRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let ws_name = req.match_info().get("workspace").unwrap_or("").to_string();
     if let Some(store) = &state.store {
         // 工作空间必须存在
         match store.get_workspace(&ws_name).await {
             Ok(Some(_)) => {},
             Ok(None) => {
-                return Err(GeoServerError::NotFound(format!(
+                return Err(TerraneError::NotFound(format!(
                     "Workspace '{}' not found",
                     ws_name
                 )))
             },
             Err(e) => {
                 eprintln!("Failed to get workspace: {}", e);
-                return Err(GeoServerError::InternalError(
+                return Err(TerraneError::InternalError(
                     "Failed to get workspace".to_string(),
                 ));
             },
         }
         if body.name == METADATA_DATA_SOURCE {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "Store '{}' is a built-in store",
                 body.name
             )));
         }
         if let Ok(Some(_)) = store.get_data_source(&body.name).await {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "Store '{}' already exists",
                 body.name
             )));
@@ -336,13 +336,13 @@ pub async fn create_workspace_store(
             ),
             Err(e) => {
                 eprintln!("Failed to create store in workspace '{}': {}", ws_name, e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to create store".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -353,10 +353,10 @@ pub async fn update_store(
     req: HttpRequest,
     body: web::Json<UpdateDataSourceRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
     if name == METADATA_DATA_SOURCE {
-        return Err(GeoServerError::BadRequest(format!(
+        return Err(TerraneError::BadRequest(format!(
             "Store '{}' is a built-in store and cannot be modified",
             name
         )));
@@ -379,13 +379,13 @@ pub async fn update_store(
             ),
             Err(e) => {
                 eprintln!("Failed to update store: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to update store".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -395,10 +395,10 @@ pub async fn update_store(
 pub async fn delete_store(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
     if name == METADATA_DATA_SOURCE {
-        return Err(GeoServerError::BadRequest(format!(
+        return Err(TerraneError::BadRequest(format!(
             "Store '{}' is a built-in store and cannot be deleted",
             name
         )));
@@ -412,13 +412,13 @@ pub async fn delete_store(
             ),
             Err(e) => {
                 eprintln!("Failed to delete store: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to delete store".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }

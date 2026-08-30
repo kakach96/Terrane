@@ -82,58 +82,58 @@ docker compose -f build/docker-compose.yml up -d                        # dev de
 docker compose -f build/docker-compose.yml --profile terrane up -d      # dev deps + terrane app
 ```
 
-> Default admin account: `admin` / `geoserver`.
+> Default admin account: `admin` / `terrane`.
 
 ## 4. Environment Variables
 
-`GEOSERVER__<SECTION>__<FIELD>` (double underscore). Precedence:
+`TERRANE__<SECTION>__<FIELD>` (double underscore). Precedence:
 **CLI flags > env vars > service/terrane.toml > built-in defaults**.
 
 | Variable                                  | Maps to                                      | Default                    |
 |-------------------------------------------|----------------------------------------------|----------------------------|
 | `RUST_LOG`                                | log level (overrides `[logging].level`)      | `info`                     |
-| `GEOSERVER__DATA_DIR`                     | `data_dir`                                   | `./data`                   |
-| `GEOSERVER__SERVER__HOST`                 | `[server] host`                              | `127.0.0.1`                |
-| `GEOSERVER__SERVER__PORT`                 | `[server] port`                              | `8080`                     |
-| `GEOSERVER__SERVER__API_CONTEXT`          | `[server] api_context`                       | `/geoserver`               |
-| `GEOSERVER__SERVER__STATIC_DIR`           | `[server] static_dir`                        | `./static`                 |
-| `GEOSERVER__SERVER__CONNECT_TIMEOUT_SECS` | `[server] connect_timeout_secs`              | `10`                       |
-| `GEOSERVER__SERVER__SHUTDOWN_TIMEOUT_SECS`| `[server] shutdown_timeout_secs`             | `30`                       |
-| `GEOSERVER__METADATA__KIND`               | `[metadata] kind` (`sqlite`\|`postgres`)     | `sqlite`                   |
-| `GEOSERVER__METADATA__SQLITE_PATH`        | `[metadata] sqlite_path`                     | `geoserver.sqlite`         |
-| `GEOSERVER__METADATA__POSTGRES__HOST`     | `[metadata.postgres] host`                   | `127.0.0.1`                |
-| `GEOSERVER__METADATA__POSTGRES__PORT`     | `[metadata.postgres] port`                   | `5432`                     |
-| `GEOSERVER__METADATA__POSTGRES__INSTANCE` | `[metadata.postgres] instance`               | `geoserver`                |
-| `GEOSERVER__METADATA__POSTGRES__SCHEMA`   | `[metadata.postgres] schema`                 | `public`                   |
-| `GEOSERVER__METADATA__POSTGRES__USER`     | `[metadata.postgres] user`                   | `postgres`                 |
-| `GEOSERVER__METADATA__POSTGRES__PASSWORD` | `[metadata.postgres] password`               | `` (empty)                 |
-| `GEOSERVER__METADATA__POSTGRES__POOL_SIZE`| `[metadata.postgres] pool_size`              | `10`                       |
-| `GEOSERVER__VECTOR__KIND`                 | `[vector] kind` (`local`\|`metadata`\|`postgres`) | `local`             |
-| `GEOSERVER__VECTOR__DIR`                  | `[vector] dir`                               | `<data_dir>/business`      |
-| `GEOSERVER__VECTOR__POSTGRES__*`          | `[vector.postgres] *`                        | (mirrors metadata.postgres)|
-| `GEOSERVER__RASTER__KIND`                 | `[raster] kind` (`local`)                    | `local`                    |
-| `GEOSERVER__RASTER__DIR`                  | `[raster] dir`                               | `<data_dir>/rasters`       |
-| `GEOSERVER__SECURITY__JWT_SECRET`         | `[security] jwt_secret`                      | `terrane-jwt-secret-2026`|
-| `GEOSERVER__SECURITY__GEOFENCE_ENABLED`   | `[security] geofence_enabled`                | `false`                 |
-| `GEOSERVER__SECURITY__LDAP__ENABLED`      | `[security.ldap] enabled`                    | `false`                 |
-| `GEOSERVER__SECURITY__LDAP__URL`          | `[security.ldap] url`                        | ``                      |
-| `GEOSERVER__SECURITY__LDAP__BASE_DN`      | `[security.ldap] base_dn`                    | ``                      |
-| `GEOSERVER__SECURITY__LDAP__USER_FILTER`  | `[security.ldap] user_filter`                | `(uid={username})`      |
-| `GEOSERVER__SECURITY__LDAP__ADMIN_GROUP`  | `[security.ldap] admin_group`                | ``                      |
-| `GEOSERVER__SECURITY__LDAP__DEFAULT_ROLE` | `[security.ldap] default_role`               | `user`                  |
-| `GEOSERVER__LOGGING__LEVEL`               | `[logging] level`                            | `info`                     |
-| `GEOSERVER__LOGGING__FORMAT`              | `[logging] format` (`text`\|`json`)          | `text`                     |
-| `GEOSERVER__SERVER__REQUEST_TIMEOUT_SECS` | `[server] request_timeout_secs`              | `60`                       |
-| `GEOSERVER__SERVER__RATE_LIMIT_MAX_REQUESTS` | `[server] rate_limit_max_requests`        | `0` (disabled)             |
-| `GEOSERVER__SERVER__CASCADED_MAX_RETRIES` | `[server] cascaded_max_retries`              | `2`                        |
-| `GEOSERVER__SERVER__CASCADED_CIRCUIT_THRESHOLD` | `[server] cascaded_circuit_threshold`   | `5`                        |
-| `GEOSERVER__SERVER__CATALOG_REFRESH_SECS` | `[server] catalog_refresh_secs`              | `0` (disabled)             |
-| `GEOSERVER__CORS__ENABLED`                | `[cors] enabled`                             | `true`                     |
-| `GEOSERVER__CORS__ALLOWED_ORIGINS`        | `[cors] allowed_origins`                     | `["*"]`                    |
-| `GEOSERVER__CORS__ALLOWED_METHODS`        | `[cors] allowed_methods`                     | GET/POST/PUT/DELETE/OPTIONS/PATCH |
-| `GEOSERVER__CORS__ALLOWED_HEADERS`        | `[cors] allowed_headers`                     | `["*"]`                    |
-| `GEOSERVER__CORS__ALLOW_CREDENTIALS`      | `[cors] allow_credentials`                   | `true`                     |
-| `GEOSERVER__CORS__MAX_AGE`                | `[cors] max_age`                             | `3600`                     |
+| `TERRANE__DATA_DIR`                     | `data_dir`                                   | `./data`                   |
+| `TERRANE__SERVER__HOST`                 | `[server] host`                              | `127.0.0.1`                |
+| `TERRANE__SERVER__PORT`                 | `[server] port`                              | `8080`                     |
+| `TERRANE__SERVER__API_CONTEXT`          | `[server] api_context`                       | `/terrane`               |
+| `TERRANE__SERVER__STATIC_DIR`           | `[server] static_dir`                        | `./static`                 |
+| `TERRANE__SERVER__CONNECT_TIMEOUT_SECS` | `[server] connect_timeout_secs`              | `10`                       |
+| `TERRANE__SERVER__SHUTDOWN_TIMEOUT_SECS`| `[server] shutdown_timeout_secs`             | `30`                       |
+| `TERRANE__METADATA__KIND`               | `[metadata] kind` (`sqlite`\|`postgres`)     | `sqlite`                   |
+| `TERRANE__METADATA__SQLITE_PATH`        | `[metadata] sqlite_path`                     | `terrane.sqlite`         |
+| `TERRANE__METADATA__POSTGRES__HOST`     | `[metadata.postgres] host`                   | `127.0.0.1`                |
+| `TERRANE__METADATA__POSTGRES__PORT`     | `[metadata.postgres] port`                   | `5432`                     |
+| `TERRANE__METADATA__POSTGRES__INSTANCE` | `[metadata.postgres] instance`               | `terrane`                |
+| `TERRANE__METADATA__POSTGRES__SCHEMA`   | `[metadata.postgres] schema`                 | `public`                   |
+| `TERRANE__METADATA__POSTGRES__USER`     | `[metadata.postgres] user`                   | `postgres`                 |
+| `TERRANE__METADATA__POSTGRES__PASSWORD` | `[metadata.postgres] password`               | `` (empty)                 |
+| `TERRANE__METADATA__POSTGRES__POOL_SIZE`| `[metadata.postgres] pool_size`              | `10`                       |
+| `TERRANE__VECTOR__KIND`                 | `[vector] kind` (`local`\|`metadata`\|`postgres`) | `local`             |
+| `TERRANE__VECTOR__DIR`                  | `[vector] dir`                               | `<data_dir>/business`      |
+| `TERRANE__VECTOR__POSTGRES__*`          | `[vector.postgres] *`                        | (mirrors metadata.postgres)|
+| `TERRANE__RASTER__KIND`                 | `[raster] kind` (`local`)                    | `local`                    |
+| `TERRANE__RASTER__DIR`                  | `[raster] dir`                               | `<data_dir>/rasters`       |
+| `TERRANE__SECURITY__JWT_SECRET`         | `[security] jwt_secret`                      | `terrane-jwt-secret-2026`|
+| `TERRANE__SECURITY__GEOFENCE_ENABLED`   | `[security] geofence_enabled`                | `false`                 |
+| `TERRANE__SECURITY__LDAP__ENABLED`      | `[security.ldap] enabled`                    | `false`                 |
+| `TERRANE__SECURITY__LDAP__URL`          | `[security.ldap] url`                        | ``                      |
+| `TERRANE__SECURITY__LDAP__BASE_DN`      | `[security.ldap] base_dn`                    | ``                      |
+| `TERRANE__SECURITY__LDAP__USER_FILTER`  | `[security.ldap] user_filter`                | `(uid={username})`      |
+| `TERRANE__SECURITY__LDAP__ADMIN_GROUP`  | `[security.ldap] admin_group`                | ``                      |
+| `TERRANE__SECURITY__LDAP__DEFAULT_ROLE` | `[security.ldap] default_role`               | `user`                  |
+| `TERRANE__LOGGING__LEVEL`               | `[logging] level`                            | `info`                     |
+| `TERRANE__LOGGING__FORMAT`              | `[logging] format` (`text`\|`json`)          | `text`                     |
+| `TERRANE__SERVER__REQUEST_TIMEOUT_SECS` | `[server] request_timeout_secs`              | `60`                       |
+| `TERRANE__SERVER__RATE_LIMIT_MAX_REQUESTS` | `[server] rate_limit_max_requests`        | `0` (disabled)             |
+| `TERRANE__SERVER__CASCADED_MAX_RETRIES` | `[server] cascaded_max_retries`              | `2`                        |
+| `TERRANE__SERVER__CASCADED_CIRCUIT_THRESHOLD` | `[server] cascaded_circuit_threshold`   | `5`                        |
+| `TERRANE__SERVER__CATALOG_REFRESH_SECS` | `[server] catalog_refresh_secs`              | `0` (disabled)             |
+| `TERRANE__CORS__ENABLED`                | `[cors] enabled`                             | `true`                     |
+| `TERRANE__CORS__ALLOWED_ORIGINS`        | `[cors] allowed_origins`                     | `["*"]`                    |
+| `TERRANE__CORS__ALLOWED_METHODS`        | `[cors] allowed_methods`                     | GET/POST/PUT/DELETE/OPTIONS/PATCH |
+| `TERRANE__CORS__ALLOWED_HEADERS`        | `[cors] allowed_headers`                     | `["*"]`                    |
+| `TERRANE__CORS__ALLOW_CREDENTIALS`      | `[cors] allow_credentials`                   | `true`                     |
+| `TERRANE__CORS__MAX_AGE`                | `[cors] max_age`                             | `3600`                     |
 
 ### CLI flags
 
@@ -146,8 +146,8 @@ docker compose -f build/docker-compose.yml --profile terrane up -d      # dev de
 ## 5. Docker / Compose
 
 - Multi-stage `Dockerfile`: node build → rust release build → debian-slim runtime (non-root).
-- The image sets `GEOSERVER__SERVER__HOST=0.0.0.0`; data persists on the `geoserver-data` volume.
-- `GEOSERVER_JWT_SECRET` must be injected (via `.env` or env) in production — all replicas must share it.
+- The image sets `TERRANE__SERVER__HOST=0.0.0.0`; data persists on the `terrane-data` volume.
+- `TERRANE_JWT_SECRET` must be injected (via `.env` or env) in production — all replicas must share it.
 - Built-in `HEALTHCHECK` hits `/health/ready`; graceful shutdown drains in-flight requests (`shutdown_timeout_secs`).
 
 ```bash
@@ -187,7 +187,7 @@ chore: bump actix-web to 4.x
 
 - Run `cargo test` for the full suite: **152 lib unit tests + 130 integration tests**
   (+ **5 `#[ignore]` live tests** that require running services, run with
-  `cargo test -- --ignored`: 3× PostGIS via `GEOSERVER_TEST_PG_*` env, 2×
+  `cargo test -- --ignored`: 3× PostGIS via `TERRANE_TEST_PG_*` env, 2×
   CascadedWms against the reference GeoServer at :18080).
 - Integration tests are split by protocol into separate crates under `service/tests/`
   (`wms_test.rs`, `wfs_test.rs`, `wcs_test.rs`, `wmts_test.rs`, `tms_test.rs`,

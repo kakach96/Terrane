@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn test_build_capabilities_structure() {
         let layers = vec![sample_layer("world")];
-        let doc = build_capabilities("http://127.0.0.1:8080/geoserver", &layers);
+        let doc = build_capabilities("http://127.0.0.1:8080/terrane", &layers);
         assert!(doc.contains("<WMT_MS_Capabilities version=\"1.1.1\">"));
         assert!(doc.contains("<Name>OGC:WMS</Name>"));
         assert!(doc.contains("Web Map Service - GeoWebCache"));

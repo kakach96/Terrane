@@ -52,7 +52,7 @@ fn is_raster_type(ds_type: &DataSourceType) -> bool {
 async fn materialize_raster(
     conn: &crate::models::DataSourceConnection,
     ds_type: &DataSourceType,
-) -> Result<Option<crate::store::file_resolver::MaterializedFile>, crate::error::GeoServerError> {
+) -> Result<Option<crate::store::file_resolver::MaterializedFile>, crate::error::TerraneError> {
     match ds_type {
         DataSourceType::WorldImage | DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => {
             crate::store::materialize_dir(conn).await

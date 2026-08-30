@@ -2,7 +2,7 @@
 //!
 //! 支持从 Shapefile、GeoTIFF、PostGIS 数据源自动计算边界
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::{Bounds, CoordinateReferenceSystem, DataSource, DataSourceType};
 use tracing::info;
 
@@ -23,7 +23,7 @@ pub async fn compute_layer_bounds(
     ds: &DataSource,
     native_name: Option<&str>,
     pg_pool: Option<&deadpool_postgres::Pool>,
-) -> Result<Option<ComputedBounds>, GeoServerError> {
+) -> Result<Option<ComputedBounds>, TerraneError> {
     match ds.data_source_type {
         DataSourceType::Shapefile => compute_shapefile_bounds(ds),
         DataSourceType::Geotiff => compute_geotiff_bounds(ds),
@@ -49,12 +49,12 @@ pub async fn compute_layer_bounds(
 }
 
 /// 从 ImagePyramid 目录计算边界 (聚合所有层级 granule 边界)
-fn compute_pyramid_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+fn compute_pyramid_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, TerraneError> {
     let file_path = ds
         .connection
         .as_ref()
         .and_then(|c| c.file_path.as_ref())
-        .ok_or_else(|| GeoServerError::BadRequest("ImagePyramid 数据源缺少目录路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("ImagePyramid 数据源缺少目录路径".to_string()))?;
 
     info!("[Bounds] 从 ImagePyramid 计算边界: {}", file_path);
 
@@ -82,12 +82,12 @@ fn compute_pyramid_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, Geo
 }
 
 /// 从 ImageMosaic 目录计算边界 (聚合所有 granule 边界)
-fn compute_mosaic_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+fn compute_mosaic_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, TerraneError> {
     let file_path = ds
         .connection
         .as_ref()
         .and_then(|c| c.file_path.as_ref())
-        .ok_or_else(|| GeoServerError::BadRequest("ImageMosaic 数据源缺少目录路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("ImageMosaic 数据源缺少目录路径".to_string()))?;
 
     info!("[Bounds] 从 ImageMosaic 计算边界: {}", file_path);
 
@@ -115,15 +115,15 @@ fn compute_mosaic_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoS
 }
 
 /// 从 GeoJSON 文件计算边界 (遍历要素坐标)
-fn compute_geojson_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+fn compute_geojson_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, TerraneError> {
     let conn = ds
         .connection
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("GeoJSON 数据源缺少连接信息".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("GeoJSON 数据源缺少连接信息".to_string()))?;
     let file_path = conn
         .file_path
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("GeoJSON 数据源缺少文件路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("GeoJSON 数据源缺少文件路径".to_string()))?;
 
     info!("[Bounds] 从 GeoJSON 计算边界: {}", file_path);
 
@@ -195,12 +195,12 @@ fn collect_geojson_coords(arr: Option<&serde_json::Value>, visit: &mut impl FnMu
 }
 
 /// 从 Shapefile 计算边界
-fn compute_shapefile_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+fn compute_shapefile_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, TerraneError> {
     let file_path = ds
         .connection
         .as_ref()
         .and_then(|c| c.file_path.as_ref())
-        .ok_or_else(|| GeoServerError::BadRequest("Shapefile 数据源缺少文件路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("Shapefile 数据源缺少文件路径".to_string()))?;
 
     info!("[Bounds] 从 Shapefile 计算边界: {}", file_path);
 
@@ -224,12 +224,12 @@ fn compute_shapefile_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, G
 }
 
 /// 从 GeoTIFF 计算边界
-fn compute_geotiff_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+fn compute_geotiff_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, TerraneError> {
     let file_path = ds
         .connection
         .as_ref()
         .and_then(|c| c.file_path.as_ref())
-        .ok_or_else(|| GeoServerError::BadRequest("GeoTIFF 数据源缺少文件路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("GeoTIFF 数据源缺少文件路径".to_string()))?;
 
     info!("[Bounds] 从 GeoTIFF 计算边界: {}", file_path);
 
@@ -259,7 +259,7 @@ async fn compute_postgis_bounds(
     ds: &DataSource,
     native_name: &str,
     pool: &deadpool_postgres::Pool,
-) -> Result<Option<ComputedBounds>, GeoServerError> {
+) -> Result<Option<ComputedBounds>, TerraneError> {
     let conn = match ds.connection.as_ref() {
         Some(c) => c,
         None => return Ok(None),
@@ -346,12 +346,12 @@ fn parse_postgis_extent(ext: &str) -> Option<Bounds> {
 }
 
 /// 从 GeoPackage 计算边界
-fn compute_geopackage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+fn compute_geopackage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, TerraneError> {
     let file_path = ds
         .connection
         .as_ref()
         .and_then(|c| c.file_path.as_ref())
-        .ok_or_else(|| GeoServerError::BadRequest("GeoPackage 数据源缺少文件路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("GeoPackage 数据源缺少文件路径".to_string()))?;
 
     info!("[Bounds] 从 GeoPackage 计算边界: {}", file_path);
 
@@ -393,12 +393,12 @@ fn compute_geopackage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, 
 }
 
 /// 从 WorldImage 计算边界
-fn compute_worldimage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+fn compute_worldimage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, TerraneError> {
     let file_path = ds
         .connection
         .as_ref()
         .and_then(|c| c.file_path.as_ref())
-        .ok_or_else(|| GeoServerError::BadRequest("WorldImage 数据源缺少文件路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("WorldImage 数据源缺少文件路径".to_string()))?;
 
     info!("[Bounds] 从 WorldImage 计算边界: {}", file_path);
 
@@ -419,12 +419,12 @@ fn compute_worldimage_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, 
 }
 
 /// 从 ArcGrid 计算边界
-fn compute_arcgrid_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, GeoServerError> {
+fn compute_arcgrid_bounds(ds: &DataSource) -> Result<Option<ComputedBounds>, TerraneError> {
     let file_path = ds
         .connection
         .as_ref()
         .and_then(|c| c.file_path.as_ref())
-        .ok_or_else(|| GeoServerError::BadRequest("ArcGrid 数据源缺少文件路径".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("ArcGrid 数据源缺少文件路径".to_string()))?;
 
     info!("[Bounds] 从 ArcGrid 计算边界: {}", file_path);
 

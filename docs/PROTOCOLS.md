@@ -20,7 +20,7 @@ and *which remain to be adapted*.
 | **WCS**             | 1.0.0 / 1.1.x / 2.0.1          | ✅ Core | GetCapabilities / DescribeCoverage / GetCoverage; WCS 2.0 subsetting |
 | **WMTS**            | 1.0.0                          | ✅ Core | GetCapabilities / GetTile / GetFeatureInfo; KVP + RESTful tile template |
 | **MVT (vector tiles)** | —                          | ✅      | Pure-Rust protobuf encoder; `/tiles/{layer}/{z}/{x}/{y}.pbf`, `/mvt/{layer}/{z}/{x}/{y}` |
-| **REST API**        | —                              | ✅      | Full CRUD under `/geoserver` (see §6) |
+| **REST API**        | —                              | ✅      | Full CRUD under `/terrane` (see §6) |
 | **TMS**             | 1.0.0                          | ✅      | GetCapabilities / TileMap / GetTile under `/gwc/service/tms` (global-geodetic + global-mercator, PNG/JPEG) |
 | **WMS-C**           | 1.1.1                          | ✅      | GetCapabilities / GetMap with `TILED=true` under `/gwc/service/wms` |
 | **Tile cache (GWC-like)** | —                         | ⚠️      | Basic `/tiles` + local disk cache; no seeding / metastore / full GWC |
@@ -76,6 +76,14 @@ Endpoint `/wfs` (`service/src/services/wfs.rs`, `service/src/handlers/wfs_handle
 | Transaction         | ⏳     | WFS-T writes not implemented yet (currently 501); planned for a later milestone |
 
 **Gaps vs reference**: deeper GML 3.2 schema fidelity.
+
+> **Note (naming migration)**: XML namespace URIs such as
+> `http://geoserver.org/feature` (unconfigured feature namespaces) and
+> `http://geoserver.org/{workspace}` (default workspace namespace URIs) are
+> **intentionally kept** — they mirror the reference GeoServer's wire format so
+> existing clients keep working. They are not part of the `geoserver` →
+> `terrane` product rename (v1.2) and should not be "fixed" without a
+> compatibility assessment.
 
 ## 4. WCS — Web Coverage Service
 
@@ -149,7 +157,7 @@ math (`service/src/utils/tile_grid.rs`):
 
 ## 6. REST API ✅
 
-All endpoints under `/geoserver` (configurable `api_context`). See
+All endpoints under `/terrane` (configurable `api_context`). See
 [ARCHITECTURE.md §6.2](ARCHITECTURE.md#62-rest-endpoint-groups) for the full table.
 
 - **Layers / workspaces / namespaces / data-sources / stores / styles / layer-groups /
@@ -291,7 +299,7 @@ and basic payload structure. It still does **not** validate full protocol
 semantics (XML schema conformance of capabilities, GML 3.2 fidelity, etc.).
 The test config uses in-memory SQLite, disables the tile cache, and reuses the
 metadata store for vectors, so tests write nothing to `service/data`. The live tests
-(`#[ignore]`) talk to a local PostGIS (env `GEOSERVER_TEST_PG_*`, defaults
+(`#[ignore]`) talk to a local PostGIS (env `TERRANE_TEST_PG_*`, defaults
 matching the dev compose `build/docker-compose.yml`: 127.0.0.1:5433
 terrane/`terrane`) and the reference GeoServer at :18080.
 

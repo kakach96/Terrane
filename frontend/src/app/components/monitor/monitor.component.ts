@@ -10,14 +10,14 @@ import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { MatTabChangeEvent } from '@angular/material/tabs';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { LanguageService } from '../../services/language.service';
 import {
   MonitorStats,
   RequestRecord,
   AuditLogEntry,
   TileCacheStats,
-} from '../../models/geoserver.models';
+} from '../../models/terrane.models';
 import { switchMap, map, startWith, catchError, of, combineLatest, interval } from 'rxjs';
 
 interface MonitorData {
@@ -35,7 +35,7 @@ interface MonitorData {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MonitorComponent {
-  private geoserver = inject(GeoserverService);
+  private terrane = inject(TerraneService);
   private translate = inject(TranslateService);
   private languageService = inject(LanguageService);
   private destroyRef = inject(DestroyRef);
@@ -49,15 +49,15 @@ export class MonitorComponent {
     startWith(0),
     switchMap(() =>
       combineLatest([
-        this.geoserver.getMonitorStats().pipe(
+        this.terrane.getMonitorStats().pipe(
           catchError((e) => {
             this.error = this.translate.instant('monitor.loadFail', { message: e.message });
             return of(null as MonitorStats | null);
           }),
         ),
-        this.geoserver.getRecentRequests(50).pipe(catchError(() => of([] as RequestRecord[]))),
-        this.geoserver.getAuditLogs(50, 0).pipe(catchError(() => of([] as AuditLogEntry[]))),
-        this.geoserver
+        this.terrane.getRecentRequests(50).pipe(catchError(() => of([] as RequestRecord[]))),
+        this.terrane.getAuditLogs(50, 0).pipe(catchError(() => of([] as AuditLogEntry[]))),
+        this.terrane
           .getTileCacheStats()
           .pipe(catchError(() => of(null as TileCacheStats | null))),
       ]).pipe(
@@ -146,7 +146,7 @@ export class MonitorComponent {
 
   resetStats(): void {
     if (confirm(this.translate.instant('monitor.confirmReset'))) {
-      this.geoserver.resetMonitorStats().subscribe({
+      this.terrane.resetMonitorStats().subscribe({
         next: () => this.refreshTrigger.update((v) => v + 1),
         error: (e) =>
           (this.error = this.translate.instant('monitor.resetFail', { message: e.message })),

@@ -22,7 +22,7 @@ async fn test_tms_get_capabilities_restful() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/tms/1.0.0")
+        .uri("/terrane/gwc/service/tms/1.0.0")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -57,7 +57,7 @@ async fn test_tms_get_capabilities_kvp() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/tms?REQUEST=GetCapabilities")
+        .uri("/terrane/gwc/service/tms?REQUEST=GetCapabilities")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -76,7 +76,7 @@ async fn test_tms_tile_map_document() {
     let app = build_test_app!();
 
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/tms/1.0.0/world@EPSG%3A4326@png")
+        .uri("/terrane/gwc/service/tms/1.0.0/world@EPSG%3A4326@png")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -109,7 +109,7 @@ async fn test_tms_get_tile_geodetic_png() {
 
     // z=0, x=0, y_tms=0 (bottom row) — global-geodetic 网格 2x1.
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/tms/1.0.0/world@EPSG:4326@png/0/0/0.png")
+        .uri("/terrane/gwc/service/tms/1.0.0/world@EPSG:4326@png/0/0/0.png")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -128,7 +128,7 @@ async fn test_tms_get_tile_mercator() {
 
     // EPSG:3857 global-mercator, z=0 (1x1).
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/tms/1.0.0/world@EPSG:3857@png/0/0/0.png")
+        .uri("/terrane/gwc/service/tms/1.0.0/world@EPSG:3857@png/0/0/0.png")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -145,7 +145,7 @@ async fn test_tms_get_tile_jpeg() {
 
     // JPEG 扩展 → image/jpeg 输出.
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/tms/1.0.0/world@EPSG:4326@jpeg/0/0/0.jpeg")
+        .uri("/terrane/gwc/service/tms/1.0.0/world@EPSG:4326@jpeg/0/0/0.jpeg")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(
@@ -164,7 +164,7 @@ async fn test_tms_kvp_get_tile() {
 
     // KVP GetTile: TILEROW 是 TMS 自底向上的行号.
     let req = test::TestRequest::get()
-        .uri("/geoserver/gwc/service/tms?SERVICE=TMS&REQUEST=GetTile&VERSION=1.0.0&LAYER=world&FORMAT=image/png&TILEMATRIXSET=EPSG:4326&TILEMATRIX=0&TILEROW=0&TILECOL=0")
+        .uri("/terrane/gwc/service/tms?SERVICE=TMS&REQUEST=GetTile&VERSION=1.0.0&LAYER=world&FORMAT=image/png&TILEMATRIXSET=EPSG:4326&TILEMATRIX=0&TILEROW=0&TILECOL=0")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(

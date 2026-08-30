@@ -142,7 +142,7 @@ Usage:
 Configuration:
   Edit terrane.toml to configure server settings.
 
-API: http://localhost:8080/geoserver
+API: http://localhost:8080/terrane
 Web: http://localhost:8080
 EOF
     

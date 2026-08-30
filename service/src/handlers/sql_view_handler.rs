@@ -4,7 +4,7 @@
 //! 支持 CRUD 操作以及查询预览。
 
 use super::rest_handler::ApiResponse;
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::sql_view::{SqlView, SqlViewParameter};
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -47,7 +47,7 @@ pub struct PreviewSqlViewRequest {
 // Handlers
 // ---------------------------------------------------------------------------
 
-pub async fn list_sql_views(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn list_sql_views(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         match store.get_all_sql_views().await {
             Ok(views) => {
@@ -73,7 +73,7 @@ pub async fn list_sql_views(state: web::Data<AppState>) -> Result<HttpResponse, 
             },
             Err(e) => {
                 eprintln!("Failed to list SQL views: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to list SQL views".to_string(),
                 ))
             },
@@ -87,7 +87,7 @@ pub async fn list_sql_views(state: web::Data<AppState>) -> Result<HttpResponse, 
 pub async fn get_sql_view(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -108,19 +108,19 @@ pub async fn get_sql_view(
                 });
                 Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
             },
-            Ok(None) => Err(GeoServerError::NotFound(format!(
+            Ok(None) => Err(TerraneError::NotFound(format!(
                 "SQL view '{}' not found",
                 name
             ))),
             Err(e) => {
                 eprintln!("Failed to get SQL view: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to get SQL view".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::NotFound(format!(
+        Err(TerraneError::NotFound(format!(
             "SQL view '{}' not found",
             name
         )))
@@ -130,11 +130,11 @@ pub async fn get_sql_view(
 pub async fn create_sql_view(
     body: web::Json<CreateSqlViewRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if let Some(store) = &state.store {
         // 检查是否已存在
         if let Ok(Some(_)) = store.get_sql_view(&body.name).await {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "SQL view '{}' already exists",
                 body.name
             )));
@@ -191,13 +191,13 @@ pub async fn create_sql_view(
             },
             Err(e) => {
                 eprintln!("Failed to create SQL view: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to create SQL view".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -207,7 +207,7 @@ pub async fn update_sql_view(
     req: HttpRequest,
     body: web::Json<UpdateSqlViewRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -230,13 +230,13 @@ pub async fn update_sql_view(
             ),
             Err(e) => {
                 eprintln!("Failed to update SQL view: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to update SQL view".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -245,7 +245,7 @@ pub async fn update_sql_view(
 pub async fn delete_sql_view(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let name = req.match_info().get("name").unwrap_or("");
 
     if let Some(store) = &state.store {
@@ -261,13 +261,13 @@ pub async fn delete_sql_view(
             },
             Err(e) => {
                 eprintln!("Failed to delete SQL view: {}", e);
-                Err(GeoServerError::InternalError(
+                Err(TerraneError::InternalError(
                     "Failed to delete SQL view".to_string(),
                 ))
             },
         }
     } else {
-        Err(GeoServerError::InternalError(
+        Err(TerraneError::InternalError(
             "Database not available".to_string(),
         ))
     }
@@ -277,25 +277,24 @@ pub async fn delete_sql_view(
 pub async fn preview_sql_view(
     body: web::Json<PreviewSqlViewRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let data_source = {
         let store_lock = &state.store;
         if let Some(ref store) = store_lock {
             store
                 .get_data_source(&body.store)
                 .await
-                .map_err(|e| GeoServerError::InternalError(format!("DB error: {}", e)))?
+                .map_err(|e| TerraneError::InternalError(format!("DB error: {}", e)))?
         } else {
             None
         }
     };
 
-    let ds = data_source.ok_or_else(|| {
-        GeoServerError::NotFound(format!("Data source '{}' not found", body.store))
-    })?;
+    let ds = data_source
+        .ok_or_else(|| TerraneError::NotFound(format!("Data source '{}' not found", body.store)))?;
 
     if ds.data_source_type != crate::models::DataSourceType::Postgis {
-        return Err(GeoServerError::BadRequest(
+        return Err(TerraneError::BadRequest(
             "SQL View 仅支持 PostGIS 数据源".to_string(),
         ));
     }
@@ -303,7 +302,7 @@ pub async fn preview_sql_view(
     let conn = ds
         .connection
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("数据源缺少连接配置".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("数据源缺少连接配置".to_string()))?;
 
     // 替换参数
     let mut sql = body.sql.clone();
@@ -318,7 +317,7 @@ pub async fn preview_sql_view(
     let client = pool
         .get()
         .await
-        .map_err(|e| GeoServerError::ServiceError(format!("数据库连接失败: {}", e)))?;
+        .map_err(|e| TerraneError::ServiceError(format!("数据库连接失败: {}", e)))?;
 
     // 限制结果行数，仅返回预览
     let limited_sql = format!("SELECT * FROM ({}) AS _sv LIMIT 100", sql);
@@ -326,7 +325,7 @@ pub async fn preview_sql_view(
     let rows = client
         .query(&limited_sql, &[])
         .await
-        .map_err(|e| GeoServerError::ServiceError(format!("SQL 执行失败: {}", e)))?;
+        .map_err(|e| TerraneError::ServiceError(format!("SQL 执行失败: {}", e)))?;
 
     // 解析列信息（从第一行获取）
     let mut columns_info: Vec<serde_json::Value> = Vec::new();

@@ -1,8 +1,8 @@
 //! 备份/恢复处理器
 
 use super::rest_handler::ApiResponse;
-use crate::backup::{export_backup, import_backup, GeoServerBackup};
-use crate::error::GeoServerError;
+use crate::backup::{export_backup, import_backup, TerraneBackup};
+use crate::error::TerraneError;
 use crate::handlers::auth_handler::require_auth;
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -12,19 +12,19 @@ use tracing::info;
 pub async fn handle_export(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
 
     let backup = export_backup(&state)
         .await
-        .map_err(GeoServerError::InternalError)?;
+        .map_err(TerraneError::InternalError)?;
 
     info!("[Backup] 导出完成: {} 个实体", backup.workspaces.len());
     Ok(HttpResponse::Ok()
         .content_type("application/json")
         .insert_header((
             "Content-Disposition",
-            "attachment; filename=geoserver-backup.json",
+            "attachment; filename=terrane-backup.json",
         ))
         .json(ApiResponse::success(backup)))
 }
@@ -32,15 +32,15 @@ pub async fn handle_export(
 /// 导入备份
 pub async fn handle_import(
     req: HttpRequest,
-    body: web::Json<GeoServerBackup>,
+    body: web::Json<TerraneBackup>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     require_auth(&req)?;
 
     let backup = body.into_inner();
     let report = import_backup(&state, &backup)
         .await
-        .map_err(GeoServerError::InternalError)?;
+        .map_err(TerraneError::InternalError)?;
 
     info!("[Backup] 导入完成: {}", report.summary());
     Ok(

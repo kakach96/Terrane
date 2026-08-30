@@ -32,12 +32,12 @@
 
 **Current status
 
-- ✅ Configuration supports environment variable overrides (`GEOSERVER__<section>__<key>`, double-underscore separator, see `service/src/config.rs`)
+- ✅ Configuration supports environment variable overrides (`TERRANE__<section>__<key>`, double-underscore separator, see `service/src/config.rs`)
 - ✅ Multi-stage container image: `Dockerfile` + `.dockerignore` + `build/docker-compose.yml` (dev deps: PostGIS + Redis + MinIO; app via `--profile terrane`)
 - ✅ Built-in image `HEALTHCHECK` + split probes: `/health/live` (liveness) & `/health/ready` (readiness)
 - ✅ Prometheus `/metrics` endpoint (requests/errors, tile cache hit rate, PG pool watermarks, system resources)
 - ✅ Graceful shutdown on SIGTERM/SIGINT with `shutdown_timeout_secs` in-flight drain
-- ⚠️ TODO: JWT secret default is hardcoded in `service/src/auth.rs`; use `GEOSERVER__SECURITY__JWT_SECRET` env injection in prod
+- ⚠️ TODO: JWT secret default is hardcoded in `service/src/auth.rs`; use `TERRANE__SECURITY__JWT_SECRET` env injection in prod
 - ✅ Storage: config keeps only `[metadata]` (workspaces / data sources / layers / styles, default SQLite / PostgreSQL); vector/raster file data sources registered per data source (`file_storage_type`: local / s3 / oss); **S3/MinIO uploads** (`/data/upload/geotiff?storage=s3`) share uploaded rasters across replicas; **credentials via env** (`${ENV_VAR}` interpolation, K8s Secrets style, never logged); tile + session cache stay built-in local, see `service/src/config.rs`
 - ⚠️ TODO: in-memory caches (`service/src/state.rs`); multi-replica requires shared storage or migration to PostgreSQL / object storage
 - ⚠️ TODO: tile cache on local disk, needs PVC or object storage
@@ -165,24 +165,24 @@ terrane/
 
 ### REST API
 
-All REST endpoints live under the configurable context path (default `/geoserver`, see `[server] api_context` in `service/terrane.toml`):
+All REST endpoints live under the configurable context path (default `/terrane`, see `[server] api_context` in `service/terrane.toml`):
 
 | Method | Endpoint | Description |
 |------|------|------|
-| GET | `/geoserver/layers` | Get all layers |
-| POST | `/geoserver/layers` | Create a layer |
-| GET | `/geoserver/layers/:name` | Get layer details |
-| PUT | `/geoserver/layers/:name` | Update a layer |
-| DELETE | `/geoserver/layers/:name` | Delete a layer |
-| GET | `/geoserver/layers/:name/preview` | Get layer preview image |
-| GET | `/geoserver/layers/:name/features` | Get layer features (read-only) |
-| GET/POST | `/geoserver/stores`, `/geoserver/stores/:name` (PUT/DELETE) | Store management (data-source view) |
-| GET/POST | `/geoserver/workspaces/:ws/layers` `/datastores` `/coveragestores` | Workspace-dimension listings |
-| GET/PUT | `/geoserver/services/:service/settings` | OGC service settings (WMS/WFS/WCS/…) |
-| GET/POST/DELETE | `/geoserver/resources` | Data-directory resource management |
-| GET/PUT | `/geoserver/layers/:name/feature-type` | Attribute schema (GeoPackage columns) |
-| POST/GET/DELETE | `/geoserver/tiles/seed`, `/tiles/seed/:id`, `/tiles/seed/truncate` | Tile seeding / cancel / truncate |
-| GET | `/geoserver/about/version`, `/geoserver/about/system-status` | System information |
+| GET | `/terrane/layers` | Get all layers |
+| POST | `/terrane/layers` | Create a layer |
+| GET | `/terrane/layers/:name` | Get layer details |
+| PUT | `/terrane/layers/:name` | Update a layer |
+| DELETE | `/terrane/layers/:name` | Delete a layer |
+| GET | `/terrane/layers/:name/preview` | Get layer preview image |
+| GET | `/terrane/layers/:name/features` | Get layer features (read-only) |
+| GET/POST | `/terrane/stores`, `/terrane/stores/:name` (PUT/DELETE) | Store management (data-source view) |
+| GET/POST | `/terrane/workspaces/:ws/layers` `/datastores` `/coveragestores` | Workspace-dimension listings |
+| GET/PUT | `/terrane/services/:service/settings` | OGC service settings (WMS/WFS/WCS/…) |
+| GET/POST/DELETE | `/terrane/resources` | Data-directory resource management |
+| GET/PUT | `/terrane/layers/:name/feature-type` | Attribute schema (GeoPackage columns) |
+| POST/GET/DELETE | `/terrane/tiles/seed`, `/tiles/seed/:id`, `/tiles/seed/truncate` | Tile seeding / cancel / truncate |
+| GET | `/terrane/about/version`, `/terrane/about/system-status` | System information |
 
 ### OGC Services
 
@@ -294,7 +294,7 @@ title = "World"
 srs = "EPSG:4326"
 ```
 
-> **Environment variable overrides**: all configuration options can be overridden via `GEOSERVER__<section>__<key>` (e.g. `GEOSERVER__SERVER__PORT=9090`). In container deployments, use K8s ConfigMap / Secret injection. Data-source credentials may reference env vars (`${DB_PASSWORD}`) and are resolved at connection time — never stored or logged in plaintext.
+> **Environment variable overrides**: all configuration options can be overridden via `TERRANE__<section>__<key>` (e.g. `TERRANE__SERVER__PORT=9090`). In container deployments, use K8s ConfigMap / Secret injection. Data-source credentials may reference env vars (`${DB_PASSWORD}`) and are resolved at connection time — never stored or logged in plaintext.
 
 ## 📚 Documentation
 

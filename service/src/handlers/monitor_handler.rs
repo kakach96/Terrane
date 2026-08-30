@@ -3,7 +3,7 @@
 //! 提供服务器请求统计、性能监控、审计日志查询。
 //! 端点: GET /monitor/stats, GET /monitor/requests, GET /monitor/logs
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::state::{AppState, EndpointStats, RequestRecord};
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Serialize;
@@ -55,7 +55,7 @@ pub struct AuditLogEntry {
 }
 
 /// 获取监控统计
-pub async fn get_monitor_stats(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn get_monitor_stats(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     let uptime = state.start_time.elapsed().as_secs();
     let total_reqs = state.request_count.load(Ordering::Relaxed);
     let total_errs = state.error_count.load(Ordering::Relaxed);
@@ -106,7 +106,7 @@ pub async fn get_monitor_stats(state: web::Data<AppState>) -> Result<HttpRespons
 pub async fn get_recent_requests(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let query = req.query_string();
     let limit: usize = query
         .split('&')
@@ -125,7 +125,7 @@ pub async fn get_recent_requests(
 pub async fn get_audit_logs(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if let Some(ref store) = state.store {
         let query = req.query_string();
         let limit: usize = query
@@ -144,7 +144,7 @@ pub async fn get_audit_logs(
         let logs = store
             .get_audit_logs(limit, offset)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("读取审计日志失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("读取审计日志失败: {}", e)))?;
 
         let entries: Vec<AuditLogEntry> = logs
             .into_iter()
@@ -165,9 +165,7 @@ pub async fn get_audit_logs(
 }
 
 /// 清除监控统计
-pub async fn reset_monitor_stats(
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+pub async fn reset_monitor_stats(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     state.request_count.store(0, Ordering::Relaxed);
     state.error_count.store(0, Ordering::Relaxed);
     state.recent_request_count.store(0, Ordering::Relaxed);
@@ -239,7 +237,7 @@ fn push_metric_labeled(
 ///
 /// 暴露指标: 请求/错误计数与速率、方法/状态码/端点分布、瓦片缓存命中率、
 /// PostgreSQL 连接池水位、系统资源 (CPU/内存)。供 Prometheus 抓取 / K8s HPA。
-pub async fn get_metrics(state: web::Data<AppState>) -> Result<HttpResponse, GeoServerError> {
+pub async fn get_metrics(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
     let mut out = String::with_capacity(4096);
 
     let uptime = state.start_time.elapsed().as_secs();

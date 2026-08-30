@@ -5,7 +5,7 @@
 //! `GET/POST /jobs`, `GET/DELETE /jobs/{jobId}`, `GET /jobs/{jobId}/results`.
 //! Execution reuses the pure-Rust WPS process engine (`services/wps.rs`).
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::services::ogc_processes;
 use crate::services::wps::{self, ResolvedInput};
 use crate::state::AppState;
@@ -54,7 +54,7 @@ fn layer_from_href(href: &str) -> Option<String> {
 /// `query_layer_features`, which falls back to the vector store), a GeoJSON
 /// feature collection (string or object) is parsed inline; numbers / booleans /
 /// strings stay literals.
-async fn resolve_input(state: &AppState, value: &Value) -> Result<ResolvedInput, GeoServerError> {
+async fn resolve_input(state: &AppState, value: &Value) -> Result<ResolvedInput, TerraneError> {
     match value {
         Value::String(s) => {
             if let Some(layer) = s.strip_prefix("layer:") {
@@ -62,13 +62,13 @@ async fn resolve_input(state: &AppState, value: &Value) -> Result<ResolvedInput,
                     crate::handlers::features::query_layer_features(state, layer, None, None, None)
                         .await
                         .map_err(|_| {
-                            GeoServerError::BadRequest(format!("Layer '{}' not found", layer))
+                            TerraneError::BadRequest(format!("Layer '{}' not found", layer))
                         })?;
                 return Ok(ResolvedInput::Features(features));
             }
             if s.trim_start().starts_with('{') {
                 let features =
-                    wps::parse_feature_collection_json(s).map_err(GeoServerError::BadRequest)?;
+                    wps::parse_feature_collection_json(s).map_err(TerraneError::BadRequest)?;
                 return Ok(ResolvedInput::Features(features));
             }
             Ok(ResolvedInput::Literal(s.clone()))
@@ -77,7 +77,7 @@ async fn resolve_input(state: &AppState, value: &Value) -> Result<ResolvedInput,
             if obj.get("type").and_then(|t| t.as_str()) == Some("FeatureCollection") {
                 let s = serde_json::to_string(value).unwrap_or_default();
                 let features =
-                    wps::parse_feature_collection_json(&s).map_err(GeoServerError::BadRequest)?;
+                    wps::parse_feature_collection_json(&s).map_err(TerraneError::BadRequest)?;
                 return Ok(ResolvedInput::Features(features));
             }
             if let Some(href) = obj.get("href").and_then(|h| h.as_str()) {
@@ -90,7 +90,7 @@ async fn resolve_input(state: &AppState, value: &Value) -> Result<ResolvedInput,
                         return Ok(ResolvedInput::Features(features));
                     }
                 }
-                return Err(GeoServerError::BadRequest(format!(
+                return Err(TerraneError::BadRequest(format!(
                     "Unresolvable input href: {}",
                     href
                 )));

@@ -31,6 +31,9 @@ service/static/*
 !service/static/.gitkeep
 
 .tmp_check/*
+# Metadata sqlite DB (terrane.sqlite is the default; geoserver.sqlite kept for
+# installs upgrading from before the naming migration)
+service/terrane.sqlite
 service/geoserver.sqlite
 
 # Trae IDE

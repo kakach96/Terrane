@@ -1,4 +1,4 @@
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::models::DataSourceType;
 use crate::services::wfs::{self, DescribeFeatureTypeResponse, WfsCapabilities, WfsRequest};
 use crate::state::AppState;
@@ -12,7 +12,7 @@ pub async fn handle_wfs_request(
     req: HttpRequest,
     query: web::Query<Vec<(String, String)>>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let params = query.as_ref();
     let wfs_request = wfs::parse_wfs_request(params)?;
 
@@ -31,7 +31,7 @@ pub async fn handle_wfs_request(
         },
         wfs::WfsOperation::GetGmlObject => handle_get_gml_object(&state, &wfs_request, &req).await,
         // WFS-T 尚未实现 (计划后续支持)
-        wfs::WfsOperation::Transaction => Err(GeoServerError::NotImplemented(
+        wfs::WfsOperation::Transaction => Err(TerraneError::NotImplemented(
             "WFS Transaction is not implemented yet (planned for a later milestone)".to_string(),
         )),
     }
@@ -43,10 +43,10 @@ pub async fn handle_wfs_post_request(
     req: HttpRequest,
     body: String,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     // WFS-T (Transaction XML) 尚未实现 (计划后续支持)
     if body.contains("Transaction") || body.contains("<wfs:") {
-        return Err(GeoServerError::NotImplemented(
+        return Err(TerraneError::NotImplemented(
             "WFS Transaction is not implemented yet (planned for a later milestone)".to_string(),
         ));
     }
@@ -71,10 +71,10 @@ pub async fn handle_wfs_post_request(
         },
         wfs::WfsOperation::GetFeature => handle_get_feature(&state, &wfs_request, &req).await,
         // WFS-T 尚未实现 (计划后续支持)
-        wfs::WfsOperation::Transaction => Err(GeoServerError::NotImplemented(
+        wfs::WfsOperation::Transaction => Err(TerraneError::NotImplemented(
             "WFS Transaction is not implemented yet (planned for a later milestone)".to_string(),
         )),
-        _ => Err(GeoServerError::BadRequest(
+        _ => Err(TerraneError::BadRequest(
             "Operation not implemented".to_string(),
         )),
     }
@@ -87,7 +87,7 @@ async fn enforce_geofence_typename(
     state: &AppState,
     req: &HttpRequest,
     typename: &str,
-) -> Result<(), GeoServerError> {
+) -> Result<(), TerraneError> {
     if !state.config.security.geofence_enabled {
         return Ok(());
     }
@@ -121,7 +121,7 @@ async fn enforce_geofence_typename(
 async fn handle_get_capabilities(
     state: &AppState,
     _request: &WfsRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let base_url = format!(
         "http://{}:{}",
         state.config.server.host, state.config.server.port
@@ -129,7 +129,7 @@ async fn handle_get_capabilities(
     let capabilities = WfsCapabilities::new(&base_url);
 
     let xml = to_string(&capabilities).map_err(|e| {
-        GeoServerError::ServiceError(format!("Failed to serialize capabilities: {}", e))
+        TerraneError::ServiceError(format!("Failed to serialize capabilities: {}", e))
     })?;
 
     let xml = format!(
@@ -144,15 +144,15 @@ async fn handle_get_capabilities(
 async fn handle_describe_feature_type(
     state: &AppState,
     request: &WfsRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let type_names = request
         .type_names
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("TYPENAME parameter is required".to_string()))?;
 
-    let type_name = type_names.first().ok_or_else(|| {
-        GeoServerError::BadRequest("At least one TYPENAME is required".to_string())
-    })?;
+    let type_name = type_names
+        .first()
+        .ok_or_else(|| TerraneError::BadRequest("At least one TYPENAME is required".to_string()))?;
 
     // Default fallback schema (used when the layer has no resolvable store).
     let mut properties: Vec<(String, String)> = vec![
@@ -199,9 +199,8 @@ async fn handle_describe_feature_type(
 
     let response = DescribeFeatureTypeResponse::new(type_name, properties);
 
-    let xml = to_string(&response).map_err(|e| {
-        GeoServerError::ServiceError(format!("Failed to serialize response: {}", e))
-    })?;
+    let xml = to_string(&response)
+        .map_err(|e| TerraneError::ServiceError(format!("Failed to serialize response: {}", e)))?;
 
     let xml = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -218,11 +217,11 @@ async fn handle_get_feature(
     state: &AppState,
     request: &WfsRequest,
     req: &HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let type_names = request
         .type_names
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("TYPENAME parameter is required".to_string()))?;
 
     // GeoFence: per-request layer access (opt-in via geofence_enabled).
     for tn in type_names {
@@ -241,7 +240,7 @@ async fn handle_get_feature(
     // GeoJSON 输出
     if output_format.contains("json") || output_format.contains("geojson") {
         let json = serde_json::to_string_pretty(&response)
-            .map_err(|e| GeoServerError::ServiceError(e.to_string()))?;
+            .map_err(|e| TerraneError::ServiceError(e.to_string()))?;
 
         return Ok(HttpResponse::Ok()
             .content_type("application/json")
@@ -273,9 +272,9 @@ async fn handle_get_feature(
     if output_format_lower.contains("shape") {
         let base = type_name.replace(':', "_");
         let pkg = crate::utils::shapefile_export::features_to_shapefile(&response.features)
-            .map_err(GeoServerError::ServiceError)?;
+            .map_err(TerraneError::ServiceError)?;
         let zip = crate::utils::shapefile_export::zip_shapefile_package(&pkg, &base)
-            .map_err(GeoServerError::ServiceError)?;
+            .map_err(TerraneError::ServiceError)?;
         return Ok(HttpResponse::Ok()
             .content_type("application/zip")
             .insert_header((
@@ -313,11 +312,11 @@ async fn handle_get_feature(
 async fn query_features(
     state: &AppState,
     request: &WfsRequest,
-) -> Result<Vec<crate::models::Feature>, GeoServerError> {
+) -> Result<Vec<crate::models::Feature>, TerraneError> {
     let type_names = request
         .type_names
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("TYPENAME parameter is required".to_string()))?;
 
     let mut all_features = Vec::new();
     for type_name in type_names {
@@ -329,7 +328,7 @@ async fn query_features(
         {
             Ok(f) => f,
             // 图层不存在时跳过 (与原先 Option 语义一致)
-            Err(GeoServerError::NotFound(_)) => Vec::new(),
+            Err(TerraneError::NotFound(_)) => Vec::new(),
             Err(e) => return Err(e),
         };
         let mut filtered_features = features;
@@ -394,13 +393,13 @@ async fn query_layer_fids(
     state: &AppState,
     type_name: &str,
     request: &WfsRequest,
-) -> Result<Vec<String>, GeoServerError> {
+) -> Result<Vec<String>, TerraneError> {
     let features =
         match crate::handlers::features::query_layer_features(state, type_name, None, None, None)
             .await
         {
             Ok(f) => f,
-            Err(GeoServerError::NotFound(_)) => return Ok(Vec::new()),
+            Err(TerraneError::NotFound(_)) => return Ok(Vec::new()),
             Err(e) => return Err(e),
         };
     let mut filtered = features;
@@ -426,11 +425,11 @@ async fn handle_get_feature_with_lock(
     state: &AppState,
     request: &WfsRequest,
     req: &HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let type_names = request
         .type_names
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("TYPENAME parameter is required".to_string()))?;
 
     for tn in type_names {
         enforce_geofence_typename(state, req, tn).await?;
@@ -463,7 +462,7 @@ async fn handle_get_feature_with_lock(
     // GeoJSON 输出 (附带 lockId 字段)
     if output_format.contains("json") || output_format.contains("geojson") {
         let mut value = serde_json::to_value(&response)
-            .map_err(|e| GeoServerError::ServiceError(e.to_string()))?;
+            .map_err(|e| TerraneError::ServiceError(e.to_string()))?;
         if let Some(obj) = value.as_object_mut() {
             obj.insert(
                 "lockId".to_string(),
@@ -499,11 +498,11 @@ async fn handle_lock_feature(
     state: &AppState,
     request: &WfsRequest,
     req: &HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let type_names = request
         .type_names
         .as_ref()
-        .ok_or_else(|| GeoServerError::BadRequest("TYPENAME parameter is required".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("TYPENAME parameter is required".to_string()))?;
 
     for tn in type_names {
         enforce_geofence_typename(state, req, tn).await?;
@@ -566,7 +565,7 @@ async fn handle_lock_feature(
             },
             Err(conflicts) => {
                 // lockAction=ALL 且部分要素已被锁: 整个请求失败 (与 GeoServer 一致)
-                return Err(GeoServerError::BadRequest(format!(
+                return Err(TerraneError::BadRequest(format!(
                     "Could not lock all requested features, already locked: {}",
                     conflicts.join(", ")
                 )));
@@ -622,7 +621,7 @@ async fn handle_get_property_value(
     state: &AppState,
     request: &WfsRequest,
     req: &HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     if let Some(tns) = request.type_names.as_ref() {
         for tn in tns {
             enforce_geofence_typename(state, req, tn).await?;
@@ -633,7 +632,7 @@ async fn handle_get_property_value(
         .as_ref()
         .and_then(|p| p.first())
         .ok_or_else(|| {
-            GeoServerError::BadRequest("PROPERTYNAME parameter is required".to_string())
+            TerraneError::BadRequest("PROPERTYNAME parameter is required".to_string())
         })?;
 
     let features = query_features(state, request).await?;
@@ -692,10 +691,11 @@ async fn handle_get_gml_object(
     state: &AppState,
     request: &WfsRequest,
     req: &HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
-    let object_ids = request.gml_object_id.as_ref().ok_or_else(|| {
-        GeoServerError::BadRequest("GMLOBJECTID parameter is required".to_string())
-    })?;
+) -> Result<HttpResponse, TerraneError> {
+    let object_ids = request
+        .gml_object_id
+        .as_ref()
+        .ok_or_else(|| TerraneError::BadRequest("GMLOBJECTID parameter is required".to_string()))?;
 
     let layers: Vec<String> = match request.type_names.as_ref() {
         Some(tns) => tns.clone(),
@@ -718,7 +718,7 @@ async fn handle_get_gml_object(
         .await
         {
             Ok(f) => f,
-            Err(GeoServerError::NotFound(_)) => continue,
+            Err(TerraneError::NotFound(_)) => continue,
             Err(e) => return Err(e),
         };
         for feature in features {

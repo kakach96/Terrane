@@ -198,7 +198,7 @@ pub async fn enforce_layer_access(
     store: &str,
     layer: &str,
     mode: &str,
-) -> Result<(), crate::error::GeoServerError> {
+) -> Result<(), crate::error::TerraneError> {
     if !state.config.security.geofence_enabled {
         return Ok(());
     }
@@ -212,7 +212,7 @@ pub async fn enforce_layer_access(
         return Ok(());
     };
     let rules = store_iface.get_permissions().await.map_err(|e| {
-        crate::error::GeoServerError::InternalError(format!("Load rules failed: {}", e))
+        crate::error::TerraneError::InternalError(format!("Load rules failed: {}", e))
     })?;
 
     let ctx = AccessContext {
@@ -226,7 +226,7 @@ pub async fn enforce_layer_access(
     if evaluate(&rules, &ctx) {
         Ok(())
     } else {
-        Err(crate::error::GeoServerError::localized(
+        Err(crate::error::TerraneError::localized(
             "GEOFENCE_DENIED",
             actix_web::http::StatusCode::FORBIDDEN,
             "Access to the requested layer is denied by GeoFence rules",

@@ -1,6 +1,6 @@
 //! # 备份与恢复
 //!
-//! 支持将 GeoServer 全部配置导出为 JSON 文件，
+//! 支持将 Terrane 全部配置导出为 JSON 文件，
 //! 以及从 JSON 文件恢复配置。
 //!
 //! ## 备份内容
@@ -23,7 +23,7 @@ use tracing::info;
 
 /// 完整备份数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeoServerBackup {
+pub struct TerraneBackup {
     /// 备份版本
     pub version: String,
     /// 创建时间
@@ -147,8 +147,8 @@ pub struct UserBackup {
 // 导出
 // ---------------------------------------------------------------------------
 
-/// 导出 GeoServer 全部配置为备份对象
-pub async fn export_backup(state: &crate::state::AppState) -> Result<GeoServerBackup, String> {
+/// 导出 Terrane 全部配置为备份对象
+pub async fn export_backup(state: &crate::state::AppState) -> Result<TerraneBackup, String> {
     let store = state.store.as_ref().ok_or("数据库不可用，无法备份")?;
 
     info!("[Backup] 开始导出配置");
@@ -321,7 +321,7 @@ pub async fn export_backup(state: &crate::state::AppState) -> Result<GeoServerBa
         styles.len()
     );
 
-    Ok(GeoServerBackup {
+    Ok(TerraneBackup {
         version: "1.0".to_string(),
         created_at: Utc::now().to_rfc3339(),
         server_info: serde_json::json!({
@@ -347,7 +347,7 @@ pub async fn export_backup(state: &crate::state::AppState) -> Result<GeoServerBa
 /// 从备份对象恢复配置
 pub async fn import_backup(
     state: &crate::state::AppState,
-    backup: &GeoServerBackup,
+    backup: &TerraneBackup,
 ) -> Result<ImportReport, String> {
     let store = state.store.as_ref().ok_or("数据库不可用，无法恢复")?;
 

@@ -1,10 +1,10 @@
 import { Component, Inject, OnInit, inject, computed } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
-import { GeoserverService } from '../../services/geoserver.service';
+import { TerraneService } from '../../services/terrane.service';
 import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
-import { StyleInfo } from '../../models/geoserver.models';
+import { StyleInfo } from '../../models/terrane.models';
 
 @Component({
   standalone: false,
@@ -180,7 +180,7 @@ export class StyleEditorDialogComponent implements OnInit {
   constructor(
     public dialogRef: MatDialogRef<StyleEditorDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { mode: 'create' | 'edit'; style?: StyleInfo },
-    private geoserverService: GeoserverService,
+    private terraneService: TerraneService,
     private notificationService: NotificationService,
     private translate: TranslateService,
   ) {}
@@ -234,7 +234,7 @@ export class StyleEditorDialogComponent implements OnInit {
 
   save(): void {
     if (this.data.mode === 'create') {
-      this.geoserverService
+      this.terraneService
         .createStyle({
           name: this.name,
           title: this.title || this.name,
@@ -254,7 +254,7 @@ export class StyleEditorDialogComponent implements OnInit {
             ),
         });
     } else {
-      this.geoserverService
+      this.terraneService
         .updateStyle(this.name, {
           title: this.title || this.name,
           content: this.content,

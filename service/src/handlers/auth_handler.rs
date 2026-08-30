@@ -4,7 +4,7 @@ use super::rest_handler::ApiResponse;
 use crate::auth::{
     generate_salt, generate_token, hash_password, verify_password, verify_token, UserRole,
 };
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::i18n;
 use crate::state::AppState;
 use actix_web::http::StatusCode;
@@ -54,7 +54,7 @@ pub async fn login(
     body: web::Json<LoginRequest>,
     state: web::Data<AppState>,
     req: HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let ip = req_ip(&req);
     let lang = i18n::from_accept_language(req.headers());
 
@@ -95,7 +95,7 @@ pub async fn login(
                                 ip.as_deref(),
                             )
                             .await;
-                        return Err(GeoServerError::localized(
+                        return Err(TerraneError::localized(
                             "LOGIN_DISABLED",
                             StatusCode::BAD_REQUEST,
                             i18n::tr(lang, "login.disabled", &[]),
@@ -122,7 +122,7 @@ pub async fn login(
                             ip.as_deref(),
                         )
                         .await;
-                    return Err(GeoServerError::localized(
+                    return Err(TerraneError::localized(
                         "LOGIN_DISABLED",
                         StatusCode::BAD_REQUEST,
                         i18n::tr(lang, "login.disabled", &[]),
@@ -149,21 +149,21 @@ pub async fn login(
                             ip.as_deref(),
                         )
                         .await;
-                    Err(GeoServerError::localized(
+                    Err(TerraneError::localized(
                         "LOGIN_INVALID_CREDENTIALS",
                         StatusCode::BAD_REQUEST,
                         i18n::tr(lang, "login.invalid_credentials", &[]),
                     ))
                 }
             },
-            None => Err(GeoServerError::localized(
+            None => Err(TerraneError::localized(
                 "LOGIN_INVALID_CREDENTIALS",
                 StatusCode::BAD_REQUEST,
                 i18n::tr(lang, "login.invalid_credentials", &[]),
             )),
         }
     } else {
-        Err(GeoServerError::localized(
+        Err(TerraneError::localized(
             "LOGIN_DB_UNAVAILABLE",
             StatusCode::SERVICE_UNAVAILABLE,
             i18n::tr(lang, "login.db_unavailable", &[]),
@@ -181,8 +181,8 @@ async fn issue_login(
     ip: Option<&str>,
     username: String,
     role: &UserRole,
-) -> Result<HttpResponse, GeoServerError> {
-    let token = generate_token(&username, role, 24).map_err(GeoServerError::InternalError)?;
+) -> Result<HttpResponse, TerraneError> {
+    let token = generate_token(&username, role, 24).map_err(TerraneError::InternalError)?;
 
     if let Some(store) = &state.store {
         if let Ok(claims) = verify_token(&token) {
@@ -228,15 +228,15 @@ async fn issue_login(
 pub async fn logout(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let lang = i18n::from_accept_language(req.headers());
     let auth_header = req
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| GeoServerError::BadRequest("未登录".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("未登录".to_string()))?;
     let claims = verify_token(auth_header)
-        .map_err(|_| GeoServerError::BadRequest("Token 无效".to_string()))?;
+        .map_err(|_| TerraneError::BadRequest("Token 无效".to_string()))?;
 
     if let Some(store) = &state.store {
         let _ = store.delete_session(&claims.jti).await;
@@ -265,15 +265,15 @@ pub async fn logout(
 pub async fn verify(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let auth_header = req
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| GeoServerError::BadRequest("缺少 Authorization 头".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("缺少 Authorization 头".to_string()))?;
 
     let claims = verify_token(auth_header)
-        .map_err(|e| GeoServerError::BadRequest(format!("Token 验证失败: {}", e)))?;
+        .map_err(|e| TerraneError::BadRequest(format!("Token 验证失败: {}", e)))?;
 
     // 校验会话 (未记录 = 已过期/已登出)
     // 优先查会话缓存, 未命中回退元数据存储并回填缓存
@@ -298,10 +298,10 @@ pub async fn verify(
         match session_opt {
             Some(session) => {
                 if session.revoked {
-                    return Err(GeoServerError::BadRequest("会话已失效".to_string()));
+                    return Err(TerraneError::BadRequest("会话已失效".to_string()));
                 }
             },
-            None => return Err(GeoServerError::BadRequest("会话不存在或已过期".to_string())),
+            None => return Err(TerraneError::BadRequest("会话不存在或已过期".to_string())),
         }
     }
 
@@ -319,20 +319,20 @@ pub async fn change_password(
     body: web::Json<ChangePasswordRequest>,
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let auth_header = req
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| GeoServerError::BadRequest("未登录".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("未登录".to_string()))?;
     let claims = verify_token(auth_header)
-        .map_err(|_| GeoServerError::BadRequest("Token 无效".to_string()))?;
+        .map_err(|_| TerraneError::BadRequest("Token 无效".to_string()))?;
 
     if let Some(store) = &state.store {
         match store.get_user(&claims.sub).await {
             Ok(Some(user)) => {
                 if !verify_password(&body.old_password, &user.salt, &user.password_hash) {
-                    return Err(GeoServerError::BadRequest("原密码错误".to_string()));
+                    return Err(TerraneError::BadRequest("原密码错误".to_string()));
                 }
                 let new_salt = generate_salt();
                 let new_hash = hash_password(&body.new_password, &new_salt);
@@ -364,10 +364,10 @@ pub async fn change_password(
                     }))),
                 )
             },
-            _ => Err(GeoServerError::BadRequest("用户不存在".to_string())),
+            _ => Err(TerraneError::BadRequest("用户不存在".to_string())),
         }
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
@@ -375,7 +375,7 @@ pub async fn change_password(
 pub async fn list_users(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     check_admin(&req)?;
 
     if let Some(store) = &state.store {
@@ -395,13 +395,10 @@ pub async fn list_users(
                     .collect();
                 Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
             },
-            Err(e) => Err(GeoServerError::InternalError(format!(
-                "查询用户失败: {}",
-                e
-            ))),
+            Err(e) => Err(TerraneError::InternalError(format!("查询用户失败: {}", e))),
         }
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
@@ -410,12 +407,12 @@ pub async fn create_user(
     body: web::Json<CreateUserRequest>,
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     check_admin(&req)?;
 
     if let Some(store) = &state.store {
         if let Ok(Some(_)) = store.get_user(&body.username).await {
-            return Err(GeoServerError::Conflict(format!(
+            return Err(TerraneError::Conflict(format!(
                 "用户 '{}' 已存在",
                 body.username
             )));
@@ -431,7 +428,7 @@ pub async fn create_user(
         store
             .create_user(&body.username, &hash, &salt, &role, true)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("创建用户失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("创建用户失败: {}", e)))?;
 
         Ok(
             HttpResponse::Created().json(ApiResponse::success(serde_json::json!({
@@ -441,7 +438,7 @@ pub async fn create_user(
             }))),
         )
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
@@ -449,7 +446,7 @@ pub async fn create_user(
 pub async fn delete_user(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     check_admin(&req)?;
     let username = req.match_info().get("username").unwrap_or("");
 
@@ -457,14 +454,14 @@ pub async fn delete_user(
         store
             .delete_user(username)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("删除失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("删除失败: {}", e)))?;
         Ok(
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "message": format!("用户 '{}' 已删除", username),
             }))),
         )
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
@@ -473,7 +470,7 @@ pub async fn update_user(
     req: HttpRequest,
     body: web::Json<UpdateUserRequest>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     check_admin(&req)?;
     let username = req.match_info().get("username").unwrap_or("").to_string();
 
@@ -481,11 +478,11 @@ pub async fn update_user(
         let existing = store
             .get_user(&username)
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("查询用户失败: {}", e)))?
-            .ok_or_else(|| GeoServerError::NotFound(format!("用户 '{}' 不存在", username)))?;
+            .map_err(|e| TerraneError::InternalError(format!("查询用户失败: {}", e)))?
+            .ok_or_else(|| TerraneError::NotFound(format!("用户 '{}' 不存在", username)))?;
 
         if body.role.is_none() && body.password.is_none() && body.enabled.is_none() {
-            return Err(GeoServerError::BadRequest(
+            return Err(TerraneError::BadRequest(
                 "至少提供 role / password / enabled 之一".to_string(),
             ));
         }
@@ -495,14 +492,14 @@ pub async fn update_user(
             Some("manager") => Some(UserRole::Manager),
             Some("guest") => Some(UserRole::Guest),
             Some("user") => Some(UserRole::User),
-            Some(other) => return Err(GeoServerError::BadRequest(format!("未知角色: {}", other))),
+            Some(other) => return Err(TerraneError::BadRequest(format!("未知角色: {}", other))),
             None => None,
         };
 
         // 密码重置: 生成新盐并重新哈希
         let (password_hash, salt) = if let Some(pw) = &body.password {
             if pw.is_empty() {
-                return Err(GeoServerError::BadRequest("密码不能为空".to_string()));
+                return Err(TerraneError::BadRequest("密码不能为空".to_string()));
             }
             let s = generate_salt();
             let h = hash_password(pw, &s);
@@ -520,7 +517,7 @@ pub async fn update_user(
                 salt.as_deref(),
             )
             .await
-            .map_err(|e| GeoServerError::InternalError(format!("更新用户失败: {}", e)))?;
+            .map_err(|e| TerraneError::InternalError(format!("更新用户失败: {}", e)))?;
 
         let role_str = role
             .map(|r| r.to_string())
@@ -533,31 +530,31 @@ pub async fn update_user(
             }))),
         )
     } else {
-        Err(GeoServerError::InternalError("数据库不可用".to_string()))
+        Err(TerraneError::InternalError("数据库不可用".to_string()))
     }
 }
 
 /// 检查是否为管理员
-fn check_admin(req: &HttpRequest) -> Result<(), GeoServerError> {
+fn check_admin(req: &HttpRequest) -> Result<(), TerraneError> {
     let auth_header = req
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| GeoServerError::BadRequest("未登录".to_string()))?;
+        .ok_or_else(|| TerraneError::BadRequest("未登录".to_string()))?;
     let claims = verify_token(auth_header)
-        .map_err(|_| GeoServerError::BadRequest("Token 无效".to_string()))?;
+        .map_err(|_| TerraneError::BadRequest("Token 无效".to_string()))?;
     if claims.role != "admin" {
-        return Err(GeoServerError::BadRequest("需要管理员权限".to_string()));
+        return Err(TerraneError::BadRequest("需要管理员权限".to_string()));
     }
     Ok(())
 }
 
 /// 检查认证的辅助函数（供其他 handler 使用）
-pub fn require_auth(req: &HttpRequest) -> Result<crate::auth::Claims, GeoServerError> {
+pub fn require_auth(req: &HttpRequest) -> Result<crate::auth::Claims, TerraneError> {
     let auth_header = req
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| GeoServerError::BadRequest("未登录".to_string()))?;
-    verify_token(auth_header).map_err(|e| GeoServerError::BadRequest(format!("认证失败: {}", e)))
+        .ok_or_else(|| TerraneError::BadRequest("未登录".to_string()))?;
+    verify_token(auth_header).map_err(|e| TerraneError::BadRequest(format!("认证失败: {}", e)))
 }

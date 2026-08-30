@@ -44,8 +44,8 @@ fn env_or(name: &str, default: usize) -> usize {
         .unwrap_or(default)
 }
 
-fn perf_config() -> terrane::config::GeoServerConfig {
-    let mut config = terrane::config::GeoServerConfig::default();
+fn perf_config() -> terrane::config::TerraneConfig {
+    let mut config = terrane::config::TerraneConfig::default();
     config.server.host = "127.0.0.1".to_string();
     config.server.port = 0;
     config.metadata.sqlite_path = ":memory:".into();
@@ -91,7 +91,7 @@ async fn spawn_server(state: terrane::state::AppState) -> std::net::SocketAddr {
             let server = actix_web::HttpServer::new(move || {
                 actix_web::App::new()
                     .app_data(state.clone())
-                    .configure(|svc| terrane::routes::configure_routes(svc, "/geoserver"))
+                    .configure(|svc| terrane::routes::configure_routes(svc, "/terrane"))
             })
             .workers(2)
             .bind(("127.0.0.1", 0))
@@ -137,7 +137,7 @@ async fn seed_layer(base: &str, client: &reqwest::Client) {
         .collect();
 
     let resp = client
-        .post(format!("{base}/geoserver/data/upload"))
+        .post(format!("{base}/terrane/data/upload"))
         .json(&json!({
             "type": "FeatureCollection",
             "total_count": FEATURE_COUNT,
@@ -153,7 +153,7 @@ async fn seed_layer(base: &str, client: &reqwest::Client) {
     );
 
     let resp = client
-        .post(format!("{base}/geoserver/layers"))
+        .post(format!("{base}/terrane/layers"))
         .json(&json!({
             "name": LAYER,
             "title": "Perf Points",
@@ -271,7 +271,7 @@ async fn http_load_benchmark() {
     // One tile covering the seeded points at zoom 3 (top-down/slippy row).
     let (col, row) = tile_grid::tile_for_bbox("EPSG:4326", 3, &BBOX).expect("tile index");
     let scenarios: Vec<(&str, String)> = vec![
-        ("rest_layers_list", "/geoserver/layers".to_string()),
+        ("rest_layers_list", "/terrane/layers".to_string()),
         (
             "wms_getcapabilities_130",
             "/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities".to_string(),
@@ -292,7 +292,7 @@ async fn http_load_benchmark() {
         ),
         (
             "tile_png_z3",
-            format!("/geoserver/tiles/{LAYER}/3/{col}/{row}"),
+            format!("/terrane/tiles/{LAYER}/3/{col}/{row}"),
         ),
     ];
 

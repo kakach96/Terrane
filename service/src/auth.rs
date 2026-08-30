@@ -155,12 +155,12 @@ pub async fn ensure_default_admin(store: &dyn crate::store::Store) {
         },
         _ => {
             let salt = generate_salt();
-            let hash = hash_password("geoserver", &salt);
+            let hash = hash_password("terrane", &salt);
             match store
                 .create_user("admin", &hash, &salt, &UserRole::Admin, true)
                 .await
             {
-                Ok(_) => info!("[Auth] 已创建默认管理员: admin / geoserver"),
+                Ok(_) => info!("[Auth] 已创建默认管理员: admin / terrane"),
                 Err(e) => eprintln!("[Auth] 创建默认管理员失败: {}", e),
             }
         },

@@ -5,7 +5,7 @@
 //! - GetTile (重定向到内部 /tiles 端点)
 //! - GetFeatureInfo (JSON)
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::services::wmts::{self, WmtsOperation};
 use crate::state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -15,7 +15,7 @@ pub async fn handle_wmts_request(
     req: HttpRequest,
     query: web::Query<Vec<(String, String)>>,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let params = query.as_ref();
     let wmts_request = wmts::parse_wmts_request(params)?;
 
@@ -74,7 +74,7 @@ pub async fn handle_wmts_request(
 async fn handle_get_capabilities(
     state: &AppState,
     req: &HttpRequest,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let _host = req
         .headers()
         .get("Host")
@@ -109,7 +109,7 @@ async fn handle_get_tile(
     tile_matrix: &str,
     tile_row: u32,
     tile_col: u32,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     // 从 TileMatrix 标识符提取 zoom level: "EPSG:4326:5" -> 5
     let z: u32 = if let Some(idx) = tile_matrix.rfind(':') {
         tile_matrix[idx + 1..].parse().unwrap_or(0)
@@ -143,7 +143,7 @@ async fn handle_get_tile(
 pub async fn handle_wmts_rest_tile(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer = req.match_info().get("layer").unwrap_or("");
     let tile_matrix_set = req.match_info().get("tileMatrixSet").unwrap_or("EPSG:4326");
     let tile_matrix = req.match_info().get("tileMatrix").unwrap_or("0");
@@ -184,7 +184,7 @@ async fn handle_get_feature_info(
     _i: u32,
     _j: u32,
     _info_format: &str,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     // 简化实现: 返回图层要素列表的 JSON
     let features =
         crate::handlers::features::query_layer_features(state, layer, None, Some(10), None).await?;

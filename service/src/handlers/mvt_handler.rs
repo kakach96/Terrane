@@ -3,7 +3,7 @@
 //! 提供 MVT 格式的矢量瓦片服务。
 //! 端点: GET /tiles/{layer}/{z}/{x}/{y}.pbf 或 GET /tiles/{layer}/{z}/{x}/{y}?format=mvt
 
-use crate::error::GeoServerError;
+use crate::error::TerraneError;
 use crate::handlers::features;
 use crate::state::AppState;
 use crate::utils::mvt;
@@ -13,7 +13,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 pub async fn handle_mvt_tile(
     req: HttpRequest,
     state: web::Data<AppState>,
-) -> Result<HttpResponse, GeoServerError> {
+) -> Result<HttpResponse, TerraneError> {
     let layer_name = req.match_info().get("layer").unwrap_or("");
     let z_str = req.match_info().get("z").unwrap_or("0");
     let x_str = req.match_info().get("x").unwrap_or("0");
@@ -21,21 +21,21 @@ pub async fn handle_mvt_tile(
 
     let z: u32 = z_str
         .parse()
-        .map_err(|_| GeoServerError::BadRequest(format!("无效的 zoom 级别: {}", z_str)))?;
+        .map_err(|_| TerraneError::BadRequest(format!("无效的 zoom 级别: {}", z_str)))?;
     let x: u32 = x_str
         .parse()
-        .map_err(|_| GeoServerError::BadRequest(format!("无效的 x: {}", x_str)))?;
+        .map_err(|_| TerraneError::BadRequest(format!("无效的 x: {}", x_str)))?;
     let y: u32 = y_str
         .parse()
-        .map_err(|_| GeoServerError::BadRequest(format!("无效的 y: {}", y_str)))?;
+        .map_err(|_| TerraneError::BadRequest(format!("无效的 y: {}", y_str)))?;
 
     // 确保图层存在 (支持 `workspace:layer` 限定名, 与 WMS 一致)
     let layer = {
         let layers = state.layers.read().await;
         crate::handlers::features::resolve_layer(&layers, layer_name).cloned()
     };
-    let layer = layer
-        .ok_or_else(|| GeoServerError::NotFound(format!("Layer '{}' not found", layer_name)))?;
+    let layer =
+        layer.ok_or_else(|| TerraneError::NotFound(format!("Layer '{}' not found", layer_name)))?;
     // 统一使用短名 (Layer.name 不带 workspace 前缀) 查询要素与编码
     let layer_name = layer.name.as_str();
 
