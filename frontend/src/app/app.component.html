@@ -1,13 +1,49 @@
 <div class="app-container">
+  <mat-toolbar class="top-toolbar">
+    <a class="logo" routerLink="/services" matTooltip="{{ 'app.home' | translate }}">
+      <img src="assets/terrane.svg" alt="Terrane" class="logo-img" />
+      <span class="logo-text">Terrane</span>
+    </a>
+    <span class="spacer"></span>
+    <button
+      mat-icon-button
+      [matMenuTriggerFor]="langMenu"
+      matTooltip="{{ 'app.language' | translate }}"
+    >
+      <mat-icon>language</mat-icon>
+    </button>
+    <mat-menu #langMenu="matMenu">
+      <button mat-menu-item (click)="setLanguage('zh-CN')">
+        <mat-icon *ngIf="currentLang() === 'zh-CN'">check</mat-icon>
+        <span>{{ 'app.chinese' | translate }}</span>
+      </button>
+      <button mat-menu-item (click)="setLanguage('en-US')">
+        <mat-icon *ngIf="currentLang() === 'en-US'">check</mat-icon>
+        <span>{{ 'app.english' | translate }}</span>
+      </button>
+    </mat-menu>
+    <button mat-icon-button [matMenuTriggerFor]="menu">
+      <mat-icon>account_circle</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
+      <div *ngIf="auth.isLoggedIn()" class="user-info-menu">
+        <span class="menu-username">{{ auth.getCurrentUser()?.username }}</span>
+        <span class="menu-role">{{ auth.getCurrentUser()?.role }}</span>
+      </div>
+      <mat-divider *ngIf="auth.isLoggedIn()"></mat-divider>
+      <button mat-menu-item *ngIf="auth.isLoggedIn()" (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>{{ 'app.logout' | translate }}</span>
+      </button>
+      <button mat-menu-item *ngIf="!auth.isLoggedIn()" (click)="openLoginDialog()">
+        <mat-icon>login</mat-icon>
+        <span>{{ 'app.login' | translate }}</span>
+      </button>
+    </mat-menu>
+  </mat-toolbar>
+
   <mat-sidenav-container class="sidenav-container">
     <mat-sidenav #sidenav mode="side" [opened]="sidenavOpened" class="sidenav">
-      <div class="sidenav-header">
-        <div class="logo">
-          <img src="assets/terrane.svg" alt="Terrane" class="logo-img" />
-          <span class="logo-text">Terrane</span>
-        </div>
-      </div>
-
       <mat-nav-list class="nav-menu">
         <ng-container *ngIf="auth.isLoggedIn()">
           <!-- Services (overview implemented, default home page) -->
@@ -164,49 +200,6 @@
     </mat-sidenav>
 
     <mat-sidenav-content class="main-content">
-      <mat-toolbar class="top-toolbar">
-        <button mat-icon-button (click)="sidenav.toggle()">
-          <mat-icon>menu</mat-icon>
-        </button>
-        <span class="toolbar-title">{{ pageTitle() }}</span>
-        <span class="spacer"></span>
-        <button
-          mat-icon-button
-          [matMenuTriggerFor]="langMenu"
-          matTooltip="{{ 'app.language' | translate }}"
-        >
-          <mat-icon>language</mat-icon>
-        </button>
-        <mat-menu #langMenu="matMenu">
-          <button mat-menu-item (click)="setLanguage('zh-CN')">
-            <mat-icon *ngIf="currentLang() === 'zh-CN'">check</mat-icon>
-            <span>{{ 'app.chinese' | translate }}</span>
-          </button>
-          <button mat-menu-item (click)="setLanguage('en-US')">
-            <mat-icon *ngIf="currentLang() === 'en-US'">check</mat-icon>
-            <span>{{ 'app.english' | translate }}</span>
-          </button>
-        </mat-menu>
-        <button mat-icon-button [matMenuTriggerFor]="menu">
-          <mat-icon>account_circle</mat-icon>
-        </button>
-        <mat-menu #menu="matMenu">
-          <div *ngIf="auth.isLoggedIn()" class="user-info-menu">
-            <span class="menu-username">{{ auth.getCurrentUser()?.username }}</span>
-            <span class="menu-role">{{ auth.getCurrentUser()?.role }}</span>
-          </div>
-          <mat-divider *ngIf="auth.isLoggedIn()"></mat-divider>
-          <button mat-menu-item *ngIf="auth.isLoggedIn()" (click)="logout()">
-            <mat-icon>logout</mat-icon>
-            <span>{{ 'app.logout' | translate }}</span>
-          </button>
-          <button mat-menu-item *ngIf="!auth.isLoggedIn()" (click)="openLoginDialog()">
-            <mat-icon>login</mat-icon>
-            <span>{{ 'app.login' | translate }}</span>
-          </button>
-        </mat-menu>
-      </mat-toolbar>
-
       <div class="page-container">
         <router-outlet></router-outlet>
       </div>

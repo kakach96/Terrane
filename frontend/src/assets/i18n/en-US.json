@@ -33,6 +33,7 @@
   },
   "app": {
     "title": "Terrane",
+    "home": "Home",
     "logout": "Sign out",
     "login": "Sign in",
     "language": "Language",

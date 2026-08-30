@@ -33,6 +33,7 @@
   },
   "app": {
     "title": "Terrane",
+    "home": "首页",
     "logout": "退出登录",
     "login": "登录",
     "language": "语言",
