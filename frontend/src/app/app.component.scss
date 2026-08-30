@@ -205,29 +205,13 @@
   box-sizing: border-box;
 }
 
-/* User menu info */
-:host ::ng-deep .user-info-menu {
-  padding: 12px 16px 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  min-width: 140px;
-  border-bottom: 1px solid var(--bg-subtle);
+/* User info item inside the account menu (rendered in an overlay) */
+:host ::ng-deep .user-info-item {
+  cursor: default;
+  font-weight: 600;
+  color: var(--text-primary);
 
-  .menu-username {
-    font-weight: 600;
-    font-size: 14px;
-    color: var(--text-primary);
-  }
-
-  .menu-role {
-    font-size: 11px;
-    color: var(--text-disabled);
-    text-transform: capitalize;
-    background: var(--bg-subtle);
-    padding: 2px 10px;
-    border-radius: var(--radius-sm);
-    letter-spacing: 0.3px;
+  mat-icon {
+    color: var(--text-secondary);
   }
 }
