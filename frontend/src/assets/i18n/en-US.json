@@ -171,6 +171,7 @@
     "descLabel": "Description",
     "descPlaceholder": "Enter workspace description",
     "save": "Save",
+    "cancel": "Cancel",
     "createSuccess": "Workspace created",
     "createFail": "Create failed",
     "updateSuccess": "Workspace updated",

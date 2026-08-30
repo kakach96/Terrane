@@ -36,7 +36,7 @@
   </form>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
-  <button mat-button (click)="onCancel()">{{ 'workspaces.cancel' | translate }}</button>
+  <button mat-stroked-button (click)="onCancel()">{{ 'workspaces.cancel' | translate }}</button>
   <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="form.invalid">
     {{ isEdit ? ('workspaces.save' | translate) : ('workspaces.create' | translate) }}
   </button>

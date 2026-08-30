@@ -171,6 +171,7 @@
     "descLabel": "描述",
     "descPlaceholder": "输入工作空间描述",
     "save": "保存",
+    "cancel": "取消",
     "createSuccess": "工作空间创建成功",
     "createFail": "创建失败",
     "updateSuccess": "工作空间更新成功",
