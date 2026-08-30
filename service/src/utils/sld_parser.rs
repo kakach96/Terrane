@@ -51,7 +51,7 @@ pub enum OgcFilter {
 pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
-    let mut buf = Vec::new();
+
     let mut rules = Vec::new();
     let mut in_rule = false;
 
@@ -101,9 +101,9 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
     let mut vendor_option_value = String::new();
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        match reader.read_event() {
             Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
-                let local = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                let local = e.name().as_ref().to_string();
                 let tag = local.split(':').next_back().unwrap_or(&local).to_string();
 
                 match tag.as_str() {
@@ -149,8 +149,8 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                         css_param_name = e
                             .attributes()
                             .filter_map(|a| a.ok())
-                            .find(|a| String::from_utf8_lossy(a.key.as_ref()) == "name")
-                            .map(|a| String::from_utf8_lossy(&a.value).to_string())
+                            .find(|a| a.key.as_ref() == "name")
+                            .map(|a| a.value.into_owned())
                             .unwrap_or_default();
                         collect_text = true;
                     },
@@ -220,8 +220,8 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
                         vendor_option_name = e
                             .attributes()
                             .filter_map(|a| a.ok())
-                            .find(|a| String::from_utf8_lossy(a.key.as_ref()) == "name")
-                            .map(|a| String::from_utf8_lossy(&a.value).to_string())
+                            .find(|a| a.key.as_ref() == "name")
+                            .map(|a| a.value.into_owned())
                             .unwrap_or_default();
                         collect_text = true;
                     },
@@ -230,7 +230,7 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
             },
 
             Ok(Event::Text(ref e)) if collect_text => {
-                let text = String::from_utf8_lossy(e.as_ref()).trim().to_string();
+                let text = e.as_ref().trim().to_string();
                 if !text.is_empty() {
                     if in_ogc_filter {
                         current_literal = text;
@@ -253,7 +253,7 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
             },
 
             Ok(Event::End(ref e)) => {
-                let local = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                let local = e.name().as_ref().to_string();
                 let tag = local.split(':').next_back().unwrap_or(&local).to_string();
 
                 match tag.as_str() {
@@ -551,7 +551,6 @@ pub fn parse_sld(xml: &str) -> Vec<ParsedRule> {
             },
             _ => {},
         }
-        buf.clear();
     }
 
     rules

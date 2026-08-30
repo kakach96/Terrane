@@ -635,20 +635,20 @@ impl XmlNode {
     }
 }
 
-/// 去掉命名空间前缀，返回本地元素名
-fn xml_local_name(raw: &[u8]) -> String {
-    let s = String::from_utf8_lossy(raw).to_string();
-    s.rsplit(':').next().unwrap_or(&s).to_string()
+/// Strip the namespace prefix and return the local element name
+fn xml_local_name(raw: &str) -> String {
+    raw.rsplit(':').next().unwrap_or(raw).to_string()
 }
 
-/// 将 XML 字符串解析为节点树
+/// Parse an XML string into a node tree
 pub(crate) fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
     use quick_xml::events::Event;
     use quick_xml::Reader;
 
+    // quick-xml 0.42 borrows event content from the input slice directly
+    // (string-based events), so no scratch buffer is needed anymore.
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
-    let mut buf = Vec::new();
 
     let mut stack: Vec<XmlNode> = Vec::new();
     let mut roots: Vec<XmlNode> = Vec::new();
@@ -672,7 +672,7 @@ pub(crate) fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
     };
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        match reader.read_event() {
             Err(e) => return Err(format!("XML parse error: {}", e)),
             Ok(Event::Eof) => break,
             Ok(Event::Start(ref e)) => {
@@ -681,12 +681,7 @@ pub(crate) fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
                 let attrs = e
                     .attributes()
                     .filter_map(|a| a.ok())
-                    .map(|a| {
-                        (
-                            xml_local_name(a.key.as_ref()),
-                            String::from_utf8_lossy(&a.value).to_string(),
-                        )
-                    })
+                    .map(|a| (xml_local_name(a.key.as_ref()), a.value.into_owned()))
                     .collect();
                 stack.push(XmlNode {
                     name,
@@ -701,12 +696,7 @@ pub(crate) fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
                 let attrs = e
                     .attributes()
                     .filter_map(|a| a.ok())
-                    .map(|a| {
-                        (
-                            xml_local_name(a.key.as_ref()),
-                            String::from_utf8_lossy(&a.value).to_string(),
-                        )
-                    })
+                    .map(|a| (xml_local_name(a.key.as_ref()), a.value.into_owned()))
                     .collect();
                 attach(
                     &mut stack,
@@ -720,7 +710,7 @@ pub(crate) fn parse_xml_nodes(xml: &str) -> Result<Vec<XmlNode>, String> {
                 );
             },
             Ok(Event::Text(ref e)) => {
-                text_buf.push_str(String::from_utf8_lossy(e.as_ref()).trim());
+                text_buf.push_str(e.as_ref().trim());
             },
             Ok(Event::End(_)) => {
                 flush_text(&mut stack, &mut text_buf);
@@ -1241,7 +1231,6 @@ pub fn parse_transaction_xml(
 
     let mut reader = Reader::from_str(xml_text);
     reader.config_mut().trim_text(true);
-    let mut buf = Vec::new();
 
     let mut transaction = TransactionRequest {
         handle: None,
@@ -1271,11 +1260,13 @@ pub fn parse_transaction_xml(
     let mut in_exterior = false;
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        match reader.read_event() {
             Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
-                let tag = String::from_utf8_lossy(e.name().as_ref())
-                    .split(':')
-                    .next_back()
+                let tag = e
+                    .name()
+                    .as_ref()
+                    .rsplit(':')
+                    .next()
                     .unwrap_or("")
                     .to_string();
                 text_content.clear();
@@ -1334,13 +1325,15 @@ pub fn parse_transaction_xml(
                     "FeatureId" | "featureId" | "FEATUREID" if in_delete => {
                         // Collect ogc:FeatureId fid attributes into the Delete filter
                         for a in e.attributes().with_checks(false).flatten() {
-                            let key = String::from_utf8_lossy(a.key.as_ref())
-                                .split(':')
-                                .next_back()
+                            let key = a
+                                .key
+                                .as_ref()
+                                .rsplit(':')
+                                .next()
                                 .unwrap_or("")
                                 .to_lowercase();
                             if key == "fid" {
-                                let fid = String::from_utf8_lossy(a.value.as_ref()).to_string();
+                                let fid = a.value.into_owned();
                                 if let Some(ref mut delete) = current_delete {
                                     if let Filter::FeatureId(ref mut ids) = delete.filter {
                                         ids.push(fid);
@@ -1365,16 +1358,19 @@ pub fn parse_transaction_xml(
                 }
             },
             Ok(Event::Text(ref e)) => {
-                text_content = e
-                    .xml10_content()
-                    .ok()
-                    .and_then(|s| quick_xml::escape::unescape(&s).ok().map(|u| u.into_owned()))
-                    .unwrap_or_default();
+                // 0.42: content is borrowed as &str (no decoding step);
+                // unescape only fails on malformed entities -> fall back to raw.
+                let raw = e.xml10_content();
+                text_content = quick_xml::escape::unescape(&raw)
+                    .map(|u| u.into_owned())
+                    .unwrap_or_else(|_| raw.into_owned());
             },
             Ok(Event::End(ref e)) => {
-                let tag = String::from_utf8_lossy(e.name().as_ref())
-                    .split(':')
-                    .next_back()
+                let tag = e
+                    .name()
+                    .as_ref()
+                    .rsplit(':')
+                    .next()
                     .unwrap_or("")
                     .to_string();
 
