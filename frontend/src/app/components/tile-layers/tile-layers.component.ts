@@ -38,6 +38,7 @@ export class TileLayersComponent implements OnDestroy {
   jobColumns = ['layer', 'gridset', 'zoom', 'format', 'status', 'progress', 'actions'];
 
   searchQuery = signal('');
+  selectedWorkspace = signal('');
   private refreshTrigger = signal(0);
   loading = signal(false);
 
@@ -50,13 +51,22 @@ export class TileLayersComponent implements OnDestroy {
   );
   layers = toSignal(this.layers$, { initialValue: [] as Layer[] });
 
+  /** Unique workspace names derived from the cached layers, for the toolbar filter. */
+  workspaces = computed(() => {
+    const set = new Set<string>();
+    this.layers().forEach((l) => set.add(l.workspace));
+    return [...set].sort();
+  });
+
   filteredLayers = computed(() => {
     const q = this.searchQuery().toLowerCase();
+    const ws = this.selectedWorkspace();
     return this.layers().filter(
       (l) =>
-        !this.searchQuery() ||
-        l.name.toLowerCase().includes(q) ||
-        l.title.toLowerCase().includes(q),
+        (!ws || l.workspace === ws) &&
+        (!this.searchQuery() ||
+          l.name.toLowerCase().includes(q) ||
+          l.title.toLowerCase().includes(q)),
     );
   });
 
@@ -69,9 +79,11 @@ export class TileLayersComponent implements OnDestroy {
   );
   seedJobs = toSignal(this.seedJobs$, { initialValue: [] as SeedJob[] });
 
-  hasRunningJobs = computed(() =>
-    this.seedJobs().some((j) => j.status === 'Pending' || j.status === 'Running'),
+  runningJobsCount = computed(
+    () => this.seedJobs().filter((j) => j.status === 'Pending' || j.status === 'Running').length,
   );
+
+  hasRunningJobs = computed(() => this.runningJobsCount() > 0);
 
   /** Poll every 2s while a job is running so progress stays live. */
   private autoRefresh$ = toObservable(this.hasRunningJobs).pipe(
@@ -242,5 +254,9 @@ export class TileLayersComponent implements OnDestroy {
 
   trackByIndex(index: number): number {
     return index;
+  }
+
+  trackByWorkspace(index: number, ws: string): string {
+    return ws;
   }
 }

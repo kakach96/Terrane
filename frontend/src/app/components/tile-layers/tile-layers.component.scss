@@ -15,36 +15,73 @@
     color: var(--text-secondary);
     font-size: 14px;
   }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 }
 
-.layers-card,
-.jobs-card {
-  margin-bottom: 16px;
+.tile-layers-tabs {
+  ::ng-deep .mat-mdc-tab-header {
+    margin-bottom: 24px;
+  }
+}
+
+.section-card {
+  margin-bottom: 24px;
   border-radius: var(--radius-md);
 }
 
-.layers-card-header {
-  // Title/subtitle are projected into Material's own header-text container;
-  // keep it from shrinking so long subtitles wrap instead of overflowing.
-  .mat-mdc-card-header-text {
-    min-width: 0;
-  }
+.jobs-tab-label {
+  display: inline-flex;
+  align-items: center;
 }
 
 .table-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 16px;
 
-  .search-field {
-    width: 300px;
-    max-width: 100%;
+  .workspace-field {
+    width: 200px;
   }
 
-  .toolbar-spacer {
-    flex: 1 1 auto;
+  .search-field {
+    flex: 1;
+    min-width: 220px;
+  }
+
+  // Workspace + search fields: match preview toolbar height and border
+  .workspace-field,
+  .search-field {
+    height: 48px;
+
+    --mdc-outlined-text-field-container-shape: var(--radius-sm);
+    --mdc-outlined-text-field-outline-color: var(--border-color);
+    --mdc-outlined-text-field-hover-outline-color: var(--border-color);
+    --mdc-outlined-text-field-focus-outline-color: var(--primary-color);
+    --mdc-outlined-text-field-active-outline-color: var(--primary-color);
+
+    ::ng-deep .mat-mdc-text-field-wrapper {
+      height: 48px;
+      flex: none;
+      border-radius: var(--radius-sm);
+    }
+
+    ::ng-deep .mdc-notched-outline__leading,
+    ::ng-deep .mdc-notched-outline__notch,
+    ::ng-deep .mdc-notched-outline__trailing {
+      border-color: var(--border-color);
+    }
+
+    ::ng-deep .mat-mdc-form-field-infix {
+      padding-top: 12px;
+      padding-bottom: 8px;
+    }
   }
 }
 
