@@ -56,17 +56,27 @@
           </div>
 
           <mat-form-field appearance="outline" class="full-width" *ngIf="tables().length > 0">
-            <mat-label>{{ 'layerCreate.tableLabel' | translate }}</mat-label>
+            <mat-label>{{
+              fileTableMode
+                ? ('layerCreate.fileLabel' | translate)
+                : ('layerCreate.tableLabel' | translate)
+            }}</mat-label>
             <mat-select formControlName="table">
               <mat-option value="" disabled>{{
-                'layerCreate.tablePlaceholder' | translate
+                fileTableMode
+                  ? ('layerCreate.filePlaceholder' | translate)
+                  : ('layerCreate.tablePlaceholder' | translate)
               }}</mat-option>
               <mat-option *ngFor="let table of tables(); trackBy: trackByIndex" [value]="table">
                 {{ table }}
               </mat-option>
             </mat-select>
             <mat-error *ngIf="layerForm.get('table')?.hasError('required')">
-              {{ 'layerCreate.tableRequired' | translate }}
+              {{
+                fileTableMode
+                  ? ('layerCreate.fileRequired' | translate)
+                  : ('layerCreate.tableRequired' | translate)
+              }}
             </mat-error>
           </mat-form-field>
         </div>

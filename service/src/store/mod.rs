@@ -9,7 +9,10 @@ pub mod types;
 
 pub use cache::{build_session_cache, SessionCache};
 pub use error::StoreError;
-pub use file_resolver::{materialize_dir, materialize_file, read_bytes, storage_type};
+pub use file_resolver::{
+    is_directory_connection, materialize_dir_for, materialize_file, materialize_file_for,
+    read_bytes_for, resolve_file_path, storage_type,
+};
 pub use file_store::{FileStore, LocalFileStore, StoreEntry};
 pub use postgres_store::PostgresStore;
 pub use s3_file_store::S3FileStore;

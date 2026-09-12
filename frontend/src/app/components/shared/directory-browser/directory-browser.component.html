@@ -38,7 +38,7 @@
 
   <div class="entry-list">
     <div
-      *ngFor="let entry of entries"
+      *ngFor="let entry of visibleEntries"
       class="entry-row"
       [class.entry-selected]="entry.path === selectedPath"
       (dblclick)="navigate(entry)"

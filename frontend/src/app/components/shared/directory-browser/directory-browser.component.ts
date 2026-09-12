@@ -11,6 +11,8 @@ export interface DirectoryBrowserData {
   initialPath?: string;
   /** Connection config in S3 mode (endpoint/bucket/credentials, etc.) */
   s3Connection?: S3BrowseRequest;
+  /** When true, only directories/prefixes can be selected (files are hidden). */
+  dirOnly?: boolean;
 }
 
 export interface DirectoryBrowserResult {
@@ -27,6 +29,8 @@ export interface DirectoryBrowserResult {
 })
 export class DirectoryBrowserComponent implements OnInit {
   mode: 'local' | 's3';
+  /** Only directories/prefixes are selectable (from `data.dirOnly`). */
+  dirOnly = false;
   currentPath = '';
   breadcrumbs: { label: string; path: string }[] = [];
   entries: FileEntry[] = [];
@@ -43,6 +47,7 @@ export class DirectoryBrowserComponent implements OnInit {
     private translate: TranslateService,
   ) {
     this.mode = data.mode;
+    this.dirOnly = !!data.dirOnly;
     this.currentPath = data.initialPath || '';
   }
 
@@ -65,6 +70,11 @@ export class DirectoryBrowserComponent implements OnInit {
       ? this.translate.instant('directoryBrowser.rootHintLocal')
       : this.translate.instant('directoryBrowser.rootHintS3');
   });
+
+  /** Entries shown in the list: directories only when `dirOnly` is set. */
+  get visibleEntries(): FileEntry[] {
+    return this.dirOnly ? this.entries.filter((e) => e.is_dir) : this.entries;
+  }
 
   load(path: string): void {
     this.loading = true;

@@ -123,9 +123,26 @@ export interface UpdateWorkspaceRequest {
   enabled?: boolean;
 }
 
+export type DataSourceType =
+  | 'postgis'
+  | 'mysql'
+  | 'mongo'
+  | 'shapefile'
+  | 'geotiff'
+  | 'geopackage'
+  | 'geojson'
+  | 'worldimage'
+  | 'arcgrid'
+  | 'image_mosaic'
+  | 'image_pyramid'
+  | 'cascaded_wms'
+  | 'redis'
+  | 'metadata'
+  | string;
+
 export interface DataSource {
   name: string;
-  type: 'postgis' | 'shapefile' | 'geotiff' | 'geopackage' | 'metadata' | string;
+  type: DataSourceType;
   workspace?: string;
   enabled: boolean;
   /** Whether this is a built-in data source (e.g. metadata reusing the metadata store); not editable/deletable */

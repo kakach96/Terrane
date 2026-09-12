@@ -664,13 +664,23 @@ async fn query_all_layer_features(
 /// ImagePyramid) 并归一化为 RGBA 图像 + 地理边界 (EPSG:4326)。
 async fn load_raster_layer(_state: &AppState, metadata: &LayerMetadata) -> Option<RasterLayerData> {
     let conn = metadata.connection.as_ref()?;
+    // 目录级数据源 (file_path 指向目录) 通过 native_name 选择具体文件;
+    // ImageMosaic / ImagePyramid 的 file_path 本身就是目录语义, 不参与拼接。
+    let native_name = match metadata.data_source_type {
+        DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => None,
+        _ => Some(metadata.native_name.as_str()),
+    };
     // WorldImage / ImageMosaic / ImagePyramid 是目录/伴生文件, 走目录物化;
     // 其余单文件。
     let materialized = match metadata.data_source_type {
         DataSourceType::WorldImage | DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => {
-            crate::store::materialize_dir(conn).await.ok()??
+            crate::store::materialize_dir_for(conn, native_name)
+                .await
+                .ok()??
         },
-        _ => crate::store::materialize_file(conn).await.ok()??,
+        _ => crate::store::materialize_file_for(conn, native_name)
+            .await
+            .ok()??,
     };
     let path = materialized.path;
     let (image, bounds) = match metadata.data_source_type {

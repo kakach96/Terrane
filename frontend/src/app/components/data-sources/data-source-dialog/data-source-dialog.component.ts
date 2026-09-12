@@ -173,6 +173,7 @@ export class DataSourceDialogComponent {
       data: {
         mode: 'local',
         initialPath: this.initialBrowsePath(),
+        dirOnly: this.browseDirectoriesOnly(),
       },
     });
     dialogRef.afterClosed().subscribe((result?: DirectoryBrowserResult) => {
@@ -201,6 +202,7 @@ export class DataSourceDialogComponent {
         mode: 's3',
         initialPath: this.initialBrowsePath(),
         s3Connection: connection,
+        dirOnly: this.browseDirectoriesOnly(),
       },
     });
     dialogRef.afterClosed().subscribe((result?: DirectoryBrowserResult) => {
@@ -208,6 +210,18 @@ export class DataSourceDialogComponent {
         this.form.get('file_path')?.setValue(result.path);
       }
     });
+  }
+
+  /**
+   * Single-file data-source types (GeoJSON / Shapefile / GeoPackage / GeoTIFF /
+   * WorldImage / ArcGrid) publish one file per layer from a directory-level
+   * data source, so the browser is restricted to directories. Directory-semantics
+   * types (ImageMosaic / ImagePyramid) keep unrestricted browsing.
+   */
+  private browseDirectoriesOnly(): boolean {
+    return ['geojson', 'shapefile', 'geopackage', 'geotiff', 'worldimage', 'arcgrid'].includes(
+      this.selectedType,
+    );
   }
 
   /** Derive the initial browse directory from the current file_path (its parent dir/prefix) */
@@ -233,14 +247,23 @@ export class DataSourceDialogComponent {
   }
 
   testConnection(): void {
-    if (
-      this.selectedType !== 'postgis' &&
-      this.selectedType !== 'mysql' &&
-      this.selectedType !== 'mongo' &&
-      this.selectedType !== 'redis' &&
-      this.selectedType !== 'image_mosaic' &&
-      this.selectedType !== 'image_pyramid'
-    ) {
+    // 文件型数据源 (目录级) 现在也支持连接测试 (后端列出可发布文件);
+    // CascadedWms 等其余类型暂不支持
+    const testableTypes = [
+      'postgis',
+      'mysql',
+      'mongo',
+      'redis',
+      'image_mosaic',
+      'image_pyramid',
+      'geojson',
+      'shapefile',
+      'geopackage',
+      'geotiff',
+      'worldimage',
+      'arcgrid',
+    ];
+    if (!testableTypes.includes(this.selectedType)) {
       this.notificationService.info(this.translate.instant('dataSources.postgisOnlyTest'));
       return;
     }

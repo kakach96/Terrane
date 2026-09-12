@@ -47,17 +47,19 @@ fn is_raster_type(ds_type: &DataSourceType) -> bool {
 /// Materialize a raster data source to a local file (supports local / s3).
 ///
 /// WorldImage needs its world-file sibling and ImageMosaic / ImagePyramid are
-/// directories, so they go through `materialize_dir`; GeoTIFF / ArcGrid are
-/// single files via `materialize_file`.
+/// directories, so they go through `materialize_dir_for`; GeoTIFF / ArcGrid are
+/// single files via `materialize_file_for`. `native_name` is used to resolve a
+/// concrete file inside a directory-level data source.
 async fn materialize_raster(
     conn: &crate::models::DataSourceConnection,
     ds_type: &DataSourceType,
+    native_name: Option<&str>,
 ) -> Result<Option<crate::store::file_resolver::MaterializedFile>, crate::error::TerraneError> {
     match ds_type {
         DataSourceType::WorldImage | DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => {
-            crate::store::materialize_dir(conn).await
+            crate::store::materialize_dir_for(conn, native_name).await
         },
-        _ => crate::store::materialize_file(conn).await,
+        _ => crate::store::materialize_file_for(conn, native_name).await,
     }
 }
 
@@ -109,7 +111,15 @@ async fn discover_coverages(state: &AppState) -> Vec<CoverageCollection> {
             .to_string(),
         };
 
-        match materialize_raster(conn, &ds.data_source_type).await {
+        match materialize_raster(
+            conn,
+            &ds.data_source_type,
+            crate::handlers::data_source_handler::resolve_raster_native_name(state, ds)
+                .await
+                .as_deref(),
+        )
+        .await
+        {
             Ok(Some(materialized)) => {
                 let path = materialized.path;
                 match ds.data_source_type {
@@ -202,9 +212,15 @@ async fn read_raster_image(
         return None;
     }
     let conn = ds.connection.as_ref()?;
-    let materialized = materialize_raster(conn, &ds.data_source_type)
-        .await
-        .ok()??;
+    let materialized = materialize_raster(
+        conn,
+        &ds.data_source_type,
+        crate::handlers::data_source_handler::resolve_raster_native_name(state, &ds)
+            .await
+            .as_deref(),
+    )
+    .await
+    .ok()??;
     let path = materialized.path;
     match ds.data_source_type {
         DataSourceType::Geotiff => crate::utils::geotiff::read_geotiff(&path)

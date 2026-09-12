@@ -24,18 +24,20 @@ pub async fn handle_wcs_request(
 
 /// 解析栅格数据源文件到本地路径 (支持 local / s3)。
 ///
-/// WorldImage 需要读取 .wld 世界文件伴生对象, 走 `materialize_dir`;
-/// ImageMosaic 是栅格目录, 走 `materialize_dir`; GeoTIFF / ArcGrid 单文件,
-/// 走 `materialize_file`。
+/// WorldImage 需要读取 .wld 世界文件伴生对象, 走 `materialize_dir_for`;
+/// ImageMosaic 是栅格目录, 走 `materialize_dir_for`; GeoTIFF / ArcGrid 单文件,
+/// 走 `materialize_file_for`。`native_name` 用于目录级文件数据源按文件解析
+/// (ImageMosaic / ImagePyramid 为 None, 目录本身即数据源)。
 async fn materialize_raster(
     conn: &crate::models::DataSourceConnection,
     ds_type: &DataSourceType,
+    native_name: Option<&str>,
 ) -> Result<Option<crate::store::file_resolver::MaterializedFile>, TerraneError> {
     match ds_type {
         DataSourceType::WorldImage | DataSourceType::ImageMosaic | DataSourceType::ImagePyramid => {
-            crate::store::materialize_dir(conn).await
+            crate::store::materialize_dir_for(conn, native_name).await
         },
-        _ => crate::store::materialize_file(conn).await,
+        _ => crate::store::materialize_file_for(conn, native_name).await,
     }
 }
 
@@ -123,8 +125,13 @@ async fn handle_describe_coverage(
         if let Some(store) = &state.store {
             if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
                 if let Some(conn) = &ds.connection {
+                    let native_name =
+                        crate::handlers::data_source_handler::resolve_raster_native_name(
+                            state, &ds,
+                        )
+                        .await;
                     if let Ok(Some(materialized)) =
-                        materialize_raster(conn, &ds.data_source_type).await
+                        materialize_raster(conn, &ds.data_source_type, native_name.as_deref()).await
                     {
                         let path = materialized.path;
                         match ds.data_source_type {
@@ -269,8 +276,9 @@ async fn handle_get_coverage(
         if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
             if ds.data_source_type == DataSourceType::ImageMosaic {
                 if let Some(conn) = &ds.connection {
+                    // ImageMosaic 目录本身即数据源, 无文件级 native_name。
                     if let Ok(Some(materialized)) =
-                        materialize_raster(conn, &ds.data_source_type).await
+                        materialize_raster(conn, &ds.data_source_type, None).await
                     {
                         let dir = materialized.path;
                         let granules = crate::utils::mosaic::load_mosaic(&dir);
@@ -300,8 +308,9 @@ async fn handle_get_coverage(
         if let Ok(Some(ds)) = store.get_data_source(coverage_id).await {
             if ds.data_source_type == DataSourceType::ImagePyramid {
                 if let Some(conn) = &ds.connection {
+                    // ImagePyramid 目录本身即数据源, 无文件级 native_name。
                     if let Ok(Some(materialized)) =
-                        materialize_raster(conn, &ds.data_source_type).await
+                        materialize_raster(conn, &ds.data_source_type, None).await
                     {
                         let dir = materialized.path;
                         let levels = crate::utils::pyramid::load_pyramid(&dir);
@@ -339,8 +348,13 @@ async fn handle_get_coverage(
                 || ds.data_source_type == DataSourceType::ArcGrid;
             if is_raster {
                 if let Some(conn) = &ds.connection {
+                    let native_name =
+                        crate::handlers::data_source_handler::resolve_raster_native_name(
+                            state, &ds,
+                        )
+                        .await;
                     if let Ok(Some(materialized)) =
-                        materialize_raster(conn, &ds.data_source_type).await
+                        materialize_raster(conn, &ds.data_source_type, native_name.as_deref()).await
                     {
                         let path = materialized.path;
                         info!("[WCS] 从 {:?} 读取覆盖: {:?}", ds.data_source_type, path);

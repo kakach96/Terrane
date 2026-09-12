@@ -304,11 +304,71 @@ pub async fn get_layer(
     Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
 }
 
+/// 目录级文件数据源的 native_name 校验。
+///
+/// file_path 指向目录/对象前缀的文件型数据源按文件发布图层:
+/// native_name 必须存在且是目录内可发布的文件。
+/// 单文件数据源 (旧模型) 与非文件型数据源不做校验, 返回 Ok。
+async fn validate_directory_native_name(
+    ds: &crate::models::DataSource,
+    native_name: Option<&str>,
+) -> Result<(), TerraneError> {
+    if !ds.is_file_based() {
+        return Ok(());
+    }
+    // ImageMosaic / ImagePyramid 的 file_path 本身就是目录语义,
+    // 不做文件级 native_name 校验。
+    if matches!(
+        ds.data_source_type,
+        crate::models::DataSourceType::ImageMosaic | crate::models::DataSourceType::ImagePyramid
+    ) {
+        return Ok(());
+    }
+    let Some(conn) = ds.connection.as_ref() else {
+        return Ok(());
+    };
+    if !crate::store::is_directory_connection(conn) {
+        return Ok(());
+    }
+    let native = native_name
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| {
+            TerraneError::BadRequest(format!(
+                "Data source '{}' is directory-level: native_name is required and must be a file inside the directory",
+                ds.name
+            ))
+        })?;
+    let files =
+        crate::handlers::data_source_handler::list_directory_files(conn, &ds.data_source_type)
+            .await?;
+    if files.iter().any(|f| f == native) {
+        return Ok(());
+    }
+    Err(TerraneError::BadRequest(format!(
+        "File '{}' not found in data source '{}' (available: {})",
+        native,
+        ds.name,
+        if files.is_empty() {
+            "(none)".to_string()
+        } else {
+            files.join(", ")
+        }
+    )))
+}
+
 pub async fn create_layer(
     body: web::Json<CreateLayerRequest>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, TerraneError> {
     let srs = body.srs.clone().unwrap_or_else(|| "EPSG:4326".to_string());
+
+    // 0. 目录级文件数据源: 校验 native_name 指向目录内的可发布文件
+    if let Some(store) = &state.store {
+        if let Ok(Some(ds)) = store.get_data_source(&body.store).await {
+            validate_directory_native_name(&ds, body.native_name.as_deref()).await?;
+        }
+    }
 
     // 1. 用户显式提供了边界 → 优先使用
     let (mut minx, mut miny, mut maxx, mut maxy) = if let (Some(x1), Some(y1), Some(x2), Some(y2)) =
@@ -411,6 +471,7 @@ pub async fn create_layer(
                 );
                 created.native_bounds = created.lat_lon_bounds.clone();
                 created.cache_store = created_layer.cache_store.clone();
+                created.native_name = created_layer.native_name.clone();
                 state.add_layer(created).await;
 
                 let response = serde_json::json!({
@@ -454,6 +515,12 @@ pub async fn update_layer(
     let layer_name = req.match_info().get("layer").unwrap_or("");
 
     if let Some(store) = &state.store {
+        // 目录级文件数据源: 校验新的 native_name 指向目录内的可发布文件
+        if let Ok(Some(layer)) = store.get_layer(layer_name).await {
+            if let Ok(Some(ds)) = store.get_data_source(&layer.store).await {
+                validate_directory_native_name(&ds, body.native_name.as_deref()).await?;
+            }
+        }
         match store
             .update_layer(
                 layer_name,

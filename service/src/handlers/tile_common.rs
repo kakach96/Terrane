@@ -198,13 +198,26 @@ pub async fn render_tile_bytes(
                     | crate::models::DataSourceType::ImagePyramid
             ) {
                 if let Some(conn) = &ds.connection {
+                    // 目录级数据源通过 native_name 选择具体文件;
+                    // ImageMosaic / ImagePyramid 的 file_path 本身就是目录语义。
+                    let native_name = match ds.data_source_type {
+                        crate::models::DataSourceType::ImageMosaic
+                        | crate::models::DataSourceType::ImagePyramid => None,
+                        _ => Some(layer_obj.native_name.as_deref().unwrap_or("")),
+                    };
                     let materialized = match ds.data_source_type {
                         crate::models::DataSourceType::WorldImage
                         | crate::models::DataSourceType::ImageMosaic
                         | crate::models::DataSourceType::ImagePyramid => {
-                            crate::store::materialize_dir(conn).await.ok().flatten()
+                            crate::store::materialize_dir_for(conn, native_name)
+                                .await
+                                .ok()
+                                .flatten()
                         },
-                        _ => crate::store::materialize_file(conn).await.ok().flatten(),
+                        _ => crate::store::materialize_file_for(conn, native_name)
+                            .await
+                            .ok()
+                            .flatten(),
                     };
                     if let Some(m) = materialized {
                         let img_bounds = match ds.data_source_type {

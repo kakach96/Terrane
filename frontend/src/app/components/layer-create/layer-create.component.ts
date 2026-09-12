@@ -26,6 +26,30 @@ export class LayerCreateComponent {
   loading = false;
   /** When the metadata built-in data source has no existing business tables: auto-use the layer name as the table */
   metadataNewTable = false;
+  /** Selected data source is file-based: the cascade lists directory files instead of DB tables */
+  fileTableMode = false;
+
+  /** File-based data-source types publish per-file layers from a directory.
+   * ImageMosaic / ImagePyramid are excluded: their file_path is the raster
+   * directory itself, no file-level cascade applies. */
+  private isFileBasedType(type: string): boolean {
+    return ['geojson', 'shapefile', 'geopackage', 'geotiff', 'worldimage', 'arcgrid'].includes(
+      type,
+    );
+  }
+
+  /**
+   * Mark the table/file control required only when the selected data source
+   * actually needs a native_name (PostGIS table / directory-level data file).
+   * Single-file and directory-semantics sources (ImageMosaic / ImagePyramid)
+   * publish layers without a native_name.
+   */
+  private setTableRequired(required: boolean): void {
+    const ctrl = this.layerForm.get('table');
+    if (!ctrl) return;
+    ctrl.setValidators(required ? [Validators.required] : null);
+    ctrl.updateValueAndValidity();
+  }
 
   // ── Signal pipeline: workspaces ───────────────────────────────────
   private workspaces$ = this.terraneService
@@ -82,34 +106,49 @@ export class LayerCreateComponent {
     this.tables$ = this.layerForm.get('dataSource')!.valueChanges.pipe(
       distinctUntilChanged(),
       switchMap((dataSourceName: string) => {
+        const tableCtrl = this.layerForm.get('table')!;
         if (!dataSourceName) {
           this.metadataNewTable = false;
-          this.layerForm.get('table')?.setValue('');
+          this.fileTableMode = false;
+          tableCtrl.setValue('');
+          this.setTableRequired(false);
           return of([] as string[]);
         }
         const ds = this.dataSources().find((d) => d.name === dataSourceName);
-        if (!ds || ds.type !== 'postgis') {
+        // 表/文件级联: PostGIS 走数据库表列表; 文件类数据源走目录文件列表
+        // (目录级数据源按文件发布, native_name = 目录内的文件名)
+        const fileBased = !!ds && this.isFileBasedType(ds.type);
+        if (!ds || (ds.type !== 'postgis' && !fileBased)) {
           this.metadataNewTable = false;
-          this.layerForm.get('table')?.setValue('');
+          this.fileTableMode = false;
+          tableCtrl.setValue('');
+          this.setTableRequired(false);
           return of([] as string[]);
         }
         return this.terraneService.getDataSourceTables(dataSourceName).pipe(
           tap((tables) => {
+            // 仅目录级文件数据源有文件列表; 单文件 / 其他类型无级联
+            this.fileTableMode = fileBased && tables.length > 0;
             if (ds.name === 'metadata') {
               if (tables.length > 0) {
                 this.metadataNewTable = false;
-                this.layerForm.get('table')?.setValue('');
+                tableCtrl.setValue('');
               } else {
                 this.metadataNewTable = true;
                 const layerName = this.layerForm.get('name')?.value;
-                this.layerForm.get('table')?.setValue(layerName || '');
+                tableCtrl.setValue(layerName || '');
               }
+              this.setTableRequired(true);
             } else {
-              this.layerForm.get('table')?.setValue('');
+              tableCtrl.setValue('');
+              // PostGIS → 表必填; 文件类 → 仅目录级有文件列表时必填
+              this.setTableRequired(fileBased ? this.fileTableMode : true);
             }
           }),
           catchError(() => {
             this.metadataNewTable = false;
+            this.fileTableMode = false;
+            this.setTableRequired(false);
             return of([] as string[]);
           }),
         );

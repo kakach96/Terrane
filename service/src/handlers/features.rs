@@ -102,13 +102,34 @@ pub async fn query_layer_features(
                 return Ok(Vec::new());
             },
             DataSourceType::Shapefile => {
-                return query_shapefile_features(ds, bbox, limit, offset).await;
+                return query_shapefile_features(
+                    ds,
+                    layer.native_name.as_deref(),
+                    bbox,
+                    limit,
+                    offset,
+                )
+                .await;
             },
             DataSourceType::GeoJson => {
-                return query_geojson_features(ds, bbox, limit, offset).await;
+                return query_geojson_features(
+                    ds,
+                    layer.native_name.as_deref(),
+                    bbox,
+                    limit,
+                    offset,
+                )
+                .await;
             },
             DataSourceType::Geopackage => {
-                return query_geopackage_features(ds, bbox, limit, offset).await;
+                return query_geopackage_features(
+                    ds,
+                    layer.native_name.as_deref(),
+                    bbox,
+                    limit,
+                    offset,
+                )
+                .await;
             },
             DataSourceType::Geotiff => {
                 info!(
@@ -216,11 +237,12 @@ pub(crate) fn builtin_metadata_data_source(state: &AppState) -> Option<DataSourc
     }
 }
 
-/// 从 GeoJSON 数据源查询要素。
-///
 /// 从 GeoJSON 数据源查询要素 (支持 local / s3)。
+///
+/// 目录级数据源 (file_path 指向目录) 通过 native_name 选择目录内的具体文件。
 async fn query_geojson_features(
     ds: &crate::models::DataSource,
+    native_name: Option<&str>,
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     offset: Option<u64>,
@@ -229,14 +251,12 @@ async fn query_geojson_features(
         .connection
         .as_ref()
         .ok_or_else(|| TerraneError::BadRequest("GeoJSON 数据源缺少连接信息".to_string()))?;
-    let file_path = conn
-        .file_path
-        .as_ref()
+    let file_path = crate::store::resolve_file_path(conn, native_name)
         .ok_or_else(|| TerraneError::BadRequest("GeoJSON 数据源缺少文件路径".to_string()))?;
 
     info!("[Features] 从 GeoJSON 读取要素: {}", file_path);
 
-    let bytes = crate::store::read_bytes(conn)
+    let bytes = crate::store::read_bytes_for(conn, native_name)
         .await?
         .ok_or_else(|| TerraneError::NotFound(format!("GeoJSON 文件不存在: {}", file_path)))?;
     let raw = String::from_utf8(bytes)
@@ -271,8 +291,11 @@ async fn query_geojson_features(
 }
 
 /// 从 Shapefile 数据源查询要素 (支持 local / s3)。
+///
+/// 目录级数据源 (file_path 指向目录) 通过 native_name 选择目录内的具体 .shp 文件。
 async fn query_shapefile_features(
     ds: &crate::models::DataSource,
+    native_name: Option<&str>,
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     offset: Option<u64>,
@@ -281,14 +304,12 @@ async fn query_shapefile_features(
         .connection
         .as_ref()
         .ok_or_else(|| TerraneError::BadRequest("Shapefile 数据源缺少连接信息".to_string()))?;
-    let file_path = conn
-        .file_path
-        .as_ref()
+    let file_path = crate::store::resolve_file_path(conn, native_name)
         .ok_or_else(|| TerraneError::BadRequest("Shapefile 数据源缺少文件路径".to_string()))?;
 
     info!("[Features] 从 Shapefile 读取要素: {}", file_path);
 
-    let materialized = crate::store::materialize_dir(conn)
+    let materialized = crate::store::materialize_dir_for(conn, native_name)
         .await?
         .ok_or_else(|| TerraneError::NotFound(format!("Shapefile 文件不存在: {}", file_path)))?;
     let result = crate::utils::shapefile::read_shapefile(&materialized.path)
@@ -694,8 +715,13 @@ async fn get_geometry_column(
 }
 
 /// 从 GeoPackage 查询要素 (支持 local / s3)。
+///
+/// 两种 native_name 语义 (以 file_path 是否为目录区分):
+/// - 目录级数据源: native_name = 目录内的 .gpkg 文件名, 读该文件第一个图层
+/// - 单文件数据源: native_name = 文件内的表名 (缺省读第一个有数据的图层)
 async fn query_geopackage_features(
     ds: &crate::models::DataSource,
+    native_name: Option<&str>,
     bbox: Option<&Bounds>,
     limit: Option<u64>,
     offset: Option<u64>,
@@ -704,14 +730,12 @@ async fn query_geopackage_features(
         .connection
         .as_ref()
         .ok_or_else(|| TerraneError::BadRequest("GeoPackage 数据源缺少连接信息".to_string()))?;
-    let file_path = conn
-        .file_path
-        .as_ref()
+    let file_path = crate::store::resolve_file_path(conn, native_name)
         .ok_or_else(|| TerraneError::BadRequest("GeoPackage 数据源缺少文件路径".to_string()))?;
 
     info!("[Features] 从 GeoPackage 读取要素: {}", file_path);
 
-    let materialized = crate::store::materialize_file(conn)
+    let materialized = crate::store::materialize_file_for(conn, native_name)
         .await?
         .ok_or_else(|| TerraneError::NotFound(format!("GeoPackage 文件不存在: {}", file_path)))?;
     let local_path = materialized.path.as_path();
@@ -726,11 +750,22 @@ async fn query_geopackage_features(
         ));
     }
 
-    // 使用第一个图层
-    let first_layer = &layers[0];
+    // 表名选择: 单文件数据源且 native_name 命中内表时用 native_name, 否则用第一个图层
+    let directory_level = crate::store::is_directory_connection(conn);
+    let table_name = if !directory_level {
+        native_name
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .filter(|n| layers.iter().any(|l| &l.table_name == n))
+    } else {
+        None
+    };
+    let selected_layer = table_name
+        .and_then(|n| layers.iter().find(|l| l.table_name == *n))
+        .unwrap_or(&layers[0]);
     let result = crate::utils::geopackage::read_geopackage_layer_features(
         local_path,
-        &first_layer.table_name,
+        &selected_layer.table_name,
         limit,
     )
     .map_err(|e| TerraneError::InternalError(format!("读取要素失败: {}", e)))?;

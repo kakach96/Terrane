@@ -377,7 +377,9 @@ async fn test_datasource_connection(ds: &DataSource) -> serde_json::Value {
     }
 }
 
-/// 文件型数据源连接测试: local → 校验文件存在; s3 → 校验对象可读。
+/// 文件型数据源连接测试: local → 校验文件/目录存在; s3 → 校验对象可读。
+///
+/// 目录级数据源 (file_path 指向目录/对象前缀) 额外统计目录内可发布文件数。
 async fn test_file_connection(ds: &DataSource) -> serde_json::Value {
     let conn = match &ds.connection {
         Some(c) => c,
@@ -399,32 +401,99 @@ async fn test_file_connection(ds: &DataSource) -> serde_json::Value {
     };
     match crate::store::storage_type(conn) {
         "local" => {
-            if std::path::Path::new(file_path).exists() {
+            let path = std::path::Path::new(file_path);
+            if !path.exists() {
+                return serde_json::json!({
+                    "success": false,
+                    "message": format!("Path not found: {}", file_path),
+                });
+            }
+            if path.is_dir() {
+                // ImageMosaic / ImagePyramid 的目录本身就是数据源语义,
+                // 无需按扩展名统计可发布文件。
+                if is_directory_semantics_type(&ds.data_source_type) {
+                    return serde_json::json!({
+                        "success": true,
+                        "message": format!("Directory exists: {}", file_path),
+                    });
+                }
+                match list_directory_files(conn, &ds.data_source_type).await {
+                    Ok(files) if files.is_empty() => serde_json::json!({
+                        "success": false,
+                        "message": format!(
+                            "Directory contains no publishable files of type {:?}: {}",
+                            ds.data_source_type, file_path
+                        ),
+                    }),
+                    Ok(files) => serde_json::json!({
+                        "success": true,
+                        "message": format!(
+                            "Directory exists: {} ({} publishable file(s))",
+                            file_path,
+                            files.len()
+                        ),
+                    }),
+                    Err(e) => serde_json::json!({
+                        "success": false,
+                        "message": format!("Directory scan failed: {}", e),
+                    }),
+                }
+            } else {
                 serde_json::json!({
                     "success": true,
                     "message": format!("File exists: {}", file_path),
                 })
-            } else {
-                serde_json::json!({
-                    "success": false,
-                    "message": format!("File not found: {}", file_path),
-                })
             }
         },
         "s3" => match crate::store::S3FileStore::from_connection(conn) {
-            Ok(store) => match store.get(file_path).await {
-                Ok(Some(_)) => serde_json::json!({
-                    "success": true,
-                    "message": format!("Object exists: {}", file_path),
-                }),
-                Ok(None) => serde_json::json!({
-                    "success": false,
-                    "message": format!("Object not found: {}", file_path),
-                }),
-                Err(e) => serde_json::json!({
-                    "success": false,
-                    "message": format!("S3 read failed: {}", e),
-                }),
+            Ok(store) => {
+                // 目录级连接以 '/' 结尾: 列出前缀下的对象; 否则按对象检查
+                let is_dir_prefix = crate::store::is_directory_connection(conn);
+                if is_dir_prefix {
+                    // ImageMosaic / ImagePyramid 的前缀本身就是数据源语义。
+                    if is_directory_semantics_type(&ds.data_source_type) {
+                        return serde_json::json!({
+                            "success": true,
+                            "message": format!("Prefix accessible: {}", file_path),
+                        });
+                    }
+                    match list_directory_files(conn, &ds.data_source_type).await {
+                        Ok(files) if files.is_empty() => serde_json::json!({
+                            "success": false,
+                            "message": format!(
+                                "Prefix contains no publishable objects of type {:?}: {}",
+                                ds.data_source_type, file_path
+                            ),
+                        }),
+                        Ok(files) => serde_json::json!({
+                            "success": true,
+                            "message": format!(
+                                "Prefix accessible: {} ({} publishable object(s))",
+                                file_path,
+                                files.len()
+                            ),
+                        }),
+                        Err(e) => serde_json::json!({
+                            "success": false,
+                            "message": format!("Prefix listing failed: {}", e),
+                        }),
+                    }
+                } else {
+                    match store.get(file_path).await {
+                        Ok(Some(_)) => serde_json::json!({
+                            "success": true,
+                            "message": format!("Object exists: {}", file_path),
+                        }),
+                        Ok(None) => serde_json::json!({
+                            "success": false,
+                            "message": format!("Object not found: {}", file_path),
+                        }),
+                        Err(e) => serde_json::json!({
+                            "success": false,
+                            "message": format!("S3 read failed: {}", e),
+                        }),
+                    }
+                }
             },
             Err(e) => serde_json::json!({
                 "success": false,
@@ -436,6 +505,145 @@ async fn test_file_connection(ds: &DataSource) -> serde_json::Value {
             "message": format!("Unsupported file storage type: {}", other),
         }),
     }
+}
+
+/// ImageMosaic / ImagePyramid 是目录语义数据源: file_path 本身就是栅格目录,
+/// 不做文件级发布 (每个图层仍指向整个目录)。
+fn is_directory_semantics_type(t: &DataSourceType) -> bool {
+    matches!(
+        t,
+        DataSourceType::ImageMosaic | DataSourceType::ImagePyramid
+    )
+}
+
+/// 数据源类型可发布的文件扩展名 (目录级数据源的文件筛选)。
+fn publishable_extensions(t: &DataSourceType) -> &'static [&'static str] {
+    match t {
+        DataSourceType::GeoJson => &["geojson", "json"],
+        DataSourceType::Shapefile => &["shp"],
+        DataSourceType::Geopackage => &["gpkg"],
+        DataSourceType::Geotiff => &["tif", "tiff"],
+        DataSourceType::WorldImage => &["png", "jpg", "jpeg", "tif", "tiff", "gif"],
+        DataSourceType::ArcGrid => &["asc", "grd"],
+        // ImageMosaic / ImagePyramid 是目录语义数据源, 不做文件级发布
+        _ => &[],
+    }
+}
+
+/// 列出目录级文件数据源内可发布的文件名。
+///
+/// - local: 读目录并按数据源类型的扩展名过滤。
+/// - s3: 列出前缀下的对象键并按扩展名过滤, 返回相对前缀的键。
+pub(crate) async fn list_directory_files(
+    conn: &DataSourceConnection,
+    ds_type: &DataSourceType,
+) -> Result<Vec<String>, TerraneError> {
+    let extensions = publishable_extensions(ds_type);
+    if extensions.is_empty() {
+        return Ok(Vec::new());
+    }
+    let matches_ext = |name: &str| {
+        let lower = name.to_lowercase();
+        extensions
+            .iter()
+            .any(|ext| lower.rsplit('.').next() == Some(*ext))
+    };
+
+    match crate::store::storage_type(conn) {
+        "local" => {
+            let dir = conn
+                .file_path
+                .as_deref()
+                .filter(|p| !p.trim().is_empty())
+                .ok_or_else(|| {
+                    TerraneError::BadRequest("File data source has no file path".to_string())
+                })?;
+            let mut files = Vec::new();
+            let entries = std::fs::read_dir(dir).map_err(|e| {
+                TerraneError::InternalError(format!("读取目录失败 '{}': {}", dir, e))
+            })?;
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        if matches_ext(name) {
+                            files.push(name.to_string());
+                        }
+                    }
+                }
+            }
+            files.sort();
+            Ok(files)
+        },
+        "s3" => {
+            let store = crate::store::S3FileStore::from_connection(conn)
+                .map_err(|e| TerraneError::InternalError(format!("S3 config invalid: {}", e)))?;
+            let prefix = format!(
+                "{}/",
+                conn.file_path
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim_end_matches('/')
+            );
+            let keys = store
+                .list_prefix(&prefix)
+                .await
+                .map_err(|e| TerraneError::InternalError(format!("S3 listing failed: {}", e)))?;
+            let mut files = Vec::new();
+            for key in keys {
+                if let Some(name) = key.strip_prefix(&prefix) {
+                    // 只取一层深度, 忽略子目录对象
+                    if !name.contains('/') && matches_ext(name) {
+                        files.push(name.to_string());
+                    }
+                }
+            }
+            files.sort();
+            Ok(files)
+        },
+        other => Err(TerraneError::NotImplemented(format!(
+            "Unsupported file storage type: {}",
+            other
+        ))),
+    }
+}
+
+/// 目录级栅格数据源的解析目标文件 (native_name)。
+///
+/// WCS / OGC Coverages 以数据源名寻址, 而目录级文件数据源按文件发布图层,
+/// 所以优先取该数据源下第一个已发布图层的 native_name, 否则取目录内第一个
+/// 可发布文件。ImageMosaic / ImagePyramid 的 file_path 本身就是目录语义,
+/// 返回 None (不参与文件级解析)。
+pub(crate) async fn resolve_raster_native_name(
+    state: &AppState,
+    ds: &DataSource,
+) -> Option<String> {
+    let conn = ds.connection.as_ref()?;
+    if is_directory_semantics_type(&ds.data_source_type) {
+        return None;
+    }
+    if !crate::store::is_directory_connection(conn) {
+        return None;
+    }
+    let layers = state.layers.read().await;
+    for layer in layers.iter() {
+        if layer.store == ds.name {
+            if let Some(n) = layer
+                .native_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|n| !n.is_empty())
+            {
+                return Some(n.to_string());
+            }
+        }
+    }
+    drop(layers);
+    list_directory_files(conn, &ds.data_source_type)
+        .await
+        .ok()?
+        .into_iter()
+        .next()
 }
 
 /// MongoDB 数据源连接测试: 建立客户端并 ping 验证可连通性。
@@ -715,8 +923,21 @@ pub async fn get_data_source_tables(
                     elapsed_get_ds
                 );
 
+                // 目录级文件数据源 (file_path 指向目录/对象前缀): 列出目录内
+                // 可发布的文件, 供图层发布的 native_name 级联选择。该分支在
+                // GeoPackage 之前, 保证目录级 GeoPackage 也走文件列表。
+                if data_source.is_file_based() {
+                    if let Some(conn) = &data_source.connection {
+                        if crate::store::is_directory_connection(conn) {
+                            let files =
+                                list_directory_files(conn, &data_source.data_source_type).await?;
+                            return Ok(HttpResponse::Ok().json(ApiResponse::success(files)));
+                        }
+                    }
+                }
+
                 if data_source.data_source_type == DataSourceType::Geopackage {
-                    // GeoPackage: 列出文件中的要素表 (local / s3)
+                    // GeoPackage: 列出文件中的要素表 (local / s3, 单文件)
                     let conn = data_source.connection.as_ref().ok_or_else(|| {
                         TerraneError::BadRequest(
                             "GeoPackage data source has no connection".to_string(),
@@ -738,6 +959,11 @@ pub async fn get_data_source_tables(
                         })
                         .unwrap_or_default();
                     return Ok(HttpResponse::Ok().json(ApiResponse::success(tables)));
+                }
+
+                // 单文件 (非目录级) 文件数据源: 无文件级联, 图层直接读 file_path。
+                if data_source.is_file_based() {
+                    return Ok(HttpResponse::Ok().json(ApiResponse::success(Vec::<String>::new())));
                 }
 
                 if data_source.data_source_type != DataSourceType::Postgis {
@@ -916,17 +1142,49 @@ pub async fn get_layer_feature_type(
             }
         } else if data_source.data_source_type == DataSourceType::Geopackage {
             // GeoPackage: 从 .gpkg 文件的要素表读取列定义 (local / s3)
-            let table_name = layer.native_name.as_ref().ok_or_else(|| {
-                TerraneError::BadRequest("Layer has no native table name configured".to_string())
-            })?;
+            //
+            // 目录级数据源: native_name = 目录内的 .gpkg 文件名, 表选该文件
+            // 第一个图层 (与 features.rs / bounds.rs 语义一致);
+            // 单文件数据源: native_name = 文件内的表名。
             let conn = data_source.connection.as_ref().ok_or_else(|| {
                 TerraneError::BadRequest("GeoPackage data source has no connection".to_string())
             })?;
-            let materialized = crate::store::materialize_file(conn).await?.ok_or_else(|| {
-                TerraneError::BadRequest("GeoPackage data source has no file path".to_string())
-            })?;
+            let directory_level = crate::store::is_directory_connection(conn);
+            let native_name = layer.native_name.as_deref();
+            let materialized = crate::store::materialize_file_for(conn, native_name)
+                .await?
+                .ok_or_else(|| {
+                    TerraneError::BadRequest("GeoPackage data source has no file path".to_string())
+                })?;
             let local_path = materialized.path.to_string_lossy().to_string();
-            let columns = get_geopackage_table_columns(&local_path, table_name)
+            let layers =
+                crate::utils::geopackage::read_geopackage_layers(&local_path).map_err(|e| {
+                    TerraneError::BadRequest(format!("Failed to read GeoPackage: {}", e))
+                })?;
+            let table_name = if directory_level {
+                // 目录级: 文件名是 native_name, 数据表取第一个图层
+                layers
+                    .first()
+                    .map(|l| l.table_name.clone())
+                    .ok_or_else(|| {
+                        TerraneError::BadRequest(
+                            "GeoPackage file has no feature layers".to_string(),
+                        )
+                    })?
+            } else {
+                let n = native_name.map(str::trim).filter(|n| !n.is_empty());
+                layers
+                    .iter()
+                    .find(|l| Some(l.table_name.as_str()) == n)
+                    .map(|l| l.table_name.clone())
+                    .ok_or_else(|| {
+                        TerraneError::BadRequest(format!(
+                            "Table '{}' not found in GeoPackage file",
+                            n.unwrap_or("")
+                        ))
+                    })?
+            };
+            let columns = get_geopackage_table_columns(&local_path, &table_name)
                 .await
                 .map_err(|e| {
                     TerraneError::BadRequest(format!("Failed to read GeoPackage: {}", e))
