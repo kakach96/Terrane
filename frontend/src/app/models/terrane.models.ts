@@ -374,6 +374,27 @@ export interface AuditLogEntry {
   detail?: string;
 }
 
+/** Single dependency health check item (GET /monitor/health) */
+export interface HealthCheckItem {
+  name: string;
+  status: 'ok' | 'error';
+  detail?: string;
+}
+
+/** Dependency health aggregation (GET /monitor/health) */
+export interface MonitorHealth {
+  status: 'ready' | 'not_ready';
+  checks: HealthCheckItem[];
+}
+
+/** Catalog overview counts (GET /monitor/catalog, persisted in the metadata store) */
+export interface CatalogStats {
+  workspaces: number;
+  data_sources: number;
+  layers: number;
+  layer_groups: number;
+}
+
 // ===== Users / storage / tile cache =====
 
 /** User */

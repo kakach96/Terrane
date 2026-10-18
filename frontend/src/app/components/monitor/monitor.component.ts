@@ -11,21 +11,24 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslateService } from '@ngx-translate/core';
 import { MatTabChangeEvent } from '@angular/material/tabs';
 import { TerraneService } from '../../services/terrane.service';
-import { NotificationService } from '../../services/notification.service';
 import { LanguageService } from '../../services/language.service';
 import {
   MonitorStats,
-  RequestRecord,
   AuditLogEntry,
   TileCacheStats,
+  MonitorHealth,
+  CatalogStats,
+  SeedJob,
 } from '../../models/terrane.models';
 import { switchMap, map, startWith, catchError, of, combineLatest, interval } from 'rxjs';
 
 interface MonitorData {
   stats: MonitorStats | null;
-  requests: RequestRecord[];
   audit: AuditLogEntry[];
   tileCache: TileCacheStats | null;
+  health: MonitorHealth | null;
+  catalog: CatalogStats | null;
+  seedJobs: SeedJob[];
 }
 
 @Component({
@@ -40,9 +43,8 @@ export class MonitorComponent {
   private translate = inject(TranslateService);
   private languageService = inject(LanguageService);
   private destroyRef = inject(DestroyRef);
-  private notificationService = inject(NotificationService);
 
-  activeTab: 'overview' | 'requests' | 'audit' = 'overview';
+  activeTab: 'overview' | 'cache' | 'audit' = 'overview';
   error = '';
   private refreshTrigger = signal(0);
 
@@ -57,32 +59,43 @@ export class MonitorComponent {
             return of(null as MonitorStats | null);
           }),
         ),
-        this.terrane.getRecentRequests(50).pipe(catchError(() => of([] as RequestRecord[]))),
         this.terrane.getAuditLogs(50, 0).pipe(catchError(() => of([] as AuditLogEntry[]))),
         this.terrane
           .getTileCacheStats()
           .pipe(catchError(() => of(null as TileCacheStats | null))),
+        this.terrane.getMonitorHealth().pipe(catchError(() => of(null as MonitorHealth | null))),
+        this.terrane.getCatalogStats().pipe(catchError(() => of(null as CatalogStats | null))),
+        this.terrane.getSeedJobs().pipe(catchError(() => of([] as SeedJob[]))),
       ]).pipe(
         map(
-          ([stats, requests, audit, tileCache]) =>
-            ({ stats, requests, audit, tileCache }) as MonitorData,
+          ([stats, audit, tileCache, health, catalog, seedJobs]) =>
+            ({ stats, audit, tileCache, health, catalog, seedJobs }) as MonitorData,
         ),
       ),
     ),
   );
 
   private data = toSignal(this.monitorData$, {
-    initialValue: { stats: null, requests: [], audit: [], tileCache: null } as MonitorData,
+    initialValue: {
+      stats: null,
+      audit: [],
+      tileCache: null,
+      health: null,
+      catalog: null,
+      seedJobs: [],
+    } as MonitorData,
   });
 
   // Derived signals
   stats = computed(() => this.data().stats);
-  recentRequests = computed(() => this.data().requests);
   auditLogs = computed(() => this.data().audit);
   tileCacheStats = computed(() => this.data().tileCache);
+  health = computed(() => this.data().health);
+  catalog = computed(() => this.data().catalog);
+  seedJobs = computed(() => this.data().seedJobs);
   loading = computed(() => this.data().stats === null && !this.error);
 
-  // ── Computed chart data ───────────────────────────────────────────
+  // ── Computed helpers ──────────────────────────────────────────────
   uptimeFormatted = computed(() => {
     // Read currentLang to re-translate on language switch.
     this.languageService.currentLang();
@@ -100,40 +113,6 @@ export class MonitorComponent {
     return parts.join(' ');
   });
 
-  errorRateFormatted = computed(() => {
-    const s = this.stats();
-    return s ? s.error_rate.toFixed(2) + '%' : '0%';
-  });
-
-  topEndpoints = computed(() => {
-    const s = this.stats();
-    if (!s) return [];
-    return Object.entries(s.endpoints)
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 10)
-      .map(([name, data]) => ({
-        name,
-        count: data.count,
-        avgDuration: data.avg_duration_ms,
-      }));
-  });
-
-  methodChart = computed(() => {
-    const s = this.stats();
-    if (!s) return [];
-    return Object.entries(s.methods)
-      .sort((a, b) => b[1] - a[1])
-      .map(([method, count]) => ({ method, count }));
-  });
-
-  statusChart = computed(() => {
-    const s = this.stats();
-    if (!s) return [];
-    return Object.entries(s.status_codes)
-      .sort((a, b) => b[1] - a[1])
-      .map(([code, count]) => ({ code, count }));
-  });
-
   constructor() {
     // Auto-refresh every 10 seconds
     interval(10000)
@@ -146,27 +125,28 @@ export class MonitorComponent {
     this.refreshTrigger.update((v) => v + 1);
   }
 
-  resetStats(): void {
-    this.notificationService
-      .confirm(this.translate.instant('common.confirm'), this.translate.instant('monitor.confirmReset'))
-      .subscribe((confirmed: boolean) => {
-        if (!confirmed) return;
-        this.terrane.resetMonitorStats().subscribe({
-          next: () => this.refreshTrigger.update((v) => v + 1),
-          error: (e) =>
-            (this.error = this.translate.instant('monitor.resetFail', { message: e.message })),
-        });
-      });
-  }
-
-  switchTab(tab: 'overview' | 'requests' | 'audit'): void {
+  switchTab(tab: 'overview' | 'cache' | 'audit'): void {
     this.activeTab = tab;
   }
 
   /** Map a mat-tab index back to the active tab id. */
   onTabChange(event: MatTabChangeEvent): void {
-    const tabs = ['overview', 'requests', 'audit'] as const;
+    const tabs = ['overview', 'cache', 'audit'] as const;
     this.activeTab = tabs[event.index] ?? tabs[0];
+  }
+
+  // ── Seed jobs ─────────────────────────────────────────────────────
+  /** Seed job progress percent (0..100), falls back to 0 when total is 0. */
+  seedProgress(job: SeedJob): number {
+    return job.total > 0 ? Math.round((job.done / job.total) * 100) : 0;
+  }
+
+  /** Cancel a running seed job (cooperative). */
+  cancelSeedJob(job: SeedJob): void {
+    this.terrane.cancelSeedJob(job.id).subscribe({
+      next: () => this.refreshTrigger.update((v) => v + 1),
+      error: () => this.refreshTrigger.update((v) => v + 1),
+    });
   }
 
   formatTimestamp(ts: string): string {
@@ -176,12 +156,5 @@ export class MonitorComponent {
     } catch {
       return ts;
     }
-  }
-
-  getMaxMethodCount(): number {
-    const s = this.stats();
-    if (!s) return 1;
-    const counts = Object.values(s.methods);
-    return Math.max(...counts, 1);
   }
 }

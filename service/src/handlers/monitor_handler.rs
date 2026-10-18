@@ -76,13 +76,11 @@ pub async fn get_monitor_stats(state: web::Data<AppState>) -> Result<HttpRespons
 
     // 系统信息
     let system = SystemInfo {
-        version: "1.0.0".to_string(),
-        rust_version: format!(
-            "{}.{}.{}",
-            std::env::var("CARGO_PKG_RUST_VERSION").unwrap_or_else(|_| "1.75".to_string()),
-            "",
-            ""
-        ),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        rust_version: option_env!("CARGO_PKG_RUST_VERSION")
+            .filter(|s| !s.is_empty())
+            .unwrap_or("unknown")
+            .to_string(),
         os: std::env::consts::OS.to_string(),
         hostname: hostname(),
         cpu_cores: num_cpus() as u32,
@@ -175,6 +173,164 @@ pub async fn reset_monitor_stats(state: web::Data<AppState>) -> Result<HttpRespo
     state.request_log.write().await.clear();
 
     Ok(HttpResponse::Ok().json(serde_json::json!({"status": "ok", "message": "监控统计已重置"})))
+}
+
+// ==================== 依赖健康聚合 ====================
+
+/// 单项依赖健康检查结果
+#[derive(Debug, Serialize)]
+pub struct HealthCheck {
+    /// 依赖名称 (metadata_store / tile_cache / redis_cache:<数据源名>)
+    pub name: String,
+    /// ok | error
+    pub status: String,
+    /// 附加说明 (后端类型 / 缓存目录 / 错误信息)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+/// 依赖健康聚合响应
+#[derive(Debug, Serialize)]
+pub struct MonitorHealth {
+    /// ready | not_ready (任一必检依赖失败即 not_ready)
+    pub status: String,
+    pub checks: Vec<HealthCheck>,
+}
+
+/// 获取依赖健康聚合 — `GET /monitor/health`。
+///
+/// 检查项:
+/// - 元数据存储 (SQLite / PostgreSQL): 必检, 失败 → not_ready
+/// - 默认瓦片缓存 (本地磁盘): 报告目录, 不阻塞就绪
+/// - Redis 缓存数据源: 逐个 PING, 失败不阻塞就绪 (图层级缓存会自动回退)
+pub async fn get_monitor_health(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
+    let mut checks: Vec<HealthCheck> = Vec::new();
+    let mut ready = true;
+
+    // 1. 元数据存储 — 必须可查询
+    if let Some(ref store) = state.store {
+        match store.get_all_workspaces().await {
+            Ok(_) => checks.push(HealthCheck {
+                name: "metadata_store".to_string(),
+                status: "ok".to_string(),
+                detail: Some(state.config.metadata.kind.clone()),
+            }),
+            Err(e) => {
+                ready = false;
+                checks.push(HealthCheck {
+                    name: "metadata_store".to_string(),
+                    status: "error".to_string(),
+                    detail: Some(format!("query failed: {}", e)),
+                });
+            },
+        }
+    } else {
+        ready = false;
+        checks.push(HealthCheck {
+            name: "metadata_store".to_string(),
+            status: "error".to_string(),
+            detail: Some("store not initialized".to_string()),
+        });
+    }
+
+    // 2. 默认瓦片缓存 (本地磁盘) — 可选, 仅报告
+    if let Some(ref cache) = state.tile_cache {
+        let st = cache.stats();
+        checks.push(HealthCheck {
+            name: "tile_cache".to_string(),
+            status: "ok".to_string(),
+            detail: Some(format!(
+                "local disk: {} (hits: {}, misses: {})",
+                cache.config.cache_dir.display(),
+                st.hits,
+                st.misses
+            )),
+        });
+    }
+
+    // 3. Redis 缓存数据源 — 逐个 PING (可选, 失败不阻塞就绪)
+    if let Some(ref store) = state.store {
+        if let Ok(datasources) = store.get_all_data_sources().await {
+            for ds in datasources.iter() {
+                if ds.data_source_type != crate::models::DataSourceType::Redis || !ds.enabled {
+                    continue;
+                }
+                let url = ds
+                    .connection
+                    .as_ref()
+                    .and_then(crate::store::cache::redis::redis_url_from_connection);
+                let name = format!("redis_cache:{}", ds.name);
+                match url {
+                    Some(u) => match crate::store::cache::redis::RedisConn::new(&u).ping().await {
+                        Ok(()) => checks.push(HealthCheck {
+                            name,
+                            status: "ok".to_string(),
+                            detail: None,
+                        }),
+                        Err(e) => checks.push(HealthCheck {
+                            name,
+                            status: "error".to_string(),
+                            detail: Some(e.to_string()),
+                        }),
+                    },
+                    None => checks.push(HealthCheck {
+                        name,
+                        status: "error".to_string(),
+                        detail: Some("incomplete connection info".to_string()),
+                    }),
+                }
+            }
+        }
+    }
+
+    Ok(HttpResponse::Ok().json(MonitorHealth {
+        status: if ready { "ready" } else { "not_ready" }.to_string(),
+        checks,
+    }))
+}
+
+// ==================== 目录概览 ====================
+
+/// 目录概览响应 — 持久化于元数据库的全局计数
+#[derive(Debug, Serialize)]
+pub struct CatalogStats {
+    pub workspaces: u64,
+    pub data_sources: u64,
+    pub layers: u64,
+    pub layer_groups: u64,
+}
+
+/// 获取目录概览统计 — `GET /monitor/catalog`。
+///
+/// 多副本部署下所有实例读到一致的持久化计数。
+pub async fn get_monitor_catalog(state: web::Data<AppState>) -> Result<HttpResponse, TerraneError> {
+    let empty = CatalogStats {
+        workspaces: 0,
+        data_sources: 0,
+        layers: 0,
+        layer_groups: 0,
+    };
+    let store = match state.store.as_ref() {
+        Some(s) => s,
+        None => return Ok(HttpResponse::Ok().json(empty)),
+    };
+
+    let (workspaces, data_sources, layers, layer_groups) = tokio::join!(
+        store.get_all_workspaces(),
+        store.get_all_data_sources(),
+        store.get_all_layers(),
+        store.get_all_layer_groups(),
+    );
+    fn count_records<T>(r: Result<Vec<T>, crate::store::StoreError>) -> u64 {
+        r.map(|v| v.len() as u64).unwrap_or(0)
+    }
+
+    Ok(HttpResponse::Ok().json(CatalogStats {
+        workspaces: count_records(workspaces),
+        data_sources: count_records(data_sources),
+        layers: count_records(layers),
+        layer_groups: count_records(layer_groups),
+    }))
 }
 
 // ==================== Prometheus /metrics ====================

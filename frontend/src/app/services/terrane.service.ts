@@ -32,6 +32,8 @@ import {
   MonitorStats,
   RequestRecord,
   AuditLogEntry,
+  CatalogStats,
+  MonitorHealth,
   SqlViewParameter,
   TileCacheStats,
   TileCacheResult,
@@ -545,6 +547,16 @@ export class TerraneService {
   /** Get monitoring stats */
   getMonitorStats(): Observable<MonitorStats> {
     return this.http.get<MonitorStats>(`${this.apiUrl}/monitor/stats`);
+  }
+
+  /** Get dependency health aggregation (metadata store / tile cache / Redis cache data sources) */
+  getMonitorHealth(): Observable<MonitorHealth> {
+    return this.http.get<MonitorHealth>(`${this.apiUrl}/monitor/health`);
+  }
+
+  /** Get catalog overview counts (workspaces / data sources / layers / layer groups) */
+  getCatalogStats(): Observable<CatalogStats> {
+    return this.http.get<CatalogStats>(`${this.apiUrl}/monitor/catalog`);
   }
 
   /** Get recent request records */

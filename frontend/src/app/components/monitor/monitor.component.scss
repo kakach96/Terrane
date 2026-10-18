@@ -50,14 +50,28 @@
   color: var(--warn-text);
 }
 
+/* Scope annotation: clarifies the data source of a section (instance-local vs global) */
+.scope-note {
+  margin: 0 0 16px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--info-bg);
+  color: var(--info-text);
+  font-size: 13px;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
-  margin-bottom: 24px;
 }
 
-.stat-card {
+/* Flat stat tile — no nested card elevation, subtle background panel */
+.tile {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 20px 16px;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -65,19 +79,16 @@
   justify-content: center;
   gap: 4px;
 
-  .stat-icon {
+  .tile-icon {
     margin-bottom: 8px;
-
-    mat-icon {
-      font-size: 36px;
-      width: 36px;
-      height: 36px;
-      color: var(--primary-color);
-    }
+    color: var(--primary-color);
+    font-size: 32px;
+    width: 32px;
+    height: 32px;
   }
 
-  .stat-value {
-    font-size: 28px;
+  .tile-value {
+    font-size: 26px;
     font-weight: 700;
     margin-bottom: 4px;
 
@@ -85,16 +96,16 @@
       color: var(--warn-text);
     }
 
-    &.stat-enabled {
+    &.tile-enabled {
       color: var(--success-color);
     }
 
-    &.stat-disabled {
+    &.tile-disabled {
       color: var(--warn-color);
     }
   }
 
-  .stat-label {
+  .tile-label {
     font-size: 13px;
     color: var(--text-secondary);
   }
@@ -111,16 +122,45 @@
   }
 }
 
-.charts-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+/* Dependency health banner */
+.health-banner {
+  border-left: 4px solid var(--border-color);
+
+  &.health-ok {
+    border-left-color: var(--success-color);
+  }
+
+  &.health-bad {
+    border-left-color: var(--warn-text);
+  }
 }
 
-.chart-card {
-  mat-card-content {
-    max-height: 400px;
-    overflow-y: auto;
+.health-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.health-check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .health-name {
+    min-width: 160px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .health-detail {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -177,20 +217,6 @@
     font-size: 12px;
   }
 
-  .path-cell {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .addr-cell {
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-
   .detail-cell {
     max-width: 200px;
     overflow: hidden;
@@ -199,7 +225,6 @@
   }
 }
 
-.method-badge,
 .action-badge,
 .status-badge {
   display: inline-block;
@@ -208,27 +233,6 @@
   font-size: 11px;
   font-weight: 600;
   font-family: 'JetBrains Mono', monospace;
-}
-
-.method-get {
-  background: var(--info-bg);
-  color: var(--info-text);
-}
-.method-post {
-  background: var(--success-bg);
-  color: var(--success-text);
-}
-.method-put {
-  background: var(--warning-bg);
-  color: var(--warning-text);
-}
-.method-delete {
-  background: var(--warn-bg);
-  color: var(--warn-text);
-}
-.method-patch {
-  background: var(--purple-bg);
-  color: var(--purple-text);
 }
 
 .status-badge.success {
@@ -257,59 +261,41 @@
   color: var(--warning-text);
 }
 
-.bar-chart {
-  padding: 8px 0;
+/* Seed job status badges */
+.action-badge.seed-pending,
+.action-badge.seed-running {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+.action-badge.seed-completed {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+.action-badge.seed-failed {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+.action-badge.seed-cancelled {
+  background: var(--bg-subtle, var(--border-color));
+  color: var(--text-secondary);
 }
 
-.bar-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
+/* Seed job progress cell */
+.progress-cell {
+  min-width: 200px;
 
-  .bar-label {
-    width: 70px;
-    font-weight: 600;
-    font-size: 13px;
-  }
-
-  .bar-track {
-    flex: 1;
-    height: 20px;
-    background: var(--border-color);
+  mat-progress-bar {
+    width: 100%;
+    height: 8px;
     border-radius: var(--radius-sm);
-    overflow: hidden;
   }
 
-  .bar-fill {
-    height: 100%;
-    border-radius: var(--radius-sm);
-    transition: width 0.3s ease;
-    min-width: 2px;
-  }
-
-  .bar-value {
-    width: 80px;
-    text-align: right;
-    font-size: 13px;
+  .progress-text {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
     color: var(--text-secondary);
   }
-}
-
-.method-get .bar-fill {
-  background: var(--info-text);
-}
-.method-post .bar-fill {
-  background: var(--success-text);
-}
-.method-put .bar-fill {
-  background: var(--warning-text);
-}
-.method-delete .bar-fill {
-  background: var(--warn-text);
-}
-.method-patch .bar-fill {
-  background: var(--purple-text);
 }
 
 .empty-state {
@@ -330,10 +316,6 @@
 }
 
 @media (max-width: 900px) {
-  .charts-row {
-    grid-template-columns: 1fr;
-  }
-
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }

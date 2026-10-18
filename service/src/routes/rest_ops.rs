@@ -112,6 +112,14 @@ pub fn add_routes(scope: Scope) -> Scope {
             web::get().to(crate::handlers::get_monitor_stats),
         )
         .route(
+            "/monitor/health",
+            web::get().to(crate::handlers::get_monitor_health),
+        )
+        .route(
+            "/monitor/catalog",
+            web::get().to(crate::handlers::get_monitor_catalog),
+        )
+        .route(
             "/monitor/requests",
             web::get().to(crate::handlers::get_recent_requests),
         )

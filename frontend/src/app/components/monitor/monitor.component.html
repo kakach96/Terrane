@@ -2,9 +2,6 @@
   <div class="page-header">
     <h1><mat-icon>monitoring</mat-icon> {{ 'monitor.title' | translate }}</h1>
     <div class="header-actions">
-      <button mat-raised-button color="warn" (click)="resetStats()">
-        <mat-icon>refresh</mat-icon> {{ 'monitor.resetStats' | translate }}
-      </button>
       <button mat-raised-button color="primary" (click)="refreshData()">
         <mat-icon>refresh</mat-icon> {{ 'monitor.refresh' | translate }}
       </button>
@@ -27,110 +24,72 @@
     (selectedTabChange)="onTabChange($event)"
     animationDuration="0ms"
   >
-    <!-- ======== Overview tab ======== -->
+    <!-- ======== Overview tab: health + catalog + instance ======== -->
     <mat-tab label="{{ 'monitor.tabOverview' | translate }}">
       <div *ngIf="stats() && !loading()">
-        <!-- Key metric cards -->
-        <div class="stats-grid">
-          <mat-card class="stat-card">
-            <mat-card-content>
-              <div class="stat-icon"><mat-icon>timer</mat-icon></div>
-              <div class="stat-value">{{ uptimeFormatted() }}</div>
-              <div class="stat-label">{{ 'monitor.statUptime' | translate }}</div>
-            </mat-card-content>
-          </mat-card>
-          <mat-card class="stat-card">
-            <mat-card-content>
-              <div class="stat-icon"><mat-icon>http</mat-icon></div>
-              <div class="stat-value">{{ stats()!.total_requests | number }}</div>
-              <div class="stat-label">{{ 'monitor.statRequests' | translate }}</div>
-            </mat-card-content>
-          </mat-card>
-          <mat-card class="stat-card">
-            <mat-card-content>
-              <div class="stat-icon"><mat-icon>error</mat-icon></div>
-              <div class="stat-value" [class.text-danger]="stats()!.error_rate > 5">
-                {{ stats()!.total_errors | number }}
-              </div>
-              <div class="stat-label">
-                {{ 'monitor.statErrors' | translate: { rate: errorRateFormatted() } }}
-              </div>
-            </mat-card-content>
-          </mat-card>
-          <mat-card class="stat-card">
-            <mat-card-content>
-              <div class="stat-icon"><mat-icon>speed</mat-icon></div>
-              <div class="stat-value">{{ stats()!.requests_per_second | number: '1.2-2' }}</div>
-              <div class="stat-label">{{ 'monitor.statRps' | translate }}</div>
-            </mat-card-content>
-          </mat-card>
-        </div>
-
-        <!-- Tile cache (GeoWebCache) -->
-        <mat-card class="section-card" *ngIf="tileCacheStats()">
+        <!-- Dependency health -->
+        <mat-card
+          class="section-card health-banner"
+          *ngIf="health()"
+          [class.health-ok]="health()!.status === 'ready'"
+          [class.health-bad]="health()!.status !== 'ready'"
+        >
           <mat-card-header>
-            <mat-icon mat-card-avatar>grid_view</mat-icon>
-            <mat-card-title>{{ 'monitor.tileCache' | translate }}</mat-card-title>
+            <mat-icon mat-card-avatar>{{ health()!.status === 'ready' ? 'check_circle' : 'report' }}</mat-icon>
+            <mat-card-title>
+              {{
+                health()!.status === 'ready'
+                  ? ('monitor.healthReady' | translate)
+                  : ('monitor.healthNotReady' | translate)
+              }}
+            </mat-card-title>
           </mat-card-header>
           <mat-card-content>
-            <div class="stats-grid">
-              <mat-card class="stat-card">
-                <mat-card-content>
-                  <div class="stat-icon"><mat-icon>touch_app</mat-icon></div>
-                  <div class="stat-value">{{ tileCacheStats()!.hits }}</div>
-                  <div class="stat-label">{{ 'monitor.tileHits' | translate }}</div>
-                </mat-card-content>
-              </mat-card>
-              <mat-card class="stat-card">
-                <mat-card-content>
-                  <div class="stat-icon"><mat-icon>block</mat-icon></div>
-                  <div class="stat-value">{{ tileCacheStats()!.misses }}</div>
-                  <div class="stat-label">{{ 'monitor.tileMisses' | translate }}</div>
-                </mat-card-content>
-              </mat-card>
-              <mat-card class="stat-card">
-                <mat-card-content>
-                  <div class="stat-icon"><mat-icon>percent</mat-icon></div>
-                  <div class="stat-value">{{ (tileCacheStats()!.hitRate * 100).toFixed(1) }}%</div>
-                  <div class="stat-label">{{ 'monitor.tileHitRate' | translate }}</div>
-                </mat-card-content>
-              </mat-card>
-              <mat-card class="stat-card">
-                <mat-card-content>
-                  <div class="stat-icon"><mat-icon>grid_on</mat-icon></div>
-                  <div class="stat-value">{{ tileCacheStats()!.totalTiles }}</div>
-                  <div class="stat-label">{{ 'monitor.tileTotalTiles' | translate }}</div>
-                </mat-card-content>
-              </mat-card>
-              <mat-card class="stat-card">
-                <mat-card-content>
-                  <div class="stat-icon"><mat-icon>storage</mat-icon></div>
-                  <div class="stat-value">{{ tileCacheStats()!.cacheSizeMb || '0 MB' }}</div>
-                  <div class="stat-label">{{ 'monitor.tileCacheSize' | translate }}</div>
-                </mat-card-content>
-              </mat-card>
-              <mat-card class="stat-card">
-                <mat-card-content>
-                  <div class="stat-icon"><mat-icon>power_settings_new</mat-icon></div>
-                  <div
-                    class="stat-value"
-                    [class.stat-enabled]="tileCacheStats()!.enabled"
-                    [class.stat-disabled]="!tileCacheStats()!.enabled"
-                  >
-                    {{
-                      tileCacheStats()!.enabled
-                        ? ('monitor.tileEnabled' | translate)
-                        : ('monitor.tileDisabled' | translate)
-                    }}
-                  </div>
-                  <div class="stat-label">{{ 'monitor.tileStatus' | translate }}</div>
-                </mat-card-content>
-              </mat-card>
+            <div class="health-checks">
+              <div class="health-check-row" *ngFor="let check of health()!.checks">
+                <span class="health-name">{{ check.name }}</span>
+                <span class="status-badge" [class.success]="check.status === 'ok'" [class.error]="check.status !== 'ok'">
+                  {{ check.status === 'ok' ? ('monitor.healthOk' | translate) : ('monitor.healthError' | translate) }}
+                </span>
+                <span class="health-detail" *ngIf="check.detail">{{ check.detail }}</span>
+              </div>
             </div>
           </mat-card-content>
         </mat-card>
 
-        <!-- System info -->
+        <!-- Catalog overview (persisted, global) -->
+        <mat-card class="section-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>folder_open</mat-icon>
+            <mat-card-title>{{ 'monitor.catalogOverview' | translate }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="stats-grid" *ngIf="catalog()">
+              <div class="tile">
+                <mat-icon class="tile-icon">public</mat-icon>
+                <div class="tile-value">{{ catalog()!.workspaces | number }}</div>
+                <div class="tile-label">{{ 'monitor.statWorkspaces' | translate }}</div>
+              </div>
+              <div class="tile">
+                <mat-icon class="tile-icon">storage</mat-icon>
+                <div class="tile-value">{{ catalog()!.data_sources | number }}</div>
+                <div class="tile-label">{{ 'monitor.statDataSources' | translate }}</div>
+              </div>
+              <div class="tile">
+                <mat-icon class="tile-icon">layers</mat-icon>
+                <div class="tile-value">{{ catalog()!.layers | number }}</div>
+                <div class="tile-label">{{ 'monitor.statLayers' | translate }}</div>
+              </div>
+              <div class="tile">
+                <mat-icon class="tile-icon">account_tree</mat-icon>
+                <div class="tile-value">{{ catalog()!.layer_groups | number }}</div>
+                <div class="tile-label">{{ 'monitor.statLayerGroups' | translate }}</div>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <!-- Instance info -->
         <mat-card class="section-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>computer</mat-icon>
@@ -162,111 +121,123 @@
                 <span class="info-label">{{ 'monitor.memory' | translate }}</span>
                 <span class="info-value">{{ stats()!.system.memory_mb | number }} MB</span>
               </div>
+              <div class="info-item">
+                <span class="info-label">{{ 'monitor.statUptime' | translate }}</span>
+                <span class="info-value">{{ uptimeFormatted() }}</span>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+
+    <!-- ======== Cache & jobs tab: tile cache + seed jobs ======== -->
+    <mat-tab label="{{ 'monitor.tabCache' | translate }}">
+      <div *ngIf="!loading()">
+        <p class="scope-note" *ngIf="tileCacheStats()">{{ 'monitor.cacheNote' | translate }}</p>
+
+        <!-- Tile cache (GeoWebCache) -->
+        <mat-card class="section-card" *ngIf="tileCacheStats()">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>grid_view</mat-icon>
+            <mat-card-title>{{ 'monitor.tileCache' | translate }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="stats-grid">
+              <div class="tile">
+                <mat-icon class="tile-icon">touch_app</mat-icon>
+                <div class="tile-value">{{ tileCacheStats()!.hits }}</div>
+                <div class="tile-label">{{ 'monitor.tileHits' | translate }}</div>
+              </div>
+              <div class="tile">
+                <mat-icon class="tile-icon">block</mat-icon>
+                <div class="tile-value">{{ tileCacheStats()!.misses }}</div>
+                <div class="tile-label">{{ 'monitor.tileMisses' | translate }}</div>
+              </div>
+              <div class="tile">
+                <mat-icon class="tile-icon">percent</mat-icon>
+                <div class="tile-value">{{ (tileCacheStats()!.hitRate * 100).toFixed(1) }}%</div>
+                <div class="tile-label">{{ 'monitor.tileHitRate' | translate }}</div>
+              </div>
+              <div class="tile">
+                <mat-icon class="tile-icon">grid_on</mat-icon>
+                <div class="tile-value">{{ tileCacheStats()!.totalTiles }}</div>
+                <div class="tile-label">{{ 'monitor.tileTotalTiles' | translate }}</div>
+              </div>
+              <div class="tile">
+                <mat-icon class="tile-icon">storage</mat-icon>
+                <div class="tile-value">{{ tileCacheStats()!.cacheSizeMb || '0 MB' }}</div>
+                <div class="tile-label">{{ 'monitor.tileCacheSize' | translate }}</div>
+              </div>
+              <div class="tile">
+                <mat-icon class="tile-icon">power_settings_new</mat-icon>
+                <div
+                  class="tile-value"
+                  [class.tile-enabled]="tileCacheStats()!.enabled"
+                  [class.tile-disabled]="!tileCacheStats()!.enabled"
+                >
+                  {{
+                    tileCacheStats()!.enabled
+                      ? ('monitor.tileEnabled' | translate)
+                      : ('monitor.tileDisabled' | translate)
+                  }}
+                </div>
+                <div class="tile-label">{{ 'monitor.tileStatus' | translate }}</div>
+              </div>
             </div>
           </mat-card-content>
         </mat-card>
 
-        <div class="charts-row">
-          <!-- Top endpoints -->
-          <mat-card class="section-card chart-card">
-            <mat-card-header>
-              <mat-icon mat-card-avatar>route</mat-icon>
-              <mat-card-title>{{ 'monitor.topEndpoints' | translate }}</mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <table class="stats-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>{{ 'monitor.endpoint' | translate }}</th>
-                    <th>{{ 'monitor.requestCount' | translate }}</th>
-                    <th>{{ 'monitor.avgDuration' | translate }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let ep of topEndpoints(); let i = index">
-                    <td>{{ i + 1 }}</td>
-                    <td class="endpoint-name">{{ ep.name }}</td>
-                    <td>{{ ep.count | number }}</td>
-                    <td>{{ ep.avgDuration | number: '1.1-1' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </mat-card-content>
-          </mat-card>
-
-          <!-- HTTP method distribution -->
-          <mat-card class="section-card chart-card">
-            <mat-card-header>
-              <mat-icon mat-card-avatar>bar_chart</mat-icon>
-              <mat-card-title>{{ 'monitor.httpMethods' | translate }}</mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <div class="bar-chart">
-                <div *ngFor="let m of methodChart()" class="bar-item">
-                  <div class="bar-label">{{ m.method }}</div>
-                  <div class="bar-track">
-                    <div
-                      class="bar-fill method-{{ m.method | lowercase }}"
-                      [style.width.%]="(m.count / getMaxMethodCount()) * 100"
-                    ></div>
-                  </div>
-                  <div class="bar-value">{{ m.count | number }}</div>
-                </div>
-              </div>
-            </mat-card-content>
-          </mat-card>
-        </div>
-      </div>
-    </mat-tab>
-
-    <!-- ======== Requests tab ======== -->
-    <mat-tab label="{{ 'monitor.tabRequests' | translate }}">
-      <div *ngIf="!loading()">
+        <!-- Tile seed jobs -->
         <mat-card class="section-card">
           <mat-card-header>
-            <mat-icon mat-card-avatar>list_alt</mat-icon>
-            <mat-card-title>{{ 'monitor.recentRequests' | translate }}</mat-card-title>
+            <mat-icon mat-card-avatar>seeding</mat-icon>
+            <mat-card-title>{{ 'monitor.seedJobs' | translate }}</mat-card-title>
           </mat-card-header>
           <mat-card-content>
             <div class="table-container">
-              <table class="stats-table" *ngIf="recentRequests().length > 0">
+              <table class="stats-table" *ngIf="seedJobs().length > 0">
                 <thead>
                   <tr>
-                    <th>{{ 'monitor.columnTime' | translate }}</th>
-                    <th>{{ 'monitor.columnMethod' | translate }}</th>
-                    <th>{{ 'monitor.columnPath' | translate }}</th>
-                    <th>{{ 'monitor.columnStatus' | translate }}</th>
-                    <th>{{ 'monitor.columnDuration' | translate }}</th>
-                    <th>{{ 'monitor.columnClient' | translate }}</th>
+                    <th>{{ 'monitor.seedColumnLayer' | translate }}</th>
+                    <th>{{ 'monitor.seedColumnZoom' | translate }}</th>
+                    <th>{{ 'monitor.seedColumnStatus' | translate }}</th>
+                    <th>{{ 'monitor.seedColumnProgress' | translate }}</th>
+                    <th>{{ 'monitor.columnAction' | translate }}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr *ngFor="let req of recentRequests()">
-                    <td>{{ formatTimestamp(req.timestamp) }}</td>
+                  <tr *ngFor="let job of seedJobs()">
+                    <td class="endpoint-name">{{ job.layer }}</td>
+                    <td>{{ job.z_min }} - {{ job.z_max }}</td>
                     <td>
-                      <span class="method-badge method-{{ req.method | lowercase }}">{{
-                        req.method
-                      }}</span>
-                    </td>
-                    <td class="path-cell">{{ req.path }}</td>
-                    <td>
-                      <span
-                        class="status-badge"
-                        [class.success]="req.status < 400"
-                        [class.error]="req.status >= 400"
-                      >
-                        {{ req.status }}
+                      <span class="action-badge seed-{{ job.status | lowercase }}">
+                        {{ 'tileLayers.status.' + job.status | translate }}
                       </span>
                     </td>
-                    <td>{{ req.duration_ms | number: '1.1-1' }}</td>
-                    <td class="addr-cell">{{ req.remote_addr }}</td>
+                    <td class="progress-cell">
+                      <mat-progress-bar
+                        mode="determinate"
+                        [value]="seedProgress(job)"
+                        aria-label="seed progress"
+                      ></mat-progress-bar>
+                      <span class="progress-text">{{ job.done }} / {{ job.total }} ({{ seedProgress(job) }}%)</span>
+                    </td>
+                    <td>
+                      <button
+                        mat-icon-button
+                        [disabled]="job.status !== 'Running' && job.status !== 'Pending'"
+                        (click)="cancelSeedJob(job)"
+                      >
+                        <mat-icon>cancel</mat-icon>
+                      </button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
-              <div *ngIf="recentRequests().length === 0" class="empty-state">
+              <div *ngIf="seedJobs().length === 0" class="empty-state">
                 <mat-icon>inbox</mat-icon>
-                <p>{{ 'monitor.emptyRequests' | translate }}</p>
+                <p>{{ 'tileLayers.emptyJobs' | translate }}</p>
               </div>
             </div>
           </mat-card-content>
@@ -274,7 +245,7 @@
       </div>
     </mat-tab>
 
-    <!-- ======== Audit logs tab ======== -->
+    <!-- ======== Audit logs tab (persisted) ======== -->
     <mat-tab label="{{ 'monitor.tabAudit' | translate }}">
       <div *ngIf="!loading()">
         <mat-card class="section-card">
