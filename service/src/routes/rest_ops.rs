@@ -131,6 +131,11 @@ pub fn add_routes(scope: Scope) -> Scope {
             "/monitor/reset",
             web::delete().to(crate::handlers::reset_monitor_stats),
         )
+        // 批量导入 (Importer 首面)
+        .route(
+            "/importer/uploads",
+            web::post().to(crate::handlers::upload_import),
+        )
         // 备份/恢复
         .route(
             "/backup/export",

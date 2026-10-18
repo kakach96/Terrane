@@ -10,9 +10,13 @@ backend copies these files into `<data_dir>/samples/` and auto-registers a
 | `major_cities.geojson`  | Point    | `major_cities`   | 25 major world cities (name / country / population / capital) |
 | `sample_routes.geojson` | Line     | `sample_routes`  | 14 sample flight routes between major cities (route / from / to / distance_km) |
 | `world_countries.geojson` | Polygon | `world_countries` | 6 simplified country outlines (name / continent / area_km2 / population) |
+| `sample_elevation.tif`  | Raster   | `sample_elevation` | 64x64 synthetic elevation GeoTIFF (EPSG:4326, North China: lon 116-119.2 / lat 36.8-40) |
 
 All files are in EPSG:4326 (WGS84 lon/lat). The country polygons are heavily
-simplified for demo purposes — they are not cartographically accurate.
+simplified for demo purposes — they are not cartographically accurate. The
+elevation raster is a synthetic dataset (ramp + basin + ridge pattern), useful
+for demoing WCS / coverage preview and tile seeding on rasters. The samples are
+also reused as offline fixtures by `service/tests/samples_test.rs`.
 
 ## Configuration
 

@@ -124,8 +124,9 @@ pub fn geometry_to_wkb(geom: &GeoJsonGeometry) -> Vec<u8> {
 /// 游标式 WKB/EWKB 解析器。
 ///
 /// 支持 WKB 类型 1-7: Point / LineString / Polygon / MultiPoint /
-/// MultiLineString / MultiPolygon / GeometryCollection。解析结果与
-/// `geometry_to_wkb` 编码器往返一致 (仅 2D 坐标)。
+/// MultiLineString / MultiPolygon / GeometryCollection, 以及 EWKB/ISO
+/// Z / M / ZM 维度扩展 (3D/4D 坐标读出后丢弃, 输出保持 2D)。解析结果与
+/// `geometry_to_wkb` 编码器往返一致。
 struct WkbReader<'a> {
     buf: &'a [u8],
     pos: usize,
@@ -166,15 +167,38 @@ impl<'a> WkbReader<'a> {
     }
 
     /// 读取一个完整几何体（含字节序头 + 类型头），成功时推进游标
+    ///
+    /// 支持 WKB 2D 类型 1-7 与 EWKB Z/M/SRID 扩展:
+    /// - EWKB 标志位: 0x20000000 SRID（跳过 4 字节）、0x80000000 Z、0x40000000 M
+    /// - ISO WKB: 类型值 +1000/+2000/+3000 表示 Z/M/ZM
+    /// - Z/M 坐标被读出后丢弃（GeoJSON 输出保持 2D），保证游标对齐
     fn read_geometry(&mut self) -> Option<GeoJsonGeometry> {
         let order = self.read_byte()?;
         let little = order == 0x01;
-        // 低 16 位为 WKB 类型, 高位为 Z/M/SRID 标志 (此处仅解析 2D)
-        let geom_type = self.read_u32(little)? & 0xFFFF;
-        match geom_type {
-            1 => self.read_point(little),
-            2 => self.read_linestring(little),
-            3 => self.read_polygon(little),
+        let type_word = self.read_u32(little)?;
+        // EWKB SRID 标志位 — 存在时跳过 4 字节 SRID
+        if type_word & 0x2000_0000 != 0 {
+            self.read_u32(little)?;
+        }
+        let mut z = type_word & 0x8000_0000 != 0;
+        let mut m = type_word & 0x4000_0000 != 0;
+        let mut base = type_word & 0xFFFF;
+        if (1000..=1007).contains(&base) {
+            base -= 1000;
+            z = true;
+        } else if (2000..=2007).contains(&base) {
+            base -= 2000;
+            m = true;
+        } else if (3000..=3007).contains(&base) {
+            base -= 3000;
+            z = true;
+            m = true;
+        }
+        let dims = 2 + z as usize + m as usize;
+        match base {
+            1 => self.read_point(little, dims),
+            2 => self.read_linestring(little, dims),
+            3 => self.read_polygon(little, dims),
             4 => self.read_multipoint(little),
             5 => self.read_multilinestring(little),
             6 => self.read_multipolygon(little),
@@ -183,20 +207,27 @@ impl<'a> WkbReader<'a> {
         }
     }
 
-    fn read_point(&mut self, little: bool) -> Option<GeoJsonGeometry> {
+    fn read_point(&mut self, little: bool, dims: usize) -> Option<GeoJsonGeometry> {
         let x = self.read_f64(little)?;
         let y = self.read_f64(little)?;
+        // 跳过 Z / M 坐标（保持游标对齐）
+        for _ in 2..dims {
+            self.read_f64(little)?;
+        }
         Some(GeoJsonGeometry::Point {
             coordinates: vec![x, y],
         })
     }
 
-    fn read_linestring(&mut self, little: bool) -> Option<GeoJsonGeometry> {
+    fn read_linestring(&mut self, little: bool, dims: usize) -> Option<GeoJsonGeometry> {
         let n = self.read_u32(little)? as usize;
         let mut coords = Vec::with_capacity(n);
         for _ in 0..n {
             let x = self.read_f64(little)?;
             let y = self.read_f64(little)?;
+            for _ in 2..dims {
+                self.read_f64(little)?;
+            }
             coords.push(vec![x, y]);
         }
         Some(GeoJsonGeometry::LineString {
@@ -204,7 +235,7 @@ impl<'a> WkbReader<'a> {
         })
     }
 
-    fn read_polygon(&mut self, little: bool) -> Option<GeoJsonGeometry> {
+    fn read_polygon(&mut self, little: bool, dims: usize) -> Option<GeoJsonGeometry> {
         let n = self.read_u32(little)? as usize;
         let mut rings = Vec::with_capacity(n);
         for _ in 0..n {
@@ -213,6 +244,9 @@ impl<'a> WkbReader<'a> {
             for _ in 0..m {
                 let x = self.read_f64(little)?;
                 let y = self.read_f64(little)?;
+                for _ in 2..dims {
+                    self.read_f64(little)?;
+                }
                 ring.push(vec![x, y]);
             }
             rings.push(ring);
@@ -581,6 +615,105 @@ mod tests {
                 "{:?}",
                 GeoJsonGeometry::MultiPoint {
                     coordinates: vec![vec![1.0, 2.0], vec![3.0, 4.0]]
+                }
+            )
+        );
+    }
+
+    /// EWKB Z 坐标: Point Z (0x80000001) 三个 double 读齐, 输出保留 XY
+    #[test]
+    fn test_parse_ewkb_point_z() {
+        let mut wkb = vec![0x01u8];
+        wkb.extend_from_slice(&0x8000_0001u32.to_le_bytes()); // PointZ
+        wkb.extend_from_slice(&3.5f64.to_le_bytes());
+        wkb.extend_from_slice(&(-7.25f64).to_le_bytes());
+        wkb.extend_from_slice(&12.0f64.to_le_bytes()); // Z, 必须被对齐消费
+        let parsed = parse_wkb_geometry(&wkb);
+        assert_eq!(
+            format!("{:?}", parsed),
+            format!(
+                "{:?}",
+                GeoJsonGeometry::Point {
+                    coordinates: vec![3.5, -7.25]
+                }
+            )
+        );
+    }
+
+    /// ISO WKB ZM: 类型 3003 (Polygon ZM) — 4 维坐标全部对齐, 多边形往返 2D
+    #[test]
+    fn test_parse_iso_polygon_zm() {
+        let mut wkb = vec![0x01u8];
+        wkb.extend_from_slice(&3003u32.to_le_bytes()); // ISO Polygon ZM
+        wkb.extend_from_slice(&1u32.to_le_bytes()); // 1 ring
+        wkb.extend_from_slice(&4u32.to_le_bytes()); // 4 points (closed square)
+        for (x, y) in [
+            (0.0f64, 0.0f64),
+            (4.0f64, 0.0f64),
+            (4.0f64, 4.0f64),
+            (0.0f64, 4.0f64),
+        ] {
+            wkb.extend_from_slice(&x.to_le_bytes());
+            wkb.extend_from_slice(&y.to_le_bytes());
+            wkb.extend_from_slice(&1.0f64.to_le_bytes()); // Z
+            wkb.extend_from_slice(&2.0f64.to_le_bytes()); // M
+        }
+        let parsed = parse_wkb_geometry(&wkb);
+        assert_eq!(
+            format!("{:?}", parsed),
+            format!(
+                "{:?}",
+                GeoJsonGeometry::Polygon {
+                    coordinates: vec![vec![
+                        vec![0.0, 0.0],
+                        vec![4.0, 0.0],
+                        vec![4.0, 4.0],
+                        vec![0.0, 4.0],
+                    ]]
+                }
+            )
+        );
+    }
+
+    /// EWKB SRID + M 标志: 0x60000001 (SRID|M) — SRID 4 字节 + M 坐标跳过
+    #[test]
+    fn test_parse_ewkb_point_srid_m() {
+        let mut wkb = vec![0x01u8];
+        wkb.extend_from_slice(&0x6000_0001u32.to_le_bytes()); // SRID | M
+        wkb.extend_from_slice(&4326u32.to_le_bytes()); // SRID
+        wkb.extend_from_slice(&1.0f64.to_le_bytes());
+        wkb.extend_from_slice(&2.0f64.to_le_bytes());
+        wkb.extend_from_slice(&3.0f64.to_le_bytes()); // M
+        let parsed = parse_wkb_geometry(&wkb);
+        assert_eq!(
+            format!("{:?}", parsed),
+            format!(
+                "{:?}",
+                GeoJsonGeometry::Point {
+                    coordinates: vec![1.0, 2.0]
+                }
+            )
+        );
+    }
+
+    /// EWKB LineString Z 多点维度对齐 (每点 3 个 double)
+    #[test]
+    fn test_parse_ewkb_linestring_z() {
+        let mut wkb = vec![0x01u8];
+        wkb.extend_from_slice(&0x8000_0002u32.to_le_bytes()); // LineStringZ
+        wkb.extend_from_slice(&2u32.to_le_bytes()); // 2 points
+        for (x, y, z) in [(0.0f64, 0.0f64, 9.0f64), (5.0f64, 5.0f64, 10.0f64)] {
+            wkb.extend_from_slice(&x.to_le_bytes());
+            wkb.extend_from_slice(&y.to_le_bytes());
+            wkb.extend_from_slice(&z.to_le_bytes());
+        }
+        let parsed = parse_wkb_geometry(&wkb);
+        assert_eq!(
+            format!("{:?}", parsed),
+            format!(
+                "{:?}",
+                GeoJsonGeometry::LineString {
+                    coordinates: vec![vec![0.0, 0.0], vec![5.0, 5.0]]
                 }
             )
         );

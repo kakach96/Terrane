@@ -192,7 +192,8 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
     // 构建查询。额外读取 rowid: 要素 id 采用 GeoServer 约定的 `{表名}.{rowid}`
     // 稳定格式 (同一要素多次读取 id 一致, 支持 WFS FEATUREID / 锁定语义)。
     let cols = if attr_columns.is_empty() {
-        "*".to_string()
+        // 显式列出几何列 — "SELECT rowid, *" 时 rowid 别名 (id) 会占位导致几何列错位
+        geom_col.clone()
     } else {
         format!("{}, {}", geom_col, attr_columns.join(", "))
     };
@@ -241,7 +242,7 @@ pub fn read_geopackage_layer_features<P: AsRef<Path>>(
         }) {
             for (rowid, geom_blob, props) in rows.flatten() {
                 if let Some(wkb) = geom_blob {
-                    let geometry = crate::utils::wkb::parse_wkb_geometry(&wkb);
+                    let geometry = parse_geopackage_geometry(&wkb);
                     update_bounds_from_geometry(&geometry, &mut bounds);
                     // GeoServer 约定: 要素 id = `表名.rowid` (稳定, 与请求次数无关)
                     features.push(Feature::with_id(
@@ -362,6 +363,160 @@ pub fn geopackage_table_columns<P: AsRef<Path>>(
 /// 再创建要素表并写入 WKB 几何 + 属性。属性列取所有要素属性键的并集,
 /// 并按值类型推断列类型 (INTEGER / REAL / BOOLEAN / TEXT)。`geometry_type`
 /// 用 GeoPackage 命名, 如 "POINT"。返回写入的图层信息。
+/// Encode a GeoJSON geometry as a standard GeoPackage geometry BLOB:
+/// `GP` magic + version + flags + srs_id + WKB (little-endian header, no
+/// envelope). Standard-format blobs are readable by GDAL / QGIS.
+pub fn gpkg_geometry_blob(geom: &GeoJsonGeometry, srs_id: i32) -> Vec<u8> {
+    let mut v = Vec::with_capacity(9 + 32);
+    v.extend_from_slice(b"GP"); // magic
+    v.push(0); // version 0
+    v.push(0x01); // flags: bit0 = little-endian header, envelope E=0
+    v.extend_from_slice(&srs_id.to_le_bytes());
+    v.extend(crate::utils::wkb::geometry_to_wkb(geom));
+    v
+}
+
+/// Byte length of the envelope section encoded in GPKG flags (bits 1-3):
+/// E=0 none, E=1 four, E=2 six, E=3 eight f64 values.
+fn gpkg_envelope_len(flags: u8) -> usize {
+    match (flags >> 1) & 0x07 {
+        1 => 4 * 8,
+        2 => 6 * 8,
+        3 => 8 * 8,
+        _ => 0,
+    }
+}
+
+/// Parse a GeoPackage geometry BLOB.
+///
+/// Accepts the standard `GP`-header format (as written by GDAL / QGIS and by
+/// [`gpkg_geometry_blob`]) as well as bare WKB (legacy rows written before the
+/// header format was adopted).
+pub fn parse_geopackage_geometry(blob: &[u8]) -> GeoJsonGeometry {
+    if blob.len() >= 8 && &blob[0..2] == b"GP" {
+        let header_len = 8 + gpkg_envelope_len(blob[3]);
+        if blob.len() > header_len {
+            return crate::utils::wkb::parse_wkb_geometry(&blob[header_len..]);
+        }
+        // Empty-geometry flag or truncated blob — no WKB payload to parse.
+        return GeoJsonGeometry::Point {
+            coordinates: vec![0.0, 0.0],
+        };
+    }
+    crate::utils::wkb::parse_wkb_geometry(blob)
+}
+
+/// Append features to an existing GeoPackage layer (in-place).
+///
+/// Opens the package, verifies the layer is registered in
+/// `gpkg_geometry_columns`, inserts the features as standard geometry blobs
+/// and extends the `gpkg_contents` bounding box to include them.
+/// Returns the number of appended features.
+pub fn append_geopackage_features<P: AsRef<Path>>(
+    path: P,
+    layer_name: &str,
+    features: &[Feature],
+) -> Result<usize, String> {
+    let path = path.as_ref();
+    let conn =
+        Connection::open(path).map_err(|e| format!("无法打开 GeoPackage '{:?}': {}", path, e))?;
+
+    // 1. Verify the layer exists and fetch its geometry column / srs_id.
+    let (geom_col, srs_id): (String, i32) = conn
+        .prepare("SELECT column_name, srs_id FROM gpkg_geometry_columns WHERE table_name = ?1")
+        .and_then(|mut stmt| {
+            stmt.query_row([layer_name], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+            })
+        })
+        .map_err(|e| format!("图层 '{}' 不存在: {}", layer_name, e))?;
+
+    // 2. Attribute columns come from the live table schema (ordered).
+    let mut attr_columns: Vec<String> = Vec::new();
+    if let Ok(mut stmt) = conn.prepare(&format!(
+        "PRAGMA table_info(\"{}\")",
+        layer_name.replace('"', "\"\"")
+    )) {
+        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(1)) {
+            for name in rows.flatten() {
+                if name != geom_col && name != "id" {
+                    attr_columns.push(name);
+                }
+            }
+        }
+    }
+
+    // 3. Insert rows (standard GP-header blobs + typed attributes).
+    let qn = layer_name.replace('"', "\"\"");
+    let mut insert_sql = format!(
+        "INSERT INTO \"{}\" (\"{}\"",
+        qn,
+        geom_col.replace('"', "\"\"")
+    );
+    for col in &attr_columns {
+        insert_sql.push_str(&format!(", \"{}\"", col.replace('"', "\"\"")));
+    }
+    insert_sql.push_str(") VALUES (?1");
+    for _ in &attr_columns {
+        insert_sql.push_str(", ?");
+    }
+    insert_sql.push(')');
+
+    let mut stmt = conn
+        .prepare(&insert_sql)
+        .map_err(|e| format!("准备插入语句失败: {}", e))?;
+    for f in features {
+        let blob = gpkg_geometry_blob(&f.geometry, srs_id);
+        let mut values: Vec<rusqlite::types::Value> = vec![rusqlite::types::Value::Blob(blob)];
+        for col in &attr_columns {
+            let val = match f.properties.get(col) {
+                Some(PropertyValue::String(s)) => rusqlite::types::Value::Text(s.clone()),
+                Some(PropertyValue::Integer(i)) => rusqlite::types::Value::Integer(*i),
+                Some(PropertyValue::Number(n)) => rusqlite::types::Value::Real(*n),
+                Some(PropertyValue::Boolean(b)) => {
+                    rusqlite::types::Value::Integer(if *b { 1 } else { 0 })
+                },
+                Some(pv) => rusqlite::types::Value::Text(pv.to_string()),
+                None => rusqlite::types::Value::Null,
+            };
+            values.push(val);
+        }
+        stmt.execute(rusqlite::params_from_iter(values.iter()))
+            .map_err(|e| format!("追加要素失败: {}", e))?;
+    }
+    let appended = features.len();
+
+    // 4. Extend gpkg_contents bounds to include the new geometries.
+    let mut bounds = Bounds::new(f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for f in features {
+        update_bounds_from_geometry(&f.geometry, &mut bounds);
+    }
+    if bounds.minx <= bounds.maxx {
+        conn.execute(
+            "UPDATE gpkg_contents SET
+                min_x = CASE WHEN min_x IS NULL OR min_x > ?2 THEN ?2 ELSE min_x END,
+                min_y = CASE WHEN min_y IS NULL OR min_y > ?3 THEN ?3 ELSE min_y END,
+                max_x = CASE WHEN max_x IS NULL OR max_x < ?4 THEN ?4 ELSE max_x END,
+                max_y = CASE WHEN max_y IS NULL OR max_y < ?5 THEN ?5 ELSE max_y END
+             WHERE table_name = ?1",
+            rusqlite::params![
+                layer_name,
+                bounds.minx,
+                bounds.miny,
+                bounds.maxx,
+                bounds.maxy
+            ],
+        )
+        .map_err(|e| format!("更新 gpkg_contents 边界失败: {}", e))?;
+    }
+
+    info!(
+        "[GeoPackage] 追加要素: 图层 '{}', {} 个",
+        layer_name, appended
+    );
+    Ok(appended)
+}
+
 pub fn write_geopackage_features<P: AsRef<Path>>(
     path: P,
     layer_name: &str,
@@ -492,7 +647,7 @@ pub fn write_geopackage_features<P: AsRef<Path>>(
         .prepare(&insert_sql)
         .map_err(|e| format!("准备插入语句失败: {}", e))?;
     for f in features {
-        let wkb = crate::utils::wkb::geometry_to_wkb(&f.geometry);
+        let wkb = gpkg_geometry_blob(&f.geometry, srs_id);
         let mut values: Vec<rusqlite::types::Value> = vec![rusqlite::types::Value::Blob(wkb)];
         for col in &attr_columns {
             let val = match f.properties.get(col) {
@@ -1052,6 +1207,158 @@ mod tests {
             Some(PropertyValue::Boolean(v)) => assert!(!*v),
             other => panic!("beta.active 应为 false, 实际: {:?}", other),
         }
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 写出的几何 blob 必须是标准 GP 头格式 (GDAL/QGIS 可读)
+    #[test]
+    fn test_gpkg_geometry_blob_header() {
+        let geom = GeoJsonGeometry::Point {
+            coordinates: vec![1.0, 2.0],
+        };
+        let blob = gpkg_geometry_blob(&geom, 4326);
+        assert_eq!(&blob[0..2], b"GP", "标准 GPKG 魔数");
+        assert_eq!(blob[2], 0, "version 0");
+        assert_eq!(blob[3] & 0x01, 1, "flags bit0 = little-endian header");
+        let srs = i32::from_le_bytes([blob[4], blob[5], blob[6], blob[7]]);
+        assert_eq!(srs, 4326);
+        // 头之后是标准 WKB (可独立解析)
+        let wkb = crate::utils::wkb::parse_wkb_geometry(&blob[8..]);
+        assert!(matches!(wkb, GeoJsonGeometry::Point { .. }));
+
+        // 解析端: 标准 blob 直接读回同一几何
+        let parsed = parse_geopackage_geometry(&blob);
+        assert!(matches!(parsed, GeoJsonGeometry::Point { .. }));
+    }
+
+    /// 裸 WKB (历史格式行) 仍可读 — 双格式兼容
+    #[test]
+    fn test_parse_geopackage_geometry_bare_wkb() {
+        let geom = GeoJsonGeometry::Point {
+            coordinates: vec![7.5, -8.5],
+        };
+        let bare = crate::utils::wkb::geometry_to_wkb(&geom);
+        let parsed = parse_geopackage_geometry(&bare);
+        assert!(matches!(parsed, GeoJsonGeometry::Point { .. }));
+    }
+
+    /// Polygon / MultiPolygon 写出 → 读回往返
+    #[test]
+    fn test_polygon_write_read_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("gpkg-poly-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("poly.gpkg");
+
+        let props: HashMap<String, PropertyValue> = [(
+            "kind".to_string(),
+            PropertyValue::String("zone".to_string()),
+        )]
+        .into_iter()
+        .collect();
+        let features = vec![
+            Feature::with_id(
+                "p1".into(),
+                GeoJsonGeometry::Polygon {
+                    coordinates: vec![vec![
+                        vec![0.0, 0.0],
+                        vec![4.0, 0.0],
+                        vec![4.0, 4.0],
+                        vec![0.0, 4.0],
+                        vec![0.0, 0.0],
+                    ]],
+                },
+                props.clone(),
+            ),
+            Feature::with_id(
+                "p2".into(),
+                GeoJsonGeometry::MultiPolygon {
+                    coordinates: vec![vec![vec![
+                        vec![10.0, 10.0],
+                        vec![12.0, 10.0],
+                        vec![12.0, 12.0],
+                        vec![10.0, 12.0],
+                        vec![10.0, 10.0],
+                    ]]],
+                },
+                props.clone(),
+            ),
+        ];
+        let bounds = Bounds::new(0.0, 0.0, 12.0, 12.0);
+        write_geopackage_features(&path, "zones", "POLYGON", 4326, &features, &bounds).unwrap();
+
+        let result = read_geopackage_layer_features(&path, "zones", None).unwrap();
+        assert_eq!(result.feature_count, 2);
+        assert!(
+            matches!(result.features[0].geometry, GeoJsonGeometry::Polygon { .. }),
+            "第一个要素应为 Polygon"
+        );
+        assert!(
+            matches!(
+                result.features[1].geometry,
+                GeoJsonGeometry::MultiPolygon { .. }
+            ),
+            "第二个要素应为 MultiPolygon"
+        );
+        assert!((result.bounds.maxx - 12.0).abs() < 1e-6);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// append: 追加要素后读回数量与边界扩展正确
+    #[test]
+    fn test_append_geopackage_features() {
+        let dir = std::env::temp_dir().join(format!("gpkg-append-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("append.gpkg");
+
+        let props: HashMap<String, PropertyValue> =
+            [("name".to_string(), PropertyValue::String("a".to_string()))]
+                .into_iter()
+                .collect();
+        let base = vec![Feature::with_id(
+            "f1".into(),
+            GeoJsonGeometry::Point {
+                coordinates: vec![10.0, 20.0],
+            },
+            props.clone(),
+        )];
+        let bounds = Bounds::new(10.0, 20.0, 10.0, 20.0);
+        write_geopackage_features(&path, "places", "POINT", 4326, &base, &bounds).unwrap();
+
+        // 追加两个点 (一个在原边界内, 一个在原边界外 → 扩展 bounds)
+        let extra = vec![
+            Feature::with_id(
+                "f2".into(),
+                GeoJsonGeometry::Point {
+                    coordinates: vec![11.0, 21.0],
+                },
+                props.clone(),
+            ),
+            Feature::with_id(
+                "f3".into(),
+                GeoJsonGeometry::Point {
+                    coordinates: vec![30.0, 40.0],
+                },
+                props.clone(),
+            ),
+        ];
+        let appended = append_geopackage_features(&path, "places", &extra).unwrap();
+        assert_eq!(appended, 2);
+
+        let result = read_geopackage_layer_features(&path, "places", None).unwrap();
+        assert_eq!(result.feature_count, 3, "追加后共 3 个要素");
+        assert!(
+            (result.bounds.maxx - 30.0).abs() < 1e-6,
+            "bounds 应扩展到 30"
+        );
+        assert!(
+            (result.bounds.maxy - 40.0).abs() < 1e-6,
+            "bounds 应扩展到 40"
+        );
+
+        // 追加到不存在的图层应报错
+        assert!(append_geopackage_features(&path, "missing", &extra).is_err());
 
         std::fs::remove_dir_all(&dir).ok();
     }

@@ -10,6 +10,7 @@ pub mod geometry;
 pub mod geopackage;
 pub mod geotiff;
 pub mod gml;
+pub mod importer;
 pub mod ldap;
 pub mod mbstyle_parser;
 pub mod mosaic;
