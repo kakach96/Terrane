@@ -261,17 +261,21 @@ pub async fn get_monitor_health(state: web::Data<AppState>) -> Result<HttpRespon
                     .and_then(crate::store::cache::redis::redis_url_from_connection);
                 let name = format!("redis_cache:{}", ds.name);
                 match url {
-                    Some(u) => match crate::store::cache::redis::RedisConn::new(&u).ping().await {
-                        Ok(()) => checks.push(HealthCheck {
-                            name,
-                            status: "ok".to_string(),
-                            detail: None,
-                        }),
-                        Err(e) => checks.push(HealthCheck {
-                            name,
-                            status: "error".to_string(),
-                            detail: Some(e.to_string()),
-                        }),
+                    Some(u) => {
+                        // Shared, timeout-bounded ping (3s) — reuses the
+                        // auto-reconnecting connection manager per URL.
+                        match crate::store::cache::redis::ping_shared(&u).await {
+                            Ok(()) => checks.push(HealthCheck {
+                                name,
+                                status: "ok".to_string(),
+                                detail: None,
+                            }),
+                            Err(e) => checks.push(HealthCheck {
+                                name,
+                                status: "error".to_string(),
+                                detail: Some(e.to_string()),
+                            }),
+                        }
                     },
                     None => checks.push(HealthCheck {
                         name,

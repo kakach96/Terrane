@@ -58,6 +58,31 @@ impl RedisConn {
     }
 }
 
+/// Process-wide registry of shared [`RedisConn`] instances keyed by URL.
+///
+/// Repeated connectivity pings (e.g. the monitor health page refreshing every
+/// 10s) reuse the auto-reconnecting connection manager instead of opening a
+/// new socket per ping.
+static SHARED_CONNS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, RedisConn>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+/// Ping Redis through the shared connection for `url` (bounded by a 3s
+/// timeout so an unreachable server cannot stall the caller, e.g. the
+/// monitor page refresh loop).
+pub async fn ping_shared(url: &str) -> Result<(), StoreError> {
+    let conn = {
+        let mut conns = SHARED_CONNS.lock().unwrap();
+        conns
+            .entry(url.to_string())
+            .or_insert_with(|| RedisConn::new(url))
+            .clone()
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(3), conn.ping())
+        .await
+        .map_err(|_| StoreError::Other("Redis PING timed out".to_string()))?
+}
+
 /// Build a Redis connection URL from a `type = "redis"` data source connection.
 ///
 /// `host`/`port`/`database` (DB index, default `0`)/`username`/`password` map
