@@ -2,8 +2,9 @@
 //!
 //! On first startup (when the catalog contains no layers yet) the backend
 //! copies the curated sample files from `config.samples.source_dir` into
-//! `<data_dir>/samples/` and auto-registers a `demo` workspace with one GeoJSON
-//! data source + layer per dataset, so the product demos out-of-the-box.
+//! `<data_dir>/samples/` and auto-registers a `demo` workspace with one
+//! data source + layer per dataset (GeoJSON vectors + a georeferenced GeoTIFF
+//! raster), so the product demos out-of-the-box.
 //!
 //! Seeding is opt-in via `[samples] enabled` (default: true) and only runs on a
 //! fresh catalog, so existing installs are never modified.
@@ -17,18 +18,29 @@ use crate::utils::bounds::compute_layer_bounds;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// Sample dataset content kind (drives the registered data source type).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SampleKind {
+    /// GeoJSON vector file (point / line / polygon).
+    Vector,
+    /// GeoTIFF raster file (georeferenced coverage).
+    Raster,
+}
+
 /// A single built-in sample dataset descriptor.
 pub struct SampleDataset {
-    /// Layer / data-source name (also the GeoJSON file stem).
+    /// Layer / data-source name (also the file stem).
     pub name: &'static str,
     /// Human-readable layer title.
     pub title: &'static str,
-    /// GeoJSON file name inside the samples directory.
+    /// Sample file name inside the samples directory.
     pub file: &'static str,
     /// Workspace the layer is published into.
     pub workspace: &'static str,
     /// Layer abstract / description.
     pub abstract_text: &'static str,
+    /// Content kind (vector GeoJSON vs raster GeoTIFF).
+    pub kind: SampleKind,
 }
 
 /// The curated built-in sample datasets (mirrors GeoServer's sample data).
@@ -39,6 +51,7 @@ pub const SAMPLE_DATASETS: &[SampleDataset] = &[
         file: "major_cities.geojson",
         workspace: "demo",
         abstract_text: "25 major world cities (points) with population and country.",
+        kind: SampleKind::Vector,
     },
     SampleDataset {
         name: "sample_routes",
@@ -46,6 +59,7 @@ pub const SAMPLE_DATASETS: &[SampleDataset] = &[
         file: "sample_routes.geojson",
         workspace: "demo",
         abstract_text: "14 sample flight routes (lines) between major cities.",
+        kind: SampleKind::Vector,
     },
     SampleDataset {
         name: "world_countries",
@@ -53,6 +67,15 @@ pub const SAMPLE_DATASETS: &[SampleDataset] = &[
         file: "world_countries.geojson",
         workspace: "demo",
         abstract_text: "6 simplified world country polygons (not cartographically accurate).",
+        kind: SampleKind::Vector,
+    },
+    SampleDataset {
+        name: "sample_elevation",
+        title: "Sample Elevation (Raster)",
+        file: "sample_elevation.tif",
+        workspace: "demo",
+        abstract_text: "64x64 synthetic elevation GeoTIFF over North China (EPSG:4326, lon 116-119.2 / lat 36.8-40).",
+        kind: SampleKind::Raster,
     },
 ];
 
@@ -121,8 +144,8 @@ fn resolve_samples_source_dir(configured: &Path) -> PathBuf {
 /// 1. Copies each sample file from `config.samples.source_dir` to
 ///    `<data_dir>/samples/` (only when the target file is missing).
 /// 2. Ensures the target workspace exists (with its namespace).
-/// 3. Registers a GeoJSON data source + layer per dataset (skipping any that
-///    already exist).
+/// 3. Registers a data source + layer per dataset (skipping any that
+///    already exist) — GeoJSON vectors and the GeoTIFF raster.
 ///
 /// Returns the newly registered layers (empty when seeding is skipped or fails).
 pub async fn seed_samples(config: &TerraneConfig, store: &Arc<dyn Store>) -> Vec<Layer> {
@@ -163,8 +186,12 @@ pub async fn seed_samples(config: &TerraneConfig, store: &Arc<dyn Store>) -> Vec
         // 2. Ensure the workspace (and its namespace) exists.
         ensure_workspace(store, ds.workspace).await;
 
-        // 3. Register the GeoJSON data source (skip if already present).
+        // 3. Register the data source (skip if already present).
         let ds_name = ds.name.to_string();
+        let ds_type = match ds.kind {
+            SampleKind::Vector => DataSourceType::GeoJson,
+            SampleKind::Raster => DataSourceType::Geotiff,
+        };
         let conn = DataSourceConnection::file(dst.to_string_lossy().to_string());
         if store
             .get_data_source(&ds_name)
@@ -176,7 +203,7 @@ pub async fn seed_samples(config: &TerraneConfig, store: &Arc<dyn Store>) -> Vec
             if let Err(e) = store
                 .create_data_source(
                     &ds_name,
-                    &DataSourceType::GeoJson,
+                    &ds_type,
                     Some(ds.workspace.to_string()),
                     true,
                     &conn,
@@ -188,10 +215,10 @@ pub async fn seed_samples(config: &TerraneConfig, store: &Arc<dyn Store>) -> Vec
             }
         }
 
-        // 4. Compute the native bounds from the GeoJSON file.
+        // 4. Compute the native bounds (GeoJSON reader / GeoTIFF geo tags).
         let data_source = DataSource {
             name: ds_name.clone(),
-            data_source_type: DataSourceType::GeoJson,
+            data_source_type: ds_type,
             workspace: Some(ds.workspace.to_string()),
             enabled: true,
             connection: Some(conn),
