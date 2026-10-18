@@ -43,7 +43,7 @@ jobs:
         run: cargo test --all
 
   frontend:
-    name: Frontend (build)
+    name: Frontend (test + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,6 +61,9 @@ jobs:
 
       - name: npm ci
         run: npm ci
+
+      - name: npm test (vitest via @angular/build:unit-test)
+        run: npm test
 
       - name: npm run build
         run: npm run build

@@ -321,11 +321,14 @@ WMS/WFS/WCS) with `[security] geofence_enabled = true` in `service/terrane.toml`
 | Task               | How                                                              |
 |--------------------|------------------------------------------------------------------|
 | Server status      | `GET /terrane/server/status` · `/about/version`                |
-| Monitoring         | `GET /terrane/monitor/stats` · `/monitor/requests` · `/monitor/logs` |
+| Monitoring         | Admin console "Monitor" page · `GET /terrane/monitor/stats` · `/monitor/requests` · `/monitor/logs` |
+| Dependency health  | `GET /terrane/monitor/health` (metadata store required; tile cache + Redis cache data sources reported) |
+| Catalog overview   | `GET /terrane/monitor/catalog` (persisted workspace / data-source / layer / layer-group counts) |
+| Bulk import        | Admin console "Data sources" page · `POST /terrane/importer/uploads?workspace=<ws>` (zip or single geojson/tif/gpkg/shp file) |
 | Metrics (Prometheus)| `GET /metrics`                                                  |
 | Health probes      | `GET /health/live` · `GET /health/ready`                         |
 | Backup / restore   | `GET /terrane/backup/export` · `POST /terrane/backup/import` |
-| Audit logs         | `GET /terrane/monitor/logs`                                    |
+| Audit logs         | Admin console "Monitor" → Audit log tab · `GET /terrane/monitor/logs`                                    |
 
 Graceful shutdown drains in-flight requests (`shutdown_timeout_secs`);
 structured JSON logs + `trace_id` via `[logging] format = "json"`.

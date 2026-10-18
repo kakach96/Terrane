@@ -266,7 +266,7 @@ Hand-verified smoke path against the reference console (`http://127.0.0.1:18080/
 
 ## 11. Automated test coverage
 
-`cargo test` currently green: **289 lib unit tests + 200 integration tests**, plus
+`cargo test` currently green: **314 lib unit tests + 200+ integration tests**, plus
 **7 `#[ignore]`-marked live tests** (PostGIS metadata/vector + PostGIS data-source
 HTTP + 3× S3 + 2× cascaded-WMS live) that require
 running services and are verified with `cargo test -- --ignored`.
@@ -292,6 +292,8 @@ convention: every file directly under `service/tests/` is its own binary), shari
 | `service/tests/ogc_coverages_test.rs` | 9 | OGC API Coverages (landing, conformance, collections empty/with real GeoTIFF, collection detail with real 8x8 metadata + bounds, coverage GeoTIFF/PNG/JPEG, bbox crop 2x2 + resize 8x8, disjoint bbox 400, 404) |
 | `service/tests/ogc_styles_test.rs` | 7 | OGC API Styles (landing, conformance, style list + SLD content + 404, metadata, create 401/201, get/put(CSS content-type)/delete lifecycle, collections + layer styles) |
 | `service/tests/resilience_test.rs` | 6 | Resilience middleware (rate limit 429, per-client X-Forwarded-For buckets, request timeout 504, fast requests pass) + **TraceId echo regression** (X-Trace-Id passthrough + generated) + **full middleware stack** (TraceId + RateLimit + RequestTimeout + Compress serves without panic) |
+| `service/tests/samples_test.rs` | 3 | Built-in sample data integrity (curated files loadable: GeoJSON feature collections + GeoTIFF georeferenced bounds) — offline fixtures, no runtime generation |
+| `service/tests/importer_test.rs` | 3 | Bulk import (Importer first surface): zip publish per member (GeoJSON + GeoTIFF from curated samples), idempotent re-import, single-file import, unsupported format 400 |
 
 Coverage is **protocol-surface level** — each adapted OGC operation / REST group
 has at least one request/response test validating status codes, content types,
@@ -343,8 +345,8 @@ terrane/`terrane`) and the reference GeoServer at :18080.
 |--------------------|----------------------------------------------------------------------------|
 | **WFS**            | OGC XML `FILTER=` also handles `ogc:Function` (e.g. `strToLowerCase` → case-insensitive equality) and spatial `Intersects` / `Within` / `DWithin` with GML Point / Polygon / Envelope (delegated to the CQL engine) — a superset of the reference KVP `FILTER=`, which rejects `ogc:`-prefixed tags and GML geometry. LockFeature / GetPropertyValue / GetGmlObject are now implemented (see §3) — remaining gap is deeper GML 3.2 schema fidelity |
 | **WCS**            | native netCDF output (falls back to TIFF); elevation / time subsetting on real rasters (only recorded) |
-| **Data sources**   | GeoPackage attributes are typed on write (INTEGER/REAL/BOOLEAN/TEXT by value inference) and typed on read, but no GeoPackage **update** / append; GeoPackage writer still only emits Point / LineString geometry types |
-| **WKB**            | decoder now handles all 7 WKB types (2D); EWKB Z/M/SRID flags are masked for routing but Z/M coordinates are not yet parsed; no GeometryCollection-in-GeoPackage round-trip test (GeoPackage write supports Point/LineString only) |
+| **Data sources**   | GeoPackage attributes are typed on write (INTEGER/REAL/BOOLEAN/TEXT by value inference) and typed on read; the writer emits standard `GP`-header geometry blobs (GDAL/QGIS readable) and all base geometry types round-trip (Point/LineString/Polygon/MultiPolygon tested). Remaining gap: per-feature **update / replace** in place (append is available via `append_geopackage_features`) and Point/LineString-only GP write path for other geometry kinds |
+| **WKB**            | decoder handles all 7 WKB types (2D) plus EWKB/ISO Z / M / ZM dimensions (3D/4D coordinates are consumed to keep the cursor aligned; GeoJSON output stays 2D); no GeometryCollection-in-GeoPackage round-trip test |
 
 ### 11.3 Bugs found by the new tests
 

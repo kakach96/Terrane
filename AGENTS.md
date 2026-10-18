@@ -17,22 +17,24 @@
 ```
 service/          — Rust backend service (Actix-web)
   src/            — Rust backend source
-    handlers/     — REST + OGC (WMS/WFS/WCS) handlers
+    handlers/     — REST + OGC (WMS/WFS/WCS/WMTS/WPS/CSW) handlers
+    services/     — OGC service implementations (wms/wfs/wcs, wps, csw, ogc_api_*)
     models/       — Shared data structs (Layer, Feature, DataSource, etc.)
     store/        — SQLite store (sqlite_store.rs) with PostGIS extension
       file_store.rs — File store abstraction (LocalFileStore + S3FileStore via rust-s3)
       cache/      — Cache abstraction (TileCacheBackend + SessionCache; local disk/in-memory)
     utils/        — Rendering + format readers
       bitmap_font.rs — built-in 5×7 bitmap font for SLD label (TextSymbolizer) rendering (zero deps)
-      gml.rs      — shared GML serialization helpers (escape_xml, GeoJSON→GML, GML 3.2 feature) used by WFS GetFeature/GetGmlObject and WMS GetFeatureInfo
       geofence.rs — GeoFence fine-grained ACL: per-request workspace/store/layer rules over the /permissions model, enforced on WMS/WFS/WCS when [security] geofence_enabled
+      importer.rs — Bulk import (Importer first surface): zip/single-file upload → unpack → publish data source + layer per member (see /importer/uploads)
+      gml.rs      — shared GML serialization helpers (escape_xml, GeoJSON→GML, GML 3.2 feature) used by WFS GetFeature/GetGmlObject and WMS GetFeatureInfo
       ldap.rs     — LDAP enterprise identity: [security.ldap] config, login fallback + auto-provision, group-based role mapping
       mosaic.rs   — ImageMosaic data source: raster-directory granule scan + bounds + composite
       pyramid.rs  — ImagePyramid data source: numeric level subdirs + resolution-based level selection
       secrets.rs  — credential management: ${ENV_VAR} interpolation for data-source secrets (K8s Secrets style) + redaction
       tile_seed.rs — GWC-style tile seeding engine: background seed jobs over a zoom range, progress + cooperative cancel (see /tiles/seed)
       wfs_lock.rs — WFS feature-lock registry (LockFeature / GetFeatureWithLock): in-memory, TTL expiry, lockAction ALL/SOME
-    routes.rs     — All route registrations in one file
+    routes/       — Route registration split by concern (mod.rs composes the api_context scope; probes.rs holds root-path health/metrics; rest_ops.rs / rest_catalog.rs / rest_auth.rs / ows.rs / ogc_api.rs)
   static/         — Built frontend served by the backend
   tests/          — Backend integration tests (REST, WMS, WFS, WCS, WMTS, ...)
   benches/        — Micro-benchmarks (criterion)
@@ -94,7 +96,8 @@ publishing & OGC protocol adaptation. WFS-T / WCS-T writes are not implemented y
 - **Layer <-> DB mapping**: `layer.store` = data source name, `layer.native_name` = DB table name
 - **Coordinates / preview**: WMS `BBOX` is always in the request SRS. Backend reprojection is generic: PostGIS `ST_Transform` for raster/feature output (any EPSG), and `service/src/utils/geometry.rs::transform_coordinates` uses `proj4rs` for file layers / in-process math (fallback: built-in WGS84/Mercator). Frontend converts native bounds to the selected CRS (`frontend/src/app/utils/coords.ts`) so previews stay in range after switching CRS
 - **Boundary representation**: GET `/layers/{name}` returns `native_bounds.bounds.{minx,miny,maxx,maxy}`; the list endpoint returns `bounds` at top level
-- **No test suite** configured (no test dependencies in Cargo.toml, Angular `ng test` untested)
+- **Tests exist** (see DEVELOPMENT.md §7 / PROTOCOLS.md §11): `#[cfg(test)]` lib unit tests + protocol-split integration test crates under `service/tests/` (`cargo test`), criterion benches (`cargo bench`), and an `#[ignore]`-marked HTTP load harness (`perf_test.rs`) plus live PostGIS/S3/cascaded tests. **Frontend tests**: Vitest via `@angular/build:unit-test` (`npm test` in `frontend/`, wired into CI) — no Karma.
+- **Local rustc quirk (Windows dev machine)**: compiling integration test targets can crash rustc itself (`STATUS_STACK_BUFFER_OVERRUN`); normal `cargo build` / `cargo bench` / lib tests are unaffected. Retrying after stopping the dev server (exe file lock) usually clears it; the CI runs `cargo test --all` on Linux without issues.
 - **Windows-native** (build/build.bat, PowerShell). Run the backend from `service/` (`cd service && cargo run`); it expects `./static/` with built frontend
 - **Config**: `service/terrane.toml` optional; defaults work without it. Environment variables: `RUST_LOG`, `TERRANE__SERVER__HOST` etc. (double-underscore separator). `load_from_file()` already mounts the `TERRANE__` env source, so env overrides also work with `--config`.
 - **Frontend proxy**: `proxy.conf.json` routes `/api`, `/wms`, `/wfs`, `/wcs` to `http://localhost:8080`
@@ -111,7 +114,7 @@ publishing & OGC protocol adaptation. WFS-T / WCS-T writes are not implemented y
 - **JWT secret has a hardcoded default** in `service/src/auth.rs` (`terrane-jwt-secret-2026`); inject via env `TERRANE__SECURITY__JWT_SECRET` in multi-replica prod (docker-compose passes `TERRANE_JWT_SECRET`)
 - **Runtime host**: default `127.0.0.1`; Docker image sets `TERRANE__SERVER__HOST=0.0.0.0`
 - **State**: metadata in SQLite (`service/terrane.sqlite`) + vector data (default local dir `<data_dir>/business`, or PostgreSQL) + raster files (default `<data_dir>/rasters`) + in-memory caches (`Arc<RwLock<...>>` in `service/src/state.rs`) + session cache (in-memory) + local disk tile cache (`service/data/gwc`) + uploads (`service/data`) → multi-replica needs shared storage or PostgreSQL / object-storage backends
-- **Observability**: stdout logs (human-readable by default, structured JSON via `[logging] format = "json"`; request-level `trace_id` attached via `X-Trace-Id` / `X-Request-Id`); split probes `/health/live` + `/health/ready` (registered on root path, decoupled from `api_context`); Prometheus `/metrics` (root path; requests/errors, tile cache hit rate, PG pool watermarks, system). Legacy `/health` & `/monitor/*` retained
+- **Observability**: stdout logs (human-readable by default, structured JSON via `[logging] format = "json"`; request-level `trace_id` attached via `X-Trace-Id` / `X-Request-Id`); split probes `/health/live` + `/health/ready` (registered on root path, decoupled from `api_context`); Prometheus `/metrics` (root path; requests/errors, tile cache hit rate, PG pool watermarks, system). Monitor REST surface: `/monitor/stats` (request counters), `/monitor/health` (dependency health aggregation: metadata store required, tile cache / Redis cache data sources reported), `/monitor/catalog` (persisted workspace/data-source/layer/layer-group counts), `/monitor/requests` + `/monitor/logs` (in-memory ring buffer / audit logs). The admin console "Monitor" page mirrors this in three tabs: Overview (health + catalog + instance), Cache & Jobs (tile cache + seed jobs), Audit log. Legacy `/health` retained
 - **Lifecycle**: SIGTERM/SIGINT graceful shutdown + `shutdown_timeout_secs` (default 30s, `[server].shutdown_timeout_secs`)
 
 ## Code conventions

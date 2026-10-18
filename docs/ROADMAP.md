@@ -113,11 +113,12 @@ state lives in external stores, so replicas stay stateless and interchangeable.
   - Docker/CI: `Dockerfile` + `build/docker-compose.yml` env vars,
     `GEOSERVER_JWT_SECRET` → `TERRANE_JWT_SECRET`
 - **Other gaps found during review** (folded into this milestone):
-  - Frontend test suite (`ng test`) not wired into CI
-  - OGC CITE compliance tests (referenced in IMPLEMENTATION_PLAN §5.3, not yet run)
+  - Frontend test suite — **done**: Vitest unit tests via `@angular/build:unit-test` (`npm test` in `frontend/`), covering the API client (`terrane.service.ts`) and pure utils (`coords.ts` bounds transforms, `preview-formats.ts`), wired into the CI `frontend` job before the build. No Karma.
+  - Monitor page rework — **done**: dependency-health aggregation (`GET /monitor/health`: metadata store required; tile cache / Redis cache data sources reported, bounded by a 3s shared-connection ping) + persisted catalog counters (`GET /monitor/catalog`); admin console page restructured into Overview (health + catalog + instance) / Cache & Jobs (tile cache + seed-job progress with cancel) / Audit log tabs. In-memory per-instance request statistics removed from the UI (long-term trends belong to Prometheus).
+  - OGC CITE compliance tests (referenced in IMPLEMENTATION_PLAN §5.3, not yet run — requires the external Java CITE harness)
   - WFS-T Transaction (currently 501) — kept deferred to v2.0
   - Oracle / SQL Server data sources — kept deferred (evaluated via tiberius / native driver)
-  - Importer (bulk-import workflow) — the last REST API gap
+  - Importer (bulk-import workflow) — **first surface done**: `POST /importer/uploads` accepts a `.zip` archive or a single recognized file, unpacks into `<data_dir>/imports/<uuid>/` and publishes every member as a data source + layer with computed bounds, returning a per-file report (created/skipped/failed). Full interactive workflow stays deferred to v2.0.
   - Printing module — kept deferred to v2.0
   - OpenTelemetry tracing — kept deferred to v2.0
   - Redis session backend — kept deferred (simple JWT by design)
@@ -145,7 +146,7 @@ state lives in external stores, so replicas stay stateless and interchangeable.
 - **In-memory caches** (`Arc<RwLock<...>>` in `service/src/state.rs`) diverge across replicas; periodic catalog refresh added (`[server] catalog_refresh_secs`, reload layers/styles/groups from the metadata store) plus event-triggered refresh on REST layer writes (`AppState::refresh_catalog`) — multi-replica divergence is bounded, but refresh remains best-effort (no external event bus).
 - **WFS feature locks are in-memory only** (`service/src/utils/wfs_lock.rs`, per-replica): locks guard concurrent consumers within one process and are lost on restart — acceptable while WFS-T writes are not implemented, but multi-replica lock coordination (e.g. Redis) is not implemented.
 - **Tile cache backend**: local disk default (`service/data/gwc`, `service/src/store/cache/tile.rs`); layer-level Redis cache data sources added (`Layer.cache_store` → `DataSourceType::Redis`, shared across replicas).
-- **Uploads on local disk** (`service/data`) — no shared volume / object storage.
+- **Uploads**: uploaded files are stored per data source under `<data_dir>/imports` / `service/data`; uploads can target S3/MinIO via `storage=s3` (see `upload_handler.rs` / `importer.rs`) — no PVC-backed shared volume required for the object-storage path.
 - **Sessions persisted in the metadata DB** (SQLite / PostgreSQL) with a local in-memory `SessionCache` fast-path — Redis session backend intentionally not implemented (simple JWT only).
 - **CI pipeline** (`.github/workflows/ci.yml` — fmt + clippy + test + frontend build + GHCR push + Trivy scan; `.github/dependabot.yml` for cargo/npm/actions) — created but not yet exercised against a real repository.
 - **Human-readable stdout logs by default** — structured JSON available via `[logging] format = "json"` with request `trace_id`; OpenTelemetry still pending.

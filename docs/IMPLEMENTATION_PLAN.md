@@ -272,8 +272,8 @@ Overall progress ████████████████░░  87%
 | 28 | **Vector Tiles** | MVT (Mapbox Vector Tile) format output | ✅ **Completed** |
 | 29 | **KML output** | Map/feature export in KML/KMZ format | 1-2 weeks |
 | 30 | **Printing module** | PDF map printing service | 3-4 weeks |
-| 31 | **Monitoring** | Request statistics, performance monitoring, audit logs | ✅ **Completed** |
-| 32 | **Importer** | Batch data import workflows | 3-4 weeks |
+| 31 | **Monitoring** | Request statistics, performance monitoring, audit logs | ✅ **Completed** (incl. dependency-health aggregation `/monitor/health` + persisted catalog counters `/monitor/catalog`) |
+| 32 | **Importer** | Batch data import workflows | ✅ **First surface** (`POST /importer/uploads`: zip/single-file → unpack → publish data source + layer per member; interactive workflow deferred to v2.0) |
 | 33 | **CSS/YSLD/MBStyle styling** | Style language support replacing SLD | ✅ **Completed** |
 | 34 | **Backup/Restore** | Data directory backup and restore | ✅ **Completed** |
 | 35 | **GeoFence** | Fine-grained access control | 3-4 weeks |
